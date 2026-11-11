@@ -67,7 +67,7 @@ locals {
   tfc_organization     = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   aws_enabled_regions  = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
   workload_account_key = coalesce(var.workload_account_key, try(local.cfg.workload_account_keys[var.environment], null), "unset")
-  vpc_cidr             = coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.20.0.0/16")
+  vpc_cidr             = coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.72.0.0/16")
   app_bootstrap_image  = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine")
   saas_bridge_version  = coalesce(var.saas_bridge_version, local.cfg.saas_bridge_rotation, 1)
 

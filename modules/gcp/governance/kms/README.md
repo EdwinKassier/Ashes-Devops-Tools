@@ -109,7 +109,7 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_key_ids"></a> [key\_ids](#output\_key\_ids) | Map of CryptoKey IDs |
-| <a name="output_key_names"></a> [key\_names](#output\_key\_names) | Map of CryptoKey names (for use in resource configs) |
+| <a name="output_key_names"></a> [key\_names](#output\_key\_names) | Map of key name to the full CryptoKey resource name (projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>), the form every kms\_key\_name argument requires. |
 | <a name="output_key_rotation_periods"></a> [key\_rotation\_periods](#output\_key\_rotation\_periods) | Map of key name to rotation period string (e.g. '7776000s'). Always set — keys without an explicit rotation\_period default to 90 days ('7776000s'). |
 | <a name="output_key_self_links"></a> [key\_self\_links](#output\_key\_self\_links) | Map of key name to full resource name (projects/<project>/locations/<location>/keyRings/<ring>/cryptoKeys/<key>). |
 | <a name="output_keyring_id"></a> [keyring\_id](#output\_keyring\_id) | ID of the KMS Keyring |

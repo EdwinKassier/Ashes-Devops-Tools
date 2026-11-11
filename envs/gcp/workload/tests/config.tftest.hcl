@@ -320,3 +320,50 @@ run "scaffold_gcp_aws_saas_plans" {
     error_message = "the scaffold runs must plan the budget module and read the network-hub remote state."
   }
 }
+
+# The untyped map inputs reject keys their consumers do not accept, so a
+# misspelled key fails the plan instead of being dropped by a type constraint.
+# (app_services keys are checked by modules/gcp/stages/environment and tested
+# there: a nested module's validation cannot be an expected failure here.)
+run "rejects_misspelled_additional_region_key" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      europe-west4 = {
+        subnet_cidrs = { public = "10.20.0.0/24", private = "10.20.1.0/24", databse = "10.20.2.0/24" }
+      }
+    }
+  }
+
+  expect_failures = [var.additional_regions]
+}
+
+run "rejects_misspelled_vm_backup_schedule_key" {
+  command = plan
+
+  variables {
+    vm_backup_schedules = { nightly = { retention_policy = { max_retention_day = 7 } } }
+  }
+
+  expect_failures = [var.vm_backup_schedules]
+}
+
+run "rejects_misspelled_os_patch_deployment_key" {
+  command = plan
+
+  variables {
+    os_patch_deployments = { weekly = { reboot = "NEVER" } }
+  }
+
+  expect_failures = [var.os_patch_deployments]
+}
+
+run "accepts_known_map_input_keys" {
+  command = plan
+
+  variables {
+    vm_backup_schedules  = { nightly = { daily_schedule = { start_time = "02:00" }, retention_policy = { max_retention_days = 7 } } }
+    os_patch_deployments = { weekly = { reboot_config = "NEVER", day_of_week = "SATURDAY" } }
+  }
+}

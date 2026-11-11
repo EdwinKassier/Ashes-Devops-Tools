@@ -38,11 +38,16 @@ jobs:
       pull-requests: write  # open/update the release PR
       issues: write         # create the autorelease labels on first run
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds RELEASE_PLEASE_TOKEN. release-please talks only to the
+      # GitHub API (REST and GraphQL) and checks nothing out, so all other
+      # egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
 
       # Fail fast and loudly instead of falling back to GITHUB_TOKEN. A release
       # PR opened with GITHUB_TOKEN does not trigger pull_request workflows, so

@@ -102,7 +102,7 @@ graph TB
             priv["private (PGA)"]
             db["database (PGA)"]
         end
-        nat["Cloud NAT + Router<br/>(private + db egress)"]
+        nat["Cloud NAT + Router<br/>(private-tier egress)"]
         armor["Cloud Armor (opt-in)"]
     end
 
@@ -112,13 +112,14 @@ graph TB
     vpc -.->|"internal-peering<br/>DNS zone"| dnshub
     hfw -.->|"attached at<br/>Shared folder"| shared
     priv --> nat
-    db --> nat
     nat --> inet
 ```
 
 - **Segmentation.** Each environment's `<env>-host` project is a **Shared VPC host**; service projects attach to it, and the host VPC peers to the hub (`vpc_peerings["hub-peering"]`, custom routes exported/imported). Per-environment folders + per-host VPCs isolate environments; prod↔nonprod is not connected except through the hub.
 - **Three-tier subnets.** `public` / `private` / `database` per zone, CIDRs auto-derived with `cidrsubnet(vpc_cidr, 8, …)`; `private` and `database` get Private Google Access. All tiers emit VPC Flow Logs.
-- **Centralized egress.** Cloud NAT + Cloud Router per host VPC covers private + database subnets (logging on); there are no external IPs on VMs (`compute.vmExternalIpAccess` is denied org-wide).
+- **Egress.** Cloud NAT + Cloud Router per host VPC covers the private subnets (logging on); there are no external IPs on VMs (`compute.vmExternalIpAccess` is denied org-wide). The database tier is not NATed by default (`nat.include_database_subnets` opts it in), so a database-subnet VM has no internet path even without the `database` tag that the deny-db-egress rule targets.
+- **Central egress control (opt-in, preview).** `secure_web_proxy` on `stages/network-hub` creates a Secure Web Proxy in the hub with an FQDN allowlist (everything else denied) and can publish it over Private Service Connect. A spoke with `egress_proxy` gets a PSC endpoint for it and drops its private tier from Cloud NAT, so workloads reach the internet only through the proxy (`HTTPS_PROXY`). Off by default: without it, each spoke egresses through its own NAT with no FQDN control.
+- **Data-plane alerts.** The hub alerts on HA VPN tunnel down and BGP session down (when VPN or an interconnect exists) and on Cloud NAT allocation failures and OUT_OF_RESOURCES drops; each spoke alerts on its own NAT. Pass `notification_channel_ids` to get notified.
 - **DNS.** The DNS hub (`shared-dns`) serves an `internal-root` private zone (DNSSEC + query logging); each spoke resolves via an `internal-peering` zone pointing at the hub domain (default `internal.local`).
 - **Private connectivity.** Private Service Access and Private Service Connect are **on by default** in the host stage, so managed services and Google APIs are reached privately. GCP uses per-project CIDRs rather than an AWS-style IPAM.
 - **Firewall — two layers.** VPC-level **network firewall** rules enforce tier-to-tier flow (api-gw→public 443/80, public→compute, compute→db, IAP SSH/RDP from `35.235.240.0/20`, health checks from `35.191.0.0/16` + `130.211.0.0/22`, deny-db-egress, and a logged deny-all-ingress backstop). Folder-level **hierarchical firewall** (`policy-hub-shared`) denies inbound 22/3389 from the internet org-wide (use IAP instead).
@@ -136,9 +137,9 @@ The GCP security stack is centralized in the organization stage plus the network
 | Org audit logging | `modules/gcp/governance/cloud-audit-logs` | Org-wide `iam_audit_config` (ADMIN_READ / DATA_READ / DATA_WRITE on all services) + org log sink (`include_children`) → CMEK-encrypted GCS bucket (UBLA, public-access-prevention enforced, versioned, lifecycle delete at `log_retention_days`, default 365). BigQuery analytics sink enabled by the org stage. |
 | Posture / findings | `modules/gcp/governance/scc` | Security Command Center **notifications** — Pub/Sub topic `scc-findings` + notification config (`filter='state="ACTIVE"'`), CMEK-encrypted; optional severity-based multi-config routing. Does not itself enable SCC tiers (enablement is an org-level, out-of-band step). |
 | Encryption keys (CMEK) | `modules/gcp/governance/kms` | Org CMEK keyring `${prefix}-org-cmek` with keys for `audit-logs`, `audit-analytics`, `billing-alerts`, `scc-notifications`, `billing-export`, each granted to the correct Google service agent. Default rotation 90 days, `SOFTWARE` protection, symmetric encrypt/decrypt. |
-| Service perimeter | `modules/gcp/network/vpc-sc` | Two perimeters: a **hub** `hub_data_perimeter` protecting spoke project numbers, and a per-env `<env>_perimeter` protecting the host project (restricting bigquery/storage/secretmanager/cloudkms/pubsub/sqladmin/container/artifactregistry). Both gated on an existing Access Context Manager policy (`vpc_sc_access_policy_name`, default `null` = no perimeter); dry-run available. |
+| Service perimeter | `modules/gcp/network/vpc-sc` | Two kinds of perimeter: a **hub** `hub_data_perimeter` protecting the hub and DNS projects only, and a per-env `<env>_perimeter` protecting that environment's host project (a project sits in one regular perimeter, so prod and non-prod never share one) (restricting bigquery/storage/secretmanager/cloudkms/pubsub/sqladmin/container/artifactregistry). Both gated on an existing Access Context Manager policy (`vpc_sc_access_policy_name`, default `null` = no perimeter); dry-run available. |
 | Automation identity | `modules/gcp/iam/workload-identity` | Keyless Workload Identity Federation for GitHub Actions and Terraform Cloud (see below). Service-account **key creation and upload are disabled org-wide** by policy. |
-| Observability | `modules/gcp/monitoring/*` | `alert-policy` (CPU/memory/Cloud Run error-rate & latency/uptime/log-based) and `compute-dashboard` (SLO scorecards). Library modules; every created project is attached to the admin project's metrics scope. |
+| Observability | `modules/gcp/monitoring/*` | `alert-policy` (CPU/memory/Cloud Run error-rate & latency/uptime/log-based, plus VPN tunnel, BGP session and Cloud NAT data-plane alerts used by `net-hub` / `net-spoke`) and `compute-dashboard` (SLO scorecards). Library modules; every created project is attached to the admin project's metrics scope. |
 
 ### Guardrails
 
@@ -198,7 +199,7 @@ This table maps each Google enterprise-foundations / CIS control to the module a
 | Shared VPC hub-and-spoke | Foundations "networking" | `modules/gcp/stages/network-hub` (`net-hub`, `dns-anchor`) + `modules/gcp/stages/net-spoke` | Hub VPC + DNS hub; each env spoke VPC peers to the hub with custom routes; three-tier subnets. |
 | Layered firewall (VPC + hierarchical) | CIS "Networking" / foundations | `modules/gcp/network/network-firewall` + `modules/gcp/network/hierarchical-firewall` | Tier-to-tier rules + logged deny-all backstop; folder-level deny of internet 22/3389 (IAP instead). The VPC layer uses **legacy `google_compute_firewall` rules**; Google now directs new builds to global/regional **network firewall policies** with IAM-governed secure tags — migration tracked in [known-gaps G7](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review). The hierarchical layer already uses the modern `firewall_policy` construct. |
 | Private connectivity, no external IPs | CIS 4.9 / foundations | host stage (PSA + PSC on by default) + `compute.vmExternalIpAccess` deny | Private Google Access on private/database tiers; managed services reached privately. |
-| VPC Service Controls data perimeter | Foundations "data exfiltration protection" | `modules/gcp/network/vpc-sc` | Hub + per-env perimeters over storage/bigquery/secretmanager/kms/pubsub/etc.; gated on an ACM access policy; dry-run supported. |
+| VPC Service Controls data perimeter | Foundations "data exfiltration protection" | `modules/gcp/network/vpc-sc` | Hub (hub + DNS projects) + per-env perimeters over storage/bigquery/secretmanager/kms/pubsub/etc.; gated on an ACM access policy; dry-run supported. |
 | Cost governance (budgets, billing export) | Foundations "billing" | `modules/gcp/governance/billing` + org billing export | Per-env + org budgets (count-gated `> 0`); Cloud Billing → BigQuery export dataset + IAM. |
 | Essential Contacts | Foundations "org setup" | `modules/gcp/stages/organization` | Security + billing contacts registered at the org. |
 | Centralized observability | Foundations "monitoring" | `modules/gcp/monitoring/*` + `stages/projects` metrics scope | Alert policies + SLO dashboard; every project attached to the admin metrics scope. |

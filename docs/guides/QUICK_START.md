@@ -134,7 +134,7 @@ Generate a token at [https://vercel.com/account/tokens](https://vercel.com/accou
 
 **Node.js requirement for vault-secrets:**
 
-`enable_vault_secrets = true` executes a Node.js script to bootstrap and reconcile the Supabase Vault. Dependencies install **automatically** at apply time — a `terraform_data.npm_install` runs `npm ci` in `modules/supabase/vault-secrets/scripts` before the bootstrap/reconcile scripts. No manual step is required; the apply runner only needs **Node.js 18+ and npm** on PATH (GitHub ubuntu-latest runners have them; on HCP Terraform use an agent pool whose image includes Node.js, since the hosted worker image is not guaranteed to).
+`enable_vault_secrets = true` executes a Node.js script to bootstrap and reconcile the Supabase Vault. Dependencies install **automatically** at apply time — the bootstrap and reconcile scripts each run `npm ci` in `modules/supabase/vault-secrets/scripts` in the same command, before `node`. No manual step is required; the apply runner only needs **Node.js 18+ and npm** on PATH (GitHub ubuntu-latest runners have them; on HCP Terraform use an agent pool whose image includes Node.js, since the hosted worker image is not guaranteed to).
 
 The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute the bootstrap SQL. `scripts/node_modules/` is gitignored and rebuilt by the automated `npm ci`. To prime it locally: `npm ci --prefix modules/supabase/vault-secrets/scripts`.
 

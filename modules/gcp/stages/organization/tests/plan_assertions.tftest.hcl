@@ -450,6 +450,75 @@ run "projects_delegation_is_bound_per_folder" {
   }
 }
 
+# An IAM condition can limit the roles a delegate grants, not the members. The
+# IAM-controlling roles are therefore dropped from projects-apply's allow-list
+# (even when the contract still lists them) and granted by this stage instead.
+run "iam_controlling_roles_are_not_delegable" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        description             = "Shared"
+        iam_group_role_bindings = {}
+      }
+      dev = {
+        display_name            = "Development"
+        description             = "Development environment"
+        iam_group_role_bindings = {}
+      }
+    }
+    projects_apply_service_account  = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+    delegated_workload_folder_roles = ["roles/compute.admin", "roles/iam.serviceAccountAdmin", "roles/iam.workloadIdentityPoolAdmin", "roles/resourcemanager.projectIamAdmin", "roles/run.admin"]
+    delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
+    workload_service_accounts = {
+      dev = {
+        plan  = "acme-wl-dev-plan@acme-admin-project.iam.gserviceaccount.com"
+        apply = "acme-wl-dev-apply@acme-admin-project.iam.gserviceaccount.com"
+      }
+    }
+    workload_folder_roles = {
+      plan  = ["roles/compute.viewer"]
+      apply = ["roles/compute.admin", "roles/iam.serviceAccountAdmin", "roles/iam.workloadIdentityPoolAdmin", "roles/resourcemanager.projectIamAdmin", "roles/run.admin"]
+    }
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }, shared = { id = "222222222", name = "folders/222222222", display_name = "Shared" } } }
+  }
+
+  assert {
+    condition = (
+      !strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "projectIamAdmin") &&
+      !strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "serviceAccountAdmin") &&
+      !strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "workloadIdentityPoolAdmin") &&
+      strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "'roles/compute.admin'") &&
+      output.delegated_folder_iam_targets["dev"] == tolist(["roles/compute.admin", "roles/run.admin"])
+    )
+    error_message = "projects-apply must never be able to grant the IAM-controlling roles on an environment folder."
+  }
+
+  assert {
+    condition = (
+      sort(keys(google_folder_iam_member.workload_non_delegable_folder_roles)) == sort(["dev|apply|roles/iam.serviceAccountAdmin", "dev|apply|roles/iam.workloadIdentityPoolAdmin", "dev|apply|roles/resourcemanager.projectIamAdmin"]) &&
+      google_folder_iam_member.workload_non_delegable_folder_roles["dev|apply|roles/resourcemanager.projectIamAdmin"].folder == "folders/111111111" &&
+      google_folder_iam_member.workload_non_delegable_folder_roles["dev|apply|roles/resourcemanager.projectIamAdmin"].member == "serviceAccount:acme-wl-dev-apply@acme-admin-project.iam.gserviceaccount.com"
+    )
+    error_message = "this stage must grant the IAM-controlling workload roles directly, on the environment's own folder, and only those."
+  }
+}
+
+run "no_direct_workload_grants_without_identities" {
+  command = plan
+
+  assert {
+    condition     = length(google_folder_iam_member.workload_non_delegable_folder_roles) == 0
+    error_message = "with no workload SAs or roles this stage grants nothing."
+  }
+}
+
 # ── Containment: production fails the plan, deny coverage ───────────────────
 
 run "production_without_containment_fails" {
@@ -825,11 +894,24 @@ run "wif_tenant_pin_custom_constraint" {
     condition = (
       one([for c in local.wif_tenant_constraints : c if c.name == "custom.wifProviderTenantPinned"]).resource_types == ["iam.googleapis.com/WorkloadIdentityPoolProvider"] &&
       strcontains(one(local.wif_tenant_constraints).condition, "matches(\"^assertion[.]terraform_organization_name == 'acme-tfc'( && [^|?]*)?$\")") &&
-      strcontains(one(local.wif_tenant_constraints).condition, "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && !(resource.attributeCondition == \"assertion.repository_owner_id == \\\"123456\\\"\"))") &&
+      strcontains(one(local.wif_tenant_constraints).condition, "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && ((has(resource.oidc.jwksJson) && resource.oidc.jwksJson != '') || !(resource.attributeCondition == \"assertion.repository_owner_id == \\\"123456\\\"\")))") &&
       !strcontains(one(local.wif_tenant_constraints).condition, "repository_owner_id == '") &&
       !strcontains(one(local.wif_tenant_constraints).condition, ".contains(")
     )
     error_message = "tenant pins must render a DENY custom constraint referencing the TFC org and GitHub owner IDs."
+  }
+
+  # An uploaded JWKS would let a provider with the exact pinned issuer and
+  # condition accept tokens signed by keys its creator holds. Both pinned
+  # issuers deny it, and the deny is OR-ed beside the condition check, not
+  # AND-ed with it.
+  assert {
+    condition = (
+      strcontains(one(local.wif_tenant_constraints).condition, "(resource.oidc.issuerUri.startsWith('https://app.terraform.io') && ((has(resource.oidc.jwksJson) && resource.oidc.jwksJson != '') || !resource.attributeCondition.matches(") &&
+      strcontains(one(local.wif_tenant_constraints).condition, "(resource.oidc.issuerUri.startsWith('https://token.actions.githubusercontent.com') && ((has(resource.oidc.jwksJson) && resource.oidc.jwksJson != '') || !(") &&
+      length(regexall("resource[.]oidc[.]jwksJson != ''", one(local.wif_tenant_constraints).condition)) == 2
+    )
+    error_message = "every pinned issuer must deny a provider that uploads its own JWKS."
   }
 }
 

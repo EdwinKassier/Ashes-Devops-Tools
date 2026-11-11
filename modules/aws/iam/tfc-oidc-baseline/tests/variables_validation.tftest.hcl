@@ -184,3 +184,15 @@ run "wildcard_break_glass_role_name_rejected" {
 
   expect_failures = [var.break_glass_role_name]
 }
+
+run "plan_read_deny_over_managed_policy_quota_rejected" {
+  # The read deny is a managed policy (6,144-character quota); a long
+  # exemption list must fail the plan, not the StackSet operation.
+  command = plan
+
+  variables {
+    plan_role_data_read_exempt_arns = [for i in range(120) : "arn:aws:secretsmanager:eu-west-2:444444444444:secret:application-secret-number-${i}-*"]
+  }
+
+  expect_failures = [aws_cloudformation_stack_set.this]
+}

@@ -1,6 +1,8 @@
-# Dependabot covers GitHub Actions (SHA-pinned) and the hash-locked CI Python
-# tooling. Terraform providers and .terraform.lock.hcl files are owned by
-# Renovate (renovate.json), so there is deliberately no terraform ecosystem here.
+# Dependabot covers GitHub Actions (SHA-pinned), the hash-locked CI Python
+# tooling and the one npm dependency that ships to apply runners (pg, used by
+# modules/supabase/vault-secrets with production database credentials).
+# Terraform providers and .terraform.lock.hcl files are owned by Renovate
+# (renovate.json), so there is deliberately no terraform ecosystem here.
 #
 # Required one-time repo setup (labels must exist or PR creation warns):
 #   gh label create dependencies --force
@@ -31,5 +33,19 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+
+  # pg for the vault-secrets bootstrap/reconcile scripts. package.json pins an
+  # exact version and package-lock.json carries the integrity hash; Dependabot
+  # bumps both together. fix(deps) so the bump is visible in the changelog
+  # (it changes code that runs with production credentials).
+  - package-ecosystem: "npm"
+    directory: "/modules/supabase/vault-secrets/scripts"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "increase"
+    commit-message:
+      prefix: "fix(deps)"
     labels:
       - "dependencies"

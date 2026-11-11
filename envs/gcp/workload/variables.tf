@@ -136,10 +136,11 @@ variable "projects_contract" {
 variable "network_hub_contract" {
   description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc_hub_id, ncc_spoke_group} it joins when network_connectivity = ncc. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
   type = object({
-    vpc_self_link   = string
-    dns_domain      = string
-    ncc_hub_id      = optional(string)
-    ncc_spoke_group = optional(string)
+    vpc_self_link                   = string
+    dns_domain                      = string
+    ncc_hub_id                      = optional(string)
+    ncc_spoke_group                 = optional(string)
+    egress_proxy_service_attachment = optional(string)
   })
   default = null
 
@@ -151,8 +152,30 @@ variable "network_hub_contract" {
 
 variable "additional_regions" {
   description = "Opt-in extra regions of this environment's spoke VPC, keyed by region name: subnet_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary spoke subnets or another region), optional secondary_ranges for the private subnet, and nat (default true: a Cloud Router and Cloud NAT in the region). Null = gcp.environments[<environment>].additional_regions from config/landing-zone.yaml, else none (single-region spoke)."
-  type        = any
-  default     = null
+  # Untyped so the config-file value (JSON text) and this variable share one
+  # decode path, and so a misspelled key stays visible: an object type
+  # constraint would drop it silently. The validation rejects unknown keys in
+  # this variable (config/landing-zone.schema.json does the same for the config
+  # file); the stage types and validates the values.
+  type    = any
+  default = null
+
+  validation {
+    condition = length([for k in flatten([
+      for region, r in coalesce(var.additional_regions, {}) : concat(
+        [for k in keys(r) : "${region}.${k}" if !contains(["subnet_cidrs", "secondary_ranges", "nat"], k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(["public", "private", "database"], k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(["range_name", "ip_cidr_range"], k)]]),
+      )
+    ]) : k]) == 0
+    error_message = "additional_regions has keys the stage does not accept: ${join(", ", [for k in flatten([
+      for region, r in coalesce(var.additional_regions, {}) : concat(
+        [for k in keys(r) : "${region}.${k}" if !contains(["subnet_cidrs", "secondary_ranges", "nat"], k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(["public", "private", "database"], k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(["range_name", "ip_cidr_range"], k)]]),
+      )
+    ]) : k])}."
+  }
 }
 
 variable "network_connectivity" {
@@ -523,10 +546,14 @@ variable "app_services" {
     `service_team = "<key>"` (a key of service_teams) deploys the service into
     that team's service project instead of the host project; the project is
     resolved from the team and its Cloud Run service agent is granted Shared VPC
-    subnet access. Without it the service stays in the host project.
+    subnet access. Without it the service stays in the host project, which a
+    production environment refuses unless enable_host_project_workloads = true.
   EOT
-  type        = any
-  default     = null
+  # Untyped on purpose: an object type would drop a misspelled key silently.
+  # modules/gcp/stages/environment rejects unknown keys in the effective value
+  # (this variable or the config file).
+  type    = any
+  default = null
 
   validation {
     condition = alltrue([
@@ -546,6 +573,12 @@ variable "app_services" {
     ])
     error_message = "An app service sets both service_team and project_id/project_number. Use service_team (the project is resolved from the team) or an explicit project_id, not both."
   }
+}
+
+variable "enable_host_project_workloads" {
+  description = "Allow app_services entries without service_team, which then run in the Shared VPC host project next to the network core. Null (default) = allowed outside production, refused in production (environment_config is_production). Set true to allow it in production too, false to refuse it everywhere."
+  type        = bool
+  default     = null
 }
 
 variable "app_subnetwork_id" {
@@ -627,8 +660,41 @@ variable "enable_vm_backup_policy" {
 
 variable "vm_backup_schedules" {
   description = "Snapshot schedules passed to modules/gcp/backup/backup-plan (see its `schedules` input for the shape). Null = one \"vm-daily-snapshots\" policy: daily at 04:00 UTC, 30-day retention, snapshots kept if the disk is deleted."
-  type        = any
-  default     = null
+  # Untyped (passed through the stage's optional(any)); an object type would
+  # drop a misspelled key silently, so the validation rejects unknown keys.
+  type    = any
+  default = null
+
+  validation {
+    condition = length([for k in flatten([
+      for name, sch in coalesce(var.vm_backup_schedules, {}) : concat(
+        [for k in keys(sch) : "${name}.${k}" if !contains(["daily_schedule", "weekly_schedule", "hourly_schedule", "retention_policy", "snapshot_properties"], k)],
+        flatten([
+          for sub, allowed in {
+            daily_schedule      = ["days_in_cycle", "start_time"]
+            weekly_schedule     = ["day_of_weeks"]
+            hourly_schedule     = ["hours_in_cycle", "start_time"]
+            retention_policy    = ["max_retention_days", "on_source_disk_delete"]
+            snapshot_properties = ["labels", "storage_locations", "guest_flush"]
+          } : [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+        ]),
+      )
+    ]) : k]) == 0
+    error_message = "vm_backup_schedules has keys modules/gcp/backup/backup-plan does not accept: ${join(", ", [for k in flatten([
+      for name, sch in coalesce(var.vm_backup_schedules, {}) : concat(
+        [for k in keys(sch) : "${name}.${k}" if !contains(["daily_schedule", "weekly_schedule", "hourly_schedule", "retention_policy", "snapshot_properties"], k)],
+        flatten([
+          for sub, allowed in {
+            daily_schedule      = ["days_in_cycle", "start_time"]
+            weekly_schedule     = ["day_of_weeks"]
+            hourly_schedule     = ["hours_in_cycle", "start_time"]
+            retention_policy    = ["max_retention_days", "on_source_disk_delete"]
+            snapshot_properties = ["labels", "storage_locations", "guest_flush"]
+          } : [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+        ]),
+      )
+    ]) : k])}."
+  }
 }
 
 variable "enable_os_patch_management" {
@@ -639,8 +705,15 @@ variable "enable_os_patch_management" {
 
 variable "os_patch_deployments" {
   description = "Patch deployments passed to modules/gcp/ops/os-config (see its `patch_deployments` input for the shape). Null = one \"weekly-os-patch\" deployment: every VM in the project, Sundays 03:00 UTC, default reboot behaviour."
-  type        = any
-  default     = null
+  # Untyped (passed through the stage's optional(any)); an object type would
+  # drop a misspelled key silently, so the validation rejects unknown keys.
+  type    = any
+  default = null
+
+  validation {
+    condition     = length(flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(["all_instances", "instance_labels", "reboot_config", "day_of_week", "start_time", "time_zone", "description"], k)]])) == 0
+    error_message = "os_patch_deployments has keys modules/gcp/ops/os-config does not accept: ${join(", ", flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(["all_instances", "instance_labels", "reboot_config", "day_of_week", "start_time", "time_zone", "description"], k)]]))}."
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -699,4 +772,10 @@ variable "app_alert_notification_channel_ids" {
   type        = list(string)
   default     = []
   nullable    = false
+}
+
+variable "enable_egress_proxy" {
+  description = "Send the environment's private-tier egress through the hub Secure Web Proxy (preview): a Private Service Connect endpoint in this VPC, and no Cloud NAT for the private tier. Needs the proxy enabled on gcp-network-hub (secure_web_proxy) with this host project in its consumers. Null = gcp.environments[<environment>].egress_proxy from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
 }

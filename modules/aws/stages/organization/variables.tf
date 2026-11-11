@@ -313,7 +313,7 @@ variable "tfc_enable_apply_boundary_propagation" {
 }
 
 variable "tfc_enable_plan_role_data_read_deny" {
-  description = "Attach an inline deny on data-plane reads (s3:GetObject*, secretsmanager:GetSecretValue, ssm:GetParameter*, kms:Decrypt, DynamoDB/SQS/Kinesis/Logs reads, ...) to every member-account tfc-plan role (default true)."
+  description = "Attach a deny on data-plane and secret-bearing reads (s3:GetObject*, secretsmanager:GetSecretValue, ssm:GetParameter*, kms:Decrypt, DynamoDB/SQS/Kinesis/Logs reads, API key values, launch-template user data, CodeBuild environment variables, ...) to every member-account tfc-plan role (default true)."
   type        = bool
   default     = true
 }

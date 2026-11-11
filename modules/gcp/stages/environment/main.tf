@@ -12,53 +12,16 @@
  */
 
 locals {
-  default_vpc_sc_ingress_policies = [
-    {
-      identity_type = "ANY_IDENTITY"
-      identities    = null
-      sources = [
-        {
-          access_level = null
-          resource     = "//iam.googleapis.com/projects/${var.admin_project_number}/locations/global/workloadIdentityPools/*"
-        }
-      ]
-      resources = null
-      operations = [
-        {
-          service_name     = "storage.googleapis.com"
-          method_selectors = null
-        },
-        {
-          service_name     = "bigquery.googleapis.com"
-          method_selectors = null
-        },
-        {
-          service_name     = "container.googleapis.com"
-          method_selectors = null
-        }
-      ]
-    }
-  ]
-
-  default_vpc_sc_egress_policies = [
-    {
-      identity_type = "ANY_IDENTITY"
-      identities    = null
-      resources     = ["*"]
-      operations = [
-        {
-          service_name     = "storage.googleapis.com"
-          method_selectors = null
-        }
-      ]
-    }
-  ]
-
   vpc_sc = var.vpc_service_controls
 
-  # Effective VPC-SC policies: caller-supplied values override the defaults above.
-  effective_vpc_sc_ingress_policies = length(local.vpc_sc.ingress_policies) > 0 ? local.vpc_sc.ingress_policies : tolist(local.default_vpc_sc_ingress_policies)
-  effective_vpc_sc_egress_policies  = length(local.vpc_sc.egress_policies) > 0 ? local.vpc_sc.egress_policies : tolist(local.default_vpc_sc_egress_policies)
+  # Effective VPC-SC policies: exactly what the caller supplies. There is no
+  # default rule in either direction. A default egress rule would have to name
+  # its identities and target projects to be safe, and this stage knows
+  # neither; a default ingress rule would need the automation identities,
+  # which the caller holds. So the perimeter starts closed and the operator
+  # opens it with named identities and projects (examples/vpc-sc).
+  effective_vpc_sc_ingress_policies = local.vpc_sc.ingress_policies
+  effective_vpc_sc_egress_policies  = local.vpc_sc.egress_policies
 
   # Google APIs via PSC. Behind an ENFORCED perimeter the endpoint targets the
   # vpc-sc (restricted.googleapis.com) bundle, so APIs outside the perimeter's
@@ -114,6 +77,13 @@ module "host" {
   ncc          = var.hub.ncc
   peerings     = var.hub.peerings
   dns_zones    = var.hub.dns_zones
+
+  # Opt-in central egress through the hub Secure Web Proxy (preview).
+  egress_proxy = {
+    enabled            = var.hub.egress_proxy.enabled
+    service_attachment = var.hub.egress_proxy.service_attachment
+    global_access      = var.hub.egress_proxy.global_access
+  }
 
   flow_logs_export = {
     enabled                 = true
@@ -370,6 +340,8 @@ module "app_services" {
   region         = var.host_project.region
   environment    = var.environment
   labels         = var.labels
+  # Production turns Cloud SQL high availability on unless a service opts out.
+  is_production = var.is_production
 
   # The env VPC (not the hub): the host stage creates Private Service Access on
   # it by default, which private-IP Cloud SQL requires.

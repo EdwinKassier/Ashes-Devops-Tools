@@ -282,3 +282,44 @@ run "rejects_unknown_ncc_preset_topology" {
 
   expect_failures = [var.ncc_preset_topology]
 }
+
+# The hub perimeter protects the hub and DNS projects, so with a perimeter on
+# their project numbers must be in the gcp-projects contract.
+run "perimeter_needs_hub_and_dns_project_numbers" {
+  command = plan
+
+  variables {
+    vpc_sc_access_policy_name = "1234567890"
+  }
+
+  override_data {
+    target = data.terraform_remote_state.gcp_projects
+    values = {
+      outputs = {
+        contract = {
+          project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "dev-host" = "acme-dev-host-abcd" }
+          project_numbers = { "dev-host" = "333333333333" }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.upstream_contract_guard]
+}
+
+# Without a perimeter the hub and DNS numbers are not needed.
+run "no_perimeter_no_hub_number_needed" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.gcp_projects
+    values = {
+      outputs = {
+        contract = {
+          project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "dev-host" = "acme-dev-host-abcd" }
+          project_numbers = { "dev-host" = "333333333333" }
+        }
+      }
+    }
+  }
+}

@@ -301,3 +301,157 @@ resource "google_monitoring_alert_policy" "log_based" {
     mime_type = "text/markdown"
   }
 }
+
+# ── Network Data-Plane Alerts ──────────────────────────────────────────────────
+# Off by default here; the network compositions (stages/net-hub, net-spoke) turn
+# each one on when the feature it watches exists.
+
+resource "google_monitoring_alert_policy" "vpn_tunnel_down" {
+  count = var.enable_vpn_tunnel_alert ? 1 : 0
+
+  project      = var.project_id
+  display_name = "${local.prefix}VPN Tunnel Down"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "HA VPN tunnel not established"
+
+    condition_threshold {
+      # DOUBLE gauge, > 0 when established. ALIGN_MAX < 1 means the tunnel was
+      # down for the whole alignment period (no single-sample flaps).
+      filter          = "metric.type=\"vpn.googleapis.com/tunnel_established\" resource.type=\"vpn_gateway\""
+      comparison      = "COMPARISON_LT"
+      threshold_value = 1
+      duration        = local.duration_str
+
+      aggregations {
+        alignment_period   = "${var.alert_alignment_period}s"
+        per_series_aligner = "ALIGN_MAX"
+      }
+    }
+  }
+
+  notification_channels = local.all_notification_channel_ids
+
+  alert_strategy {
+    auto_close = "86400s"
+  }
+
+  documentation {
+    content   = "An HA VPN tunnel is down (metric label tunnel_name). Check the tunnel status and the peer gateway: `gcloud compute vpn-tunnels describe <tunnel> --region <region>`."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "bgp_session_down" {
+  count = var.enable_bgp_session_alert ? 1 : 0
+
+  project      = var.project_id
+  display_name = "${local.prefix}BGP Session Down"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Cloud Router BGP session down"
+
+    condition_threshold {
+      # INT64 gauge: 1 = session up, 0 = down.
+      filter          = "metric.type=\"router.googleapis.com/bgp/session_up\" resource.type=\"gce_router\""
+      comparison      = "COMPARISON_LT"
+      threshold_value = 1
+      duration        = local.duration_str
+
+      aggregations {
+        alignment_period   = "${var.alert_alignment_period}s"
+        per_series_aligner = "ALIGN_MAX"
+      }
+    }
+  }
+
+  notification_channels = local.all_notification_channel_ids
+
+  alert_strategy {
+    auto_close = "86400s"
+  }
+
+  documentation {
+    content   = "A Cloud Router BGP session is down (metric label bgp_peer_name), so routes to or from the peer are withdrawn. Check: `gcloud compute routers get-status <router> --region <region>`."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "nat_allocation_failed" {
+  count = var.enable_nat_allocation_failure_alert ? 1 : 0
+
+  project      = var.project_id
+  display_name = "${local.prefix}Cloud NAT Allocation Failure"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Cloud NAT failed to allocate NAT IPs or ports"
+
+    condition_threshold {
+      # BOOL gauge: count the true samples in the period.
+      filter          = "metric.type=\"router.googleapis.com/nat/nat_allocation_failed\" resource.type=\"nat_gateway\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = local.duration_str
+
+      aggregations {
+        alignment_period   = "${var.alert_alignment_period}s"
+        per_series_aligner = "ALIGN_COUNT_TRUE"
+      }
+    }
+  }
+
+  notification_channels = local.all_notification_channel_ids
+
+  alert_strategy {
+    auto_close = "86400s"
+  }
+
+  documentation {
+    content   = "A Cloud NAT gateway could not allocate NAT IPs or ports to a VM, so new outbound connections from it fail. Add NAT IPs, raise min_ports_per_vm or enable dynamic port allocation."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "nat_dropped_packets" {
+  count = var.enable_nat_dropped_packets_alert ? 1 : 0
+
+  project      = var.project_id
+  display_name = "${local.prefix}Cloud NAT Dropped Packets (Out of Resources)"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Cloud NAT dropped sent packets: OUT_OF_RESOURCES"
+
+    condition_threshold {
+      filter = join(" AND ", [
+        "metric.type=\"router.googleapis.com/nat/dropped_sent_packets_count\"",
+        "resource.type=\"nat_gateway\"",
+        "metric.labels.reason=\"OUT_OF_RESOURCES\"",
+      ])
+      comparison      = "COMPARISON_GT"
+      threshold_value = var.nat_dropped_packets_threshold
+      duration        = local.duration_str
+
+      aggregations {
+        alignment_period     = "${var.alert_alignment_period}s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+        group_by_fields      = ["resource.label.router_id", "resource.label.gateway_name"]
+      }
+    }
+  }
+
+  notification_channels = local.all_notification_channel_ids
+
+  alert_strategy {
+    auto_close = "86400s"
+  }
+
+  documentation {
+    content   = "A Cloud NAT gateway dropped outbound packets because it ran out of NAT ports or IPs (port exhaustion). Add NAT IPs, raise min_ports_per_vm or enable dynamic port allocation."
+    mime_type = "text/markdown"
+  }
+}

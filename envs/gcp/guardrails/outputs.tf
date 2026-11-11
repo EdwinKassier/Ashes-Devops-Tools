@@ -2,7 +2,7 @@
 # validated here (a variable validation cannot read the derived locals without
 # a cycle). A failed precondition fails the plan.
 output "admin_containment_enabled" {
-  description = "Whether the admin-containment deny policy is on (explicit enable_admin_containment, else gcp.admin_containment, else on when any environment is_production)."
+  description = "Whether the admin-containment deny policy is on (explicit enable_admin_containment, else gcp.admin_containment, else on when any environment is_production or a break-glass principal is set)."
   value       = local.enable_admin_containment
 
   precondition {

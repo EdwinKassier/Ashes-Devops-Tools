@@ -159,3 +159,27 @@ run "edition_defaults_to_enterprise" {
     error_message = "edition must default to ENTERPRISE so the default db-custom tier is valid."
   }
 }
+
+# Backups default to Cloud SQL's own location; backup_location moves them to
+# another region (or multi-region) so they survive a regional outage.
+run "backup_location_default_and_cross_region" {
+  command = plan
+
+  variables {
+    backup_location = "europe-west2"
+  }
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].location == "europe-west2" && output.backup_location == "europe-west2"
+    error_message = "backup_location must set the automated backups' location."
+  }
+}
+
+run "backup_location_unset_by_default" {
+  command = plan
+
+  assert {
+    condition     = output.backup_location == null && output.availability_type == "ZONAL"
+    error_message = "By default the backups use Cloud SQL's location and the instance is zonal."
+  }
+}

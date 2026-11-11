@@ -68,3 +68,30 @@ run "explicit_variable_beats_config" {
     error_message = "An explicit enable_vpn must beat aws.network.vpn.enabled."
   }
 }
+
+# vpn is untyped so a misspelled key stays visible: it must fail the plan
+# instead of being dropped by the stage's object type.
+run "rejects_misspelled_vpn_key" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", static_route_only = true }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "explicit_vpn_variable_reaches_stage" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.20", customer_gateway_bgp_asn = 65020 }
+  }
+
+  assert {
+    condition     = local.vpn.customer_gateway_ip == "203.0.113.20" && local.vpn.customer_gateway_bgp_asn == 65020
+    error_message = "an explicit vpn variable must reach the network-hub stage."
+  }
+}

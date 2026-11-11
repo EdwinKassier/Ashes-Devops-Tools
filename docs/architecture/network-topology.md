@@ -95,6 +95,43 @@ graph LR
 
 The perimeter starts in **dry-run mode** (`enable_dry_run = true`) — violations are logged to Cloud Audit Logs but not blocked. Flip to enforcement after validating that all legitimate callers have ingress policies.
 
+Each environment host project sits in its **own** perimeter. The hub perimeter (`hub_data_perimeter`, `stages/network-hub`) protects only the hub and DNS projects: a project can belong to only one regular perimeter of an access policy, and one shared perimeter around every environment would let prod and non-prod exchange data freely once enforced. This holds in both modes: with one org-wide access policy the hub and environment perimeters hold disjoint projects, and with per-environment scoped policies the environment perimeters live in their own policies. VPC peering between a spoke and the hub carries IP traffic only; it does not merge perimeters.
+
+---
+
+## Egress Control
+
+By default each spoke egresses through its own Cloud NAT (private tier only; the database tier is NATed only with `nat.include_database_subnets`). Opt-in central egress control (preview) uses a Secure Web Proxy in the hub:
+
+```mermaid
+graph LR
+    subgraph spoke["Spoke VPC (per environment)"]
+        wl["Private-tier workload\nHTTPS_PROXY=endpoint:443"]
+        ep["PSC endpoint\n(egress_proxy)"]
+    end
+    subgraph hub["Hub VPC"]
+        sa["PSC service attachment\n(accepts env host projects)"]
+        swp["Secure Web Proxy\nFQDN allowlist, default deny"]
+    end
+    inet(("Internet"))
+    wl --> ep --> sa --> swp -->|"allowlisted hosts only"| inet
+```
+
+- Hub: `secure_web_proxy` on `stages/network-hub` / `net-hub` (`modules/gcp/network/secure-web-proxy`). `psc_nat_subnet_cidr` publishes it; consumers default to the environment host projects.
+- Spoke: `egress_proxy` on `stages/net-spoke` creates the PSC endpoint and drops the private tier from Cloud NAT (so the proxy is the only path). `nat.include_private_subnets = true` keeps NAT during a migration.
+- Why PSC and not routes: next-hop routing to the proxy works only inside the proxy's VPC and region, and a peered spoke has no supported route to it. PSC is the multi-VPC model Google documents. Through PSC the proxy sees a NAT address, so rules match on host, not client IP. Without TLS inspection rules match the host, not HTTPS paths.
+
+## Data-Plane Alerts
+
+`modules/gcp/monitoring/alert-policy` carries the network alerts; the compositions turn them on for the features that exist (`alerting.enabled = true` by default, `alerting.notification_channel_ids` for routing):
+
+| Alert | Metric | Where | On when |
+|-------|--------|-------|---------|
+| VPN tunnel down | `vpn.googleapis.com/tunnel_established` < 1 | hub | `vpn.enabled` |
+| BGP session down | `router.googleapis.com/bgp/session_up` < 1 | hub | `vpn.enabled` or any interconnect |
+| NAT allocation failure | `router.googleapis.com/nat/nat_allocation_failed` | hub, each spoke | a NAT exists |
+| NAT dropped packets | `router.googleapis.com/nat/dropped_sent_packets_count`, reason `OUT_OF_RESOURCES` | hub, each spoke | a NAT exists |
+
 ---
 
 ## Workload Identity Federation Trust
@@ -166,3 +203,7 @@ Spoke projects use DNS peering to resolve records from the hub's private zone. N
 | `vpn.tunnel_count` | `modules/gcp/stages/net-hub` | Number of HA-VPN tunnels (1 or 2). Must be 2 for 99.99% SLA. |
 | `interconnects` | `modules/gcp/stages/net-hub` | Map of Cloud Interconnect (Dedicated/Partner) VLAN attachments to create. Empty map = no interconnect. |
 | `vpc_service_controls` | `modules/gcp/stages/net-spoke`, `net-hub` | Object controlling VPC-SC perimeter config. |
+| `nat.include_database_subnets` | `modules/gcp/stages/net-spoke`, `net-hub` | NAT the database tier too. Default `false`. |
+| `secure_web_proxy` | `modules/gcp/stages/network-hub`, `net-hub` | Opt-in hub Secure Web Proxy with an FQDN allowlist (preview). |
+| `egress_proxy` | `modules/gcp/stages/net-spoke` | Opt-in PSC endpoint for the hub proxy; drops private-tier NAT. |
+| `alerting` | `modules/gcp/stages/net-spoke`, `net-hub`, `network-hub` | Data-plane alerts and their notification channels. |

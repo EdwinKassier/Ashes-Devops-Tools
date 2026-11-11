@@ -260,3 +260,27 @@ run "key_policy_admin_defaults_to_key_admin" {
     error_message = "empty key_policy_admin_arns must fall back to key_admin_arn without bypassing the lockout check"
   }
 }
+
+# KMS keys are guarded against destroy and replacement by default, like the
+# GCP KMS keys (prevent_destroy).
+run "deletion_guard_on_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(terraform_data.deletion_guard) == 1 && terraform_data.deletion_guard[0].input == "alias/central-logs"
+    error_message = "the key must carry a prevent_destroy guard by default"
+  }
+}
+
+run "deletion_guard_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+  }
+
+  assert {
+    condition     = length(terraform_data.deletion_guard) == 0
+    error_message = "enable_deletion_protection = false must omit the guard"
+  }
+}

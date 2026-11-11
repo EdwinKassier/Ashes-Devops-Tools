@@ -6,7 +6,27 @@ Object Lock, Block Public Access on all four dimensions, versioning, SSE-KMS
 with a bucket key, a default Object Lock retention, a GLACIER-transition +
 expiration lifecycle, and a bucket policy (built with `jsonencode()`) that scopes
 log-delivery grants to this organization via `aws:SourceOrgID` and denies
-non-TLS access.
+non-TLS access. With `cloudtrail_trail_account_id` set, the CloudTrail grants
+also require `aws:SourceArn` to match a trail in that account
+(`arn:<partition>:cloudtrail:*:<id>:trail/*`).
+
+## Server access logs
+
+S3 does not deliver server access logs to a bucket with SSE-KMS default
+encryption or an Object Lock default retention, so the archive never logs to
+itself. By default the module creates `<log_archive_bucket_name>-access-logs`
+(SSE-S3, versioned, no Object Lock, Block Public Access, bucket-owner-enforced,
+expiry after `access_log_retention_days`) whose policy lets only
+`logging.s3.amazonaws.com` write, only for this archive. Set
+`access_log_bucket` to use an existing bucket instead.
+
+## Deletion guard
+
+`enable_deletion_protection` (default `true`) adds a `terraform_data` guard with
+`prevent_destroy` and `replace_triggered_by` on the bucket, so a plan that
+destroys or replaces the archive fails. Turning the flag off does not remove an
+existing guard; run
+`terraform state rm '<module_address>.terraform_data.deletion_guard[0]'` first.
 
 ## Object Lock and teardown
 
@@ -53,6 +73,7 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="provider_aws"></a> [aws](#provider\_aws) | 6.72.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 
 
@@ -61,14 +82,23 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_s3_bucket.this (modules/aws/data/log-archive-bucket/main.tf#L101)
-- resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L169)
-- resource.aws_s3_bucket_logging.this (modules/aws/data/log-archive-bucket/main.tf#L140)
-- resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L158)
-- resource.aws_s3_bucket_policy.this (modules/aws/data/log-archive-bucket/main.tf#L196)
-- resource.aws_s3_bucket_public_access_block.this (modules/aws/data/log-archive-bucket/main.tf#L120)
-- resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L146)
-- resource.aws_s3_bucket_versioning.this (modules/aws/data/log-archive-bucket/main.tf#L129)
+- resource.aws_s3_bucket.access_logs (modules/aws/data/log-archive-bucket/main.tf#L233)
+- resource.aws_s3_bucket.this (modules/aws/data/log-archive-bucket/main.tf#L115)
+- resource.aws_s3_bucket_lifecycle_configuration.access_logs (modules/aws/data/log-archive-bucket/main.tf#L290)
+- resource.aws_s3_bucket_lifecycle_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L187)
+- resource.aws_s3_bucket_logging.this (modules/aws/data/log-archive-bucket/main.tf#L155)
+- resource.aws_s3_bucket_object_lock_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L176)
+- resource.aws_s3_bucket_ownership_controls.access_logs (modules/aws/data/log-archive-bucket/main.tf#L261)
+- resource.aws_s3_bucket_policy.access_logs (modules/aws/data/log-archive-bucket/main.tf#L314)
+- resource.aws_s3_bucket_policy.this (modules/aws/data/log-archive-bucket/main.tf#L214)
+- resource.aws_s3_bucket_public_access_block.access_logs (modules/aws/data/log-archive-bucket/main.tf#L251)
+- resource.aws_s3_bucket_public_access_block.this (modules/aws/data/log-archive-bucket/main.tf#L134)
+- resource.aws_s3_bucket_server_side_encryption_configuration.access_logs (modules/aws/data/log-archive-bucket/main.tf#L279)
+- resource.aws_s3_bucket_server_side_encryption_configuration.this (modules/aws/data/log-archive-bucket/main.tf#L164)
+- resource.aws_s3_bucket_versioning.access_logs (modules/aws/data/log-archive-bucket/main.tf#L270)
+- resource.aws_s3_bucket_versioning.this (modules/aws/data/log-archive-bucket/main.tf#L143)
+- resource.terraform_data.deletion_guard (modules/aws/data/log-archive-bucket/main.tf#L359)
+- data source.aws_caller_identity.current (modules/aws/data/log-archive-bucket/main.tf#L231)
 - data source.aws_partition.current (modules/aws/data/log-archive-bucket/partition.tf#L4)
 
 
@@ -79,8 +109,11 @@ The following resources are created:
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the CMK used for SSE-KMS default encryption on the bucket (e.g. the aws/kms-key module's key\_arn output). | `string` | n/a | yes |
 | <a name="input_log_archive_bucket_name"></a> [log\_archive\_bucket\_name](#input\_log\_archive\_bucket\_name) | Deterministic name of the central log-archive bucket. This is a cross-root naming contract: it must match the name the B3 SCP references. | `string` | n/a | yes |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations organization ID (o-xxxxxxxxxx). Used in the aws:SourceOrgID condition that scopes log-delivery grants in the bucket policy. | `string` | n/a | yes |
-| <a name="input_access_log_bucket"></a> [access\_log\_bucket](#input\_access\_log\_bucket) | Target bucket for S3 server access logs. Empty (default) self-logs to this bucket under access\_log\_prefix, which is appropriate for the terminal log sink; set to a separate audit bucket to ship access logs elsewhere. | `string` | `""` | no |
+| <a name="input_access_log_bucket"></a> [access\_log\_bucket](#input\_access\_log\_bucket) | Existing bucket to receive the log archive's S3 server access logs (it must not use SSE-KMS default encryption or an Object Lock default retention). Empty (default) creates a companion <log\_archive\_bucket\_name>-access-logs bucket with SSE-S3 and no Object Lock. | `string` | `""` | no |
 | <a name="input_access_log_prefix"></a> [access\_log\_prefix](#input\_access\_log\_prefix) | Key prefix for S3 server access logs. | `string` | `"s3-access-logs/"` | no |
+| <a name="input_access_log_retention_days"></a> [access\_log\_retention\_days](#input\_access\_log\_retention\_days) | Days the companion access-log bucket keeps S3 server access logs before they expire. Ignored when access\_log\_bucket names an existing bucket. | `number` | `365` | no |
+| <a name="input_cloudtrail_trail_account_id"></a> [cloudtrail\_trail\_account\_id](#input\_cloudtrail\_trail\_account\_id) | Account ID that owns the organization trail (the management account, also when a CloudTrail delegated administrator manages the trail). When set, the CloudTrail grants also require aws:SourceArn to match arn:<partition>:cloudtrail:*:<id>:trail/*. Empty (default) scopes them by aws:SourceOrgID only. | `string` | `""` | no |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Create a prevent\_destroy guard that makes any plan which destroys or replaces the log-archive bucket fail. Turning it off does not remove an existing guard: run terraform state rm on the guard first. | `bool` | `true` | no |
 | <a name="input_object_lock_mode"></a> [object\_lock\_mode](#input\_object\_lock\_mode) | Default S3 Object Lock retention mode. COMPLIANCE is WORM against all principals (incl. root) and blocks destroy until retention lapses; GOVERNANCE is bypassable by privileged principals. | `string` | `"COMPLIANCE"` | no |
 | <a name="input_retention_days"></a> [retention\_days](#input\_retention\_days) | Default Object Lock retention period, in days. Also drives lifecycle expiration. | `number` | `365` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
@@ -89,6 +122,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_access_log_bucket_name"></a> [access\_log\_bucket\_name](#output\_access\_log\_bucket\_name) | The bucket that receives the log archive's S3 server access logs: the companion <name>-access-logs bucket, or access\_log\_bucket when set. |
 | <a name="output_bucket_arn"></a> [bucket\_arn](#output\_bucket\_arn) | The ARN of the log-archive bucket. |
 | <a name="output_bucket_id"></a> [bucket\_id](#output\_bucket\_id) | The name (ID) of the log-archive bucket. |
 | <a name="output_bucket_name"></a> [bucket\_name](#output\_bucket\_name) | The deterministic bucket name (equals var.log\_archive\_bucket\_name); the cross-root naming contract the B3 SCP references. |

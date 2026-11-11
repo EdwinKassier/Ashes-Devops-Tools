@@ -413,3 +413,40 @@ run "delegated_admin_trail_owner_trusted_and_bounded" {
     error_message = "A delegated-admin trail's delivery role must trust the owner and this account, and carry the boundary."
   }
 }
+
+# The module-created CloudWatch Logs CMK is guarded against destroy and
+# replacement by default, like the GCP KMS keys.
+run "cloudwatch_kms_key_deletion_guard" {
+  command = plan
+
+  assert {
+    condition     = length(aws_kms_key.cloudwatch) == 1 && length(terraform_data.cloudwatch_kms_deletion_guard) == 1 && terraform_data.cloudwatch_kms_deletion_guard[0].input == "alias/${var.trail_name}-cloudwatch"
+    error_message = "the module-created CloudWatch Logs CMK must carry a prevent_destroy guard by default"
+  }
+}
+
+run "cloudwatch_kms_key_deletion_guard_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+  }
+
+  assert {
+    condition     = length(aws_kms_key.cloudwatch) == 1 && length(terraform_data.cloudwatch_kms_deletion_guard) == 0
+    error_message = "enable_deletion_protection = false must omit the guard"
+  }
+}
+
+run "no_guard_without_module_created_key" {
+  command = plan
+
+  variables {
+    cloudwatch_logs_kms_key_arn = "arn:aws:kms:us-east-1:111111111111:key/11111111-1111-1111-1111-111111111111"
+  }
+
+  assert {
+    condition     = length(aws_kms_key.cloudwatch) == 0 && length(terraform_data.cloudwatch_kms_deletion_guard) == 0
+    error_message = "no guard is created when the caller supplies the CloudWatch Logs key"
+  }
+}

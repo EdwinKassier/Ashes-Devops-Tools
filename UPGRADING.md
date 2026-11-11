@@ -43,6 +43,67 @@ Manual steps for the next release, grouped by area. A breaking change
 
 ### HCP Terraform and policy
 
+#### Production workloads need an approver to apply (tfc-admin)
+
+The platform team no longer has write access on production `gcp-workload-<env>` and `aws-workload-<env>` workspaces. It can queue plans there, but it cannot edit variables or confirm applies. Set `control_plane_approvers_team_id`, or only organization owners can apply production. Production workspaces get the new tag `tier:production`. With `split_workload_projects = true`, a workloads project that holds a production workload becomes custom, and its non-production workloads get write through workspace grants.
+
+#### Workspaces trigger only on the modules their root uses (tfc-admin)
+
+Trigger patterns now list each root's own module trees, not all of `modules/<cloud>/**`. When a root starts to use a new module, add it to `root_trigger_dirs` in `envs/tfc-admin/main.tf`. `scripts/check-consistency.sh` fails until you do. `config/landing-zone.yaml` still triggers every workspace.
+
+#### TFC runs an exact Terraform version (tfc-admin)
+
+`terraform_version` now defaults to `1.17.1`, the version CI tests. Constraints such as `~> 1.17` are rejected. Change it in the same PR as `.tool-versions`.
+
+#### New policies on the TFC layer (tfc-admin, policies)
+
+- `tfc_admin_guard` (mandatory, overridable by the security team) blocks these changes on tfc-admin plans:
+  - detaching or weakening a policy set;
+  - auto-apply on control-plane or production workspaces;
+  - any wider team access or new token.
+
+  Expect a security-team override when you add or remove an environment.
+- `no_plan_time_code_execution` (mandatory, not overridable) blocks provisioners and the `external` and `http` data sources outside `supabase/vault-secrets`.
+
+Both sets now also attach to the tfc-admin workspace itself.
+
+#### Drift detection compares against the applied configuration (CI)
+
+`TFC_TOKEN_DRIFT` now also needs read access to state versions. Drift detection runs a refresh-only plan pinned to the configuration of the last applied run. Changes that are merged but not applied are reported as pending, not as drift.
+
+#### State backup workflow (CI, tfc-admin)
+
+The new `state-backup.yml` exports each workspace's current state daily to a versioned, locked bucket. It fails until it is configured: follow `docs/runbooks/state-backup.md`, or set `STATE_BACKUP_OPT_OUT=true`. tfc-admin's new `state_backup_team_id` grants that team read access to state versions.
+
+#### Dependency update commits use fix(deps) (Renovate, Dependabot)
+
+Renovate and Dependabot now commit as `fix(deps):`, so provider and package bumps appear in the changelog. Each bump now produces a patch release. Dependabot also updates the `pg` package of `vault-secrets`, which is pinned to an exact version.
+
+#### Platform team cannot queue plans where static secrets live; one SaaS reader team per stack (tfc-admin)
+
+**Breaking.** A plan runs code with the workspace's environment variables, and
+anyone with `plan` permission can run a CLI speculative plan of their own,
+unreviewed configuration (`speculative_enabled = false` stops only automatic PR
+plans). So:
+
+- On the self-managed `platform` project (tfc-admin, which holds `TFE_TOKEN`)
+  and the `saas` project (account-wide Supabase/Vercel tokens), the platform team
+  now gets custom `runs = read` instead of `plan` (tfc-admin) or fixed `write`
+  (saas). The approvers team (`control_plane_approvers_team_id`) now confirms
+  `saas-*` runs. Without an approvers team, only organization owners can run
+  `saas-*`: set one before the upgrade apply.
+- `saas_outputs_reader_team_id` is removed (the plan fails while it is set).
+  Create one reader team per `saas-<name>` workspace and set
+  `saas_outputs_reader_team_ids = { "saas-<name>" = "team-..." }`. Then create
+  a token for each team and replace the `TFE_TOKEN` on each bridging workload
+  with the token of the stack it bridges
+  ([saas-bootstrap](docs/runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them)).
+  Delete the old shared team's token afterwards.
+
+Also in this change (no manual step): `scripts/check-consistency.sh` (CI) fails
+on a `data "external"`, `data "http"`, provisioner or `hashicorp/external` /
+`hashicorp/http` provider outside the reviewed allowlist.
+
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply (estates with policy sets on).** tfc-admin's
@@ -117,6 +178,80 @@ skipping it. A single-cloud estate sets the `TFC_DRIFT_WORKSPACES` repository
 variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
 ### AWS
+
+#### The tfc-plan read deny is now a managed policy with more actions (aws-organization)
+
+The plan-role deny moves from an inline policy on each `tfc-plan` role to one managed policy per account, `tfc-plan-data-read-deny`. It now also denies:
+
+- API Gateway key values
+- launch-template and launch-configuration user data
+- CodeBuild project and build variables
+- Lambda layer code
+- Cognito app-client secrets
+- AppSync API keys
+- Step Functions execution data
+- Lightsail access details
+- Glacier job output
+- Elastic Beanstalk configuration
+
+What to do:
+
+- A stack that plans a launch template, a CodeBuild project or a similar resource must add its ARN to `plan_role_data_read_exempt_arns`.
+- A stack that plans REST API keys must set `enable_plan_role_data_read_deny = false`.
+
+The StackSet update creates the policy and removes the old inline policy.
+
+#### The deny-tamper SCP protects StackSet-owned policies (aws-organization)
+
+The new statement `DenyStackSetPolicyTampering` limits who can create, version, delete or tag `tfc-apply-boundary` and `tfc-plan-data-read-deny`. Only break-glass and the StackSet execution role can. Configure the names with `stackset_managed_policy_names`. An external boundary set through `apply_permissions_boundary_arn` is not covered.
+
+#### The log-archive SCP covers all bucket configuration changes (aws-organization)
+
+On the log archive and its access-log bucket, the SCP now denies:
+
+- replication, encryption, lifecycle and inventory configuration
+- every `s3:PutBucket*` change
+- bucket deletion
+
+Pipeline roles and break-glass stay exempt, as before (ADR 0014).
+
+#### The region SCP exempts the member break-glass role (aws-organization)
+
+The exemption is now `arn:<partition>:iam::*:role/<break-glass name>`. The management-account ARN it used before had no effect, because SCPs never apply to the management account.
+
+#### Log-archive access logs go to a companion bucket (aws-security)
+
+By default the module creates `<log_archive_bucket_name>-access-logs`, with SSE-S3 and no Object Lock. The archive can no longer log to itself. A bucket name longer than 51 characters needs `access_log_bucket`.
+
+#### CloudTrail log-archive grants are pinned to the trail owner (aws-security)
+
+The CloudTrail grants now also require an `aws:SourceArn` trail pattern for the management account (`cloudtrail_trail_account_id`, set by the security stage).
+
+#### The forensics role can be assumed (aws-security)
+
+The trust and KMS conditions now use `aws:PrincipalAccount` and `aws:PrincipalOrgID`. The previous service-principal keys meant no IAM principal could assume the role.
+
+#### AWS KMS keys and the log archive have deletion guards (aws-security, aws-organization)
+
+`kms-key`, `cloudtrail-org` and `log-archive-bucket` add a `prevent_destroy` guard (`enable_deletion_protection`, default true). The guard-alerts key has `prevent_destroy`. A plan that destroys or replaces one of these resources now fails. To retire one deliberately, set `enable_deletion_protection = false` and apply first, or run `terraform state rm` on its guard.
+
+#### AWS network addressing moves to the CIDR plan (aws-network, aws-workload, tfc-admin)
+
+**Breaking for an applied aws-network.** The aws-network defaults sat inside
+the GCP block (`top_cidr` `10.0.0.0/8`, inspection `10.0.0.0/16` and egress
+`10.1.0.0/16`, the GCP hub and DNS ranges). They now follow
+[the CIDR plan](docs/architecture/cidr-plan.md): `top_cidr` `10.64.0.0/10`,
+regional pool `10.64.0.0/12`, inspection `10.64.0.0/16`, egress `10.65.0.0/16`.
+The aws-workload built-in `vpc_cidr` moves from `10.20.0.0/16` to
+`10.72.0.0/16`. All four network values can now be set in
+`aws.network.{top_cidr,regional_cidrs,inspection_cidr,egress_cidr}`.
+
+**Before the upgrade apply,** if aws-network is already applied, pin its current
+ranges in `config/landing-zone.yaml` (`aws.network.top_cidr: 10.0.0.0/8`, and so
+on), or the plan replaces the IPAM pools and hub VPCs. Do the same for a
+workload that relied on the `10.20.0.0/16` default (`vpc_cidr`). Then plan
+tfc-admin: it now fails on any overlap between GCP and AWS ranges in the config
+file, naming each pair. Move whichever cloud's ranges the plan names.
 
 #### Member-account backup vault (aws-organization)
 
@@ -477,6 +612,97 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### The environment perimeter has no default VPC-SC rules (gcp-workload)
+
+`modules/gcp/stages/environment` no longer adds a default ingress or egress rule:
+
+- The old egress rule let any identity copy storage data to any project.
+- The old ingress rule named a Workload Identity pool as a source. VPC-SC does not accept that, so it never matched.
+
+Set `vpc_sc_ingress_policies` and `vpc_sc_egress_policies` with named identities and `projects/<number>` targets, as in `modules/gcp/stages/environment/examples/vpc-sc`. Before you enforce a perimeter, add an ingress rule for the workload's TFC identities. The plan now rejects a pool as an ingress source, and rejects `ANY_IDENTITY` egress to `*`. The stage input `admin_project_number` is deprecated and ignored.
+
+#### Workload identity providers may not upload a JWKS (gcp-organization)
+
+`custom.wifProviderTenantPinned` now also denies any provider for a pinned issuer (TFC or GitHub Actions) that sets `oidc.jwks_json`. With an uploaded JWKS, the key holder could sign any token while still passing the issuer and condition pins. Remove any uploaded JWKS from such providers before you apply gcp-organization.
+
+#### IAM-controlling workload roles are no longer delegable (gcp-bootstrap, gcp-organization, gcp-projects)
+
+projects-apply could grant itself any delegated role on an environment folder, because a folder IAM condition limits roles but not members. It can no longer grant these roles:
+
+- `projectIamAdmin`
+- `serviceAccountAdmin`
+- `serviceAccountKeyAdmin`
+- `serviceAccountTokenCreator`
+- `workloadIdentityPoolAdmin`
+
+gcp-organization now grants them to each workload SA directly.
+
+**Upgrade order:**
+
+1. Apply gcp-bootstrap.
+2. Apply gcp-organization. It creates the direct grants. The bindings already exist, so nothing changes in IAM.
+3. Before you apply gcp-projects, remove its copies of those grants from its state, or its apply tries to delete bindings that gcp-organization now owns. List them with:
+
+   ```bash
+   terraform state list | grep 'workload_sa_folder_roles\[' | grep -E 'projectIamAdmin|serviceAccountAdmin|serviceAccountKeyAdmin|serviceAccountTokenCreator|workloadIdentityPoolAdmin'
+   ```
+
+   Run `terraform state rm '<address>'` for each. The plan must then show no change to `workload_sa_folder_roles`.
+4. Apply gcp-projects.
+
+#### Production Cloud SQL is regional by default (gcp-workload)
+
+In an environment with `is_production`, app-service databases are created with REGIONAL availability, unless the entry sets `database.enable_high_availability: false`. An existing zonal production database changes to regional in place, with a short restart. The new option `database.backup_location` keeps backups in another region.
+
+#### Production app services need a service team (gcp-workload)
+
+In a production environment, every `app_services` entry must set `service_team`, so app principals do not share the Shared VPC host project. To keep a service in the host project, set `enable_host_project_workloads = true` on the workload.
+
+#### Admin containment follows the break-glass group (gcp-organization, gcp-guardrails)
+
+Admin containment is now on when `gcp.break_glass_group` is set, even with no production environment. To keep it off, set `gcp.admin_containment: false`.
+
+#### The hub VPC-SC perimeter now covers only the hub and DNS projects (gcp-network-hub)
+
+The hub perimeter no longer lists the environment host projects. Each environment host project is protected by its own environment perimeter, so production and non-production never share one. In org-wide-policy mode the old layout was also invalid: a project can belong to only one regular perimeter of a policy. `stages/network-hub` takes two new inputs, `hub_project_number` and `dns_project_number`, and requires them when `vpc_sc_access_policy_name` is set. The `gcp-network-hub` root reads them from the gcp-projects contract (`shared-hub`, `shared-dns`). On the next apply, the environment projects leave the hub perimeter. Before you enforce, confirm that every environment has its own perimeter.
+
+#### Cloud NAT no longer covers the database subnets (gcp-network-hub, gcp-workload)
+
+By default, Cloud NAT in `stages/net-hub` and `stages/net-spoke` now translates only the private tier. A VM in a database subnet has no internet path, even without the `database` network tag. If a database-tier workload needs outbound internet, set `nat.include_database_subnets = true`.
+
+#### Network data-plane alerts are on by default (gcp-network-hub, gcp-workload)
+
+`stages/net-hub` and `stages/net-spoke` now create Cloud Monitoring alert policies for the features that exist: VPN tunnel down, BGP session down, Cloud NAT allocation failures and Cloud NAT packet drops. To get notifications, set `alerting.notification_channel_ids` (`network_alerting` on the gcp-network-hub root). Set `alerting.enabled = false` to turn them off.
+
+#### Opt-in Secure Web Proxy for central egress (preview)
+
+The new module `modules/gcp/network/secure-web-proxy`, the hub input `secure_web_proxy` and the spoke input `egress_proxy` add FQDN-allowlisted egress through one proxy in the hub, reached over Private Service Connect. They are off by default and not yet validated by a real apply. Rules match on host name: traffic is source-NATed and there is no TLS inspection.
+
+#### The hub owns the hub side of each environment peering (gcp-network-hub, gcp-workload, gcp-projects)
+
+Every `gcp-workload-<env>` used to create the reverse peering
+`hub-peering-reverse` on the hub VPC, so a second environment collided on that
+name, and the workload apply SA had no right on the hub project anyway. Now
+`gcp-network-hub` creates `hub-to-<env>` for each peering-mode environment
+whose spoke network exists, and the workload creates only its own side.
+`gcp-projects` grants the network-hub SAs read-only `roles/compute.viewer` on
+each environment folder so the hub can list the spoke networks.
+
+**Upgrade order (an applied peering-mode environment loses hub connectivity
+between steps 3 and 4):**
+
+1. Apply `gcp-projects` (the new viewer grants).
+2. Do not apply `gcp-network-hub` yet. It plans `hub-to-<env>` for every
+   existing spoke, and GCP rejects that peering while the old
+   `hub-peering-reverse` still pairs the same two networks.
+3. Apply each `gcp-workload-<env>`: it destroys its `hub-peering-reverse`.
+4. Apply `gcp-network-hub`: it creates `hub-to-<env>`. Each workload's
+   `hub_peering_state` output reads `ACTIVE` after its next refresh.
+
+For a **new** environment, queue `gcp-network-hub` once more after the
+environment's first workload apply: the hub side can only be created once the
+spoke network exists.
+
 #### Internet egress route for Cloud NAT (gcp-network-hub, gcp-workload-<env>)
 
 **Behaviour change.** `tiered-vpc` creates every VPC with
@@ -831,6 +1057,10 @@ or destroyed.
 
 ### SaaS and cross-cloud
 
+#### vault-secrets installs its dependencies in each script run (saas)
+
+`terraform_data.npm_install` is gone. It ran only when `package-lock.json` changed, so a later bootstrap or reconcile on a fresh runner failed with "module not found". Bootstrap and reconcile now each run `npm ci --ignore-scripts` in the same command, before `node`. `removed` blocks drop the old resource from state without running anything. The runner still needs Node.js 18+ and npm.
+
 #### saas / vercel: function regions through `resource_config`
 
 `vercel_project` now sets `resource_config.function_default_regions` and no longer
@@ -865,6 +1095,34 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
   reads ephemerally" under Terraform 1.17).
 
 ### All clouds
+
+#### The compute dashboard applies changes (gcp)
+
+`compute-dashboard` no longer ignores `dashboard_json`, so tile and threshold changes now reach the dashboard. The next plan may update an existing dashboard once, to match the module.
+
+#### Deletion guards also block replacement (gcp, aws)
+
+The Cloud SQL and Aurora guards now also fail a plan that would replace the instance or cluster. The Aurora guard follows `deletion_protection`, and its address moves to `terraform_data.deletion_guard[0]` (a `moved` block handles this). To destroy or replace on purpose, run `terraform state rm` on the guard, then set the flag to false and apply.
+
+#### Removed-input shims are deleted (gcp-organization, aws-security)
+
+The inert re-declarations of the 81 removed variables, and `terraform_data.removed_inputs_guard`, are gone before v1.0 (the project is pre-1.0). A stale old variable now produces Terraform's "undeclared variable" warning instead of failing the plan. Before you upgrade, confirm that no old variable is still set, and move any you find into `gcp_overrides` or `aws_overrides`.
+
+#### Unknown keys in map inputs fail the plan (gcp-workload, aws-network)
+
+`app_services`, `additional_regions`, `vm_backup_schedules`, `os_patch_deployments` (gcp-workload) and `vpn` (aws-network) now reject keys their consumers do not accept, instead of dropping them silently.
+
+#### The KMS key_names output returns full key names (gcp)
+
+`modules/gcp/governance/kms` output `key_names` now returns the full key resource name (`projects/.../cryptoKeys/<key>`), not the short key name. Every `kms_key_name` argument needs the full form, so gcp-organization's CMEK wiring (audit logs, SCC, billing) and the net-spoke flow-logs key failed to plan before. A caller that relied on the short name should use the map key instead.
+
+#### Security Lake creates one data lake per Region (aws-security)
+
+The aws provider accepts one `configuration` block per data lake, so more than one enabled Region failed to plan. The first enabled Region keeps its data lake (no address change). Each other Region gets its own data lake, encrypted with its key from `additional_region_kms_key_ids` (S3-managed when absent), because a KMS key is regional.
+
+#### Opt-in egress proxy per environment (gcp-workload, preview)
+
+`enable_egress_proxy` (or `gcp.environments.<env>.egress_proxy: true`) sends the environment's private-tier egress through the hub Secure Web Proxy. The gcp-network-hub contract publishes the proxy's service attachment as `hub_network.egress_proxy_service_attachment`. The plan fails when the proxy is on for an environment but the hub has no proxy.
 
 #### The `starter` profile requires a budget (aws-organization, gcp-organization)
 
@@ -937,9 +1195,9 @@ What else changes on the next plan:
   Terraform's `deprecated` attribute, so setting one prints a "Deprecated
   variable got a value" warning that names the replacement. Nothing else
   changes. The inputs:
-  - the 81 removed variables in `envs/gcp/organization/deprecated_inputs.tf`
-    and `envs/aws/security/deprecated_inputs.tf` (setting one still fails the
-    plan through the removed-inputs guard);
+  - the 81 removed variables of gcp-organization and aws-security (their
+    declarations and guard were deleted in a later release; see "Removed-input
+    shims are deleted");
   - `config_role_arn` and `create_config_service_linked_role` on
     `envs/aws/workload` and `modules/aws/stages/workload`. The root no longer
     passes them to the stage, which replaces the stage's warning `check`;
@@ -1036,12 +1294,10 @@ whose values moved 1:1 shows no changes.
 For a TFC workspace variable, delete the old variable and add one HCL variable,
 for example `gcp_overrides = { enable_pam = true, pam_eligible_groups = ["..."] }`.
 Leave a key out to keep its config value. **An old variable that is still set
-fails the plan.** Each root's `deprecated_inputs.tf` declares every removed name
-again (untyped, `default = null`, inert), and `terraform_data.removed_inputs_guard`
-fails while any of them is set, from a tfvars file, a TFC workspace variable or
-a `TF_VAR_` environment variable. The error lists each one with its replacement,
-for example `enable_pam -> gcp_overrides.enable_pam`. The guard and the inert
-declarations are removed at v1.0 (see "Legacy modes removed at v1.0").
+fails the plan** in this release, through `terraform_data.removed_inputs_guard`.
+A later release deleted that guard and the inert declarations (see "Removed-input
+shims are deleted"): after it, a stale variable only produces an "undeclared
+variable" warning, so move every old variable first.
 
 Behaviour changes to check:
 
@@ -1229,6 +1485,5 @@ Each dual mode keeps both paths until v1.0. Migrate before then.
 | `guardrail_owner_mode = "organization"` (in-stage apply, `roles/iam.denyAdmin` on the organization apply SA) | `guardrail_owner_mode = "separate"` | GCP deny policies move to the security-team `gcp-guardrails` workspace |
 | Workload `removed` block for `module.config_recorder`, the deprecated `config_role_arn` and `create_config_service_linked_role` inputs, and the `config_role_arn` output | The `org-config-recorders` StackSet in aws-organization | AWS Config recorders move to an aws-organization StackSet |
 | Flag-off recorder path of the SCP (recorder actions in `DenyWeakenSecurityServices`) | `enable_config_recorder_scp = true` | AWS Config recorders move to an aws-organization StackSet |
-| `deprecated_inputs.tf` in gcp-organization and aws-security (inert re-declarations of the 81 removed variables, and `terraform_data.removed_inputs_guard`) | `gcp_overrides` / `aws_overrides` keys | Object pass-through: `gcp_overrides` (gcp-organization) and `aws_overrides` (aws-security) |
 | The individual cross-root outputs of the producer roots, and the consumers' fallback to them when `contract` is absent | The `contract` output (`outputs.contract.<key>`) | One `contract` output per producer root |
 | `connectivity = peering` as the default hub connectivity (VPC peering from each spoke) | `connectivity = ncc`, the default from v1.0 once sandbox-proven. `peering` stays selectable. | NCC hub/spoke connectivity, opt-in |

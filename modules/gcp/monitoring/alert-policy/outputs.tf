@@ -59,5 +59,9 @@ output "all_alert_policy_ids" {
     var.enable_high_latency_alert ? { "high_latency" = google_monitoring_alert_policy.high_latency[0].id } : {},
     (var.enable_uptime_alert && length(var.uptime_check_ids) > 0) ? { "uptime" = google_monitoring_alert_policy.uptime[0].id } : {},
     (var.enable_log_based_alert && var.log_filter != null) ? { "log_based" = google_monitoring_alert_policy.log_based[0].id } : {},
+    var.enable_vpn_tunnel_alert ? { "vpn_tunnel_down" = google_monitoring_alert_policy.vpn_tunnel_down[0].id } : {},
+    var.enable_bgp_session_alert ? { "bgp_session_down" = google_monitoring_alert_policy.bgp_session_down[0].id } : {},
+    var.enable_nat_allocation_failure_alert ? { "nat_allocation_failed" = google_monitoring_alert_policy.nat_allocation_failed[0].id } : {},
+    var.enable_nat_dropped_packets_alert ? { "nat_dropped_packets" = google_monitoring_alert_policy.nat_dropped_packets[0].id } : {},
   )
 }

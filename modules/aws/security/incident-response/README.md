@@ -36,15 +36,16 @@ per-deployment input).
 ## Forensics role (intra-org)
 
 `ir-forensics-snapshot-share` is trusted only by the **forensics account**
-principal AND further scoped by `aws:PrincipalOrgID` AND `aws:SourceAccount`
+principal AND further scoped by `aws:PrincipalOrgID` AND `aws:PrincipalAccount`
 (belt-and-suspenders), so no principal outside the organization — and no
 account other than the forensics account — can assume it even if the account id
-leaks. It is intended for cross-account EBS-snapshot copy/share during an
+leaks. (`aws:SourceAccount` / `aws:SourceOrgID` are not used: AWS sets them only
+when a service principal calls, never on a role-to-role `AssumeRole`.) It is intended for cross-account EBS-snapshot copy/share during an
 investigation.
 
 When `forensics_kms_key_arn` is set, the role additionally gets
 `kms:Decrypt` / `kms:DescribeKey` / `kms:CreateGrant` on that key, scoped by
-`aws:SourceOrgID`, so shared **encrypted** snapshots are actually usable in the
+`aws:PrincipalOrgID`, so shared **encrypted** snapshots are actually usable in the
 forensics account (without it, a shared encrypted snapshot is present but
 unreadable).
 
@@ -118,9 +119,9 @@ The following resources are created:
 
 - resource.aws_cloudwatch_event_rule.guardduty_high (modules/aws/security/incident-response/main.tf#L79)
 - resource.aws_cloudwatch_event_target.isolate (modules/aws/security/incident-response/main.tf#L93)
-- resource.aws_iam_role.forensics_snapshot (modules/aws/security/incident-response/main.tf#L138)
+- resource.aws_iam_role.forensics_snapshot (modules/aws/security/incident-response/main.tf#L141)
 - resource.aws_iam_role.isolation_lambda (modules/aws/security/incident-response/main.tf#L23)
-- resource.aws_iam_role_policy.forensics_kms (modules/aws/security/incident-response/main.tf#L168)
+- resource.aws_iam_role_policy.forensics_kms (modules/aws/security/incident-response/main.tf#L172)
 - resource.aws_lambda_function.isolate (modules/aws/security/incident-response/main.tf#L62)
 - resource.aws_lambda_permission.eventbridge (modules/aws/security/incident-response/main.tf#L103)
 - resource.aws_security_group.quarantine (modules/aws/security/incident-response/main.tf#L116)
@@ -134,8 +135,8 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_enable_incident_response"></a> [enable\_incident\_response](#input\_enable\_incident\_response) | Master switch for the incident-response automation. When false, no Lambda, EventBridge rule, or forensics role is created. | `bool` | `true` | no |
 | <a name="input_forensics_account_id"></a> [forensics\_account\_id](#input\_forensics\_account\_id) | 12-digit AWS account ID of the forensics account that is trusted to assume the snapshot-sharing role. Required when enable\_incident\_response is true. | `string` | `""` | no |
-| <a name="input_forensics_kms_key_arn"></a> [forensics\_kms\_key\_arn](#input\_forensics\_kms\_key\_arn) | ARN of the forensics CMK. When set, the forensics snapshot-sharing role is granted kms:Decrypt/DescribeKey/CreateGrant on it (scoped by aws:SourceOrgID) so shared encrypted snapshots are usable in the forensics account. Empty (default) omits the grant. | `string` | `""` | no |
-| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations organization ID (o-xxxx) used to scope the forensics role trust policy via aws:PrincipalOrgID and the forensics KMS grant via aws:SourceOrgID. | `string` | `""` | no |
+| <a name="input_forensics_kms_key_arn"></a> [forensics\_kms\_key\_arn](#input\_forensics\_kms\_key\_arn) | ARN of the forensics CMK. When set, the forensics snapshot-sharing role is granted kms:Decrypt/DescribeKey/CreateGrant on it (scoped by aws:PrincipalOrgID) so shared encrypted snapshots are usable in the forensics account. Empty (default) omits the grant. | `string` | `""` | no |
+| <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations organization ID (o-xxxx) used to scope the forensics role trust policy via aws:PrincipalOrgID and the forensics KMS grant via aws:PrincipalOrgID. | `string` | `""` | no |
 | <a name="input_permissions_boundary_arn"></a> [permissions\_boundary\_arn](#input\_permissions\_boundary\_arn) | Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable\_apply\_boundary\_propagation): pass arn:PARTITION:iam::ACCOUNT\_ID:policy/tfc-apply-boundary. Null (default) = no boundary. | `string` | `null` | no |
 | <a name="input_quarantine_vpc_id"></a> [quarantine\_vpc\_id](#input\_quarantine\_vpc\_id) | VPC ID in which the deny-all quarantine security group is created. Empty (default) skips the SG; supply the VPC that holds the workloads the isolation Lambda may need to quarantine. The Lambda attaches this SG to a flagged instance's ENIs to cut off all traffic. | `string` | `""` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |

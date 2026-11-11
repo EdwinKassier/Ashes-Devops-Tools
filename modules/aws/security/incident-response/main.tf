@@ -127,9 +127,12 @@ resource "aws_security_group" "quarantine" {
 
 # Intra-org forensics role: lets the forensics account assume in to share/copy
 # EBS snapshots. Trust is triply scoped — the forensics account principal, the
-# org id (aws:PrincipalOrgID), AND the forensics account (aws:SourceAccount,
-# belt-and-suspenders) — so no principal outside the organization, and no
-# account other than the forensics account, can assume it.
+# org id (aws:PrincipalOrgID), AND the calling principal's account
+# (aws:PrincipalAccount, belt-and-suspenders) — so no principal outside the
+# organization, and no account other than the forensics account, can assume it.
+# aws:SourceAccount / aws:SourceOrgID are NOT used: they are present only when
+# an AWS service principal calls on a resource's behalf, never on a role-to-role
+# AssumeRole, so a condition on them would make the role unassumable.
 #
 # Scope note: this is the SECURITY-TOOLING-side role. The reciprocal member-side
 # snapshot-SHARE roles (that permit ec2:ModifySnapshotAttribute to share
@@ -141,7 +144,7 @@ resource "aws_iam_role" "forensics_snapshot" {
 
   permissions_boundary = var.permissions_boundary_arn
 
-  # checkov:skip=CKV_AWS_61:The trust policy grants sts:AssumeRole to a single, specific account principal (the forensics account root) and is additionally scoped by aws:PrincipalOrgID and aws:SourceAccount, so no principal outside this AWS Organization can assume it. Checkov flags the bare sts:AssumeRole action but does not resolve that the Principal is not a wildcard/service-wide grant.
+  # checkov:skip=CKV_AWS_61:The trust policy grants sts:AssumeRole to a single, specific account principal (the forensics account root) and is additionally scoped by aws:PrincipalOrgID and aws:PrincipalAccount, so no principal outside this AWS Organization can assume it. Checkov flags the bare sts:AssumeRole action but does not resolve that the Principal is not a wildcard/service-wide grant.
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -151,8 +154,8 @@ resource "aws_iam_role" "forensics_snapshot" {
       Action    = "sts:AssumeRole"
       Condition = {
         StringEquals = {
-          "aws:PrincipalOrgID" = var.org_id
-          "aws:SourceAccount"  = var.forensics_account_id
+          "aws:PrincipalOrgID"   = var.org_id
+          "aws:PrincipalAccount" = var.forensics_account_id
         }
       }
     }]
@@ -162,7 +165,8 @@ resource "aws_iam_role" "forensics_snapshot" {
 }
 
 # When a forensics KMS key is supplied, allow the forensics role to decrypt and
-# create grants on it, scoped by aws:SourceOrgID. Shared encrypted EBS snapshots
+# create grants on it, scoped by aws:PrincipalOrgID (the role's own session;
+# aws:SourceOrgID is absent on principal-initiated calls). Shared encrypted EBS snapshots
 # are unusable in the forensics account without kms:Decrypt / kms:CreateGrant on
 # the key that encrypted them, so this closes the "shared but unreadable" gap.
 resource "aws_iam_role_policy" "forensics_kms" {
@@ -180,7 +184,7 @@ resource "aws_iam_role_policy" "forensics_kms" {
         "kms:CreateGrant",
       ]
       Resource  = var.forensics_kms_key_arn
-      Condition = { StringEquals = { "aws:SourceOrgID" = var.org_id } }
+      Condition = { StringEquals = { "aws:PrincipalOrgID" = var.org_id } }
     }]
   })
 }

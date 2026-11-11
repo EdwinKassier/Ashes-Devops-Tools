@@ -18,3 +18,5 @@ Each ADR records one decision as Context, Decision and Consequences, on one page
 | [0012](0012-cloudtrail-delegated-admin.md) | CloudTrail delegated administrator | Accepted |
 | [0013](0013-security-hub-and-policy-language.md) | Security Hub generation and policy language | Accepted |
 | [0014](0014-log-archive-bucket-policy.md) | Log-archive PutBucketPolicy stays allowed and is detected | Accepted |
+| [0015](0015-team-owned-app-stacks.md) | Team-owned app stacks consume the environment contract | Proposed |
+| [0016](0016-split-aws-organization-stage.md) | Split the AWS organization stage by concern | Proposed |

@@ -19,13 +19,24 @@ locals {
     if try(var.folders[k].name, "") != ""
   ])
 
-  # Staged dry-run delta for the hub perimeter (see network/vpc-sc): null =
-  # no staged spec; a list = enforced status keeps the base set, the dry-run
-  # spec trials base set + these.
   # The NCC spoke group auto-accepts spokes from every environment host
   # project (bare numbers; empty entries dropped).
   ncc_auto_accept_projects = sort(distinct(compact([for n in values(var.spoke_project_numbers) : trimprefix(n, "projects/")])))
 
+  # The hub perimeter holds the hub and DNS projects only. Environment host
+  # projects each sit in their own environment perimeter: a project can be in
+  # only one regular perimeter of an access policy, and one shared perimeter
+  # would let prod and non-prod exchange data freely once enforced.
+  hub_perimeter_projects = sort(distinct(compact([var.hub_project_number, var.dns_project_number])))
+
+  # The published proxy accepts the environment host projects unless the
+  # caller lists consumers explicitly.
+  secure_web_proxy = merge(var.secure_web_proxy, {
+    consumer_accept_projects = length(var.secure_web_proxy.consumer_accept_projects) > 0 ? var.secure_web_proxy.consumer_accept_projects : local.ncc_auto_accept_projects
+  })
+
+  # Base restricted services of the hub perimeter. vpc_sc_dry_run_additional_restricted_services
+  # stages a dry-run delta on top (null = no staged spec; see network/vpc-sc).
   hub_base_restricted_services = distinct(concat([
     "storage.googleapis.com",
     "bigquery.googleapis.com",
@@ -75,6 +86,10 @@ module "hub" {
   vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
   interconnects                = var.interconnects
 
+  # Opt-in central egress (Secure Web Proxy) and the data-plane alerts.
+  secure_web_proxy = local.secure_web_proxy
+  alerting         = var.alerting
+
   # Hierarchical Firewall Policy (Defense in Depth)
   hierarchical_firewall_policies = {
     "policy-hub-shared" = {
@@ -103,11 +118,11 @@ module "hub" {
       organization_id    = local.org_id_normalized
       access_policy_name = var.vpc_sc_access_policy_name
       perimeter_title    = "Hub Network Data Protection Perimeter"
-      description        = "Prevents data exfiltration from hub-managed projects"
+      description        = "Prevents data exfiltration from the hub and DNS projects"
       enable_dry_run     = var.vpc_sc_enable_dry_run
 
-      # values() returns project numbers from the spoke_project_numbers map.
-      protected_projects = values(var.spoke_project_numbers)
+      # Hub and DNS projects only; environments have their own perimeters.
+      protected_projects = local.hub_perimeter_projects
       # Base set + opt-in additions. Expanding this without the ingress
       # policy below would block the automation SA under the enforced perimeter.
       restricted_services = local.hub_base_restricted_services
@@ -126,6 +141,23 @@ module "hub" {
       }]
     }
   } : {}
+}
+
+# Hub side of each environment's VPC peering. The hub owns its half: each
+# gcp-workload-<env> root creates only the spoke side, so no workload state
+# holds a resource in the hub project and the workload apply SA needs no right
+# there. Names are unique per environment (a VPC's peering names must be
+# unique). The caller passes only spokes whose network already exists: GCP
+# rejects a peering to a network that does not exist yet.
+resource "google_compute_network_peering" "hub_to_spoke" {
+  for_each = var.spoke_peerings
+
+  name         = "hub-to-${each.key}"
+  network      = module.hub.network_self_link
+  peer_network = each.value.network_self_link
+
+  export_custom_routes = each.value.export_custom_routes
+  import_custom_routes = each.value.import_custom_routes
 }
 
 # Hub Cloud Armor policy. stages/host created this project-level WAF policy

@@ -71,8 +71,12 @@ module "organization" {
     if contains(keys(local.environments), env)
   }
 
+  # The IAM-controlling workload folder roles (projectIamAdmin and the like) are
+  # granted by this stage, never through projects-apply's delegation.
+  workload_folder_roles = try(local.bootstrap.workload_folder_roles, { plan = [], apply = [] })
+
   # projects-apply delegated folder IAM, bound on each environment folder and the
-  # shared folder (not the org node).
+  # shared folder (not the org node). The stage drops the non-delegable roles.
   projects_apply_service_account  = try(local.bootstrap.stage_service_accounts["projects"].apply, null)
   delegated_workload_folder_roles = try(local.bootstrap.delegated_workload_folder_roles, [])
   delegated_network_folder_roles  = try(local.bootstrap.delegated_network_folder_roles, [])

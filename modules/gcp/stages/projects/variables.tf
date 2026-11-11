@@ -153,3 +153,16 @@ variable "network_folder_key" {
   type        = string
   default     = "shared"
 }
+
+variable "non_delegable_workload_folder_roles" {
+  description = "Workload folder roles this stage never grants: gcp-organization grants them to the workload SAs directly, because a delegate that may grant one of them could grant it to itself. Keep in step with the gcp-organization input of the same name."
+  type        = list(string)
+  default = [
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.serviceAccountKeyAdmin",
+    "roles/iam.serviceAccountTokenCreator",
+    "roles/iam.workloadIdentityPoolAdmin",
+  ]
+  nullable = false
+}

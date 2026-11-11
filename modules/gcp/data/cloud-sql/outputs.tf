@@ -34,3 +34,13 @@ output "private_network" {
   description = "The VPC network the instance is peered into via Private Service Access."
   value       = google_sql_database_instance.this.settings[0].ip_configuration[0].private_network
 }
+
+output "availability_type" {
+  description = "REGIONAL (high availability, synchronous standby in a second zone) or ZONAL."
+  value       = google_sql_database_instance.this.settings[0].availability_type
+}
+
+output "backup_location" {
+  description = "Location of the automated backups, or null for Cloud SQL's default (the multi-region nearest the instance)."
+  value       = var.backup_location
+}

@@ -1,0 +1,32 @@
+# Test fixture: GCP and AWS ranges that collide (the pre-plan AWS defaults on
+# top of the GCP hub), for the tfc-admin address-plan check (config.tftest.hcl).
+version: 1
+org:
+  tfc:
+    organization: cfg-tfc
+    project_name_prefix: lz-
+    aws_project: aws-landing-zone
+    plan: standard
+    vcs_repo:
+      identifier: cfg/landing-zone
+      github_app_installation_id: ghain-123
+gcp:
+  enabled: true
+  network:
+    hub_cidr_block: 10.0.0.0/16
+    dns_hub_cidr_block: 10.1.0.0/16
+  environments:
+    dev: {cidr_block: 10.10.0.0/16}
+    prod: {cidr_block: 10.30.0.0/16, is_production: true}
+aws:
+  enabled: true
+  network:
+    top_cidr: 10.0.0.0/8
+    inspection_cidr: 10.0.0.0/16
+    egress_cidr: 10.65.0.0/16
+  workload_environments:
+    dev: {account_key: workload_dev, vpc_cidr: 10.20.0.0/16}
+    staging: {account_key: workload_staging, is_production: true}
+saas:
+  enabled: true
+  workspaces: [web, admin]

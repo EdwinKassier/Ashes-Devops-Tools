@@ -430,7 +430,7 @@ aws:
   workload_environments:
     dev:
       account_key: workload_dev
-      vpc_cidr: 10.20.0.0/16
+      vpc_cidr: 10.72.0.0/16
 ```
 
 ### Typed contracts between roots

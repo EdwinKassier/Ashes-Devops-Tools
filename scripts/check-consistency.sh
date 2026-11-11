@@ -2,7 +2,9 @@
 # Consistency guards — assert canonical strings that are hand-propagated across
 # many files (and have drifted before, e.g. the AWS region regex). Cheap grep
 # checks that fail CI when a copy diverges. Add new invariants here.
-set -uo pipefail
+# -e: an unexpected command failure stops the script (non-zero exit) instead of
+# being ignored. A grep whose "no match" status is expected ends in `|| true`.
+set -euo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
 fail=0
@@ -10,7 +12,7 @@ note() { echo "  - $1"; fail=1; }
 
 echo "==> AWS region regex is canonical (single form, no single-digit-ordinal drift)"
 # Canonical: ^[a-z]{2}-[a-z]+-[1-9][0-9]?$  ·  Rejected: the older ...-[0-9]$ form.
-drift=$(grep -rln 'a-z]{2}-\[a-z\]+-\[0-9\]\$' --include='*.tf' modules envs 2>/dev/null)
+drift=$(grep -rln 'a-z]{2}-\[a-z\]+-\[0-9\]\$' --include='*.tf' modules envs 2>/dev/null || true)
 [ -z "$drift" ] || { echo "$drift" | while read -r f; do note "region regex drift (use [1-9][0-9]?\$): $f"; done; fail=1; }
 
 echo "==> AWS provider pin is the canonical floored pin in every AWS versions.tf"
@@ -52,11 +54,15 @@ case "$tv" in 1.1[7-9].* | 1.[2-9][0-9].*) ;; *) note ".tool-versions terraform 
 for wf in .github/workflows/*.yml; do
   grep -E '^[[:space:]]*TERRAFORM_VERSION:' "$wf" | grep -vq "\"$tv\"" && note "$wf: TERRAFORM_VERSION differs from .tool-versions terraform $tv"
 done
+# HCP Terraform runs every managed workspace on tfc-admin's terraform_version
+# default, so it must be the exact version CI tests.
+tfc_tv=$(awk '/^variable "terraform_version"/{inb=1} inb && /default[[:space:]]*=/{gsub(/[" ]/, "", $0); sub(/^default=/, "", $0); print; exit}' envs/tfc-admin/variables.tf 2>/dev/null)
+[ "$tfc_tv" = "$tv" ] || note "envs/tfc-admin/variables.tf terraform_version default '$tfc_tv' differs from .tool-versions terraform $tv (TFC would apply with a version CI never tested)"
 
 echo "==> No import blocks in reusable modules (adoption lives in the roots)"
 # A module-level import block is inherited by every caller and fails their plan
 # once the resource is managed. import blocks belong in an envs/** adoption file.
-imports=$(grep -rlE '^[[:space:]]*import[[:space:]]*\{' --include='*.tf' --exclude-dir='.terraform' modules templates 2>/dev/null)
+imports=$(grep -rlE '^[[:space:]]*import[[:space:]]*\{' --include='*.tf' --exclude-dir='.terraform' modules templates 2>/dev/null || true)
 [ -z "$imports" ] || { echo "$imports" | while read -r f; do note "import block in a reusable module (move it to the root's adoption file): $f"; done; fail=1; }
 
 echo "==> OPA lib_helpers.rego copies are byte-identical"
@@ -141,7 +147,7 @@ echo "==> GitHub WIF tenant condition is the one canonical string wherever it is
 # workload-identity primitive (which gcp-bootstrap calls) must render the same.
 wif_canon='"assertion.repository_owner_id == \"<id>\""'
 for f in modules/gcp/stages/app-services/main.tf modules/gcp/iam/workload-identity/main.tf modules/gcp/stages/organization/main.tf; do
-  forms=$(grep -oE '"assertion\.repository_owner_id == [^$]*\$\{[^}]*\}[^ ,)]*' "$f" 2>/dev/null | sed -E 's/\$\{[^}]*\}/<id>/' | sort -u)
+  forms=$(grep -oE '"assertion\.repository_owner_id == [^$]*\$\{[^}]*\}[^ ,)]*' "$f" 2>/dev/null | sed -E 's/\$\{[^}]*\}/<id>/' | sort -u || true)
   [ -n "$forms" ] || { note "$f: renders no GitHub owner-pin condition"; continue; }
   echo "$forms" | while read -r form; do
     [ "$form" = "$wif_canon" ] || note "$f: GitHub owner-pin condition $form is not $wif_canon"
@@ -161,6 +167,18 @@ if [ -n "$prov" ]; then
   echo "  ERROR: audit/finding provenance codes in Terraform code (see above)" >&2
   fail=1
 fi
+
+echo "==> No plan-time code execution outside the allowlist (external/http data sources, provisioners)"
+# A plan runs with the workspace's credentials and environment variables (TFE_TOKEN,
+# SUPABASE_ACCESS_TOKEN, cloud plan identities). A data "external" or data "http"
+# block in a PR runs during the speculative plan and can send those values out;
+# a provisioner runs during apply. Only the reviewed callers below may use them.
+# The TFC permission model (runs = read on secret-bearing projects) covers CLI
+# uploads that never reach this check.
+exec_allow='^(modules/supabase/vault-secrets/main\.tf|tests/e2e/aws/main\.tf):'
+execs=$(grep -rnE '^[[:space:]]*(data[[:space:]]+"(external|http)"|provisioner[[:space:]]+"|source[[:space:]]*=[[:space:]]*"hashicorp/(external|http)")' \
+  --include='*.tf' --exclude-dir='.terraform' modules envs examples templates tests 2>/dev/null | grep -vE "$exec_allow" || true)
+[ -z "$execs" ] || { echo "$execs" | while read -r l; do note "plan/apply-time code execution outside the allowlist: $l"; done; fail=1; }
 
 echo "==> Lockfiles: multi-platform and one version per provider (Renovate owns them)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per
@@ -189,6 +207,50 @@ if [ -n "$drift" ]; then
 fi
 rm -f "$verlist"
 echo "  ${nsingle}/${nlocks} committed lockfiles lack the linux_amd64/darwin_arm64/darwin_amd64 h1: hashes"
+
+echo "==> tfc-admin root_trigger_dirs lists exactly the modules each root composes"
+# envs/tfc-admin/main.tf local.root_trigger_dirs scopes each workspace's VCS
+# trigger patterns to the module trees its root composes. Recompute the
+# transitive closure of every root's local `source = "../..."` references and
+# compare: a missing module would not trigger the plan that tests its change;
+# a stale one queues needless plans. Entries outside modules/ (files a root
+# reads, e.g. examples/presets) are allowed as long as the directory exists.
+repo_root=$(pwd -P)
+module_closure() {
+  local queue=("$1") seen="" d rel abs
+  while [ "${#queue[@]}" -gt 0 ]; do
+    d=${queue[0]}
+    queue=("${queue[@]:1}")
+    for rel in $(cat "$d"/*.tf 2>/dev/null | sed -nE 's/^[[:space:]]*source[[:space:]]*=[[:space:]]*"(\.\.?\/[^"]*)".*/\1/p'); do
+      abs=$(cd "$d/$rel" 2>/dev/null && pwd -P) || { note "$d: module source $rel does not resolve"; continue; }
+      abs=${abs#"$repo_root"/}
+      case " $seen " in *" $abs "*) ;; *) seen="$seen $abs"; queue+=("$abs") ;; esac
+    done
+  done
+  printf '%s\n' $seen | sed '/^$/d' | sort
+}
+trigger_map=$(awk '
+  /^  root_trigger_dirs = \{/ { inb = 1; next }
+  inb && /^  \}/ { inb = 0 }
+  inb && match($0, /^    "[^"]+" = \[/) { k = $0; sub(/^    "/, "", k); sub(/".*/, "", k); next }
+  inb && match($0, /^      "[^"]+",?/) { v = $0; sub(/^      "/, "", v); sub(/".*/, "", v); print k, v }
+' envs/tfc-admin/main.tf)
+[ -n "$trigger_map" ] || note "envs/tfc-admin/main.tf: local.root_trigger_dirs not found or empty"
+for dir in $(sed -nE 's/(^|.*[^a-z_])dir[[:space:]]*=[[:space:]]*"(envs\/[^"]+)".*/\2/p' envs/tfc-admin/main.tf | sort -u); do
+  printf '%s\n' "$trigger_map" | awk -v d="$dir" '$1 == d { f = 1 } END { exit f ? 0 : 1 }' \
+    || { note "envs/tfc-admin/main.tf: catalog root $dir has no root_trigger_dirs entry"; continue; }
+  listed=$(printf '%s\n' "$trigger_map" | awk -v d="$dir" '$1 == d && $2 ~ /^modules\// { print $2 }' | sort)
+  actual=$(module_closure "$dir")
+  for m in $(comm -13 <(printf '%s\n' "$listed") <(printf '%s\n' "$actual")); do
+    note "root_trigger_dirs[\"$dir\"] is missing $m (composed by the root, so a change to it must queue the plan)"
+  done
+  for m in $(comm -23 <(printf '%s\n' "$listed") <(printf '%s\n' "$actual")); do
+    note "root_trigger_dirs[\"$dir\"] lists $m, which the root does not compose (remove it)"
+  done
+done
+for extra in $(printf '%s\n' "$trigger_map" | awk '$2 !~ /^modules\// { print $2 }' | sort -u); do
+  [ -d "$extra" ] || note "root_trigger_dirs lists $extra, which is not a directory"
+done
 
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."

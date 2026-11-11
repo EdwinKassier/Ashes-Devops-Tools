@@ -14,8 +14,12 @@ variables. It also sees what a run is about to destroy.
 
 | Set | `policies_path` | Overridable | Contents |
 |---|---|---|---|
-| `tfe_policy_set.opa` (`<prefix>opa-guardrails`) | `policies/opa` | no (`policy_set_overridable`, default false) | 10 mandatory + 3 advisory guardrails |
-| `tfe_policy_set.destructive` (`<prefix>destructive-change-guard`) | `policies/opa-destructive` | **yes**, always | the mandatory `destroy_guard` |
+| `tfe_policy_set.opa` (`<prefix>opa-guardrails`) | `policies/opa` | no (`policy_set_overridable`, default false) | 11 mandatory + 3 advisory guardrails |
+| `tfe_policy_set.destructive` (`<prefix>destructive-change-guard`) | `policies/opa-destructive` | **yes**, always | the mandatory `destroy_guard` and `tfc_admin_guard` |
+
+Both sets are also attached to the `tfc-admin` workspace itself, whether or
+not it is self-managed (`manage_tfc_admin_workspace`): an unmanaged one is
+looked up by name. So `tfc_admin_guard` judges the plan that would detach it.
 
 - A VCS policy set reads the `policies.hcl` in its own `policies_path`, so the
   destroy guard needs its own directory to be overridable while the guardrails
@@ -36,7 +40,7 @@ variables. It also sees what a run is about to destroy.
   (tfc-admin `tfc_plan`) is `standard` or `premium`. HCP Terraform Free allows
   one policy set of up to five policies, so `free` and `essentials` stay off
   unless you set `enable_policy_sets = true` yourself. On Free that explicit
-  `true` exceeds the limit (two sets, 14 policies): HCP Terraform rejects the
+  `true` exceeds the limit (two sets, 16 policies): HCP Terraform rejects the
   second set or the extra policies, so do not set it there. Essentials support
   is unverified ([known gaps](../known-gaps.md)). While the sets are off,
   the `destructive_changes_guarded` check warns on every tfc-admin plan that
@@ -48,8 +52,11 @@ variables. It also sees what a run is about to destroy.
 
 HCP Terraform passes OPA one document. `input.plan` is the JSON plan (the
 `terraform show -json` shape) and `input.run` holds run metadata (organization,
-workspace and similar). The policies read only
-`input.plan.resource_changes[]`:
+workspace and similar). Every policy except `no_plan_time_code_execution`
+reads only `input.plan.resource_changes[]`; that one walks
+`input.plan.configuration` (every module's resource blocks, their
+`provisioners` and the `source` of each module call), because a provisioner or
+a data source never shows up as a resource change that says so:
 
 | Field | Meaning |
 |---|---|
@@ -75,6 +82,7 @@ returns a set of messages, and an empty set means the policy passed.
 |---|---|---|
 | `gcs_no_public_buckets` | mandatory | `google_storage_bucket` sets `uniform_bucket_level_access = true` and `public_access_prevention = "enforced"`. |
 | `gcp_iam_no_public_members` | mandatory | No `allUsers` / `allAuthenticatedUsers` in any `google_*_iam_member`, `_iam_binding` or `_iam_policy` (`policy_data`). |
+| `no_plan_time_code_execution` | mandatory | No `provisioner` block (`local-exec`, `remote-exec`, `file`) and no `data "external"` / `data "http"` in any module, except in resources declared directly in a module called with a source ending in `supabase/vault-secrets`. These run code with the workspace's credentials and environment variables. `scripts/check-consistency.sh` enforces the same allowlist on the repo; this policy also covers runs whose configuration never passed CI (a CLI upload, another branch). |
 | `gcp_cloud_run_no_public_url` | mandatory | No `google_cloud_run_v2_service` with `invoker_iam_disabled = true` and `ingress = INGRESS_TRAFFIC_ALL` (an unauthenticated, unprotected run.app URL). Public apps use `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` behind the external ALB. |
 | `aws_s3_public_access` | mandatory | No `public-read` / `public-read-write` / `authenticated-read` canned ACL. Every bucket- and account-level public access block keeps all four switches `true`. |
 | `aws_sg_no_public_admin_ports` | mandatory | No ingress from `0.0.0.0/0` or `::/0` that reaches TCP 22 or 3389, including all-protocol (`-1`) rules. Covers `aws_security_group`, `aws_security_group_rule` and `aws_vpc_security_group_ingress_rule`. |
@@ -86,12 +94,34 @@ returns a set of messages, and an empty set means the policy passed.
 | `aws_s3_bucket_public_access_block_present` | advisory | A new `aws_s3_bucket` has a public access block created in the same module instance, or an account-level block is in the plan. The pairing goes by module and count, because the bucket id is unknown at plan time. |
 | `require_labels` | advisory | Listed GCP types carry at least one label (or `effective_labels`). Listed AWS types carry at least one tag (or `tags_all` from provider `default_tags`). |
 | `destroy_guard` | mandatory, **overridable** set (`policies/opa-destructive`) | Denies any delete or replace (either order) of a stateful type. GCP: `google_sql_database_instance`, `google_storage_bucket`, `google_kms_crypto_key`, `google_project`, `google_folder`, `google_compute_network`, `google_logging_organization_sink`, `google_logging_project_bucket_config`, `google_secret_manager_secret`. AWS: `aws_s3_bucket`, `aws_rds_cluster`, `aws_db_instance`, `aws_kms_key`, `aws_organizations_account`, `aws_dynamodb_table`, `aws_vpc`, `aws_cloudtrail`, `aws_secretsmanager_secret`, `aws_cloudformation_stack_set_instance` (a replace removes the recorders org-wide). Supabase: `supabase_project`. Plus key rings, the other log buckets/sinks, CloudTrail Lake, organisation policies and VPC-SC perimeters. The security team overrides an intended destroy. |
+| `tfc_admin_guard` | mandatory, **overridable** set (`policies/opa-destructive`) | Guards the HCP Terraform layer that tfc-admin manages. Denies: deleting or replacing a `tfe_policy_set`, `tfe_workspace_policy_set` or `tfe_project_policy_set`; dropping a workspace from a set's `workspace_ids`; turning `global` off; changing `policies_path` or the `vcs_repo` identifier or branch; making a hard-gate set overridable; any `tfe_workspace_policy_set_exclusion`. Turning on `auto_apply` or `auto_apply_run_trigger` (also at creation) on a workspace tagged `layer:control-plane`, `layer:bootstrap` or `tier:production` (tfc-admin tags production workloads), or removing one of those tags. Widening team access: creating any `tfe_team_access`, `tfe_team_project_access`, team or organization membership or team/organization token, granting a team organization access, or raising a grant (fixed level, a custom permission, or fixed to custom by its nearest fixed level). Lowering access passes. |
 
 The mandatory rules only encode controls that this repo's modules already meet
 by default: hardened GCS buckets, private Cloud SQL, KMS rotation, private and
 encrypted Aurora, no inline `*:*` Allow. Turning them on should not block an
 existing workspace. Run `enable_policy_sets` in a non-production project first
 and read the advisory results before relying on them.
+
+## The TFC-layer guard in practice
+
+`tfc_admin_guard` stops some changes that are routine, so the security team
+overrides them on the run after reading the plan:
+
+- **A new environment** creates workspace-level team grants (a non-production
+  workload in a shared project gets `tfe_team_access` write) and, on its first
+  production environment, an approvers project grant.
+- **Removing an environment** drops its workspace from both sets'
+  `workspace_ids`.
+- **The sandbox estate** (`auto_apply_on_merge = true`) creates control-plane
+  workspaces with `auto_apply` on.
+
+Limits: when the same plan creates a workspace, the new ID is unknown and
+`workspace_ids` cannot be compared, so a removal hidden behind an addition in
+one plan is not caught by that rule (the deletion and repointing rules still
+apply). The rule judges `tfe_*` resources in any workspace, but only tfc-admin
+declares them. Organization owners keep their implicit access, and a policy
+override is itself an org-wide permission, so separation of duties still rests
+on CODEOWNERS for `envs/tfc-admin/**` and `policies/**`.
 
 ## Adding a policy
 

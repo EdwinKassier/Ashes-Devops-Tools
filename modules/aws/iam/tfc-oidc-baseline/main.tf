@@ -6,8 +6,9 @@
 # (auto-deploying to accounts that join the targeted OUs) creates in each member:
 #
 #   - AWS::IAM::OIDCProvider for https://<tfc_hostname> (aud aws.workload.identity)
-#   - <plan_role_name>  (default tfc-plan)  — read-only (ReadOnlyAccess plus an
-#       inline deny on data-plane reads: GetObject/GetSecretValue/Decrypt/...); trusts ONLY
+#   - <plan_role_name>  (default tfc-plan)  — read-only (ReadOnlyAccess plus a
+#       managed <plan_role_name>-data-read-deny policy on data-plane and secret-bearing reads: GetObject/
+#       GetSecretValue/Decrypt/API key values/launch-template user data/...); trusts ONLY
 #       <host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:plan
 #   - <apply_role_name> (default tfc-apply) — apply policy; trusts ONLY
 #       <host>:sub = organization:<org>:project:<project>:workspace:<ws>:run_phase:apply
@@ -98,6 +99,8 @@ locals {
     "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:role/${var.apply_role_name}",
     "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:oidc-provider/${var.tfc_hostname}",
     var.apply_permissions_boundary_arn != null ? var.apply_permissions_boundary_arn : local.apply_boundary_arn_sub,
+    # The plan role's read deny: detaching or re-versioning it would lift it.
+    local.plan_read_deny_arn_sub,
   ]
 
   # Privileged roles the apply identity must never create, modify, delete or
@@ -318,25 +321,41 @@ locals {
   )
 
   # --- Plan-role data-plane read deny ---------------------------------------
-  # ReadOnlyAccess includes data-plane reads (s3:GetObject, GetSecretValue,
-  # dynamodb:Scan, ...). Speculative PR plans run as tfc-plan, so an inline deny
-  # keeps the plan identity to control-plane metadata. Trade-off: planning a
-  # resource whose refresh reads data (aws_s3_object, aws_secretsmanager_secret_version,
-  # aws_ssm_parameter, ...) fails unless its ARN is in plan_role_data_read_exempt_arns.
+  # ReadOnlyAccess includes data-plane and secret-bearing reads (s3:GetObject,
+  # GetSecretValue, dynamodb:Scan, API key values, launch-template user data,
+  # CodeBuild environment variables, ...). Speculative PR plans run as tfc-plan,
+  # so a deny policy keeps the plan identity to control-plane metadata.
   #
-  # Deliberately NOT denied (Terraform plan must refresh these resources, so a
-  # deny would break every plan that manages them): lambda:GetFunction /
-  # GetFunctionConfiguration (returns environment variables),
-  # ecs:DescribeTaskDefinition (returns container environment + secret ARNs —
-  # the values stay in Secrets Manager / SSM, which ARE denied) and
+  # Why a deny-list on ReadOnlyAccess and not an allow-list on ViewOnlyAccess /
+  # SecurityAudit: refresh calls hundreds of Get*/Describe*/List* actions across
+  # the services the AWS modules manage (s3:GetBucket*, iam:GetRolePolicy,
+  # kms:GetKeyPolicy, wafv2:GetWebACL, ...), most of which ViewOnlyAccess lacks.
+  # An allow-list cannot be proven complete under mock_provider tests, and a gap
+  # fails every plan that touches the resource. The deny-list fails the other
+  # way: a missing entry leaks one read, so this list is kept current.
+  #
+  # Trade-off: planning a resource whose refresh reads denied data
+  # (aws_s3_object, aws_secretsmanager_secret_version, aws_ssm_parameter,
+  # aws_launch_template, aws_codebuild_project, ...) fails unless its ARN is in
+  # plan_role_data_read_exempt_arns. No AWS module in this repo manages a launch
+  # template, launch configuration, CodeBuild project, Lambda layer, Cognito
+  # user pool client, Step Functions state machine, AppSync API, Lightsail,
+  # Glacier or Elastic Beanstalk resource.
+  #
+  # Deliberately NOT denied (Terraform plan must refresh these resources, which
+  # this repo manages, so a deny would break every plan that touches them):
+  # lambda:GetFunction / GetFunctionConfiguration (returns environment
+  # variables), ecs:DescribeTaskDefinition (returns container environment +
+  # secret ARNs; the values stay in Secrets Manager / SSM, which ARE denied) and
   # ec2:DescribeInstanceAttribute (returns userData). Keep secrets out of Lambda
   # env vars, task-definition environment and user data; reference
-  # Secrets Manager / SSM instead. Everything below is unused by refresh.
+  # Secrets Manager / SSM instead.
   # ssm:GetParameter* also covers GetParameters, GetParametersByPath and
   # GetParameterHistory. glue:GetConnection(s) returns connection passwords and
   # no module in this repo manages Glue.
   plan_role_data_read_deny_actions = [
     "s3:GetObject*",
+    "s3-object-lambda:GetObject*",
     "secretsmanager:GetSecretValue",
     "secretsmanager:BatchGetSecretValue",
     "ssm:GetParameter*",
@@ -345,6 +364,10 @@ locals {
     "ec2:GetPasswordData",
     "ec2:GetConsoleOutput",
     "ec2:GetConsoleScreenshot",
+    # Launch-template / launch-configuration user data.
+    "ec2:GetLaunchTemplateData",
+    "ec2:DescribeLaunchTemplateVersions",
+    "autoscaling:DescribeLaunchConfigurations",
     "glue:GetConnection",
     "glue:GetConnections",
     "dynamodb:GetItem",
@@ -363,8 +386,10 @@ locals {
     "rds-data:*",
     "redshift-data:GetStatementResult",
     "athena:GetQueryResults",
+    "timestream:Select",
     "ecr:GetDownloadUrlForLayer",
     "ecr:BatchGetImage",
+    "ecr:GetAuthorizationToken",
     "ssm:GetCommandInvocation",
     "logs:GetLogRecord",
     "rds:DownloadDBLogFilePortion",
@@ -372,7 +397,41 @@ locals {
     "cassandra:Select",
     "codecommit:GitPull",
     "codecommit:GetFile",
+    "codecommit:GetBlob",
+    "codeartifact:ReadFromRepository",
+    # Build-project and build environment variables (plaintext values).
+    "codebuild:BatchGetProjects",
+    "codebuild:BatchGetBuilds",
+    # Lambda layer code download URL.
+    "lambda:GetLayerVersion",
+    # Cognito app-client secret, AppSync API key values.
+    "cognito-idp:DescribeUserPoolClient",
+    "appsync:ListApiKeys",
+    # Step Functions execution input and output.
+    "states:GetExecutionHistory",
+    "states:DescribeExecution",
+    # Lightsail SSH keys / passwords, Glacier archive retrieval, Beanstalk
+    # environment properties.
+    "lightsail:GetInstanceAccessDetails",
+    "lightsail:GetRelationalDatabaseMasterUserPassword",
+    "glacier:GetJobOutput",
+    "elasticbeanstalk:DescribeConfigurationSettings",
   ]
+
+  # API Gateway reads are one action (apigateway:GET), and refresh of the HTTP
+  # APIs this repo manages needs it, so the API key paths are denied by
+  # resource: GET /apikeys?includeValues=true, GET /apikeys/{id}?includeValue=true
+  # and GET /usageplans/{id}/keys return key values. Not covered by
+  # plan_role_data_read_exempt_arns (a statement cannot carry both Resource and
+  # NotResource); a stack that plans REST API keys must turn the deny off.
+  plan_role_api_key_read_deny_statement = {
+    Sid    = "DenyApiKeyValueReads"
+    Effect = "Deny"
+    Action = "apigateway:GET"
+    Resource = [for r in ["/apikeys", "/apikeys/*", "/usageplans/*/keys", "/usageplans/*/keys/*"] :
+      { "Fn::Sub" = "arn:$${AWS::Partition}:apigateway:*::${r}" }
+    ]
+  }
 
   # Deny on tampering with the StackSet-owned baseline. Lives in the embedded
   # boundary, or, when an external boundary replaces it, inline on the apply role
@@ -422,24 +481,44 @@ locals {
     }]
   }
 
-  # The plan role's Policies property ({} = omitted).
-  plan_role_policies_property = {
-    for _ in(var.enable_plan_role_data_read_deny ? [1] : []) : "Policies" => [{
-      PolicyName = "deny-data-plane-reads"
-      PolicyDocument = {
-        Version = "2012-10-17"
-        Statement = [merge(
-          {
-            Sid    = "DenyDataPlaneReads"
-            Effect = "Deny"
-            Action = local.plan_role_data_read_deny_actions
-          },
-          { for _ in(length(var.plan_role_data_read_exempt_arns) > 0 ? [] : [1]) : "Resource" => "*" },
-          { for _ in(length(var.plan_role_data_read_exempt_arns) > 0 ? [1] : []) : "NotResource" => var.plan_role_data_read_exempt_arns },
-        )]
-      }
-    }]
+  # Plan-role deny: ONE AWS::IAM::ManagedPolicy per account (unconditional
+  # like the apply boundary, so the template does not grow with every binding
+  # and an unbound account gets an inert policy), attached to the plan role.
+  create_plan_read_deny      = var.enable_plan_role_data_read_deny && length(var.account_bindings) > 0
+  plan_read_deny_policy_name = "${var.plan_role_name}-data-read-deny"
+  plan_read_deny_arn_sub     = "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/${local.plan_read_deny_policy_name}"
+  plan_read_deny_document = {
+    Version = "2012-10-17"
+    Statement = [
+      merge(
+        {
+          Sid    = "DenyDataPlaneReads"
+          Effect = "Deny"
+          Action = local.plan_role_data_read_deny_actions
+        },
+        { for _ in(length(var.plan_role_data_read_exempt_arns) > 0 ? [] : [1]) : "Resource" => "*" },
+        { for _ in(length(var.plan_role_data_read_exempt_arns) > 0 ? [1] : []) : "NotResource" => var.plan_role_data_read_exempt_arns },
+      ),
+      local.plan_role_api_key_read_deny_statement,
+    ]
   }
+
+  plan_read_deny_resource = local.create_plan_read_deny ? {
+    TfcPlanDataReadDeny = {
+      Type = "AWS::IAM::ManagedPolicy"
+      Properties = {
+        ManagedPolicyName = local.plan_read_deny_policy_name
+        Description       = "Data-plane and secret-bearing read deny for the Terraform Cloud plan role (managed by Terraform: modules/aws/iam/tfc-oidc-baseline)"
+        PolicyDocument    = local.plan_read_deny_document
+      }
+    }
+  } : {}
+
+  # The plan role's managed policies: the read-only grants plus the deny.
+  plan_role_managed_policy_arns = concat(
+    local.partitioned_plan_role_policy_arns,
+    [for _ in(local.create_plan_read_deny ? [1] : []) : { Ref = "TfcPlanDataReadDeny" }],
+  )
 
   oidc_provider = {
     TfcOidcProvider = {
@@ -480,10 +559,9 @@ locals {
             RoleName                 = var.plan_role_name
             Description              = "Terraform Cloud PLAN phase (read-only) for ${k}"
             AssumeRolePolicyDocument = local.trust_policies[k]["plan"]
-            ManagedPolicyArns        = local.partitioned_plan_role_policy_arns
+            ManagedPolicyArns        = local.plan_role_managed_policy_arns
             MaxSessionDuration       = var.max_session_duration
           },
-          local.plan_role_policies_property,
         )
       }
       "TfcApplyRole${local.logical_suffix[k]}" = {
@@ -514,7 +592,7 @@ locals {
     {
       AWSTemplateFormatVersion = "2010-09-09"
       Description              = "Terraform Cloud OIDC workload-identity baseline (managed by Terraform: modules/aws/iam/tfc-oidc-baseline)"
-      Resources                = merge(local.oidc_provider, local.github_oidc_provider, local.apply_boundary_resource, local.role_resources)
+      Resources                = merge(local.oidc_provider, local.github_oidc_provider, local.apply_boundary_resource, local.plan_read_deny_resource, local.role_resources)
       Outputs = {
         OidcProviderArn = { Value = { Ref = "TfcOidcProvider" } }
       }
@@ -560,6 +638,12 @@ resource "aws_cloudformation_stack_set" "this" {
       # would be required.
       condition     = length(local.template_body) <= 51200
       error_message = "The generated StackSet template exceeds CloudFormation's 51,200-byte inline limit — reduce account_bindings or split the baseline."
+    }
+
+    precondition {
+      # IAM managed-policy size quota: 6,144 characters, whitespace excluded.
+      condition     = !local.create_plan_read_deny || length(jsonencode(local.plan_read_deny_document)) <= 6144
+      error_message = "The plan-role read deny exceeds the 6,144-character managed-policy quota: shorten plan_role_data_read_exempt_arns (use patterns)."
     }
   }
 }

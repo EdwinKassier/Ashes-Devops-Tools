@@ -78,7 +78,9 @@ module "hierarchical_firewall_policies" {
 # EGRESS AND PRIVATE SERVICES (NAT, PSA, PSC)
 # =============================================================================
 
-# Cloud NAT for the private and database tiers only (public tier excluded).
+# Cloud NAT for the private tier (public tier excluded). The database tier is
+# NATed only with nat.include_database_subnets: its egress deny is tag-based,
+# so an untagged VM there would otherwise reach the internet.
 module "integrated_nat" {
   source = "../../network/nat"
   count  = var.nat.enabled ? 1 : 0
@@ -96,7 +98,7 @@ module "integrated_nat" {
 
   subnetworks = concat(
     [for s in module.network.subnets.private : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }],
-    [for s in module.network.subnets.database : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }]
+    var.nat.include_database_subnets ? [for s in module.network.subnets.database : { name = s.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }] : []
   )
 
   enable_logging = true
@@ -121,13 +123,41 @@ module "additional_region_nat" {
   nat_ip_allocate_option             = var.nat.ip_allocate_option
   source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
 
-  subnetworks = [
-    { name = module.network.additional_region_subnets[each.key].private.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
-    { name = module.network.additional_region_subnets[each.key].database.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] },
-  ]
+  subnetworks = concat(
+    [{ name = module.network.additional_region_subnets[each.key].private.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }],
+    var.nat.include_database_subnets ? [{ name = module.network.additional_region_subnets[each.key].database.self_link, source_ip_ranges_to_nat = ["ALL_IP_RANGES"] }] : [],
+  )
 
   enable_logging = true
   log_filter     = var.nat.log_filter
+}
+
+# Central egress control (opt-in, preview): Secure Web Proxy with an FQDN
+# allowlist, optionally published to the spokes over Private Service Connect.
+module "secure_web_proxy" {
+  source = "../../network/secure-web-proxy"
+  count  = var.secure_web_proxy.enabled ? 1 : 0
+
+  project_id = var.project_id
+  name       = "${trimsuffix(substr(var.network.name, 0, 36), "-")}-swp"
+  region     = var.region
+  network    = module.network.network_id
+  subnetwork = module.network.subnets.private[sort(keys(module.network.subnets.private))[0]].id
+
+  address          = var.secure_web_proxy.address
+  ports            = var.secure_web_proxy.ports
+  allowed_fqdns    = var.secure_web_proxy.allowed_fqdns
+  additional_rules = var.secure_web_proxy.additional_rules
+  certificate_urls = var.secure_web_proxy.certificate_urls
+
+  create_proxy_only_subnet = var.secure_web_proxy.proxy_only_subnet_cidr != null
+  proxy_only_subnet_cidr   = var.secure_web_proxy.proxy_only_subnet_cidr
+
+  create_service_attachment = var.secure_web_proxy.psc_nat_subnet_cidr != null
+  psc_nat_subnet_cidr       = var.secure_web_proxy.psc_nat_subnet_cidr
+  consumer_accept_projects  = var.secure_web_proxy.consumer_accept_projects
+
+  labels = var.labels
 }
 
 module "private_service_access" {
@@ -305,4 +335,37 @@ module "vpc_service_controls" {
   dry_run_restricted_services = each.value.dry_run_restricted_services
   dry_run_ingress_policies    = each.value.dry_run_ingress_policies
   dry_run_egress_policies     = each.value.dry_run_egress_policies
+}
+
+# =============================================================================
+# DATA-PLANE ALERTS (on for the features that exist)
+# =============================================================================
+
+locals {
+  alert_vpn  = var.vpn.enabled
+  alert_bgp  = var.vpn.enabled || length(var.interconnects) > 0
+  alert_nat  = var.nat.enabled
+  any_alerts = var.alerting.enabled && (local.alert_vpn || local.alert_bgp || local.alert_nat)
+}
+
+module "network_alerts" {
+  source = "../../monitoring/alert-policy"
+  count  = local.any_alerts ? 1 : 0
+
+  project_id                     = var.project_id
+  alert_display_name_prefix      = var.network.name
+  extra_notification_channel_ids = var.alerting.notification_channel_ids
+
+  # Only the network data-plane policies; the compute and Cloud Run ones
+  # belong to the workloads.
+  enable_high_cpu_alert     = false
+  enable_high_memory_alert  = false
+  enable_error_rate_alert   = false
+  enable_high_latency_alert = false
+
+  enable_vpn_tunnel_alert             = local.alert_vpn
+  enable_bgp_session_alert            = local.alert_bgp
+  enable_nat_allocation_failure_alert = local.alert_nat
+  enable_nat_dropped_packets_alert    = local.alert_nat
+  nat_dropped_packets_threshold       = var.alerting.nat_dropped_packets_threshold
 }

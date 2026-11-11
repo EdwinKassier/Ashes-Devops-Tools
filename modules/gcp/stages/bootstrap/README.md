@@ -103,23 +103,23 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L319)
-- resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L309)
+- resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L333)
+- resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L323)
 - resource.google_organization_iam_custom_role.plan_viewer (modules/gcp/stages/bootstrap/plan_viewer.tf#L14)
-- resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L409)
-- resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L435)
-- resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L284)
-- resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L258)
-- resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L270)
-- resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L298)
-- resource.google_service_account.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L399)
-- resource.google_service_account.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L426)
-- resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L247)
-- resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L417)
+- resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L423)
+- resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L449)
+- resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L298)
+- resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L272)
+- resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L284)
+- resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L312)
+- resource.google_service_account.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L413)
+- resource.google_service_account.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L440)
+- resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L261)
+- resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L431)
 - resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L6)
-- resource.terraform_data.guardrails_workspace_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L448)
+- resource.terraform_data.guardrails_workspace_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L462)
 - resource.terraform_data.phase0_impersonation_is_time_boxed (modules/gcp/stages/bootstrap/main.tf#L77)
-- resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L342)
+- resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L356)
 
 
 ## Inputs
@@ -163,7 +163,7 @@ The following resources are created:
 | <a name="input_vpc_sc_access_policy_id"></a> [vpc\_sc\_access\_policy\_id](#input\_vpc\_sc\_access\_policy\_id) | Optional numeric ID of the org-wide Access Context Manager policy. Only used with enable\_legacy\_org\_access\_policy\_grants = true. The default model gives each environment its own folder-scoped access policy (created by gcp-organization), so a workload SA can never edit another environment's or the hub's perimeter. | `string` | `null` | no |
 | <a name="input_workload_billing_roles"></a> [workload\_billing\_roles](#input\_workload\_billing\_roles) | Billing-account roles for each workload SA (budgets live on the billing account, not a folder). Not org-level. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [<br/>    "roles/billing.costsManager",<br/>    "roles/billing.user"<br/>  ],<br/>  "plan": [<br/>    "roles/billing.viewer"<br/>  ]<br/>}</pre> | no |
 | <a name="input_workload_environments"></a> [workload\_environments](#input\_workload\_environments) | Application environment keys. Each gets a <prefix>-wl-<env>-plan / -apply SA pair, bound to TFC workspace <tfc\_workload\_workspace\_prefix><env>. These SAs get NO org-level role; their folder roles are granted by the gcp-projects stage. | `set(string)` | `[]` | no |
-| <a name="input_workload_folder_roles"></a> [workload\_folder\_roles](#input\_workload\_folder\_roles) | Roles the gcp-projects stage grants each workload plan/apply SA on its OWN environment folder. Also the allow-list (with network\_folder\_roles) for the projects-apply SA's delegated folder-IAM grant. Avoid roles/owner: anything listed here becomes grantable on ANY folder by projects-apply. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [<br/>    "roles/resourcemanager.projectIamAdmin",<br/>    "roles/iam.serviceAccountAdmin",<br/>    "roles/iam.serviceAccountUser",<br/>    "roles/serviceusage.serviceUsageAdmin",<br/>    "roles/compute.admin",<br/>    "roles/compute.xpnAdmin",<br/>    "roles/servicenetworking.networksAdmin",<br/>    "roles/dns.admin",<br/>    "roles/secretmanager.admin",<br/>    "roles/storage.admin",<br/>    "roles/cloudkms.admin",<br/>    "roles/bigquery.admin",<br/>    "roles/logging.admin",<br/>    "roles/monitoring.admin",<br/>    "roles/pubsub.admin",<br/>    "roles/run.admin",<br/>    "roles/artifactregistry.admin",<br/>    "roles/resourcemanager.projectCreator",<br/>    "roles/iam.workloadIdentityPoolAdmin",<br/>    "roles/cloudsql.admin",<br/>    "roles/container.admin",<br/>    "roles/osconfig.patchDeploymentAdmin"<br/>  ],<br/>  "plan": [<br/>    "roles/resourcemanager.folderViewer",<br/>    "roles/iam.securityReviewer",<br/>    "roles/iam.serviceAccountViewer",<br/>    "roles/iam.workloadIdentityPoolViewer",<br/>    "roles/serviceusage.serviceUsageViewer",<br/>    "roles/compute.viewer",<br/>    "roles/dns.reader",<br/>    "roles/cloudkms.viewer",<br/>    "roles/secretmanager.viewer",<br/>    "roles/pubsub.viewer",<br/>    "roles/bigquery.metadataViewer",<br/>    "roles/cloudsql.viewer",<br/>    "roles/run.viewer",<br/>    "roles/container.clusterViewer",<br/>    "roles/monitoring.viewer",<br/>    "roles/osconfig.patchDeploymentViewer"<br/>  ]<br/>}</pre> | no |
+| <a name="input_workload_folder_roles"></a> [workload\_folder\_roles](#input\_workload\_folder\_roles) | Roles each workload plan/apply SA holds on its OWN environment folder. Also the allow-list (with network\_folder\_roles) for the projects-apply SA's delegated folder-IAM grant, except the IAM-controlling roles (projectIamAdmin, serviceAccountAdmin, serviceAccountKeyAdmin, serviceAccountTokenCreator, workloadIdentityPoolAdmin): those are never delegable, and gcp-organization grants them directly. Avoid roles/owner: anything else listed here becomes grantable on the environment folders by projects-apply. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [<br/>    "roles/resourcemanager.projectIamAdmin",<br/>    "roles/iam.serviceAccountAdmin",<br/>    "roles/iam.serviceAccountUser",<br/>    "roles/serviceusage.serviceUsageAdmin",<br/>    "roles/compute.admin",<br/>    "roles/compute.xpnAdmin",<br/>    "roles/servicenetworking.networksAdmin",<br/>    "roles/dns.admin",<br/>    "roles/secretmanager.admin",<br/>    "roles/storage.admin",<br/>    "roles/cloudkms.admin",<br/>    "roles/bigquery.admin",<br/>    "roles/logging.admin",<br/>    "roles/monitoring.admin",<br/>    "roles/pubsub.admin",<br/>    "roles/run.admin",<br/>    "roles/artifactregistry.admin",<br/>    "roles/resourcemanager.projectCreator",<br/>    "roles/iam.workloadIdentityPoolAdmin",<br/>    "roles/cloudsql.admin",<br/>    "roles/container.admin",<br/>    "roles/osconfig.patchDeploymentAdmin"<br/>  ],<br/>  "plan": [<br/>    "roles/resourcemanager.folderViewer",<br/>    "roles/iam.securityReviewer",<br/>    "roles/iam.serviceAccountViewer",<br/>    "roles/iam.workloadIdentityPoolViewer",<br/>    "roles/serviceusage.serviceUsageViewer",<br/>    "roles/compute.viewer",<br/>    "roles/dns.reader",<br/>    "roles/cloudkms.viewer",<br/>    "roles/secretmanager.viewer",<br/>    "roles/pubsub.viewer",<br/>    "roles/bigquery.metadataViewer",<br/>    "roles/cloudsql.viewer",<br/>    "roles/run.viewer",<br/>    "roles/container.clusterViewer",<br/>    "roles/monitoring.viewer",<br/>    "roles/osconfig.patchDeploymentViewer"<br/>  ]<br/>}</pre> | no |
 
 ## Outputs
 

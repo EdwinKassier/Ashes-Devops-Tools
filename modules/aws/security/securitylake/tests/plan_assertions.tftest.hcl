@@ -71,3 +71,38 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_securitylake_data_lake.this"
   }
 }
+
+# The provider allows one configuration block per data lake: each extra Region
+# gets its own lake in that Region, with its own regional key.
+run "one_data_lake_per_region" {
+  command = plan
+
+  variables {
+    aws_enabled_regions           = ["eu-west-2", "eu-west-1", "us-east-1"]
+    additional_region_kms_key_ids = { "eu-west-1" = "arn:aws:kms:eu-west-1:111111111111:key/def" }
+  }
+
+  assert {
+    condition     = length(aws_securitylake_data_lake.this[0].configuration) == 1 && aws_securitylake_data_lake.this[0].configuration[0].region == "eu-west-2"
+    error_message = "the home lake has one configuration block, for the first enabled Region."
+  }
+
+  assert {
+    condition = (
+      toset(keys(aws_securitylake_data_lake.additional)) == toset(["eu-west-1", "us-east-1"]) &&
+      aws_securitylake_data_lake.additional["eu-west-1"].region == "eu-west-1" &&
+      aws_securitylake_data_lake.additional["eu-west-1"].configuration[0].encryption_configuration[0].kms_key_id == "arn:aws:kms:eu-west-1:111111111111:key/def" &&
+      aws_securitylake_data_lake.additional["us-east-1"].configuration[0].encryption_configuration[0].kms_key_id == "S3_MANAGED"
+    )
+    error_message = "each extra Region gets its own lake in that Region, encrypted with its regional key or S3_MANAGED."
+  }
+}
+
+run "single_region_has_no_additional_lake" {
+  command = plan
+
+  assert {
+    condition     = length(aws_securitylake_data_lake.additional) == 0
+    error_message = "with one enabled Region only the home lake exists."
+  }
+}

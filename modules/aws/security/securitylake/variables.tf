@@ -27,7 +27,7 @@ variable "kms_key_id" {
 }
 
 variable "aws_enabled_regions" {
-  description = "Regions in which Security Lake is enabled. One data-lake configuration block is created per Region."
+  description = "Regions in which Security Lake is enabled. The first is the home Region (encrypted with kms_key_id); each Region gets its own data lake."
   type        = list(string)
   default     = ["eu-west-2"]
 
@@ -85,6 +85,13 @@ variable "subscriber_external_id" {
 
 variable "tags" {
   description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}
+
+variable "additional_region_kms_key_ids" {
+  description = "Map of Region to the KMS key (ARN) that encrypts that Region's Security Lake objects, for every enabled Region after the first. A KMS key is regional, so kms_key_id covers the home Region only. A Region without an entry uses S3_MANAGED."
   type        = map(string)
   default     = {}
   nullable    = false

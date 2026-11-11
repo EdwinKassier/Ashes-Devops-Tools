@@ -14,7 +14,7 @@
     "commitMessageAction": "Refresh",
     "commitMessageTopic": "provider lockfiles"
   },
-  "commitMessagePrefix": "build(deps):",
+  "commitMessagePrefix": "fix(deps):",
   "labels": [
     "dependencies",
     "terraform"

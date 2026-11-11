@@ -61,6 +61,13 @@ variable "environment" {
   }
 }
 
+variable "is_production" {
+  description = "Whether this is a production environment. Production turns Cloud SQL high availability (REGIONAL) on for every service database whose database.enable_high_availability is unset; an explicit false opts out."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "network_id" {
   description = "ID of the environment Shared VPC network (projects/<p>/global/networks/<n>). Cloud SQL peers into it via the host stage's Private Service Access; Cloud Run and GKE attach to it. Required when any service or GKE is declared."
   type        = string
@@ -252,14 +259,19 @@ variable "services" {
     }), {})
 
     database = optional(object({
-      database_version              = optional(string, "POSTGRES_16")
-      edition                       = optional(string, "ENTERPRISE")
-      tier                          = optional(string, "db-custom-1-3840")
-      databases                     = optional(list(string), ["app"])
-      enable_high_availability      = optional(bool, false)
+      database_version = optional(string, "POSTGRES_16")
+      edition          = optional(string, "ENTERPRISE")
+      tier             = optional(string, "db-custom-1-3840")
+      databases        = optional(list(string), ["app"])
+      # Null = on in production (var.is_production), off elsewhere. Set false
+      # to run a production database zonal on purpose.
+      enable_high_availability      = optional(bool)
       enable_point_in_time_recovery = optional(bool, true)
-      encryption_key_name           = optional(string)
-      enable_deletion_protection    = optional(bool)
+      # Region or multi-region of the automated backups (cross-region copy).
+      # Null = Cloud SQL's default, the multi-region nearest the instance.
+      backup_location            = optional(string)
+      encryption_key_name        = optional(string)
+      enable_deletion_protection = optional(bool)
     }))
 
     github = optional(object({

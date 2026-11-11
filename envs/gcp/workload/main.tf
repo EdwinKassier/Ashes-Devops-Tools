@@ -1,7 +1,7 @@
 # Upstream stage contracts (FAST-style "stage contract override"): the
 # <layer>_contract variable, else gcp.contracts.<layer> in config/landing-zone.yaml,
 # else the upstream workspace's remote state (read ONLY when no contract was given):
-#   - organization → org_id, billing_account, admin_project_number
+#   - organization → org_id, billing_account
 #   - projects     → environment_config[<env>] (host project, folder, region, ...)
 #   - network_hub  → hub_network {vpc_self_link, dns_domain, optional ncc_hub_id /
 #     ncc_spoke_group}. OPTIONAL: enable_network_hub = false means no hub peering
@@ -59,9 +59,8 @@ locals {
   projects_remote    = local.read_projects ? try(data.terraform_remote_state.projects[0].outputs.contract, data.terraform_remote_state.projects[0].outputs) : null
   network_hub_remote = local.read_network_hub ? try(data.terraform_remote_state.network_hub[0].outputs.contract, data.terraform_remote_state.network_hub[0].outputs) : null
 
-  org_id               = local.read_organization ? local.org_remote.org_id : local.organization_contract.org_id
-  billing_account      = local.read_organization ? local.org_remote.billing_account : local.organization_contract.billing_account
-  admin_project_number = local.read_organization ? local.org_remote.admin_project_number : local.organization_contract.admin_project_number
+  org_id          = local.read_organization ? local.org_remote.org_id : local.organization_contract.org_id
+  billing_account = local.read_organization ? local.org_remote.billing_account : local.organization_contract.billing_account
 
   # Hub network contract, or null when the network hub is not part of this
   # landing zone (enable_network_hub = false).
@@ -78,6 +77,13 @@ locals {
     local.cfg.network_connectivity,
     "peering",
   )
+  # Opt-in central egress through the hub Secure Web Proxy (preview). Needs the
+  # hub's proxy service attachment from the gcp-network-hub contract.
+  enable_egress_proxy = local.hub_network != null && coalesce(
+    var.enable_egress_proxy,
+    try(local.cfg.environment_egress_proxy[var.environment], null),
+    false,
+  )
   hub_ncc = {
     hub_id = try(local.hub_network.ncc_hub_id, null)
     group  = coalesce(try(local.hub_network.ncc_spoke_group, null), "edge")
@@ -89,9 +95,13 @@ locals {
   hub_vpc_peerings = {
     for k, v in {
       "hub-peering" = {
-        peer_network         = try(local.hub_network.vpc_self_link, null)
-        export_custom_routes = true
-        import_custom_routes = true
+        peer_network = try(local.hub_network.vpc_self_link, null)
+        # The hub side (hub-to-<env>) belongs to gcp-network-hub: a workload
+        # state never owns a hub resource, and every environment would
+        # otherwise create the same reverse-peering name on the hub VPC.
+        create_reverse_peering = false
+        export_custom_routes   = true
+        import_custom_routes   = true
       }
     } : k => v if local.hub_network != null
   }
@@ -177,13 +187,17 @@ ephemeral "tfe_outputs" "saas" {
 module "environment" {
   source = "../../../modules/gcp/stages/environment"
 
-  environment          = var.environment
-  project_prefix       = local.project_prefix
-  org_id               = local.org_id
-  billing_account      = local.billing_account
-  admin_project_number = local.admin_project_number
-  labels               = local.labels
-  deletion_protection  = var.enable_deletion_protection
+  environment         = var.environment
+  project_prefix      = local.project_prefix
+  org_id              = local.org_id
+  billing_account     = local.billing_account
+  labels              = local.labels
+  deletion_protection = var.enable_deletion_protection
+
+  # Production: Cloud SQL HA by default, and app services must name a
+  # service_team unless enable_host_project_workloads says otherwise.
+  is_production                 = local.is_production
+  enable_host_project_workloads = var.enable_host_project_workloads
 
   host_project = {
     project_id     = local.env_config.host_project_id
@@ -208,6 +222,10 @@ module "environment" {
     ncc          = local.hub_ncc
     peerings     = local.hub_vpc_peerings
     dns_zones    = local.hub_dns_zones
+    egress_proxy = {
+      enabled            = local.enable_egress_proxy
+      service_attachment = try(local.hub_network.egress_proxy_service_attachment, null)
+    }
   }
 
   cloud_armor = {
@@ -297,6 +315,19 @@ resource "terraform_data" "projects_contract_guard" {
     precondition {
       condition     = contains(keys(local.env_config_map), var.environment)
       error_message = "The gcp-projects contract environment_config has no \"${var.environment}\" entry (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output); add the environment to gcp.environments and apply gcp-projects first."
+    }
+  }
+}
+
+# The egress proxy endpoint targets the hub Secure Web Proxy's service
+# attachment. Fail early, naming the fix, when the hub does not publish one.
+resource "terraform_data" "egress_proxy_guard" {
+  count = local.enable_egress_proxy ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = try(local.hub_network.egress_proxy_service_attachment, null) != null
+      error_message = "egress proxy is on for ${var.environment} (enable_egress_proxy / gcp.environments.${var.environment}.egress_proxy) but the gcp-network-hub contract has no egress_proxy_service_attachment: enable secure_web_proxy on gcp-network-hub with this host project as a consumer, and apply it first."
     }
   }
 }

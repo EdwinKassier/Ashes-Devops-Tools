@@ -10,7 +10,7 @@ Bootstraps the Supabase Vault with helper functions and reconciles a desired-sta
 
 ## Script dependencies
 
-Installed **automatically** at apply time by `terraform_data.npm_install`:
+Installed **automatically** at apply time. Each provisioner (bootstrap and reconcile) runs the install in the same shell command, immediately before `node`, so a fresh remote runner with no `node_modules` (every Terraform Cloud run) always has the dependencies:
 
 ```bash
 npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts
@@ -46,7 +46,7 @@ from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public' and p.proname like '%vault_secret%';
 ```
 
-The provisioner resources moved from `null_resource` to built-in `terraform_data`. `moved` blocks migrate existing state in place (`npm_install` is not re-run). `bootstrap` and `reconcile` run once on upgrade because their scripts and trigger inputs changed, which applies the privilege migration above.
+The provisioner resources moved from `null_resource` to built-in `terraform_data`. `moved` blocks migrate existing state in place. The separate `npm_install` resource is gone: `removed` blocks (with `destroy = false`) drop it from state without running anything, because the install now happens inside each script command. `bootstrap` and `reconcile` run once on upgrade because their scripts and trigger inputs changed, which applies the privilege migration above.
 
 ## Trigger hashing
 
@@ -103,9 +103,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.bootstrap (modules/supabase/vault-secrets/main.tf#L78)
-- resource.terraform_data.npm_install (modules/supabase/vault-secrets/main.tf#L67)
-- resource.terraform_data.reconcile (modules/supabase/vault-secrets/main.tf#L97)
+- resource.terraform_data.bootstrap (modules/supabase/vault-secrets/main.tf#L77)
+- resource.terraform_data.reconcile (modules/supabase/vault-secrets/main.tf#L94)
 
 
 ## Inputs

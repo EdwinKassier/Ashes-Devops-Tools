@@ -9,7 +9,7 @@
 #     default AWS key)
 #   - cluster lives in PRIVATE subnets; instances are never publicly_accessible
 #   - deletion_protection defaults on, plus a terraform_data guard that blocks an
-#     accidental `terraform destroy`
+#     accidental `terraform destroy` or replacement of the cluster
 #   - automated backups retained (default 7 days), final snapshot taken on delete
 #   - IAM database authentication on by default
 #   - Performance Insights on, encrypted with a CMEK
@@ -126,14 +126,33 @@ resource "aws_rds_cluster_instance" "this" {
 
 # ── Deletion guard ────────────────────────────────────────────────────────────
 #
-# A terraform_data guard (not prevent_destroy on the cluster itself) so the
-# cluster can still be replaced/updated in place, while any `terraform destroy`
-# that would tear down the cluster is aborted at plan time. To intentionally
-# destroy the cluster, remove this guard from the configuration first.
+# A terraform_data guard (not prevent_destroy on the cluster itself, which
+# cannot be switched off by a variable). Present when deletion_protection is
+# true:
+#   - prevent_destroy aborts any plan that destroys the guard, so a
+#     `terraform destroy` of the cluster fails at plan time.
+#   - replace_triggered_by ties it to the cluster id, so any plan that would
+#     REPLACE the cluster (a ForceNew change such as cluster_identifier,
+#     kms_key_id or db_subnet_group_name) also plans to replace the guard and
+#     fails the same way. In-place updates keep the id and are not blocked.
+#   - setting deletion_protection = false while the guard exists is also
+#     refused, because it would destroy the guard.
+# To intentionally destroy or replace a protected cluster, first run:
+#   terraform state rm '<module_address>.terraform_data.deletion_guard[0]'
+# then set deletion_protection = false and apply.
 resource "terraform_data" "deletion_guard" {
+  count = var.deletion_protection ? 1 : 0
+
   input = aws_rds_cluster.this.cluster_identifier
 
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy      = true
+    replace_triggered_by = [aws_rds_cluster.this.id]
   }
+}
+
+# The guard became conditional (count) so consumers can turn it off.
+moved {
+  from = terraform_data.deletion_guard
+  to   = terraform_data.deletion_guard[0]
 }

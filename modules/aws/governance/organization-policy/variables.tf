@@ -99,6 +99,17 @@ variable "stackset_managed_role_names" {
   }
 }
 
+variable "stackset_managed_policy_names" {
+  description = "Member-account customer-managed policy names (optionally path-prefixed) that a service-managed StackSet owns, by default the tfc-oidc-baseline tfc-apply permissions boundary and the tfc-plan read-deny policy. DenyStackSetPolicyTampering stops everyone except break-glass and stackset_execution_role_names from creating, versioning, deleting or tagging them. Empty omits the statement."
+  type        = list(string)
+  default     = ["tfc-apply-boundary", "tfc-plan-data-read-deny"]
+
+  validation {
+    condition     = alltrue([for n in var.stackset_managed_policy_names : can(regex("^[A-Za-z0-9+=,.@_/-]{1,512}$", n))])
+    error_message = "stackset_managed_policy_names entries must be IAM policy names without wildcards (optionally path-prefixed)."
+  }
+}
+
 variable "stackset_execution_role_names" {
   description = "Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles); themselves protected break-glass-only by DenyPrivilegedRoleTampering."
   type        = list(string)

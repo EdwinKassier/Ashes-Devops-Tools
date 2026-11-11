@@ -41,9 +41,32 @@ variable "billing_account" {
   type        = string
 }
 
+# tflint-ignore: terraform_unused_declarations # deprecated and ignored, kept so a set value warns until v1.0
 variable "admin_project_number" {
-  description = "Project number of the Terraform admin project (the gcp-organization contract). The default perimeter ingress policy admits its Workload Identity pools."
+  description = "Ignored. The perimeter has no default ingress rule any more, so the stage no longer needs the admin project number."
   type        = string
+  default     = null
+  deprecated  = "Ignored: the perimeter has no default ingress rule. Remove this input; it is deleted in v1.0."
+}
+
+variable "is_production" {
+  description = "Whether this is a production environment (the gcp-projects environment_config is_production). Production turns Cloud SQL high availability on by default and, unless enable_host_project_workloads is set, requires every app service to name a service_team."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "enable_host_project_workloads" {
+  description = "Allow app services without a service_team, which then run in the Shared VPC host project next to the network core. Null (default) = allowed outside production, refused in production. Set true to allow it in production too, false to refuse it everywhere."
+  type        = bool
+  default     = null
+
+  validation {
+    condition = coalesce(var.enable_host_project_workloads, !var.is_production) || alltrue([
+      for k, s in var.app_services : try(s.service_team, null) != null
+    ])
+    error_message = "app_services ${join(", ", [for k, s in var.app_services : k if try(s.service_team, null) == null])} set no service_team, so they would run in the Shared VPC host project. Give each a service_teams key (its own service project). Host-project workloads are refused in production by default; set enable_host_project_workloads = true to allow them explicitly."
+  }
 }
 
 variable "host_project" {
@@ -115,9 +138,14 @@ variable "network" {
 }
 
 variable "hub" {
-  description = "Hub connectivity resolved from the gcp-network-hub contract: connectivity (peering | ncc), ncc (hub_id, group), the hub VPC peerings and the DNS peering zones. Empty maps = standalone (no hub)."
+  description = "Hub connectivity resolved from the gcp-network-hub contract: connectivity (peering | ncc), ncc (hub_id, group), the hub VPC peerings, the DNS peering zones, and the opt-in egress proxy (preview): egress_proxy.enabled with the hub Secure Web Proxy's service_attachment. Empty maps = standalone (no hub)."
   type = object({
     connectivity = optional(string, "peering")
+    egress_proxy = optional(object({
+      enabled            = optional(bool, false)
+      service_attachment = optional(string)
+      global_access      = optional(bool, false)
+    }), {})
     ncc = optional(object({
       hub_id = optional(string)
       group  = optional(string, "edge")
@@ -167,9 +195,13 @@ variable "vpc_service_controls" {
     The environment VPC-SC perimeter. access_policy_name null = no perimeter.
     perimeter_title null = "<ENVIRONMENT> Perimeter". enable_dry_run keeps the
     perimeter in dry-run; dry_run_restricted_services stages a dry-run delta on
-    an enforced perimeter. Empty ingress_policies / egress_policies use the
-    defaults (admin-project WIF pools in for storage, BigQuery and GKE; storage
-    out).
+    an enforced perimeter. ingress_policies / egress_policies are used as given;
+    empty (default) = no rule, so an enforced perimeter admits nothing across
+    its edge until the operator names identities and projects. An ingress
+    source.resource must be projects/<number> or a VPC network
+    (//compute.googleapis.com/projects/<p>/global/networks/<n>); use
+    access_level "*" for callers from outside Google Cloud (CI, TFC). An egress
+    rule may not combine identity_type ANY_IDENTITY with resources "*".
   EOT
   type = object({
     access_policy_name = optional(string)
@@ -217,6 +249,26 @@ variable "vpc_service_controls" {
   })
   default  = {}
   nullable = false
+
+  # A Workload Identity pool (or any non-project, non-network name) is not a
+  # valid ingress source: the API rejects it, or it never matches a request.
+  validation {
+    condition = alltrue(flatten([
+      for p in var.vpc_service_controls.ingress_policies : [
+        for src in(p.sources == null ? [] : p.sources) : src.resource == null || can(regex("^(projects/[0-9]+|//compute[.]googleapis[.]com/projects/[^/]+/global/networks/[^/]+)$", coalesce(src.resource, "-")))
+      ]
+    ]))
+    error_message = "vpc_service_controls.ingress_policies[*].sources[*].resource must be projects/<number> or //compute.googleapis.com/projects/<project>/global/networks/<network>. For callers outside Google Cloud use access_level = \"*\" and name them in identities."
+  }
+
+  # Any identity to any project anywhere is the copy-out path the perimeter
+  # exists to close.
+  validation {
+    condition = !anytrue([
+      for p in var.vpc_service_controls.egress_policies : p.identity_type == "ANY_IDENTITY" && p.resources != null && contains(coalesce(p.resources, ["-"]), "*")
+    ])
+    error_message = "vpc_service_controls.egress_policies may not combine identity_type = \"ANY_IDENTITY\" with resources = [\"*\"]: that lets any identity copy data to any project. Name the identities and the target projects (projects/<number>)."
+  }
 }
 
 # --- Budget ---------------------------------------------------------------------
@@ -325,10 +377,52 @@ variable "saas_secret_bridge_value" {
 # --- Application golden path ------------------------------------------------------
 
 variable "app_services" {
-  description = "Application services keyed by service name, in the shape of the modules/gcp/stages/app-services `services` input (which validates them). `service_team = \"<key>\"` deploys a service into that service team's project. Services named in public_ingress default to LB-only ingress with unauthenticated invocation."
-  type        = any
-  default     = {}
-  nullable    = false
+  description = "Application services keyed by service name, in the shape of the modules/gcp/stages/app-services `services` input (which validates them). `service_team = \"<key>\"` deploys a service into that service team's project. Services named in public_ingress default to LB-only ingress with unauthenticated invocation. A key that the services shape does not have fails the plan."
+  # Deliberately untyped: an object type constraint silently drops attributes it
+  # does not declare, so a misspelled key would vanish without an error, and
+  # unset optional attributes would arrive as null and override the
+  # public_ingress defaults merged in main.tf. The validation below rejects
+  # unknown keys instead; the app-services stage types and validates values.
+  type     = any
+  default  = {}
+  nullable = false
+
+  validation {
+    condition = length([for k in flatten([
+      for name, s in var.app_services : concat(
+        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
+        flatten([
+          for sub, allowed in {
+            artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]
+            database          = ["database_version", "edition", "tier", "databases", "enable_high_availability", "enable_point_in_time_recovery", "backup_location", "encryption_key_name", "enable_deletion_protection"]
+            github            = ["repository_id", "repository", "ref", "environment"]
+            alerts            = ["enabled", "error_ratio_threshold", "p99_latency_ms", "duration"]
+            job               = ["task_count", "parallelism", "max_retries"]
+            slo               = ["sli_type", "goal", "rolling_period_days", "latency_threshold", "enable_burn_rate_alert", "burn_rate_threshold", "burn_rate_lookback"]
+            pubsub            = ["enabled", "ack_deadline_seconds", "max_delivery_attempts", "message_retention_duration"]
+          } : [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+        ]),
+        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(["secret", "version"], k)]]),
+      )
+    ]) : k]) == 0
+    error_message = "app_services has keys the services shape does not have (misspelled or unsupported): ${join(", ", [for k in flatten([
+      for name, s in var.app_services : concat(
+        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
+        flatten([
+          for sub, allowed in {
+            artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]
+            database          = ["database_version", "edition", "tier", "databases", "enable_high_availability", "enable_point_in_time_recovery", "backup_location", "encryption_key_name", "enable_deletion_protection"]
+            github            = ["repository_id", "repository", "ref", "environment"]
+            alerts            = ["enabled", "error_ratio_threshold", "p99_latency_ms", "duration"]
+            job               = ["task_count", "parallelism", "max_retries"]
+            slo               = ["sli_type", "goal", "rolling_period_days", "latency_threshold", "enable_burn_rate_alert", "burn_rate_threshold", "burn_rate_lookback"]
+            pubsub            = ["enabled", "ack_deadline_seconds", "max_delivery_attempts", "message_retention_duration"]
+          } : [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+        ]),
+        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(["secret", "version"], k)]]),
+      )
+    ]) : k])}."
+  }
 }
 
 variable "public_ingress" {

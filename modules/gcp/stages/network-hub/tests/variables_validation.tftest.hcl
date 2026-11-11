@@ -331,3 +331,119 @@ run "rejects_vpn_without_write_only_key" {
 
   expect_failures = [var.vpn_shared_secret_wo]
 }
+
+run "rejects_spoke_peering_key_unusable_in_name" {
+  command = plan
+
+  variables {
+    spoke_peerings = {
+      "Dev_Env" = { network_self_link = "projects/p/global/networks/n" }
+    }
+  }
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  expect_failures = [var.spoke_peerings]
+}
+
+run "rejects_perimeter_without_hub_project_number" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    vpc_sc_access_policy_name = "1234567890"
+    dns_project_number        = "222222222222"
+  }
+
+  expect_failures = [var.hub_project_number]
+}
+
+run "rejects_perimeter_without_dns_project_number" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    vpc_sc_access_policy_name = "1234567890"
+    hub_project_number        = "111111111111"
+  }
+
+  expect_failures = [var.dns_project_number]
+}
+
+run "rejects_prefixed_hub_project_number" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    hub_project_number = "projects/111111111111"
+  }
+
+  expect_failures = [var.hub_project_number]
+}

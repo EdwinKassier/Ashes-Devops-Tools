@@ -59,11 +59,11 @@ variable "aws_enabled_regions" {
 variable "vpc_cidr" {
   description = "IPv4 CIDR of the workload spoke VPC. Used for subnet math; also the literal VPC CIDR when ipam_pool_id is empty."
   type        = string
-  default     = "10.20.0.0/16"
+  default     = "10.72.0.0/16"
 
   validation {
     condition     = can(cidrnetmask(var.vpc_cidr))
-    error_message = "vpc_cidr must be a valid IPv4 CIDR block (e.g. 10.20.0.0/16)."
+    error_message = "vpc_cidr must be a valid IPv4 CIDR block (e.g. 10.72.0.0/16)."
   }
 }
 

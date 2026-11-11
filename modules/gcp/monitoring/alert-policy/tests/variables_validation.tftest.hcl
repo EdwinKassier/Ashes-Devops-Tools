@@ -242,3 +242,14 @@ run "accepts_zero_alert_duration_fires_immediately" {
     alert_duration = 0
   }
 }
+
+run "rejects_negative_nat_dropped_packets_threshold" {
+  command = plan
+
+  variables {
+    project_id                    = "my-valid-project"
+    nat_dropped_packets_threshold = -1
+  }
+
+  expect_failures = [var.nat_dropped_packets_threshold]
+}

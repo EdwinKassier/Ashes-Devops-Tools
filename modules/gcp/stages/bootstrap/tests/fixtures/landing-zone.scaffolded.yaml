@@ -154,7 +154,7 @@ gcp:
     prod:
       display_name: Production
       region: europe-west2
-      cidr_block: 10.30.0.0/16
+      cidr_block: 10.12.0.0/16
       budget_monthly_limit: 2000
       is_production: true
       iam_group_role_bindings: {}
@@ -223,7 +223,7 @@ aws:
   workload_environments:
     dev:
       account_key: workload_dev
-      vpc_cidr: 10.20.0.0/16
+      vpc_cidr: 10.72.0.0/16
 
   # Network Firewall egress posture (aws-network). A production estate (profile
   # production AND a workload environment with is_production, or keyed

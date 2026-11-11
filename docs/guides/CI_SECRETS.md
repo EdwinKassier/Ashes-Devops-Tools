@@ -10,7 +10,7 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 | Name | Kind | Used by | Purpose |
 |------|------|---------|---------|
 | `TFC_TOKEN` | Secret | `terraform-apply.yml` | Terraform Cloud team token with **READ** access to workspace runs. Used only to verify run status before publishing a release; it does not trigger or modify runs. |
-| `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Terraform Cloud team token with **Queue Plans (write)** on the target workspaces. Drift detection creates speculative plan-only runs (`POST /runs`), which read access cannot do. There is **no fallback** to `TFC_TOKEN`: if unset, scheduled runs skip and manual runs fail with an explicit error, so the release token is never silently granted Queue Plans. |
+| `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Terraform Cloud team token with **Queue Plans** (`runs = plan`) and **Read state versions** on the target workspaces. Drift detection reads the current state version to find the last applied run and its configuration version, then creates a speculative refresh-only run pinned to that configuration (`POST /runs`), which read access cannot do. Merged but unapplied configuration is reported as a separate warning, not as drift. There is **no fallback** to `TFC_TOKEN`: if unset, scheduled runs skip and manual runs fail with an explicit error, so the release token is never silently granted Queue Plans. |
 | `TFC_ORGANIZATION` | Variable | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud organization name that owns the workspaces. |
 | `RELEASE_PLEASE_TOKEN` | Secret | `release.yml` | Machine-account token release-please uses to open the release PR and cut `vX.Y.Z` tags. **Required; no fallback.** See [below](#release_please_token). |
 
@@ -132,6 +132,12 @@ the ones it manages at its next apply).
 | `TFC_DRIFT_WORKSPACES` | Variable | `drift-detection.yml` | JSON array of TFC workspace names to check for drift, e.g. `["gcp-organization","gcp-workload-dev","gcp-workload-prod"]`. | `["gcp-organization","gcp-workload-dev"]` |
 | `DOCS_BOT_PAT` | Secret | `documentation.yml` | Fine-grained PAT (see [below](#docs_bot_pat)) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
 | `DOCS_REVIEWER` | Variable | `documentation.yml` | GitHub username to request as reviewer on auto-generated docs PRs. | No reviewer requested. |
+| `TFC_TOKEN_STATE_BACKUP` | Secret | `state-backup.yml` | Team token of the dedicated state-backup team (`state_backup_team_id` in `envs/tfc-admin`: `state_versions = read`, nothing else). It reads every state file, so keep it in the `tfc-state-backup` environment. See [state backup](../runbooks/state-backup.md). | Run fails unless `STATE_BACKUP_OPT_OUT=true` (scheduled runs only). |
+| `STATE_BACKUP_S3_BUCKET`, `STATE_BACKUP_AWS_ROLE_ARN`, `STATE_BACKUP_AWS_REGION` | Variables | `state-backup.yml` | S3 target: an Object Lock, versioned, SSE-KMS bucket and the role GitHub OIDC assumes to write to it. | No S3 copy. With no target at all the run fails. |
+| `STATE_BACKUP_GCS_BUCKET`, `STATE_BACKUP_GCP_WIF_PROVIDER`, `STATE_BACKUP_GCP_SA` | Variables | `state-backup.yml` | GCS target: a bucket with a locked retention policy and the service account the WIF principal impersonates. | No GCS copy. With no target at all the run fails. |
+| `STATE_BACKUP_WORKSPACES` | Variable | `state-backup.yml` | JSON array of workspaces that must be exported; a missing one fails the run. | Every workspace the token can see. |
+| `STATE_BACKUP_PREFIX` | Variable | `state-backup.yml` | Object-name prefix in the bucket. | `tfstate/` |
+| `STATE_BACKUP_OPT_OUT` | Variable | `state-backup.yml` | `true` only to acknowledge running without a state copy outside HCP Terraform: unconfigured scheduled runs then warn instead of failing. | Unset: an unconfigured run fails. |
 | `CODEOWNERS_ENFORCE` | Variable | `terraform-plan.yml` (CODEOWNERS placeholders job) | Set to `true` once `.github/CODEOWNERS` names real teams: any remaining `@your-org/` placeholder then fails the build. | Placeholders produce a warning only, so forks stay green. |
 
 ## Sandbox E2E
@@ -169,12 +175,13 @@ environment, not at repository level, and restrict the environment's deployment 
 | `tfc-drift` | `TFC_TOKEN_DRIFT` | `main` only | `drift-detection.yml` |
 | `release` | `RELEASE_PLEASE_TOKEN` | `main` only | `release.yml` |
 | `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
+| `tfc-state-backup` | `TFC_TOKEN_STATE_BACKUP` | `main` only | `state-backup.yml` |
 | `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
 | `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label. **Required reviewers: yes** (at least one, prevent self-review) | `sandbox-e2e.yml` |
 
 ```bash
 repo=OWNER/REPO
-for env in tfc-drift release docs-bot; do
+for env in tfc-drift tfc-state-backup release docs-bot; do
   gh api -X PUT "repos/$repo/environments/$env" \
     -F 'deployment_branch_policy[protected_branches]=false' \
     -F 'deployment_branch_policy[custom_branch_policies]=true'

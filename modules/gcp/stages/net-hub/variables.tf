@@ -122,11 +122,12 @@ variable "firewall" {
 }
 
 variable "nat" {
-  description = "Cloud NAT (and its Cloud Router) for the private and database tiers. Set enabled = false for a network with no egress need."
+  description = "Cloud NAT (and its Cloud Router) for the private tier. Set enabled = false for a network with no egress need. include_database_subnets (default false) also NATs the database tier: leave it off so a database VM has no internet path even when it lacks the database network tag."
   type = object({
-    enabled            = optional(bool, true)
-    ip_allocate_option = optional(string, "AUTO_ONLY")
-    log_filter         = optional(string, "ERRORS_ONLY")
+    enabled                  = optional(bool, true)
+    ip_allocate_option       = optional(string, "AUTO_ONLY")
+    log_filter               = optional(string, "ERRORS_ONLY")
+    include_database_subnets = optional(bool, false)
   })
   default  = {}
   nullable = false
@@ -433,5 +434,58 @@ variable "firewall_policy_enforcement_order" {
   validation {
     condition     = var.firewall_policy_enforcement_order == null ? true : contains(["BEFORE_CLASSIC_FIREWALL", "AFTER_CLASSIC_FIREWALL"], var.firewall_policy_enforcement_order)
     error_message = "firewall_policy_enforcement_order must be null, BEFORE_CLASSIC_FIREWALL or AFTER_CLASSIC_FIREWALL."
+  }
+}
+
+variable "secure_web_proxy" {
+  description = <<-EOT
+    Opt-in central egress control (preview): a Secure Web Proxy in the hub region with an FQDN
+    allowlist (everything else is denied). It takes its address from the first primary-region
+    private subnet. proxy_only_subnet_cidr creates the proxy-only subnet it needs (null = one already
+    exists). psc_nat_subnet_cidr publishes the proxy through a Private Service Connect service
+    attachment that accepts consumer_accept_projects only; spokes then reach it through a PSC
+    endpoint (stages/net-spoke egress_proxy). Clients use it as an explicit proxy
+    (HTTPS_PROXY=<address>:<port>). Default: off.
+  EOT
+  type = object({
+    enabled       = optional(bool, false)
+    address       = optional(string)
+    ports         = optional(list(number), [443])
+    allowed_fqdns = optional(list(string), [])
+    additional_rules = optional(map(object({
+      priority            = number
+      action              = string
+      session_matcher     = string
+      application_matcher = optional(string)
+      description         = optional(string)
+      enabled             = optional(bool, true)
+    })), {})
+    certificate_urls         = optional(list(string), [])
+    proxy_only_subnet_cidr   = optional(string)
+    psc_nat_subnet_cidr      = optional(string)
+    consumer_accept_projects = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = !var.secure_web_proxy.enabled || var.secure_web_proxy.psc_nat_subnet_cidr == null || length(var.secure_web_proxy.consumer_accept_projects) > 0
+    error_message = "secure_web_proxy.consumer_accept_projects must list at least one project when psc_nat_subnet_cidr publishes the proxy."
+  }
+}
+
+variable "alerting" {
+  description = "Data-plane alert policies in the hub project, on by default for the features that exist: VPN tunnel down (vpn.enabled), BGP session down (vpn.enabled or any interconnect) and Cloud NAT allocation failures and OUT_OF_RESOURCES drops (nat.enabled). notification_channel_ids are existing channel IDs (projects/<project>/notificationChannels/<id>); empty = the policies still open incidents in the console but notify no one. enabled = false creates none."
+  type = object({
+    enabled                       = optional(bool, true)
+    notification_channel_ids      = optional(list(string), [])
+    nat_dropped_packets_threshold = optional(number, 0)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for c in var.alerting.notification_channel_ids : can(regex("^projects/[^/]+/notificationChannels/[^/]+$", c))])
+    error_message = "alerting.notification_channel_ids entries must look like projects/<project>/notificationChannels/<id>."
   }
 }

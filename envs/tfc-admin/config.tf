@@ -164,3 +164,62 @@ locals {
     [for k, e in local.aws_environments : "${local.catalog_family.aws}-${k}" if coalesce(e.is_production, can(regex("^prod(uction)?$", k)))],
   ))
 }
+
+# ── Address plan (docs/architecture/cidr-plan.md) ──────────────────────────
+# The cidrnetmask validations in each root only check that a CIDR is well
+# formed. Overlap between the GCP and AWS ranges only shows up as broken routes
+# once the clouds are joined (VPN / Interconnect), so tfc-admin, which reads the
+# whole config file, fails its plan on any overlap. Explicit TFC variables on a
+# network workspace are not visible here: keep them in the config file.
+locals {
+  cidr_gcp_ranges = local.enable_gcp ? {
+    for k, c in merge(
+      {
+        "gcp.network.hub_cidr_block"     = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
+        "gcp.network.dns_hub_cidr_block" = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+      },
+      { for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : "gcp.environments.${env}.cidr_block" => try(tostring(e.cidr_block), null) },
+    ) : k => c if c != null && can(cidrnetmask(c))
+  } : {}
+
+  # AWS VPCs with a fixed range: the hub VPCs (aws-network defaults when the
+  # config sets none) and workload VPCs that set vpc_cidr. A workload without
+  # vpc_cidr is allocated from the IPAM pool, which sits inside top_cidr.
+  cidr_aws_top = local.enable_aws ? try(tostring(local.lz.aws.network.top_cidr), "10.64.0.0/10") : null
+  cidr_aws_ranges = local.enable_aws ? {
+    for k, c in merge(
+      {
+        "aws.network.inspection_cidr" = try(tostring(local.lz.aws.network.inspection_cidr), "10.64.0.0/16")
+        "aws.network.egress_cidr"     = try(tostring(local.lz.aws.network.egress_cidr), "10.65.0.0/16")
+      },
+      { for env, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : "aws.workload_environments.${env}.vpc_cidr" => try(tostring(e.vpc_cidr), null) },
+    ) : k => c if c != null && can(cidrnetmask(c))
+  } : {}
+
+  # Two ranges overlap when their network addresses agree on the shorter prefix
+  # (cidrhost masks the host bits of the address it is given).
+  cidr_all = merge(
+    local.cidr_gcp_ranges,
+    local.cidr_aws_ranges,
+    local.cidr_aws_top == null || !can(cidrnetmask(coalesce(local.cidr_aws_top, "x"))) ? {} : { "aws.network.top_cidr" = local.cidr_aws_top },
+  )
+  cidr_keys = sort(keys(local.cidr_all))
+  cidr_overlaps = flatten([
+    for i, a in local.cidr_keys : [
+      for b in slice(local.cidr_keys, i + 1, length(local.cidr_keys)) : "${a} (${local.cidr_all[a]}) overlaps ${b} (${local.cidr_all[b]})"
+      # AWS VPCs are meant to sit inside the AWS supernet; overlap among them is
+      # still checked pairwise.
+      if !(contains(["aws.network.top_cidr"], a) && contains(keys(local.cidr_aws_ranges), b)) &&
+      !(contains(["aws.network.top_cidr"], b) && contains(keys(local.cidr_aws_ranges), a)) &&
+      cidrhost("${split("/", local.cidr_all[a])[0]}/${min(tonumber(split("/", local.cidr_all[a])[1]), tonumber(split("/", local.cidr_all[b])[1]))}", 0) ==
+      cidrhost("${split("/", local.cidr_all[b])[0]}/${min(tonumber(split("/", local.cidr_all[a])[1]), tonumber(split("/", local.cidr_all[b])[1]))}", 0)
+    ]
+  ])
+  # Fixed AWS VPC ranges outside the AWS supernet (top_cidr) are not covered by
+  # the transit gateway's top_cidr routes.
+  cidr_outside_aws_top = local.cidr_aws_top == null || !can(cidrnetmask(coalesce(local.cidr_aws_top, "x"))) ? [] : [
+    for k, c in local.cidr_aws_ranges : "${k} (${c}) is outside aws.network.top_cidr (${local.cidr_aws_top})"
+    if tonumber(split("/", c)[1]) < tonumber(split("/", local.cidr_aws_top)[1]) ||
+    cidrhost("${split("/", c)[0]}/${split("/", local.cidr_aws_top)[1]}", 0) != cidrhost(local.cidr_aws_top, 0)
+  ]
+}

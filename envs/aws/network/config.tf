@@ -31,6 +31,12 @@ locals {
     egress_domain_allowlist  = try([for d in local.lz.aws.network.egress_domain_allowlist : tostring(d)], null)
     stateful_default_actions = try([for a in local.lz.aws.network.stateful_default_actions : tostring(a)], null)
     egress_alert_only_waived = try(tobool(local.lz.aws.network.egress_alert_only_waived), null)
+    # aws.network addressing (docs/architecture/cidr-plan.md: AWS owns
+    # 10.64.0.0/10). tfc-admin fails its plan when these overlap a GCP range.
+    top_cidr        = try(tostring(local.lz.aws.network.top_cidr), null)
+    regional_cidrs  = try({ for r, c in local.lz.aws.network.regional_cidrs : r => tostring(c) }, null)
+    inspection_cidr = try(tostring(local.lz.aws.network.inspection_cidr), null)
+    egress_cidr     = try(tostring(local.lz.aws.network.egress_cidr), null)
     # aws.network.vpn: opt-in Site-to-Site VPN on the TGW (no secret: AWS
     # generates the tunnel keys). JSON text so the explicit-variable fallback
     # is a plain conditional; the stage's variable type validates the shape.
@@ -79,6 +85,13 @@ locals {
   network_firewall_stateful_default_actions = var.network_firewall_stateful_default_actions != null ? var.network_firewall_stateful_default_actions : coalesce(local.cfg.stateful_default_actions, ["aws:alert_established"])
   egress_alert_only_waived                  = coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false)
   # Opt-in hybrid connectivity (default off: no VPN).
+  # Addressing: explicit variable > aws.network.* in config > the CIDR plan's
+  # AWS block (10.64.0.0/10), clear of the GCP block 10.0.0.0/12.
+  top_cidr        = coalesce(var.top_cidr, local.cfg.top_cidr, "10.64.0.0/10")
+  regional_cidrs  = var.regional_cidrs != null ? var.regional_cidrs : coalesce(local.cfg.regional_cidrs, { (contains(local.aws_enabled_regions, local.aws_region) ? local.aws_region : local.aws_enabled_regions[0]) = "10.64.0.0/12" })
+  inspection_cidr = coalesce(var.inspection_cidr, local.cfg.inspection_cidr, "10.64.0.0/16")
+  egress_cidr     = coalesce(var.egress_cidr, local.cfg.egress_cidr, "10.65.0.0/16")
+
   enable_vpn = coalesce(var.enable_vpn, local.cfg.enable_vpn, false)
   vpn        = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
   # Workload spoke routing (default none: no change).

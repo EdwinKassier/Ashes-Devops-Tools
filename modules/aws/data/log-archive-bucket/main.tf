@@ -6,6 +6,12 @@
 # with a bucket key, a default Object Lock retention (COMPLIANCE by default),
 # and a lifecycle that transitions to GLACIER and expires per retention_days.
 #
+# S3 server access logs cannot be delivered to a bucket whose default
+# encryption is SSE-KMS or that has an Object Lock default retention, so they
+# go to a companion bucket (<name>-access-logs: SSE-S3, versioned, no Object
+# Lock, own lifecycle) that this module creates, or to an existing bucket named
+# in access_log_bucket.
+#
 # The bucket name (var.log_archive_bucket_name) is a cross-root naming contract:
 # it must match the deterministic name that the B3 SCP references, so keep the
 # two in sync.
@@ -21,6 +27,14 @@ locals {
   # case where retention_days < 90, which S3 would otherwise reject).
   glacier_transition_days = min(90, var.retention_days)
 
+  # CloudTrail grants are additionally pinned to trails owned by the trail
+  # owner account (organization trails, including one a delegated admin
+  # creates, are owned by the management account). Name-agnostic, so a trail
+  # rename or the delegated-admin migration needs no policy change.
+  cloudtrail_source_condition = var.cloudtrail_trail_account_id == "" ? {} : {
+    ArnLike = { "aws:SourceArn" = "arn:${local.partition}:cloudtrail:*:${var.cloudtrail_trail_account_id}:trail/*" }
+  }
+
   bucket_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -31,7 +45,7 @@ locals {
         Principal = { Service = "cloudtrail.amazonaws.com" }
         Action    = "s3:GetBucketAcl"
         Resource  = local.bucket_arn
-        Condition = { StringEquals = { "aws:SourceOrgID" = var.org_id } }
+        Condition = merge({ StringEquals = { "aws:SourceOrgID" = var.org_id } }, local.cloudtrail_source_condition)
       },
       # CloudTrail object delivery, scoped to this org.
       {
@@ -40,7 +54,7 @@ locals {
         Principal = { Service = "cloudtrail.amazonaws.com" }
         Action    = "s3:PutObject"
         Resource  = "${local.bucket_arn}/*"
-        Condition = { StringEquals = { "aws:SourceOrgID" = var.org_id } }
+        Condition = merge({ StringEquals = { "aws:SourceOrgID" = var.org_id } }, local.cloudtrail_source_condition)
       },
       # Config delivery, scoped to this org.
       {
@@ -134,13 +148,17 @@ resource "aws_s3_bucket_versioning" "this" {
   }
 }
 
-# S3 server access logging. For the central log-archive bucket (the terminal
-# log sink) this self-logs to a dedicated prefix by default; set
-# var.access_log_bucket to ship access logs to a separate audit bucket instead.
+# S3 server access logging goes to the companion access-log bucket (created
+# below unless access_log_bucket names an existing one). Never to the archive
+# itself: S3 does not deliver access logs to a target with SSE-KMS default
+# encryption or an Object Lock default retention.
 resource "aws_s3_bucket_logging" "this" {
   bucket        = aws_s3_bucket.this.id
-  target_bucket = var.access_log_bucket != "" ? var.access_log_bucket : aws_s3_bucket.this.id
+  target_bucket = local.create_access_log_bucket ? local.access_log_bucket_name : var.access_log_bucket
   target_prefix = var.access_log_prefix
+
+  # The companion bucket and its logging-service grant must exist first.
+  depends_on = [aws_s3_bucket_policy.access_logs]
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
@@ -196,4 +214,155 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 resource "aws_s3_bucket_policy" "this" {
   bucket = aws_s3_bucket.this.id
   policy = local.bucket_policy
+}
+
+# ---------------------------------------------------------------------------
+# Companion S3 server access-log bucket
+# ---------------------------------------------------------------------------
+
+locals {
+  create_access_log_bucket = var.access_log_bucket == ""
+  # coalesce: static tools (tflint) evaluate the module with the required
+  # bucket name unset; the variable itself is never null at plan.
+  access_log_bucket_name = "${coalesce(var.log_archive_bucket_name, "unset")}-access-logs"
+  access_log_bucket_arn  = "arn:${local.partition}:s3:::${local.access_log_bucket_name}"
+}
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket" "access_logs" {
+  # checkov:skip=CKV_AWS_18:This bucket is the access-log target for the log archive; logging it to itself or onward would loop.
+  # checkov:skip=CKV_AWS_145:S3 server access logging supports only SSE-S3 (AES256) default encryption on the target bucket.
+  # checkov:skip=CKV_AWS_144:No cross-region replication, as for the log archive it serves.
+  # checkov:skip=CKV2_AWS_62:No event notifications; access logs are read in place.
+  count = local.create_access_log_bucket ? 1 : 0
+
+  bucket = local.access_log_bucket_name
+  tags   = var.tags
+
+  lifecycle {
+    precondition {
+      condition     = length(local.access_log_bucket_name) <= 63
+      error_message = "The derived access-log bucket name (<log_archive_bucket_name>-access-logs) exceeds 63 characters. Shorten log_archive_bucket_name or set access_log_bucket to an existing bucket."
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "access_logs" {
+  count  = local.create_access_log_bucket ? 1 : 0
+  bucket = aws_s3_bucket.access_logs[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "access_logs" {
+  count  = local.create_access_log_bucket ? 1 : 0
+  bucket = aws_s3_bucket.access_logs[0].id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "access_logs" {
+  count  = local.create_access_log_bucket ? 1 : 0
+  bucket = aws_s3_bucket.access_logs[0].id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
+  count  = local.create_access_log_bucket ? 1 : 0
+  bucket = aws_s3_bucket.access_logs[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
+  count  = local.create_access_log_bucket ? 1 : 0
+  bucket = aws_s3_bucket.access_logs[0].id
+
+  rule {
+    id     = "expire-access-logs"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = var.access_log_retention_days
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "access_logs" {
+  count  = local.create_access_log_bucket ? 1 : 0
+  bucket = aws_s3_bucket.access_logs[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # The S3 logging service writes only the log archive's access logs.
+      {
+        Sid       = "S3ServerAccessLogsWrite"
+        Effect    = "Allow"
+        Principal = { Service = "logging.s3.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "${local.access_log_bucket_arn}/${var.access_log_prefix}*"
+        Condition = {
+          ArnLike      = { "aws:SourceArn" = local.bucket_arn }
+          StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        }
+      },
+      {
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource  = [local.access_log_bucket_arn, "${local.access_log_bucket_arn}/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      },
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.access_logs]
+}
+
+# ---------------------------------------------------------------------------
+# Deletion guard
+#
+# prevent_destroy must be a static literal, so a terraform_data guard carries
+# it. replace_triggered_by ties the guard to the bucket: a plan that destroys
+# OR replaces the archive (e.g. a rename) must also replace the guard, which
+# prevent_destroy refuses. Setting enable_deletion_protection = false does not
+# lift an existing guard (removing it is itself a destroy). To retire the
+# archive deliberately, first run:
+#   terraform state rm '<module_address>.terraform_data.deletion_guard[0]'
+# ---------------------------------------------------------------------------
+
+resource "terraform_data" "deletion_guard" {
+  count = var.enable_deletion_protection ? 1 : 0
+
+  input = var.log_archive_bucket_name
+
+  lifecycle {
+    prevent_destroy      = true
+    replace_triggered_by = [aws_s3_bucket.this.id]
+  }
 }

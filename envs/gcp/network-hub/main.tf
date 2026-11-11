@@ -24,7 +24,11 @@ module "network_hub" {
 
   hub_project_id = try(local.projects.project_ids["shared-hub"], "")
   dns_project_id = try(local.projects.project_ids["shared-dns"], "")
-  # VPC-SC / ACM require numeric project numbers, not ID strings.
+  # VPC-SC / ACM require numeric project numbers, not ID strings. The hub
+  # perimeter protects only the hub and DNS projects; the environment host
+  # numbers feed the NCC auto-accept list and the proxy consumer list.
+  hub_project_number = try(local.projects.project_numbers["shared-hub"], "")
+  dns_project_number = try(local.projects.project_numbers["shared-dns"], "")
   spoke_project_numbers = {
     for env_key in sort(keys(local.environments)) :
     env_key => try(local.projects.project_numbers["${env_key}-host"], "")
@@ -39,6 +43,14 @@ module "network_hub" {
   enable_ncc_hub      = local.enable_ncc_hub
   ncc_preset_topology = local.ncc_preset_topology
 
+  # Hub side of each existing peering-mode spoke (data.tf).
+  spoke_peerings = {
+    for env, c in local.spoke_peering_candidates : env => {
+      network_self_link = "projects/${c.project_id}/global/networks/${c.network_name}"
+    }
+    if contains(data.google_compute_networks.spoke[env].networks, c.network_name)
+  }
+
   vpn                          = local.vpn
   vpn_shared_secret_wo         = var.vpn_shared_secret_wo
   vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
@@ -52,19 +64,24 @@ module "network_hub" {
   vpc_sc_ingress_identities             = var.vpc_sc_ingress_identities
 
   vpc_sc_dry_run_additional_restricted_services = var.vpc_sc_dry_run_additional_restricted_services
+
+  # Opt-in central egress control and the hub data-plane alerts.
+  secure_web_proxy = var.secure_web_proxy
+  alerting         = var.network_alerting
 }
 
-# Nothing else ties production to an enforced perimeter. The hub perimeter
-# protects the hub/DNS projects every environment peers with, so if any
-# environment is marked is_production the hub perimeter must exist AND be
-# enforced. A check block WARNS (it does not
-# fail the plan) so a staged rollout under dry-run stays possible.
+# The hub perimeter protects only the hub and DNS projects every environment
+# peers with; each environment host project is in its own perimeter, which
+# gcp-workload-<env> checks for production. So if any environment is marked
+# is_production, the hub perimeter must exist AND be enforced too. A check
+# block WARNS (it does not fail the plan) so a staged rollout under dry-run
+# stays possible.
 check "hub_vpc_sc_enforced_when_prod_present" {
   assert {
     condition = !anytrue([for e in values(local.environments) : e.is_production]) || (
       local.vpc_sc_access_policy_name != null && !var.vpc_sc_enable_dry_run
     )
-    error_message = "A production environment (is_production = true) is present but the hub VPC-SC perimeter is ${local.vpc_sc_access_policy_name == null ? "NOT CREATED (set gcp.network.vpc_sc_access_policy or vpc_sc_access_policy_name)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_additional_restricted_services to keep staging further changes)."
+    error_message = "A production environment (is_production = true) is present but the hub VPC-SC perimeter (hub and DNS projects; environment projects have their own perimeters) is ${local.vpc_sc_access_policy_name == null ? "NOT CREATED (set gcp.network.vpc_sc_access_policy or vpc_sc_access_policy_name)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_additional_restricted_services to keep staging further changes)."
   }
 }
 
@@ -81,6 +98,10 @@ resource "terraform_data" "upstream_contract_guard" {
     precondition {
       condition     = length(setsubtract(["shared-hub", "shared-dns"], keys(local.projects.project_ids))) == 0
       error_message = "The gcp-projects contract project_ids lack ${join(", ", sort(setsubtract(["shared-hub", "shared-dns"], keys(local.projects.project_ids))))} (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output)."
+    }
+    precondition {
+      condition     = local.vpc_sc_access_policy_name == null || length(setsubtract(["shared-hub", "shared-dns"], keys(local.projects.project_numbers))) == 0
+      error_message = "The hub VPC-SC perimeter is enabled but the gcp-projects contract project_numbers lack ${join(", ", sort(setsubtract(["shared-hub", "shared-dns"], keys(local.projects.project_numbers))))} (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output)."
     }
     precondition {
       condition     = length(setsubtract([for e in keys(local.environments) : "${e}-host"], keys(local.projects.project_numbers))) == 0

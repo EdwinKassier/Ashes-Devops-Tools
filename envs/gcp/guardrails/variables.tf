@@ -35,7 +35,7 @@ variable "environments" {
 }
 
 variable "enable_admin_containment" {
-  description = "Create the admin-containment deny policy. Org-wide, it blocks sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter mutation. Scoped by the containment/protected tag to the audit store, it blocks bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. containment_exempt_principals (break-glass) are exempt. Null (default) = gcp.admin_containment from config, else ON whenever an environment is_production, as in gcp-organization (which creates and binds the tag). Needs a break-glass principal."
+  description = "Create the admin-containment deny policy. Org-wide, it blocks sink update/delete, exclusion changes, log-bucket delete and VPC-SC perimeter mutation. Scoped by the containment/protected tag to the audit store, it blocks bucket delete/IAM change/untag, object delete, key-version destroy/disable and key IAM change. containment_exempt_principals (break-glass) are exempt. Null (default) = gcp.admin_containment from config, else ON whenever an environment is_production or a break-glass principal is set, as in gcp-organization (which creates and binds the tag). Needs a break-glass principal."
   type        = bool
   default     = null
 }

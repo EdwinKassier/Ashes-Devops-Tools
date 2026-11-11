@@ -201,6 +201,9 @@ jobs:
       TF_VAR_run_attempt: ${{ github.run_attempt }}
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
+      # Not block: a real apply reaches the Terraform registry, provider
+      # downloads and many regional cloud API endpoints, which a fixed
+      # allow-list would break as the suites grow.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
@@ -265,6 +268,9 @@ jobs:
       TF_VAR_run_attempt: ${{ github.run_attempt }}
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
+      # Not block: a real apply reaches the Terraform registry, provider
+      # downloads and many regional cloud API endpoints, which a fixed
+      # allow-list would break as the suites grow.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:

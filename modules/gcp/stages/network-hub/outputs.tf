@@ -62,3 +62,23 @@ output "hybrid_connectivity" {
   description = "Which hybrid connectivity is planned for the hub: vpn (HA VPN on), ncc_vpn_spoke (tunnels linked to the NCC hub) and the Cloud Interconnect attachment names."
   value       = try(module.hub.hybrid_connectivity, { vpn = false, ncc_vpn_spoke = false, ncc_vpn_spoke_group = null, interconnects = [] })
 }
+
+output "spoke_peering_states" {
+  description = "State of each hub-side environment peering (ACTIVE once the workload has created the spoke side), keyed by environment key."
+  value       = { for k, p in google_compute_network_peering.hub_to_spoke : k => p.state }
+}
+
+output "hub_perimeter_projects" {
+  description = "Project numbers in the hub VPC-SC perimeter (the hub and DNS projects only; environment host projects are in their own environment perimeters)."
+  value       = local.hub_perimeter_projects
+}
+
+output "secure_web_proxy" {
+  description = "The hub Secure Web Proxy: gateway_id, address, ports and service_attachment_id (the target for each environment's net-spoke egress_proxy.service_attachment). Null when secure_web_proxy.enabled = false."
+  value       = module.hub.secure_web_proxy
+}
+
+output "network_alert_policy_ids" {
+  description = "Hub data-plane alert policy IDs keyed by alert (vpn_tunnel_down, bgp_session_down, nat_allocation_failed, nat_dropped_packets)."
+  value       = module.hub.network_alert_policy_ids
+}

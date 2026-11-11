@@ -612,9 +612,16 @@ run "region_restriction_does_not_exempt_the_run_role" {
     condition = alltrue([
       for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement :
       !contains(s.Condition.ArnNotLike["aws:PrincipalArn"], var.terraform_run_role_arn) &&
-      contains(s.Condition.ArnNotLike["aws:PrincipalArn"], var.break_glass_role_arn)
+      s.Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/break-glass"]
     ])
-    error_message = "the region SCP must exempt break-glass only, never the Terraform run role."
+    error_message = "the region SCP must exempt the member-account break-glass role only, never the Terraform run role."
+  }
+
+  # SCPs never apply to the management account, so a management-account ARN
+  # exemption would be inert while the member break-glass role stayed denied.
+  assert {
+    condition     = !can(regex("arn:aws:iam::[0-9]{12}:", aws_organizations_policy.policy["scp-region-restriction"].content))
+    error_message = "the region SCP must not reference account-qualified (management-account) role ARNs"
   }
 
   # Global-endpoint services the pipeline still reaches stay outside the deny.
@@ -801,5 +808,110 @@ run "allowed_images_unmanaged_omits_setting" {
   assert {
     condition     = !contains(keys(jsondecode(aws_organizations_policy.policy["declarative-ec2-baseline"].content).ec2_attributes), "allowed_images_settings")
     error_message = "state = unmanaged must leave the baseline policy without an allowed-images setting."
+  }
+}
+
+run "region_restriction_exempts_custom_member_break_glass_names" {
+  command = plan
+
+  variables {
+    break_glass_role_names = ["emergency/break-glass-admin"]
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_organizations_policy.policy["scp-region-restriction"].content).Statement :
+      s.Condition.ArnNotLike["aws:PrincipalArn"] == ["arn:aws:iam::*:role/emergency/break-glass-admin"]
+    ])
+    error_message = "explicit break_glass_role_names must be the region SCP exemption"
+  }
+}
+
+# The log-archive statement covers every bucket-configuration change that could
+# redirect, re-key, expire or expose the archive, on the archive and its
+# access-log bucket. Only the privileged pipeline roles and break-glass are exempt.
+run "log_archive_scp_covers_bucket_reconfiguration" {
+  command = plan
+
+  assert {
+    condition = length(setsubtract(
+      [
+        "s3:BypassGovernanceRetention", "s3:PutBucket*", "s3:DeleteBucket", "s3:DeleteBucketPolicy",
+        "s3:PutReplicationConfiguration", "s3:PutEncryptionConfiguration", "s3:PutLifecycleConfiguration", "s3:PutInventoryConfiguration",
+      ],
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyLogArchiveObjectLockTampering"]).Action
+    )) == 0
+    error_message = "the log-archive SCP must deny replication, encryption, lifecycle, inventory, every PutBucket* change (policy, Object Lock, public-access block, ownership, logging, versioning, ACL) and bucket deletion"
+  }
+
+  # s3:PutBucket* must actually match the bucket-level mutations it stands for.
+  assert {
+    condition = alltrue([
+      for a in ["s3:PutBucketPolicy", "s3:PutBucketObjectLockConfiguration", "s3:PutBucketPublicAccessBlock", "s3:PutBucketOwnershipControls", "s3:PutBucketLogging", "s3:PutBucketVersioning", "s3:PutBucketAcl"] :
+      anytrue([for p in one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyLogArchiveObjectLockTampering"]).Action : can(regex("^${replace(p, "*", ".*")}$", a))])
+    ])
+    error_message = "the log-archive SCP action patterns must match each bucket-configuration mutation"
+  }
+
+  assert {
+    condition = toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyLogArchiveObjectLockTampering"]).Resource) == toset([
+      "arn:aws:s3:::sra-log-archive-111111111111",
+      "arn:aws:s3:::sra-log-archive-111111111111/*",
+      "arn:aws:s3:::sra-log-archive-111111111111-access-logs",
+      "arn:aws:s3:::sra-log-archive-111111111111-access-logs/*",
+    ])
+    error_message = "the log-archive SCP must protect the archive and its access-log bucket"
+  }
+
+  assert {
+    condition = toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyLogArchiveObjectLockTampering"]).Condition.ArnNotLike["aws:PrincipalArn"]) == toset([
+      "arn:aws:iam::*:role/tfc-apply", "arn:aws:iam::*:role/OrganizationAccountAccessRole", "arn:aws:iam::*:role/stacksets-exec-*", "arn:aws:iam::*:role/break-glass",
+    ])
+    error_message = "only the privileged pipeline roles and break-glass may reconfigure the log archive"
+  }
+}
+
+# The tfc-apply permissions boundary (and the tfc-plan read deny) are
+# StackSet-owned managed policies. Role
+# protection alone left CreatePolicyVersion / SetDefaultPolicyVersion open to
+# member admins, which would rewrite the boundary.
+run "stackset_boundary_policy_protected" {
+  command = plan
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetPolicyTampering"]).Resource == ["arn:aws:iam::*:policy/tfc-apply-boundary", "arn:aws:iam::*:policy/tfc-plan-data-read-deny"] &&
+      length(setsubtract(
+        ["iam:CreatePolicy", "iam:CreatePolicyVersion", "iam:DeletePolicy", "iam:DeletePolicyVersion", "iam:SetDefaultPolicyVersion", "iam:TagPolicy", "iam:UntagPolicy"],
+        one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetPolicyTampering"]).Action
+      )) == 0
+    )
+    error_message = "the deny-tamper SCP must deny create/version/delete/tag on the tfc-apply-boundary and tfc-plan read-deny policies"
+  }
+
+  # Exempt: break-glass and the StackSet execution role only. Never tfc-apply.
+  assert {
+    condition = toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetPolicyTampering"]).Condition.ArnNotLike["aws:PrincipalArn"]) == toset([
+      "arn:aws:iam::*:role/break-glass", "arn:aws:iam::*:role/stacksets-exec-*",
+    ])
+    error_message = "only break-glass and the StackSet execution role may change the boundary policy"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
+    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
+  }
+}
+
+run "stackset_policy_statement_omitted_when_no_policy_names" {
+  command = plan
+
+  variables {
+    stackset_managed_policy_names = []
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetPolicyTampering"]) == 0
+    error_message = "an empty stackset_managed_policy_names must omit the statement (an SCP Resource cannot be empty)"
   }
 }

@@ -48,6 +48,11 @@ output "vpc_peerings" {
   value       = module.environment.vpc_peerings
 }
 
+output "hub_peering_state" {
+  description = "State of this environment's spoke-side peering with the hub (ACTIVE or INACTIVE), or null without hub peering. INACTIVE means the hub side (hub-to-<env>) does not exist yet: gcp-network-hub creates it only once this environment's network exists, so queue gcp-network-hub after the environment's first apply."
+  value       = try(module.environment.vpc_peerings["hub-peering"].peering_state, null)
+}
+
 output "ncc_spoke_id" {
   description = "The environment VPC's NCC spoke ID, or null with network_connectivity = peering."
   value       = module.environment.ncc_spoke_id

@@ -72,22 +72,33 @@ locals {
   ]
 
   dashboard_tiles = concat(local.slo_tiles, local.cr_tiles, local.cf_tiles)
-}
 
-resource "google_monitoring_dashboard" "compute_dashboard" {
-  project = var.project_id
-
-  dashboard_json = jsonencode({
+  # Normalise the JSON to the form the Monitoring API returns, so the plan shows
+  # no diff when nothing changed. The google provider already suppresses fields
+  # the API adds (etag, name, ...), but fields we send that the API drops still
+  # show as a diff. proto3 JSON drops zero values, so a tile at xPos/yPos 0
+  # comes back without that key. jsonencode sorts object keys (height, widget,
+  # width, xPos, yPos), so a zero position always follows a comma and precedes
+  # a comma or the closing brace. Two passes, because the first match of
+  # `,"xPos":0,"yPos":0}` consumes the comma the yPos match needs.
+  dashboard_json_raw = jsonencode({
     displayName = var.dashboard_display_name
     mosaicLayout = {
       columns = 48
       tiles   = local.dashboard_tiles
     }
   })
+  dashboard_json = replace(
+    replace(local.dashboard_json_raw, "/,\"(?:xPos|yPos)\":0([,}])/", "$1"),
+    "/,\"(?:xPos|yPos)\":0([,}])/", "$1",
+  )
+}
 
-  lifecycle {
-    # The API may return slightly different JSON than what was sent (field reordering,
-    # additional metadata fields). Suppress spurious drift on every plan.
-    ignore_changes = [dashboard_json]
-  }
+resource "google_monitoring_dashboard" "compute_dashboard" {
+  project = var.project_id
+
+  # No ignore_changes: dashboard_json is the dashboard's entire content, so a
+  # tile or threshold change must reach the API. local.dashboard_json is
+  # normalised to the API's returned form to avoid perpetual diffs.
+  dashboard_json = local.dashboard_json
 }

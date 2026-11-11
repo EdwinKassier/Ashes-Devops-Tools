@@ -243,3 +243,51 @@ variable "projects_contract" {
   })
   default = null
 }
+
+variable "create_spoke_peerings" {
+  description = "Create the hub side of each environment's VPC peering (hub-to-<env> on the hub VPC) for every environment whose connectivity is peering. The spoke side is created by gcp-workload-<env>. A spoke network that does not exist yet is skipped: queue this workspace again after the environment's first workload apply (the workload's hub_peering_state output reads INACTIVE until then). Null = true. false = no hub-side peerings (manage them elsewhere)."
+  type        = bool
+  default     = null
+}
+
+variable "secure_web_proxy" {
+  description = <<-EOT
+    Opt-in central egress control (preview): a Secure Web Proxy in the hub with an FQDN allowlist,
+    everything else denied. Fields: enabled, address, ports (default [443]), allowed_fqdns,
+    additional_rules, certificate_urls, proxy_only_subnet_cidr (null = a proxy-only subnet already
+    exists in the hub region), psc_nat_subnet_cidr (publishes the proxy to the environments over
+    Private Service Connect) and consumer_accept_projects (empty = every environment host project).
+    Default: off.
+  EOT
+  type = object({
+    enabled       = optional(bool, false)
+    address       = optional(string)
+    ports         = optional(list(number), [443])
+    allowed_fqdns = optional(list(string), [])
+    additional_rules = optional(map(object({
+      priority            = number
+      action              = string
+      session_matcher     = string
+      application_matcher = optional(string)
+      description         = optional(string)
+      enabled             = optional(bool, true)
+    })), {})
+    certificate_urls         = optional(list(string), [])
+    proxy_only_subnet_cidr   = optional(string)
+    psc_nat_subnet_cidr      = optional(string)
+    consumer_accept_projects = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+}
+
+variable "network_alerting" {
+  description = "Hub data-plane alert policies in the hub project: VPN tunnel down and BGP session down (when HA VPN or an interconnect exists) and Cloud NAT allocation failures and OUT_OF_RESOURCES drops. On by default. notification_channel_ids: existing channel IDs (projects/<project>/notificationChannels/<id>); empty = incidents open in the console but notify no one. enabled = false creates none."
+  type = object({
+    enabled                       = optional(bool, true)
+    notification_channel_ids      = optional(list(string), [])
+    nat_dropped_packets_threshold = optional(number, 0)
+  })
+  default  = {}
+  nullable = false
+}
