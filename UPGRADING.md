@@ -116,7 +116,11 @@ confirmation and sees no change. With policy sets on, every
 `is_production: false` **explicitly** gets `auto_apply_run_trigger` and
 `queue_all_runs`. A confirmed upstream apply (`gcp-network-hub`, `aws-network`,
 `aws-security`) then applies those workloads with no second confirmation.
-Production workloads and every shared workspace are unchanged.
+Production workloads and every shared workspace are unchanged. An environment
+without the flag used to keep manual confirmation; every environment must now
+set `is_production` (see "`is_production` is required on every environment"
+below), so `is_production: false` on a former unflagged environment turns
+auto-apply on for it. Set `is_production: true` where you want to confirm by hand.
 
 **To keep the previous behaviour,** set `enable_nonprod_workload_auto_apply = false`
 on tfc-admin **before** the upgrade apply.
@@ -1114,6 +1118,18 @@ production, gcp-workload treated any name that contains `prod` (also `nonprod`
 and `preprod`) as production, and the other GCP roots treated an unflagged
 environment as non-production. Check that each flag matches what you intend
 before you apply.
+
+**Auto-apply consequence (tfc-admin, policy sets on).** Before this change, an
+environment without the flag kept manual confirmation: only an explicit
+`is_production: false` opted its workload into auto-apply. Now that every
+environment states the flag, `is_production: false` on a previously unflagged
+environment (`qa`, `uat` and so on) gives its `gcp-workload-<env>` /
+`aws-workload-<env>` workspace `auto_apply_run_trigger` and `queue_all_runs`
+while `enable_nonprod_workload_auto_apply` is on (by default, whenever the
+policy sets are on). A confirmed upstream apply then applies that workload with
+no second confirmation. Set `is_production: true` on any such environment that
+you want confirmed by hand, or set `enable_nonprod_workload_auto_apply = false`
+on tfc-admin.
 
 gcp-workload now also fails the plan when the gcp-projects contract
 `environment_config.<env>` has no `is_production`. The gcp-projects contract

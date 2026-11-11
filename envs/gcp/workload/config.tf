@@ -44,7 +44,8 @@ locals {
         budget_monthly_limit    = tonumber(try(e.budget_monthly_limit, 0))
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
         labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
-        is_production           = tobool(try(e.is_production, false))
+        # Never decides production: main.tf reads env_config, and projects_contract_guard fails on a missing flag.
+        is_production = tobool(try(e.is_production, false))
       }
     }
     # Environment keys whose is_production is missing or not a boolean. The
