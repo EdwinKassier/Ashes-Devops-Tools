@@ -33,9 +33,6 @@ jobs:
     # branch; an environment secret only by runs its branch policy allows.
     environment: release
     timeout-minutes: 10
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
     permissions:
       contents: write       # create the vX.Y.Z tag and GitHub Release
       pull-requests: write  # open/update the release PR

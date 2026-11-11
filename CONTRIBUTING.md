@@ -21,9 +21,10 @@ make pre-commit-install
 
 ### Scanner versions: `.tool-versions` must be active before running pre-commit
 
-`.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_trivy`, `terraform_checkov`, and
-`terraform_docs` hooks (from `antonbabenko/pre-commit-terraform`) are implemented as
-`language: script` hooks — thin wrapper scripts that shell out to whatever `tflint`/`trivy`/
+`.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_trivy` and `terraform_checkov` hooks
+(from `antonbabenko/pre-commit-terraform`) and its local `terraform_docs` hook
+(`scripts/precommit-terraform-docs.sh`, which regenerates the same READMEs as `make docs`) are
+implemented as `language: script` hooks — thin wrapper scripts that shell out to whatever `tflint`/`trivy`/
 `checkov`/`terraform-docs` binary is first on your `PATH`. Unlike pre-commit's Python/Node/Go
 hook backends, `language: script` hooks have no `additional_dependencies` mechanism, so
 pre-commit itself **cannot** pin or sandbox these tool versions.

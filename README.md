@@ -301,14 +301,14 @@ These modules are tested and documented but **no `envs/**` root composes them** 
 ## Commands
 
 ```bash
-make ci                    # Full local pipeline (fmt + docs + validate + lint + security + test)
+make ci                    # Every workstation-runnable CI gate (see make -n ci); needs pre-commit, cz, check-jsonschema, opa 1.22.2, origin/main
 make fmt                   # Format all Terraform files
 make test                  # Run every .tftest.hcl suite (no cloud creds needed)
 make validate-all          # terraform validate across all roots
 make lint                  # TFLint with the GCP + AWS rulesets
 make security              # Trivy (IaC config) + Checkov — tfsec is EOL and no longer used
 make count                 # Live module / root / test-suite counts
-make docs                  # Regenerate all module READMEs via terraform-docs
+make docs                  # Regenerate the READMEs of all modules and the 15 roots via terraform-docs
 make docs-check            # Verify no README is stale
 make plan-gcp-organization     # Plan control-plane changes
 make plan-gcp-workload APP_ENV=dev

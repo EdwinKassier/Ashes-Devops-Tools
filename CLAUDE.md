@@ -100,7 +100,7 @@ One committed file, `config/landing-zone.yaml` (schema and placeholders: `config
 
 ```bash
 make fmt-check      # terraform fmt -check (CI gate)
-make docs           # terraform-docs on every module (auto-generates READMEs)
+make docs           # terraform-docs on every module and the 15 roots (auto-generates READMEs)
 make docs-check     # same but exits non-zero if READMEs are stale
 make test           # runs all *.tftest.hcl with mock_provider — no real creds needed
 make validate-all   # terraform validate across all modules
@@ -109,7 +109,7 @@ make security       # trivy config + checkov (versions pinned in .tool-versions;
 make count          # print live module/root/test-suite counts (make count-check enforces README/CLAUDE.md)
 make links          # fail on broken repo-relative Markdown links
 make shellcheck     # shellcheck scripts/*.sh
-make ci             # fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security
+make ci             # every workstation-runnable CI gate: fmt-check, consistency, yamllint, markdownlint-check, commit-check, codeowners-check, scaffold-fixtures-check, config-check, count-check, links, examples-refs, required-checks, backend-check, shellcheck, test-scripts, docs-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, check-jsonschema, opa 1.22.2, a fetched origin/main)
 ```
 
 ---

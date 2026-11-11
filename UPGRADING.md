@@ -1100,6 +1100,18 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 ### All clouds
 
+#### `make plan-gcp-workload` no longer adds the example tfvars file (tooling)
+
+`APP_VARS` is now empty unless you set it, so the target no longer passes `examples/dev.tfvars.example`. That example no longer sets `project_prefix`, `environment`, `region`, `terraform_admin_email`, `tfc_organization` or `organization_workspace_name`. Those values come from `config/landing-zone.yaml` and from the workspace variables that tfc-admin sets. If a script relied on the old default, pass `APP_VARS=<file>` yourself.
+
+#### The release workflow uses a GitHub App (CI)
+
+`release.yml` now mints its token from a release GitHub App instead of reading `RELEASE_PLEASE_TOKEN`. Set the variable `RELEASE_APP_ID` and the secret `RELEASE_APP_PRIVATE_KEY` in the `release` environment. The workflow has no fallback. See [CI_SECRETS.md](docs/guides/CI_SECRETS.md#release_app).
+
+#### `make ci` runs more gates (contributors)
+
+`make ci` now also runs `yamllint`, `markdownlint-check`, `commit-check`, `codeowners-check`, `scaffold-fixtures-check` and `opa-test`. It needs `pre-commit`, commitizen (`cz`), `opa` 1.22.2 and a fetched `origin/main`. Set `COMMIT_BASE=<ref>` to compare against another base.
+
 #### The compute dashboard applies changes (gcp)
 
 `compute-dashboard` no longer ignores `dashboard_json`, so tile and threshold changes now reach the dashboard. The next plan may update an existing dashboard once, to match the module.
