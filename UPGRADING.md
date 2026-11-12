@@ -363,6 +363,25 @@ variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
 ### AWS
 
+#### Log-archive retention and lock mode from config (aws-security)
+
+The log-archive bucket retention is now set from `compliance.audit_log_retention_days` in `config/landing-zone.yaml`, the same key as the GCP audit bucket. `aws_overrides.log_archive_retention_days` wins over it. With neither set it stays 365 days, and the plan does not change. `aws_overrides.log_archive_object_lock_mode` sets the Object Lock mode for new objects (default `COMPLIANCE`).
+
+The plan fails when:
+
+- the retention is below the floor of a listed `compliance.frameworks` entry (pci_dss 365, hipaa 2190, fedramp_moderate 913 days); or
+- `compliance.frameworks` is set and the lock mode is `GOVERNANCE`.
+
+A floor is a minimum. It does not prove that a framework is met.
+
+What a change does:
+
+- The value is the bucket's Object Lock default retention and its lifecycle expiry. Objects still move to Glacier after 90 days, or at expiry when the retention is shorter.
+- The default retention applies to new objects only. Objects already written in COMPLIANCE mode keep their retain-until date. Nobody, including the root user, can shorten it.
+- A higher value keeps every new log object for longer, so storage cost rises. Each new object stays locked for the full period, and you cannot shorten it later.
+- A lower value applies to new objects only and makes the lifecycle expire objects sooner.
+- Apply it through the `aws-security` workspace. The deny-tamper SCP statement `DenyLogArchiveObjectLockTampering` lets only the pipeline roles and break-glass change the bucket configuration.
+
 #### Aurora clusters are tagged for the organization backup policy (rds-aurora, app-services)
 
 `modules/aws/data/rds-aurora` now tags every cluster `backup = true` (new input `enable_org_backup`, default `true`). The organization BACKUP_POLICY from `aws-backup` selects resources by this tag, so after the next apply of each workload that uses the module, AWS Backup also backs up its Aurora clusters daily and keeps each recovery point for 365 days. The RDS automated backups do not change.

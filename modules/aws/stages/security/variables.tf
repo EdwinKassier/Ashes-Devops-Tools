@@ -106,6 +106,15 @@ variable "aws" {
     # Deterministic name of the central log-archive bucket. Cross-root naming contract: it must match
     # the name the log-tamper SCP references.
     log_archive_bucket_name = optional(string)
+    # Days the log-archive bucket keeps objects: the Object Lock default retention and the lifecycle
+    # expiry. The default retention applies to new objects only; an object already written keeps its
+    # retain-until date, and in COMPLIANCE mode nobody can shorten it. The aws-security root reads
+    # compliance.audit_log_retention_days. Default 365.
+    log_archive_retention_days = optional(number, 365)
+    # Object Lock default retention mode for new objects: COMPLIANCE (default; nobody, including the
+    # root user, can shorten or remove it) or GOVERNANCE (principals with
+    # s3:BypassGovernanceRetention can).
+    log_archive_object_lock_mode = optional(string, "COMPLIANCE")
     # Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no
     # Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and
     # security-tooling CMKs. Null (default) grants each key's OWN account role key_admin_role_name
@@ -271,6 +280,16 @@ variable "aws" {
   validation {
     condition     = length(trimspace(coalesce(var.aws.log_archive_bucket_name, " "))) > 0
     error_message = "log_archive_bucket_name is unset: set aws.log_archive_bucket_name in config/landing-zone.yaml (or aws_overrides.log_archive_bucket_name in the aws-security root) to a non-empty S3 bucket name."
+  }
+
+  validation {
+    condition     = var.aws.log_archive_retention_days >= 1 && var.aws.log_archive_retention_days == floor(var.aws.log_archive_retention_days)
+    error_message = "aws_overrides.log_archive_retention_days (compliance.audit_log_retention_days in config/landing-zone.yaml) must be a whole number of days, at least 1."
+  }
+
+  validation {
+    condition     = contains(["COMPLIANCE", "GOVERNANCE"], var.aws.log_archive_object_lock_mode)
+    error_message = "aws_overrides.log_archive_object_lock_mode must be COMPLIANCE or GOVERNANCE."
   }
 
   validation {

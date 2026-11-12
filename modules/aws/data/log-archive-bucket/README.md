@@ -115,7 +115,7 @@ The following resources are created:
 | <a name="input_cloudtrail_trail_account_id"></a> [cloudtrail\_trail\_account\_id](#input\_cloudtrail\_trail\_account\_id) | Account ID that owns the organization trail (the management account, also when a CloudTrail delegated administrator manages the trail). When set, the CloudTrail grants also require aws:SourceArn to match arn:<partition>:cloudtrail:*:<id>:trail/*. Empty (default) scopes them by aws:SourceOrgID only. | `string` | `""` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Create a prevent\_destroy guard that makes any plan which destroys or replaces the log-archive bucket fail. Turning it off does not remove an existing guard: run terraform state rm on the guard first. | `bool` | `true` | no |
 | <a name="input_object_lock_mode"></a> [object\_lock\_mode](#input\_object\_lock\_mode) | Default S3 Object Lock retention mode. COMPLIANCE is WORM against all principals (incl. root) and blocks destroy until retention lapses; GOVERNANCE is bypassable by privileged principals. | `string` | `"COMPLIANCE"` | no |
-| <a name="input_retention_days"></a> [retention\_days](#input\_retention\_days) | Default Object Lock retention period, in days. Also drives lifecycle expiration. | `number` | `365` | no |
+| <a name="input_retention_days"></a> [retention\_days](#input\_retention\_days) | Default Object Lock retention period, in days. Also drives lifecycle expiration. It applies to new objects only: an object already written keeps its retain-until date, and in COMPLIANCE mode nobody can shorten it. | `number` | `365` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs
@@ -126,6 +126,8 @@ The following resources are created:
 | <a name="output_bucket_arn"></a> [bucket\_arn](#output\_bucket\_arn) | The ARN of the log-archive bucket. |
 | <a name="output_bucket_id"></a> [bucket\_id](#output\_bucket\_id) | The name (ID) of the log-archive bucket. |
 | <a name="output_bucket_name"></a> [bucket\_name](#output\_bucket\_name) | The deterministic bucket name (equals var.log\_archive\_bucket\_name); the cross-root naming contract the B3 SCP references. |
+| <a name="output_object_lock_mode"></a> [object\_lock\_mode](#output\_object\_lock\_mode) | The planned Object Lock default retention mode (COMPLIANCE or GOVERNANCE). |
+| <a name="output_retention_days"></a> [retention\_days](#output\_retention\_days) | The planned Object Lock default retention in days (also the lifecycle expiry). It applies to new objects only. |
 <!-- END_TF_DOCS -->
 
 ## Usage

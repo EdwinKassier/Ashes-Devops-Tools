@@ -465,7 +465,7 @@ saas:
 
 # compliance: estate-wide compliance knobs. Absent = today's behaviour.
 compliance:
-  # frameworks: [soc2, pci_dss]            # raises the audit-retention floor
+  # frameworks: [soc2, pci_dss]            # plan fails below their retention floor
   # audit_log_retention_days: 400          # GCP audit bucket and AWS log archive
   # breach_notification_contacts: [dpo@acme.example]
   backup:

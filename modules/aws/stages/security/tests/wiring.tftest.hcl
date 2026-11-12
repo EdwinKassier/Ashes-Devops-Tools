@@ -185,3 +185,38 @@ run "cloudwatch_logs_off_reaches_cloudtrail" {
     error_message = "aws.enable_cloudwatch_logs = false must reach module.cloudtrail (no log group, no CIS filters)."
   }
 }
+
+# CMP-2: the log-archive retention and lock mode reach the bucket child. The
+# outputs read the child's planned Object Lock default retention.
+run "log_archive_retention_wired" {
+  command = plan
+
+  variables {
+    aws = {
+      log_archive_bucket_name      = "acme-wiring-log-archive"
+      key_admin_arn                = "arn:aws:iam::333333333333:role/kms-admin"
+      meta_store_manager_role_arn  = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+      break_glass_role_arn         = "arn:aws:iam::111111111111:role/break-glass"
+      log_archive_retention_days   = 2190
+      log_archive_object_lock_mode = "GOVERNANCE"
+      notification_subscribers = {
+        secops = { protocol = "email", endpoint = "secops@example.com" }
+      }
+    }
+  }
+
+  assert {
+    condition     = output.log_archive_retention_days == 2190 && module.log_archive_bucket.object_lock_mode == "GOVERNANCE"
+    error_message = "aws.log_archive_retention_days and aws.log_archive_object_lock_mode must reach the log-archive bucket."
+  }
+}
+
+# Unset keys keep today's bucket: 365 days in COMPLIANCE mode.
+run "log_archive_retention_default_unchanged" {
+  command = plan
+
+  assert {
+    condition     = output.log_archive_retention_days == 365 && module.log_archive_bucket.object_lock_mode == "COMPLIANCE"
+    error_message = "without the new keys the log archive must stay 365 days in COMPLIANCE mode."
+  }
+}

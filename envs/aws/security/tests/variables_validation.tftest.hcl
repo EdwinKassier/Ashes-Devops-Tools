@@ -240,3 +240,73 @@ run "rejects_empty_default_tag_value" {
 
   expect_failures = [var.default_tags]
 }
+
+# -----------------------------------------------------------------------------
+# CMP-2: log-archive retention and lock mode against compliance.frameworks
+# -----------------------------------------------------------------------------
+
+# hipaa sets a 2190-day floor.
+run "log_archive_retention_below_floor_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { log_archive_retention_days = 365 }
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+run "log_archive_governance_with_frameworks_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { log_archive_object_lock_mode = "GOVERNANCE" }
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+# Without frameworks GOVERNANCE stays possible, and any retention of 1 day or more.
+run "log_archive_governance_without_frameworks_plans" {
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_retention_days   = 30
+      log_archive_object_lock_mode = "GOVERNANCE"
+    })
+  }
+
+  assert {
+    condition     = module.aws_security.log_archive_retention_days == 30
+    error_message = "without compliance.frameworks a short GOVERNANCE retention must plan."
+  }
+}
+
+run "log_archive_retention_zero_fails" {
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, { log_archive_retention_days = 0 })
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+run "log_archive_unknown_lock_mode_fails" {
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, { log_archive_object_lock_mode = "LEGAL_HOLD" })
+  }
+
+  expect_failures = [var.aws_overrides]
+}

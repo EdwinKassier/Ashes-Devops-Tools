@@ -17,3 +17,13 @@ output "access_log_bucket_name" {
   description = "The bucket that receives the log archive's S3 server access logs: the companion <name>-access-logs bucket, or access_log_bucket when set."
   value       = aws_s3_bucket_logging.this.target_bucket
 }
+
+output "retention_days" {
+  description = "The planned Object Lock default retention in days (also the lifecycle expiry). It applies to new objects only."
+  value       = one(one(aws_s3_bucket_object_lock_configuration.this.rule).default_retention).days
+}
+
+output "object_lock_mode" {
+  description = "The planned Object Lock default retention mode (COMPLIANCE or GOVERNANCE)."
+  value       = one(one(aws_s3_bucket_object_lock_configuration.this.rule).default_retention).mode
+}

@@ -64,3 +64,46 @@ run "scaffold_gcp_aws_saas_plans" {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
   }
 }
+
+# CMP-2: compliance.audit_log_retention_days feeds the log archive. The stage
+# output reads the planned Object Lock default retention.
+run "compliance_retention_feeds_log_archive" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.aws.log_archive_retention_days == 2190 && module.aws_security.log_archive_retention_days == 2190
+    error_message = "compliance.audit_log_retention_days must feed aws.log_archive_retention_days and the bucket."
+  }
+}
+
+run "override_retention_beats_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    aws_overrides            = { log_archive_retention_days = 2555 }
+  }
+
+  assert {
+    condition     = module.aws_security.log_archive_retention_days == 2555
+    error_message = "aws_overrides.log_archive_retention_days must win over compliance.audit_log_retention_days."
+  }
+}
+
+# No compliance section: the archive keeps 365 days.
+run "log_archive_retention_default_unchanged" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+  }
+
+  assert {
+    condition     = module.aws_security.log_archive_retention_days == 365
+    error_message = "without a compliance section the log archive must keep 365 days."
+  }
+}

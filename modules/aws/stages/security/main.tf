@@ -190,6 +190,8 @@ module "log_archive_bucket" {
   log_archive_bucket_name = var.aws.log_archive_bucket_name
   kms_key_arn             = module.log_cmk.key_arn
   org_id                  = var.org_id
+  retention_days          = var.aws.log_archive_retention_days
+  object_lock_mode        = var.aws.log_archive_object_lock_mode
   # The organization trail is owned by the management account, also when the
   # CloudTrail delegated administrator manages it.
   cloudtrail_trail_account_id = var.management_account_id

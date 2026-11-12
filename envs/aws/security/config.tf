@@ -29,6 +29,9 @@ locals {
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
     notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    # compliance: the log-archive retention and the framework floors (CMP-2).
+    audit_log_retention_days = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
+    compliance_frameworks    = try([for f in local.lz.compliance.frameworks : tostring(f)], [])
     # Same key, same value in the aws-organization root.
     enable_cloudtrail_delegated_admin = try(tobool(local.lz.aws.enable_cloudtrail_delegated_admin), null)
     create_management_trail           = try(tobool(local.lz.aws.create_management_trail), null)
@@ -45,12 +48,19 @@ locals {
     }
   }
 
+  # Framework audit-retention floors in days. Canonical copy: every root that
+  # reads compliance.frameworks holds this exact line (check-consistency.sh).
+  retention_floor_days = { pci_dss = 365, hipaa = 2190, fedramp_moderate = 913, soc2 = 0, iso27001 = 0, nist_800_53 = 0, dora = 0, nis2 = 0, gdpr = 0 }
+  retention_floor      = max(0, [for f in local.cfg.compliance_frameworks : lookup(local.retention_floor_days, f, 0)]...)
+
   # The aws section as the stage's aws object (config-backed keys only; every
   # other key is unset here). notifications.emails feeds the subscriber map, so
   # the effective object below keeps aws_overrides > config file > default.
   lz_aws = {
     log_archive_bucket_name = local.cfg.log_archive_bucket_name
     aws_enabled_regions     = local.cfg.aws_enabled_regions
+    # compliance.audit_log_retention_days: the same value as the GCP audit bucket.
+    log_archive_retention_days = local.cfg.audit_log_retention_days
     # Org trail managed by the CloudTrail delegated admin (security tooling).
     enable_cloudtrail_delegated_admin = local.cfg.enable_cloudtrail_delegated_admin
     create_management_trail           = local.cfg.create_management_trail

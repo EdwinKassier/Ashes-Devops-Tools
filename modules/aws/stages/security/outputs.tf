@@ -8,6 +8,11 @@ output "log_archive_bucket_name" {
   value       = module.log_archive_bucket.bucket_name
 }
 
+output "log_archive_retention_days" {
+  description = "Days the log-archive bucket keeps new objects: its planned Object Lock default retention (also the lifecycle expiry)."
+  value       = module.log_archive_bucket.retention_days
+}
+
 output "log_cmk_arn" {
   description = "ARN of the log-archive customer-managed KMS key."
   value       = module.log_cmk.key_arn

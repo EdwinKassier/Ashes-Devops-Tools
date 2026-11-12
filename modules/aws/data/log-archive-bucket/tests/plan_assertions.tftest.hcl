@@ -204,3 +204,24 @@ run "deletion_guard_can_be_disabled" {
     error_message = "enable_deletion_protection = false must omit the guard"
   }
 }
+
+# The retention outputs read the planned Object Lock default retention, and the
+# lifecycle expiry uses the same number of days.
+run "retention_outputs_read_object_lock" {
+  command = plan
+
+  variables {
+    retention_days   = 2190
+    object_lock_mode = "GOVERNANCE"
+  }
+
+  assert {
+    condition     = output.retention_days == 2190 && output.object_lock_mode == "GOVERNANCE"
+    error_message = "the retention outputs must read the planned Object Lock default retention."
+  }
+
+  assert {
+    condition     = one(one(aws_s3_bucket_lifecycle_configuration.this.rule).expiration).days == 2190
+    error_message = "retention_days must also set the lifecycle expiry."
+  }
+}

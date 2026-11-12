@@ -61,6 +61,7 @@ This landing zone implements defense-in-depth across every layer:
 ### Audit & Compliance
 
 - **Cloud Audit Logs**: Data Access logs on for all services. The audit bucket retention is `compliance.audit_log_retention_days` in `config/landing-zone.yaml` (or the `gcp-organization` root variable `audit_log_retention_days`), default 365 days. When `compliance.frameworks` lists `pci_dss`, `hipaa` or `fedramp_moderate`, the plan fails for a retention below that framework's floor (365, 2190 or 913 days). The floors are minimums; they do not prove that a framework is met. With the WORM lock on, the retention must be at least 365 days and can only be increased.
+- **AWS log archive**: S3 Object Lock in COMPLIANCE mode by default. The default retention is the same `compliance.audit_log_retention_days` (or the `aws-security` override `aws_overrides.log_archive_retention_days`), default 365 days, with the same framework floors. It applies to new objects only; objects already written keep their retain-until date. With `compliance.frameworks` set, the plan refuses `log_archive_object_lock_mode = "GOVERNANCE"`.
 - **Security Command Center**: a Pub/Sub notification of every ACTIVE finding (CMEK topic). The SCC tier is activated outside Terraform.
 - **Org Policies** — domain-restricted sharing, uniform bucket access, disable SA key creation
 

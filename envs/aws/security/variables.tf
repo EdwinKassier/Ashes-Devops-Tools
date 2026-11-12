@@ -74,6 +74,8 @@ variable "aws_overrides" {
   type = object({
     aws_enabled_regions                     = optional(list(string))
     log_archive_bucket_name                 = optional(string)
+    log_archive_retention_days              = optional(number)
+    log_archive_object_lock_mode            = optional(string)
     key_admin_arn                           = optional(string)
     key_admin_role_name                     = optional(string)
     kms_key_user_arns                       = optional(map(list(string)))
@@ -120,6 +122,23 @@ variable "aws_overrides" {
   })
   default  = {}
   nullable = false
+
+  # CMP-2. The effective values are inlined (local.aws reads this variable).
+  # local.retention_floor reads only the config file.
+  validation {
+    condition     = coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365) >= max(1, local.retention_floor)
+    error_message = "The log-archive retention (aws_overrides.log_archive_retention_days, else compliance.audit_log_retention_days, else 365) is ${coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365)} days. It must be at least 1 and at least the ${local.retention_floor}-day floor of compliance.frameworks (${join(", ", local.cfg.compliance_frameworks)})."
+  }
+
+  validation {
+    condition     = contains(["COMPLIANCE", "GOVERNANCE"], coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE"))
+    error_message = "aws_overrides.log_archive_object_lock_mode must be COMPLIANCE or GOVERNANCE."
+  }
+
+  validation {
+    condition     = length(local.cfg.compliance_frameworks) == 0 || coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE") == "COMPLIANCE"
+    error_message = "compliance.frameworks is set (${join(", ", local.cfg.compliance_frameworks)}), so aws_overrides.log_archive_object_lock_mode must stay COMPLIANCE. GOVERNANCE lets privileged principals shorten or remove the retention."
+  }
 }
 
 # key_policy_admin_role_name stays its own variable: null is a meaningful value
@@ -214,4 +233,3 @@ variable "profile" {
     error_message = "profile must be production or starter."
   }
 }
-
