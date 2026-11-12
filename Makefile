@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci yamllint markdownlint-check commit-check module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci ci-quick yamllint markdownlint-check commit-check module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -234,23 +234,26 @@ codeowners-check: ## Fail on @your-org/ placeholder owners when CODEOWNERS_ENFOR
 		echo "warning: CODEOWNERS still contains @your-org/ placeholder teams (set CODEOWNERS_ENFORCE=true to make this fatal)."; \
 	else echo "No placeholder owners found."; fi
 
-ci: ## Run the local CI pipeline: every workstation-runnable gate of terraform-plan.yml and reusable-security.yml (see make -n ci)
+ci-quick: ## Fast offline gates, no terraform init: fmt, consistency, config, scaffold fixtures, counts, links, refs, required checks, shellcheck, script tests, docs
 	@$(MAKE) fmt-check
 	@$(MAKE) consistency
-	@$(MAKE) yamllint
-	@$(MAKE) markdownlint-check
-	@$(MAKE) commit-check
-	@$(MAKE) codeowners-check
-	@$(MAKE) scaffold-fixtures-check
 	@$(MAKE) config-check
+	@$(MAKE) scaffold-fixtures-check
 	@$(MAKE) count-check
 	@$(MAKE) links
 	@$(MAKE) examples-refs
 	@$(MAKE) required-checks
-	@$(MAKE) backend-check
 	@$(MAKE) shellcheck
 	@$(MAKE) test-scripts
 	@$(MAKE) docs-check
+
+ci: ## Run the local CI pipeline: every workstation-runnable gate of terraform-plan.yml and reusable-security.yml (see make -n ci)
+	@$(MAKE) ci-quick
+	@$(MAKE) yamllint
+	@$(MAKE) markdownlint-check
+	@$(MAKE) commit-check
+	@$(MAKE) codeowners-check
+	@$(MAKE) backend-check
 	@$(MAKE) validate-all
 	@$(MAKE) lint
 	@$(MAKE) test

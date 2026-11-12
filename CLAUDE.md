@@ -109,7 +109,8 @@ make security       # trivy config + checkov (versions pinned in .tool-versions;
 make count          # print live module/root/test-suite counts (make count-check enforces README/CLAUDE.md)
 make links          # fail on broken repo-relative Markdown links
 make shellcheck     # shellcheck scripts/*.sh
-make ci             # every workstation-runnable CI gate: fmt-check, consistency, yamllint, markdownlint-check, commit-check, codeowners-check, scaffold-fixtures-check, config-check, count-check, links, examples-refs, required-checks, backend-check, shellcheck, test-scripts, docs-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, check-jsonschema, opa 1.22.2, a fetched origin/main)
+make ci-quick       # fast offline gates (no terraform init): fmt, consistency, config, fixtures, counts, links, refs, required checks, shellcheck, script tests, docs
+make ci             # ci-quick + yamllint, markdownlint-check, commit-check, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (every workstation-runnable CI gate; needs pre-commit, cz, check-jsonschema, opa 1.22.2, a fetched origin/main)
 ```
 
 ---

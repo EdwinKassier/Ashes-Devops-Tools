@@ -57,6 +57,9 @@ expect README.md "badge/test_suites-${suites}-" "Test-suites badge"
 expect README.md "${modules_total} modules — **${modules_gcp} GCP · ${modules_aws} AWS · ${modules_saas} SaaS · ${modules_tfc} TFC**" \
   "Module Library headline"
 expect CLAUDE.md "${modules_total} modules, ${roots} deployable roots" "CLAUDE.md header"
+expect CLAUDE.md "make ci-quick" "CLAUDE.md lists ci-quick"
+expect README.md "make ci-quick" "README.md lists ci-quick"
+expect docs/guides/QUICK_START.md '`make ci-quick`' "QUICK_START.md lists ci-quick"
 
 # Claims the repo cannot back until a real-cloud apply exists (docs/known-gaps.md).
 # A banned phrase in README.md or CLAUDE.md fails, so it cannot creep back.

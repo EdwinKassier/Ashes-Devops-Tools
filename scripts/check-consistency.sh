@@ -314,6 +314,13 @@ echo "==> Compliance matrices cite existing paths and unique IDs (scripts/check-
 echo "==> Production is decided by is_production only (scripts/check-production-rule.sh)"
 ./scripts/check-production-rule.sh >/dev/null || note "a root decides production from an environment name"
 
+echo "==> check-jsonschema pin agrees across CI, setup.sh and pre-commit"
+cj_ci="$(grep -oE 'check-jsonschema==[0-9.]+' .github/workflows/terraform-plan.yml | head -1 | cut -d= -f3)"
+cj_pc="$(awk '/check-jsonschema$/{f=1} f && /rev:/{print $2; exit}' .pre-commit-config.yaml)"
+[ -n "$cj_ci" ] || note ".github/workflows/terraform-plan.yml: no check-jsonschema==<version> pin found"
+grep -q 'check-jsonschema' scripts/setup.sh || note "scripts/setup.sh does not install check-jsonschema"
+[ -z "$cj_pc" ] || [ "$cj_pc" = "$cj_ci" ] || note "check-jsonschema: CI ${cj_ci}, pre-commit ${cj_pc}"
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

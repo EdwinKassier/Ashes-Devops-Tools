@@ -55,7 +55,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] `gh --version` (repository secrets and variables, environments, branch protection, numeric repository IDs)
 - [ ] `python3 --version` reports Python 3 (CI uses 3.12) for the repo scripts, and `python3 -c 'import hcl2'` succeeds (`python-hcl2`, hash-locked in `.github/requirements/hcl2.txt`; `make install` installs it; `make consistency` needs it)
 - [ ] `pre-commit --version` and `cz version` (commitizen; CI pins it in `.github/requirements/commitizen.txt`): `make yamllint`, `make markdownlint-check` and `make commit-check` need them
-- [ ] `check-jsonschema --version` reports 0.39.0 (`pipx install check-jsonschema==0.39.0`; `make install` does not install it; `make config-check` needs it)
+- [ ] `check-jsonschema --version` reports 0.39.0 (`make install` installs it; by hand: `pipx install check-jsonschema==0.39.0`; `make config-check` needs it)
 - [ ] `tflint`, `terraform-docs`, `shellcheck`, `trivy` and `opa` at the versions in `.tool-versions` (`make install` checks or installs all of them except shellcheck, which `make shellcheck` runs through `uvx` when available; `make opa-test` and `make security` refuse a version mismatch)
 - [ ] Optional: `uv` (`make security` then runs the exact Checkov version CI uses, and `make shellcheck` uses the pinned shellcheck)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
@@ -93,7 +93,7 @@ make install
 make pre-commit-install
 ```
 
-`make install` installs repo-managed tools: TFLint, Checkov, terraform-docs, and pre-commit at the exact versions in `.tool-versions`. Install Trivy at the `.tool-versions` version too — `make security` refuses a mismatched binary (tfsec is end-of-life and no longer used). Terraform itself must be installed separately — use `tfenv` or `mise` with the version in `.terraform-version`.
+`make install` installs repo-managed tools: TFLint, Checkov, check-jsonschema, terraform-docs, and pre-commit at the exact versions in `.tool-versions`. Install Trivy at the `.tool-versions` version too — `make security` refuses a mismatched binary (tfsec is end-of-life and no longer used). Terraform itself must be installed separately — use `tfenv` or `mise` with the version in `.terraform-version`.
 
 ## 2a. Configure the Landing Zone (one file)
 
@@ -416,7 +416,8 @@ make plan-gcp-workload APP_ENV=dev
 | `make test` | Run all .tftest.hcl suites |
 | `make plan-gcp-organization` | Plan control-plane changes |
 | `make plan-gcp-workload APP_ENV=dev` | Plan an app environment (add `APP_VARS=examples/dev.tfvars.example` for local tuning knobs) |
-| `make ci` | Every workstation-runnable CI gate: fmt-check, consistency, yamllint, markdownlint-check, commit-check, codeowners-check, scaffold-fixtures-check, config-check, count-check, links, examples-refs, required-checks, backend-check, shellcheck, test-scripts, docs-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, check-jsonschema, opa 1.22.2 and a fetched origin/main) |
+| `make ci-quick` | The fast offline subset of `make ci`, no `terraform init`: fmt-check, consistency, config-check, scaffold-fixtures-check, count-check, links, examples-refs, required-checks, shellcheck, test-scripts, docs-check (needs check-jsonschema) |
+| `make ci` | Every workstation-runnable CI gate: `ci-quick`, then yamllint, markdownlint-check, commit-check, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, check-jsonschema, opa 1.22.2 and a fetched origin/main) |
 
 ---
 

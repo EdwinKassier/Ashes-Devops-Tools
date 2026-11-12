@@ -165,5 +165,19 @@ else
   echo "checkov $checkov_installed OK"
 fi
 
+# check-jsonschema (make config-check, make scaffold-fixtures-check, pre-commit).
+# The version is single-sourced from the CI pin in terraform-plan.yml.
+REQUIRED_CHECK_JSONSCHEMA_VERSION="$(grep -oE 'check-jsonschema==[0-9.]+' \
+  "$(dirname "${_TOOL_VERSIONS_FILE}")/.github/workflows/terraform-plan.yml" | head -1 | cut -d= -f3)"
+cj_installed=$(installed_version check-jsonschema)
+if [[ -z "$cj_installed" ]]; then
+  echo "Installing check-jsonschema $REQUIRED_CHECK_JSONSCHEMA_VERSION ..."
+  install_pip_package check-jsonschema "$REQUIRED_CHECK_JSONSCHEMA_VERSION"
+elif [[ "$cj_installed" != "$REQUIRED_CHECK_JSONSCHEMA_VERSION" ]]; then
+  echo "WARNING: check-jsonschema $cj_installed is installed but $REQUIRED_CHECK_JSONSCHEMA_VERSION is required."
+else
+  echo "check-jsonschema $cj_installed OK"
+fi
+
 echo ""
 echo "Setup complete. All version warnings above indicate CI/local drift — address with 'mise install'."

@@ -302,6 +302,7 @@ These modules are tested and documented but **no `envs/**` root composes them** 
 ## Commands
 
 ```bash
+make ci-quick              # Fast offline subset of make ci (no terraform init); needs check-jsonschema
 make ci                    # Every workstation-runnable CI gate (see make -n ci); needs pre-commit, cz, check-jsonschema, opa 1.22.2, origin/main
 make fmt                   # Format all Terraform files
 make test                  # Run every .tftest.hcl suite (no cloud creds needed)

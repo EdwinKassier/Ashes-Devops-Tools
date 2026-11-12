@@ -23,9 +23,11 @@ new_tree() {
     printf 'badge/modules-1- badge/test_suites-0-\n'
     printf '1 modules \xe2\x80\x94 **1 GCP \xc2\xb7 0 AWS \xc2\xb7 0 SaaS \xc2\xb7 0 TFC**\n'
     printf 'envs/gcp/*<br/>1 roots\nenvs/aws/*<br/>0 layered roots\n'
+    printf 'make ci-quick\n'
   } >"${t}/README.md"
-  printf '1 modules, 1 deployable roots\n' >"${t}/CLAUDE.md"
-  mkdir -p "${t}/docs"
+  printf '1 modules, 1 deployable roots\nmake ci-quick\n' >"${t}/CLAUDE.md"
+  mkdir -p "${t}/docs/guides"
+  printf '`make ci-quick`\n' >"${t}/docs/guides/QUICK_START.md"
   echo "${t}"
 }
 
@@ -40,6 +42,11 @@ grep -q 'Production-grade' "${workdir}/out" && ok "claim is named" || bad "claim
 
 t="$(new_tree fullytested 'a fully-tested platform')"
 if run "${t}"; then bad "fully-tested claim fails"; else ok "fully-tested claim fails"; fi
+
+t="$(new_tree noquick 'a reference landing zone')"
+printf '1 modules, 1 deployable roots\n' >"${t}/CLAUDE.md"
+if run "${t}"; then bad "CLAUDE.md without ci-quick fails"; else ok "CLAUDE.md without ci-quick fails"; fi
+grep -q 'ci-quick' "${workdir}/out" && ok "missing ci-quick is named" || bad "missing ci-quick is named"
 
 printf 'test-check-docs-counts: %s failed\n' "${failures}"
 [[ "${failures}" -eq 0 ]]
