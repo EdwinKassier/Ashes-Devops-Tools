@@ -114,6 +114,17 @@ variable "timeout" {
   default     = "300s"
 }
 
+variable "health_check_path" {
+  description = "HTTP path for a startup probe (up to 120 s to become ready) and a liveness probe (every 30 s) on the container port. Null (default) keeps Cloud Run's default TCP startup probe."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.health_check_path == null || startswith(coalesce(var.health_check_path, "/"), "/")
+    error_message = "health_check_path must start with /."
+  }
+}
+
 # -----------------------------------------------------------------------------
 # SCALING
 # -----------------------------------------------------------------------------

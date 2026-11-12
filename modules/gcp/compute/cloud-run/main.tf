@@ -74,6 +74,33 @@ resource "google_cloud_run_v2_service" "this" {
         }
       }
 
+      dynamic "startup_probe" {
+        for_each = var.health_check_path == null ? [] : [var.health_check_path]
+        content {
+          initial_delay_seconds = 0
+          period_seconds        = 5
+          timeout_seconds       = 3
+          failure_threshold     = 24
+
+          http_get {
+            path = startup_probe.value
+          }
+        }
+      }
+
+      dynamic "liveness_probe" {
+        for_each = var.health_check_path == null ? [] : [var.health_check_path]
+        content {
+          period_seconds    = 30
+          timeout_seconds   = 5
+          failure_threshold = 3
+
+          http_get {
+            path = liveness_probe.value
+          }
+        }
+      }
+
       # Plain environment variables.
       dynamic "env" {
         for_each = var.env_vars

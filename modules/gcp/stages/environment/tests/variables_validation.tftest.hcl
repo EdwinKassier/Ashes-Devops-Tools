@@ -247,12 +247,13 @@ run "accepts_known_app_service_keys" {
   variables {
     app_services = {
       api = {
-        image         = "europe-docker.pkg.dev/acme/app/api:1"
-        min_instances = 1
-        secrets       = { DB_URL = { secret = "db-url", version = "2" } }
-        database      = { tier = "db-custom-2-7680", databases = ["app"] }
-        alerts        = { p99_latency_ms = 1500 }
-        slo           = { goal = 0.995 }
+        image             = "europe-docker.pkg.dev/acme/app/api:1"
+        min_instances     = 1
+        health_check_path = "/healthz"
+        secrets           = { DB_URL = { secret = "db-url", version = "2" } }
+        database          = { tier = "db-custom-2-7680", databases = ["app"] }
+        alerts            = { p99_latency_ms = 1500 }
+        slo               = { goal = 0.995 }
       }
     }
   }

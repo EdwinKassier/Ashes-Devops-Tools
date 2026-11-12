@@ -970,3 +970,63 @@ run "non_production_database_stays_zonal" {
     error_message = "outside production a database defaults to ZONAL."
   }
 }
+
+# ARC-16: production keeps one Cloud Run instance warm; every service is probed.
+run "production_services_stay_warm_and_probed" {
+  command = plan
+
+  variables {
+    is_production = true
+    services      = { api = {} }
+  }
+
+  assert {
+    condition     = module.service["api"].min_instance_count_effective == 1
+    error_message = "A production Cloud Run service without min_instances must keep one warm instance (ARC-16)."
+  }
+
+  assert {
+    condition     = module.service["api"].health_check_path_effective == "/"
+    error_message = "Services default to probing / (the bootstrap image serves it)."
+  }
+}
+
+run "explicit_min_instances_wins_in_production" {
+  command = plan
+
+  variables {
+    is_production = true
+    services      = { api = { min_instances = 0 } }
+  }
+
+  assert {
+    condition     = module.service["api"].min_instance_count_effective == 0
+    error_message = "An explicit min_instances = 0 must opt a production service out of the warm instance."
+  }
+}
+
+run "non_production_still_scales_to_zero" {
+  command = plan
+
+  variables {
+    services = { api = {} }
+  }
+
+  assert {
+    condition     = module.service["api"].min_instance_count_effective == 0
+    error_message = "Non-production services keep scale-to-zero by default."
+  }
+}
+
+run "empty_health_check_path_keeps_the_tcp_probe" {
+  command = plan
+
+  variables {
+    services = { api = { health_check_path = "" } }
+  }
+
+  assert {
+    condition     = module.service["api"].health_check_path_effective == null
+    error_message = "health_check_path = \"\" must leave the service without an HTTP probe."
+  }
+}

@@ -146,3 +146,29 @@ run "direct_vpc_egress_wired" {
     error_message = "Direct VPC egress must attach the service to the supplied subnetwork."
   }
 }
+
+run "health_check_path_adds_startup_and_liveness_probes" {
+  command = plan
+
+  variables {
+    health_check_path = "/healthz"
+  }
+
+  assert {
+    condition = (
+      google_cloud_run_v2_service.this.template[0].containers[0].startup_probe[0].http_get[0].path == "/healthz" &&
+      google_cloud_run_v2_service.this.template[0].containers[0].liveness_probe[0].http_get[0].path == "/healthz" &&
+      google_cloud_run_v2_service.this.template[0].containers[0].startup_probe[0].timeout_seconds <= google_cloud_run_v2_service.this.template[0].containers[0].startup_probe[0].period_seconds
+    )
+    error_message = "A health_check_path must add an HTTP startup and liveness probe."
+  }
+}
+
+run "no_path_keeps_the_platform_default_probe" {
+  command = plan
+
+  assert {
+    condition     = length(google_cloud_run_v2_service.this.template[0].containers[0].liveness_probe) == 0
+    error_message = "Without a path the module must not add an HTTP probe the image may not serve."
+  }
+}

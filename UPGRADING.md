@@ -1411,6 +1411,14 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Cloud Run probes and a warm instance in production (gcp-workload, breaking)
+
+Production Cloud Run services without `min_instances` now keep one instance warm. Cloud Run bills an idle instance, so this adds a monthly cost per service. Production means the environment's `is_production` is `true`. Set `min_instances: 0` on a service to keep scale-to-zero in production.
+
+Every Cloud Run service now gets an HTTP startup probe (up to 120 seconds to become ready) and an HTTP liveness probe (every 30 seconds) on `health_check_path`. The default is `/`, which the bootstrap image serves. Set `health_check_path` to your health route. Set it to an empty string to keep Cloud Run's default TCP probe. The key is valid in `app_services`, in `gcp.environments.<env>.services` and in `config/landing-zone.yaml`.
+
+The first apply rolls a new revision of each existing service. The delivery pipeline owns the image and Terraform ignores it, so the new revision runs the image that is deployed now. If your image does not answer `GET /` (or your path) with a 2xx status, the new revision fails its startup probe and Cloud Run keeps the old one serving. Check the path before you apply.
+
 #### Internal DNS domain from config (gcp-network-hub)
 
 Nothing changes for an existing estate: the default stays `internal.local`, so the first plan shows no change. Before, `envs/gcp/network-hub` never passed `internal_domain` to the stage and no config key existed, so every estate's private root zone (`internal-root`) was named `internal.local.`. Now `gcp.network.internal_domain` in `config/landing-zone.yaml` (or the `internal_domain` variable) names it, for example `corp.example.com`. The value must be a lowercase DNS name of at least two labels, without a trailing dot. Every `gcp-workload-<env>` `internal-peering` zone follows it through `hub_network.dns_domain`.

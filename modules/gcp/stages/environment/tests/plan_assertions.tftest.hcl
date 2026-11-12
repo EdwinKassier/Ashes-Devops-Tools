@@ -160,6 +160,25 @@ run "production_allows_host_project_workloads_when_explicit" {
   }
 }
 
+# ARC-16: the production flag and health_check_path reach the Cloud Run module
+# through the hand-kept key allowlist (a dropped key would leave these unset).
+run "production_service_is_warm_and_probed" {
+  command = plan
+
+  variables {
+    is_production                 = true
+    enable_host_project_workloads = true
+    app_services = {
+      api = { health_check_path = "/healthz" }
+    }
+  }
+
+  assert {
+    condition     = output.app_services["api"].min_instances == 1 && output.app_services["api"].health_check_path == "/healthz"
+    error_message = "A production service must keep one warm instance and probe the configured path."
+  }
+}
+
 run "non_production_database_stays_zonal" {
   command = plan
 

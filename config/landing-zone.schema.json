@@ -612,6 +612,10 @@
                     "min_instances": {
                       "type": "number"
                     },
+                    "health_check_path": {
+                      "type": "string",
+                      "pattern": "^(/.*)?$"
+                    },
                     "max_instances": {
                       "type": "number"
                     },

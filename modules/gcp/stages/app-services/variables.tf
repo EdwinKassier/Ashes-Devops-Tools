@@ -62,7 +62,7 @@ variable "environment" {
 }
 
 variable "is_production" {
-  description = "Whether this is a production environment. Production turns Cloud SQL high availability (REGIONAL) on for every service database whose database.enable_high_availability is unset; an explicit false opts out."
+  description = "Whether this is a production environment. Production turns Cloud SQL high availability (REGIONAL) on for every service database whose database.enable_high_availability is unset; an explicit false opts out. Production also keeps one warm Cloud Run instance for every service whose min_instances is unset."
   type        = bool
   default     = false
   nullable    = false
@@ -220,7 +220,8 @@ variable "services" {
     ingress                     = optional(string, "INGRESS_TRAFFIC_INTERNAL_ONLY")
     cpu                         = optional(string, "1000m")
     memory                      = optional(string, "512Mi")
-    min_instances               = optional(number, 0)
+    min_instances               = optional(number)      # null = 1 in production (var.is_production), 0 elsewhere
+    health_check_path           = optional(string, "/") # HTTP probe path; "" keeps the TCP startup probe
     max_instances               = optional(number, 10)
     concurrency                 = optional(number, 80)
     timeout                     = optional(string, "300s")

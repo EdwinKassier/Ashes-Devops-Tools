@@ -300,7 +300,9 @@ module "service" {
 
   cpu                = each.value.cpu
   memory             = each.value.memory
-  min_instance_count = each.value.min_instances
+  min_instance_count = coalesce(each.value.min_instances, var.is_production ? 1 : 0)
+  # An optional attribute with a default turns null into "/", so "" opts out.
+  health_check_path  = each.value.health_check_path == "" ? null : each.value.health_check_path
   max_instance_count = each.value.max_instances
   concurrency        = each.value.concurrency
   timeout            = each.value.timeout

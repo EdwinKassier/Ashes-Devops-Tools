@@ -98,7 +98,8 @@ The typed shape, with every default, is the `services` variable of
 Common optional fields include `image` (first-revision image; default the
 root's `app_bootstrap_image` / `gcp.workload.bootstrap_image`, else
 `us-docker.pkg.dev/cloudrun/container/hello`), `ingress`, `cpu`, `memory`,
-`min_instances`, `max_instances`, `subnetwork_id`, `invoker_members`,
+`min_instances` (default 1 in production, else 0), `health_check_path` (HTTP
+probe path, default `/`, empty string for the TCP probe), `max_instances`, `subnetwork_id`, `invoker_members`,
 `enable_unauthenticated`, `enable_binary_authorization` / `binary_authorization_policy`,
 `runtime_project_roles` (an escape hatch, empty by default), `artifact_registry`
 (cleanup tuning) and `database.{tier,edition,enable_high_availability,encryption_key_name}`.

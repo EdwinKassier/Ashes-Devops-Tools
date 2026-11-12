@@ -236,6 +236,7 @@ gcp:
       #   api:
       #     service_team: platform
       #     min_instances: 1
+      #     health_check_path: /healthz
       #     github: {repository_id: "123456789"}
       # Service teams: a team = a GCP project in this environment's folder,
       # attached to the Shared VPC, with its admin group granted least-privilege

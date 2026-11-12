@@ -404,7 +404,7 @@ variable "app_services" {
   validation {
     condition = length([for k in flatten([
       for name, s in var.app_services : concat(
-        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
+        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "health_check_path", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
         flatten([
           for sub, allowed in {
             artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]
@@ -421,7 +421,7 @@ variable "app_services" {
     ]) : k]) == 0
     error_message = "app_services has keys the services shape does not have (misspelled or unsupported): ${join(", ", [for k in flatten([
       for name, s in var.app_services : concat(
-        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
+        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "health_check_path", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
         flatten([
           for sub, allowed in {
             artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]

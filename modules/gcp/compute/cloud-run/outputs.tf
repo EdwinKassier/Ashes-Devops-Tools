@@ -28,3 +28,13 @@ output "ingress" {
   description = "The ingress traffic policy applied to the service."
   value       = google_cloud_run_v2_service.this.ingress
 }
+
+output "min_instance_count_effective" {
+  description = "Minimum instance count the service runs with."
+  value       = var.min_instance_count
+}
+
+output "health_check_path_effective" {
+  description = "HTTP path of the startup and liveness probes (null when the service keeps Cloud Run's default TCP startup probe)."
+  value       = var.health_check_path
+}

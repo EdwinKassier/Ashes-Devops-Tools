@@ -5,12 +5,14 @@
  */
 
 output "services" {
-  description = "Per-service golden-path facts: runtime, Cloud Run service name and URL (null for a job) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user and availability type (REGIONAL or ZONAL); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
+  description = "Per-service golden-path facts: runtime, Cloud Run service name, URL, effective minimum instance count and probe path (null for a job; the probe path is also null when probing is off) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user and availability type (REGIONAL or ZONAL); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
   value = {
     for k, s in var.services : k => {
       runtime                  = s.runtime
       service_name             = s.runtime == "cloud-run" ? module.service[k].name : null
       url                      = s.runtime == "cloud-run" ? module.service[k].uri : null
+      min_instances            = s.runtime == "cloud-run" ? module.service[k].min_instance_count_effective : null
+      health_check_path        = s.runtime == "cloud-run" ? module.service[k].health_check_path_effective : null
       job_name                 = s.runtime == "cloud-run-job" ? module.job[k].name : null
       image_repository         = local.image_repository[k]
       initial_image            = local.initial_image[k]

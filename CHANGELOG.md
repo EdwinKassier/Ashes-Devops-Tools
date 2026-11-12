@@ -527,6 +527,11 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Changed
 
+- **Cloud Run probes and a warm instance in production (breaking, ARC-16).** `modules/gcp/compute/cloud-run`
+  takes `health_check_path` and adds an HTTP startup and liveness probe. The app-services stage
+  defaults it to `/` (empty string = keep the TCP probe) and keeps one instance warm for every
+  production service whose `min_instances` is unset. The key is accepted in every `services` key list
+  and in `config/landing-zone.schema.json`. See `UPGRADING.md`.
 - **One production rule: `is_production` (breaking).** Every `gcp.environments` and
   `aws.workload_environments` entry, and every entry of tfc-admin's `environments` variable, must
   set `is_production`; `config/landing-zone.schema.json` and the roots that read the flag fail
