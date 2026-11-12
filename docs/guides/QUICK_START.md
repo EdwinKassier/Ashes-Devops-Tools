@@ -51,6 +51,13 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] `terraform version` reports `>= 1.17` (CI pins the version in `.terraform-version`)
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
+- [ ] `aws --version` reports AWS CLI v2 (AWS only: the phase-0 CloudFormation stack, StackSets and the account checks in the AWS runbooks)
+- [ ] `gh --version` (repository secrets and variables, environments, branch protection, numeric repository IDs)
+- [ ] `python3 --version` reports Python 3 (CI uses 3.12) for the repo scripts, and `python3 -c 'import hcl2'` succeeds (`python-hcl2`, hash-locked in `.github/requirements/hcl2.txt`; `make install` installs it; `make consistency` needs it)
+- [ ] `pre-commit --version` and `cz version` (commitizen; CI pins it in `.github/requirements/commitizen.txt`): `make yamllint`, `make markdownlint-check` and `make commit-check` need them
+- [ ] `check-jsonschema --version` reports 0.39.0 (`pipx install check-jsonschema==0.39.0`; `make install` does not install it; `make config-check` needs it)
+- [ ] `tflint`, `terraform-docs`, `shellcheck`, `trivy` and `opa` at the versions in `.tool-versions` (`make install` checks or installs all of them except shellcheck, which `make shellcheck` runs through `uvx` when available; `make opa-test` and `make security` refuse a version mismatch)
+- [ ] Optional: `uv` (`make security` then runs the exact Checkov version CI uses, and `make shellcheck` uses the pinned shellcheck)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
 - [ ] A Terraform Cloud organization with the GCP workspaces (`gcp-bootstrap`, `gcp-organization`, `gcp-guardrails`, `gcp-projects`, `gcp-network-hub` and one `gcp-workload-<env>` per environment). Create them with `envs/tfc-admin` (`gcp.enabled: true` in `config/landing-zone.yaml`, or `enable_gcp = true`; every cloud defaults to disabled). It creates `gcp-bootstrap` in **local** execution mode, so the phase-0 apply below runs on your machine with your ADC while TFC stores the state ([bootstrap runbook](../runbooks/bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass))
 
@@ -242,7 +249,12 @@ In your GitHub repo → Settings → Secrets and variables → Actions:
 | Name | Type | Value |
 |------|------|-------|
 | `TFC_ORGANIZATION` | Variable | Your Terraform Cloud org name |
-| `TFC_TOKEN` | Secret | A TFC team token scoped to "Read runs" on the GCP workspaces |
+| `TFC_TOKEN` | Secret (environment `tfc-readonly`) | A TFC team token with **Read runs** on the workspaces you tag for release metadata |
+| `TFC_TOKEN_DRIFT` | Secret (environment `tfc-drift`) | The token of the team set as tfc-admin `drift_team_id`: **Queue plans** and **Read state versions**, no variable access. Without it, scheduled drift detection skips and a manual run fails |
+| `RELEASE_APP_ID` | Variable (environment `release`) | ID of the release GitHub App. Required: `release.yml` fails without it |
+| `RELEASE_APP_PRIVATE_KEY` | Secret (environment `release`) | Private key of the release GitHub App. Required |
+
+Optional secrets (the state backup tokens `TFC_TOKEN_STATE_BACKUP` and `TFC_TOKEN_AUDIT_TRAIL`, `DOCS_BOT_PAT`) and the full list, scopes and environment setup: [CI secrets](CI_SECRETS.md).
 
 **Step 7 — Wire dynamic credentials (tfc-admin pass 2) and apply the remaining roots in order, in Terraform Cloud:**
 
