@@ -2288,6 +2288,23 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 ### All clouds
 
+#### Deletion-protection inputs renamed to `enable_*deletion_protection`
+
+**Who:** every fork that sets one of the old names in a module call, a tfvars file or a TFC workspace variable.
+**What changes:** ten inputs now follow the `enable_` rule from `CLAUDE.md`. The old names stay as `deprecated` aliases. A set old name still works and warns. When both names are set, the new name wins. Old names are removed in v1.0. No plan changes and no state changes.
+
+| Module or root | Old input | New input |
+|---|---|---|
+| `modules/gcp/network/tiered-vpc` | `deletion_protection` | `enable_deletion_protection` |
+| `modules/gcp/stages/{dns-anchor,net-hub,net-spoke,environment}` | `deletion_protection` | `enable_deletion_protection` |
+| `modules/gcp/governance/private-ca` | `deletion_protection` | `enable_deletion_protection` |
+| `modules/aws/data/rds-aurora` | `deletion_protection` | `enable_deletion_protection` |
+| `modules/aws/network/network-firewall` | `delete_protection` | `enable_deletion_protection` |
+| `modules/aws/stages/app-services` | `alb_enable_deletion_protection` | `enable_alb_deletion_protection` |
+| `envs/aws/workload` | `app_alb_enable_deletion_protection` | `enable_app_alb_deletion_protection` |
+
+A TFC workspace variable with an old name keeps working through the alias. Rename it when convenient. `scripts/check-consistency.sh` fails when a deletion-protection input has neither the `enable_` form nor a `deprecated` marker. The `services.<name>.database.deletion_protection` object field of `app-services` and `envs/aws/workload` is unchanged.
+
 #### `require_labels` is now mandatory; data classification on both clouds (CMP-10, ARC-17)
 
 **Who:** every fork that attaches the OPA policy set (`enable_policy_sets`).

@@ -131,11 +131,11 @@ run "optional_services_can_be_disabled" {
   command = plan
 
   variables {
-    deletion_protection     = true
-    nat                     = { enabled = false }
-    private_service_access  = { enabled = false }
-    private_service_connect = { enabled = false }
-    edge                    = { cloud_armor = { enabled = false } }
+    enable_deletion_protection = true
+    nat                        = { enabled = false }
+    private_service_access     = { enabled = false }
+    private_service_connect    = { enabled = false }
+    edge                       = { cloud_armor = { enabled = false } }
     firewall = {
       enable_iap_access = false
       additional_rules = {
@@ -344,5 +344,32 @@ run "flow_log_export_location_can_be_pinned" {
   assert {
     condition     = module.vpc_flow_logs[0].bigquery_dataset.location == "US"
     error_message = "an explicit bigquery_location must win over the region default."
+  }
+}
+
+run "deprecated_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    deletion_protection = true
+  }
+
+  assert {
+    condition     = output.network_name == "mock-dev-vpc"
+    error_message = "The deprecated deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+    deletion_protection        = true
+  }
+
+  assert {
+    condition     = output.network_name == "mock-dev-vpc"
+    error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
   }
 }

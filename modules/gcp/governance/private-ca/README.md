@@ -94,8 +94,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_privateca_ca_pool.this (modules/gcp/governance/private-ca/main.tf#L26)
-- resource.google_privateca_certificate_authority.this (modules/gcp/governance/private-ca/main.tf#L42)
+- resource.google_privateca_ca_pool.this (modules/gcp/governance/private-ca/main.tf#L29)
+- resource.google_privateca_certificate_authority.this (modules/gcp/governance/private-ca/main.tf#L45)
 
 
 ## Inputs
@@ -107,8 +107,9 @@ The following resources are created:
 | <a name="input_name"></a> [name](#input\_name) | Certificate authority ID (1-63 alphanumeric characters, hyphens, and underscores). | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the CA pool and certificate authority will be created (6-30 characters, lowercase alphanumeric and hyphens). | `string` | n/a | yes |
 | <a name="input_ca_type"></a> [ca\_type](#input\_ca\_type) | Type of certificate authority. ROOT anchors the hierarchy (self-signed); SUBORDINATE is signed by a parent CA. | `string` | `"ROOT"` | no |
-| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | When true (default) Terraform refuses to destroy the certificate authority, guarding against accidental teardown of the org's trust anchor. | `bool` | `true` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Deprecated: use enable\_deletion\_protection. Removed in v1.0. | `bool` | `null` | no |
 | <a name="input_enable_ca"></a> [enable\_ca](#input\_enable\_ca) | When true (default) the certificate authority is created and enabled inside the pool. When false only the pool is created, staging the CA for a later apply. CAS bills per active CA, so this gate lets the pool exist without incurring CA charges. | `bool` | `true` | no |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | When true (default) Terraform refuses to destroy the certificate authority, guarding against accidental teardown of the org's trust anchor. Null (default) uses the deprecated deletion\_protection input, else true. | `bool` | `null` | no |
 | <a name="input_ignore_active_certificates_on_deletion"></a> [ignore\_active\_certificates\_on\_deletion](#input\_ignore\_active\_certificates\_on\_deletion) | When true, the CA can be deleted even while it has active issued certificates. Defaults to false — the safe setting that blocks deletion until certificates are dealt with. | `bool` | `false` | no |
 | <a name="input_key_algorithm"></a> [key\_algorithm](#input\_key\_algorithm) | Algorithm used to generate the CA's key pair (e.g. RSA\_PKCS1\_4096\_SHA256, EC\_P256\_SHA256, EC\_P384\_SHA384). | `string` | `"RSA_PKCS1_4096_SHA256"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to the CA pool and certificate authority. | `map(string)` | `{}` | no |

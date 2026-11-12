@@ -793,3 +793,32 @@ run "non_production_autoscaling_stays_opt_in" {
     error_message = "Non-production services keep a fixed task count unless enable_autoscaling is set."
   }
 }
+
+run "deprecated_alb_enable_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    alb_enable_deletion_protection = false
+    services                       = { orders = {} }
+  }
+
+  assert {
+    condition     = length(module.alb) == 1
+    error_message = "The deprecated alb_enable_deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_alb_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_alb_deletion_protection = true
+    alb_enable_deletion_protection = false
+    services                       = { orders = {} }
+  }
+
+  assert {
+    condition     = length(module.alb) == 1
+    error_message = "Setting enable_alb_deletion_protection together with the deprecated alias must still plan."
+  }
+}

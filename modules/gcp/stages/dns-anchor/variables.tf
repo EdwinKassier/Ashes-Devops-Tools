@@ -30,10 +30,17 @@ variable "labels" {
   default     = {}
 }
 
-variable "deletion_protection" {
-  description = "Guard the VPC and subnet stack with a prevent_destroy terraform_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard."
+variable "enable_deletion_protection" {
+  description = "Guard the VPC and subnet stack with a prevent_destroy terraform_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard. Null (default) uses the deprecated deletion_protection input, else false."
   type        = bool
-  default     = false
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 variable "network" {

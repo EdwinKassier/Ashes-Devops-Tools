@@ -83,11 +83,11 @@ locals {
 module "hub" {
   source = "../net-hub"
 
-  project_id          = var.hub_project_id
-  project_prefix      = var.project_prefix
-  region              = var.default_region
-  deletion_protection = var.enable_deletion_protection
-  additional_regions  = var.hub_additional_regions
+  project_id                 = var.hub_project_id
+  project_prefix             = var.project_prefix
+  region                     = var.default_region
+  enable_deletion_protection = var.enable_deletion_protection
+  additional_regions         = var.hub_additional_regions
 
   network = {
     name            = "hub-vpc-core"
@@ -235,9 +235,9 @@ module "hub_cloud_armor" {
 module "dns_anchor" {
   source = "../dns-anchor"
 
-  project_id          = var.dns_project_id
-  region              = var.default_region
-  deletion_protection = var.enable_deletion_protection
+  project_id                 = var.dns_project_id
+  region                     = var.default_region
+  enable_deletion_protection = var.enable_deletion_protection
 
   network = {
     name       = "dns-vpc-core"

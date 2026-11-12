@@ -67,11 +67,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_networkfirewall_firewall.this (modules/aws/network/network-firewall/main.tf#L177)
-- resource.aws_networkfirewall_firewall_policy.this (modules/aws/network/network-firewall/main.tf#L127)
-- resource.aws_networkfirewall_logging_configuration.this (modules/aws/network/network-firewall/main.tf#L207)
-- resource.aws_networkfirewall_rule_group.domain_allowlist (modules/aws/network/network-firewall/main.tf#L92)
-- resource.aws_networkfirewall_rule_group.stateful (modules/aws/network/network-firewall/main.tf#L63)
+- resource.aws_networkfirewall_firewall.this (modules/aws/network/network-firewall/main.tf#L180)
+- resource.aws_networkfirewall_firewall_policy.this (modules/aws/network/network-firewall/main.tf#L130)
+- resource.aws_networkfirewall_logging_configuration.this (modules/aws/network/network-firewall/main.tf#L210)
+- resource.aws_networkfirewall_rule_group.domain_allowlist (modules/aws/network/network-firewall/main.tf#L95)
+- resource.aws_networkfirewall_rule_group.stateful (modules/aws/network/network-firewall/main.tf#L66)
 - data source.aws_region.current (modules/aws/network/network-firewall/main.tf#L37)
 
 
@@ -81,9 +81,10 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_inspection_vpc_id"></a> [inspection\_vpc\_id](#input\_inspection\_vpc\_id) | ID of the inspection VPC the firewall is deployed into. | `string` | n/a | yes |
 | <a name="input_log_bucket_name"></a> [log\_bucket\_name](#input\_log\_bucket\_name) | Name of the S3 bucket that receives firewall flow logs. | `string` | n/a | yes |
-| <a name="input_delete_protection"></a> [delete\_protection](#input\_delete\_protection) | Whether to enable deletion protection on the firewall. On by default so the inspection firewall is not torn down accidentally; set false to allow teardown. | `bool` | `true` | no |
+| <a name="input_delete_protection"></a> [delete\_protection](#input\_delete\_protection) | Deprecated: use enable\_deletion\_protection. Removed in v1.0. | `bool` | `null` | no |
 | <a name="input_domain_allowlist_capacity"></a> [domain\_allowlist\_capacity](#input\_domain\_allowlist\_capacity) | Reserved capacity for the egress domain allowlist rule group (roughly 2 x number of domains for HTTP\_HOST + TLS\_SNI). Cannot be changed after creation. | `number` | `200` | no |
 | <a name="input_egress_domain_allowlist"></a> [egress\_domain\_allowlist](#input\_egress\_domain\_allowlist) | Optional egress domain allowlist matched on HTTP Host and TLS SNI (e.g. [".amazonaws.com", "github.com"]; a leading dot matches subdomains). When non-empty an ALLOWLIST rule group passes these domains and DROPS all other HTTP/TLS traffic from HOME\_NET — set home\_net\_cidrs to the spoke CIDRs first. Empty (default) = no domain filtering. | `list(string)` | `[]` | no |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Whether to enable deletion protection on the firewall. On by default so the inspection firewall is not torn down accidentally; set false to allow teardown. Null (default) uses the deprecated delete\_protection input, else true. | `bool` | `null` | no |
 | <a name="input_enable_network_firewall"></a> [enable\_network\_firewall](#input\_enable\_network\_firewall) | Whether to deploy the Network Firewall. COST TOGGLE: an AWS Network Firewall bills per endpoint-hour (one endpoint per firewall subnet) plus per-GB processed. Set false to remove all firewall resources. | `bool` | `true` | no |
 | <a name="input_firewall_name"></a> [firewall\_name](#input\_firewall\_name) | Name of the firewall. | `string` | `"org-firewall"` | no |
 | <a name="input_firewall_subnet_ids"></a> [firewall\_subnet\_ids](#input\_firewall\_subnet\_ids) | Subnet IDs (one per AZ, in the inspection VPC) the firewall creates endpoints in. One subnet\_mapping is created per ID. | `list(string)` | <pre>[<br/>  "subnet-aaaa",<br/>  "subnet-bbbb"<br/>]</pre> | no |

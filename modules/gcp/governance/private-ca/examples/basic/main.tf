@@ -27,7 +27,7 @@ module "private_ca" {
   lifetime      = "315360000s" # 10 years
 
   # Defaults, shown for clarity: guard the trust anchor against teardown.
-  deletion_protection                    = true
+  enable_deletion_protection             = true
   ignore_active_certificates_on_deletion = false
   skip_grace_period                      = false
 

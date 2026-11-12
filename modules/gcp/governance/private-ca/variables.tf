@@ -101,10 +101,17 @@ variable "lifetime" {
 # Lifecycle safety
 # -----------------------------------------------------------------------------
 
-variable "deletion_protection" {
-  description = "When true (default) Terraform refuses to destroy the certificate authority, guarding against accidental teardown of the org's trust anchor."
+variable "enable_deletion_protection" {
+  description = "When true (default) Terraform refuses to destroy the certificate authority, guarding against accidental teardown of the org's trust anchor. Null (default) uses the deprecated deletion_protection input, else true."
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 variable "ignore_active_certificates_on_deletion" {

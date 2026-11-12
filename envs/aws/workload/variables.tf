@@ -641,10 +641,17 @@ variable "app_alb_ingress_cidrs" {
   default     = []
 }
 
-variable "app_alb_enable_deletion_protection" {
-  description = "Deletion protection on the shared ALB. Set false only for ephemeral environments."
+variable "enable_app_alb_deletion_protection" {
+  description = "Deletion protection on the shared ALB. Set false only for ephemeral environments. Null (default) uses the deprecated app_alb_enable_deletion_protection input, else true."
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "app_alb_enable_deletion_protection" {
+  description = "Deprecated: use enable_app_alb_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_app_alb_deletion_protection; app_alb_enable_deletion_protection is removed in v1.0."
 }
 
 variable "app_alb_access_logs_bucket" {

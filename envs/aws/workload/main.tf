@@ -16,6 +16,9 @@
 # It composes the aws-workload stage in a SINGLE workload account. It declares
 # ONLY the aws provider — no supabase/vercel (SaaS lives in envs/saas).
 locals {
+  # enable_app_alb_deletion_protection replaces the deprecated app_alb_enable_deletion_protection input; the new name wins.
+  enable_app_alb_deletion_protection = coalesce(var.enable_app_alb_deletion_protection, var.app_alb_enable_deletion_protection, true)
+
   organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
   network_contract      = var.network_contract != null ? var.network_contract : local.cfg.network_contract
   # var.log_archive_bucket_name is the legacy single-field form of security_contract.
@@ -214,7 +217,7 @@ module "app_services" {
   alb_internal                   = local.app_public_alb ? false : var.app_alb_internal
   alb_certificate_arn            = var.app_alb_certificate_arn
   alb_ingress_cidrs              = local.app_alb_ingress_cidrs
-  alb_enable_deletion_protection = var.app_alb_enable_deletion_protection
+  enable_alb_deletion_protection = local.enable_app_alb_deletion_protection
   alb_access_logs_bucket         = var.app_alb_access_logs_bucket
 
   log_retention_days  = var.app_log_retention_days

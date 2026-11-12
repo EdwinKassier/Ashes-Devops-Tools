@@ -13,6 +13,9 @@
  */
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, true)
+
   # ROOT CAs are self-signed in CAS; SUBORDINATE CAs are signed by a parent.
   ca_type_map = {
     ROOT        = "SELF_SIGNED"
@@ -77,10 +80,10 @@ resource "google_privateca_certificate_authority" "this" {
     algorithm = var.key_algorithm
   }
 
-  # Safe-by-default lifecycle toggles. deletion_protection defaults true so a
+  # Safe-by-default lifecycle toggles. enable_deletion_protection defaults true so a
   # CA cannot be destroyed by an unguarded apply; the CAS-specific toggles
   # default to their safe values (keep active certs, honour the grace period).
-  deletion_protection                    = var.deletion_protection
+  deletion_protection                    = local.enable_deletion_protection
   ignore_active_certificates_on_deletion = var.ignore_active_certificates_on_deletion
   skip_grace_period                      = var.skip_grace_period
 

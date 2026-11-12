@@ -8,7 +8,7 @@
 #   - storage_encrypted = true with a REQUIRED customer-managed KMS key (no
 #     default AWS key)
 #   - cluster lives in PRIVATE subnets; instances are never publicly_accessible
-#   - deletion_protection defaults on, plus a terraform_data guard that blocks an
+#   - enable_deletion_protection defaults on, plus a terraform_data guard that blocks an
 #     accidental `terraform destroy` or replacement of the cluster
 #   - automated backups retained (default 7 days), final snapshot taken on delete
 #   - IAM database authentication on by default
@@ -21,6 +21,9 @@
 # switch to the db.serverless class.
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, true)
+
   # Serverless v2 keeps engine_mode "provisioned" but uses the db.serverless
   # instance class and a scaling configuration block.
   instance_class = var.enable_serverless_v2 ? "db.serverless" : var.instance_class
@@ -74,7 +77,7 @@ resource "aws_rds_cluster" "this" {
   preferred_maintenance_window = var.preferred_maintenance_window
   copy_tags_to_snapshot        = true
 
-  deletion_protection       = var.deletion_protection
+  deletion_protection       = local.enable_deletion_protection
   skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : local.final_snapshot_identifier
 
@@ -128,7 +131,7 @@ resource "aws_rds_cluster_instance" "this" {
 # ── Deletion guard ────────────────────────────────────────────────────────────
 #
 # A terraform_data guard (not prevent_destroy on the cluster itself, which
-# cannot be switched off by a variable). Present when deletion_protection is
+# cannot be switched off by a variable). Present when enable_deletion_protection is
 # true:
 #   - prevent_destroy aborts any plan that destroys the guard, so a
 #     `terraform destroy` of the cluster fails at plan time.
@@ -136,13 +139,13 @@ resource "aws_rds_cluster_instance" "this" {
 #     REPLACE the cluster (a ForceNew change such as cluster_identifier,
 #     kms_key_id or db_subnet_group_name) also plans to replace the guard and
 #     fails the same way. In-place updates keep the id and are not blocked.
-#   - setting deletion_protection = false while the guard exists is also
+#   - setting enable_deletion_protection = false while the guard exists is also
 #     refused, because it would destroy the guard.
 # To intentionally destroy or replace a protected cluster, first run:
 #   terraform state rm '<module_address>.terraform_data.deletion_guard[0]'
-# then set deletion_protection = false and apply.
+# then set enable_deletion_protection = false and apply.
 resource "terraform_data" "deletion_guard" {
-  count = var.deletion_protection ? 1 : 0
+  count = local.enable_deletion_protection ? 1 : 0
 
   input = aws_rds_cluster.this.cluster_identifier
 

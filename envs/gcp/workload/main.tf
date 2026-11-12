@@ -192,12 +192,12 @@ ephemeral "tfe_outputs" "saas" {
 module "environment" {
   source = "../../../modules/gcp/stages/environment"
 
-  environment         = var.environment
-  project_prefix      = local.project_prefix
-  org_id              = local.org_id
-  billing_account     = local.billing_account
-  labels              = local.labels
-  deletion_protection = var.enable_deletion_protection
+  environment                = var.environment
+  project_prefix             = local.project_prefix
+  org_id                     = local.org_id
+  billing_account            = local.billing_account
+  labels                     = local.labels
+  enable_deletion_protection = var.enable_deletion_protection
 
   # Production: Cloud SQL HA by default, and app services must name a
   # service_team unless enable_host_project_workloads says otherwise.

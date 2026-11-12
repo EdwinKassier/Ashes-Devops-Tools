@@ -86,34 +86,34 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_log_group.service (modules/aws/stages/app-services/main.tf#L213)
-- resource.aws_cloudwatch_metric_alarm.latency_p99 (modules/aws/stages/app-services/main.tf#L975)
-- resource.aws_ecs_cluster.this (modules/aws/stages/app-services/main.tf#L175)
-- resource.aws_iam_openid_connect_provider.github (modules/aws/stages/app-services/main.tf#L160)
-- resource.aws_iam_role.deploy (modules/aws/stages/app-services/main.tf#L404)
-- resource.aws_iam_role.execution (modules/aws/stages/app-services/main.tf#L242)
-- resource.aws_iam_role.task (modules/aws/stages/app-services/main.tf#L312)
-- resource.aws_iam_role_policy.deploy (modules/aws/stages/app-services/main.tf#L433)
-- resource.aws_iam_role_policy.execution (modules/aws/stages/app-services/main.tf#L253)
-- resource.aws_iam_role_policy.task (modules/aws/stages/app-services/main.tf#L323)
-- resource.aws_iam_role_policy.task_exec (modules/aws/stages/app-services/main.tf#L331)
-- resource.aws_iam_role_policy.task_queue (modules/aws/stages/app-services/main.tf#L354)
-- resource.aws_iam_role_policy_attachment.task (modules/aws/stages/app-services/main.tf#L391)
-- resource.aws_security_group.database (modules/aws/stages/app-services/main.tf#L562)
-- resource.aws_security_group.service (modules/aws/stages/app-services/main.tf#L509)
-- resource.aws_sns_topic.alarms (modules/aws/stages/app-services/main.tf#L853)
-- resource.aws_sns_topic_policy.alarms (modules/aws/stages/app-services/main.tf#L863)
-- resource.aws_sqs_queue.dlq (modules/aws/stages/app-services/main.tf#L777)
-- resource.aws_sqs_queue.service (modules/aws/stages/app-services/main.tf#L791)
-- resource.aws_sqs_queue_policy.tls_only (modules/aws/stages/app-services/main.tf#L832)
-- resource.aws_sqs_queue_redrive_allow_policy.dlq (modules/aws/stages/app-services/main.tf#L811)
-- resource.aws_vpc_security_group_egress_rule.service_https (modules/aws/stages/app-services/main.tf#L534)
-- resource.aws_vpc_security_group_egress_rule.service_to_db (modules/aws/stages/app-services/main.tf#L549)
-- resource.aws_vpc_security_group_ingress_rule.alb (modules/aws/stages/app-services/main.tf#L494)
-- resource.aws_vpc_security_group_ingress_rule.database_from_service (modules/aws/stages/app-services/main.tf#L574)
-- resource.aws_vpc_security_group_ingress_rule.service_from_alb (modules/aws/stages/app-services/main.tf#L520)
-- data source.aws_caller_identity.current (modules/aws/stages/app-services/main.tf#L152)
-- data source.aws_partition.current (modules/aws/stages/app-services/main.tf#L148)
+- resource.aws_cloudwatch_log_group.service (modules/aws/stages/app-services/main.tf#L216)
+- resource.aws_cloudwatch_metric_alarm.latency_p99 (modules/aws/stages/app-services/main.tf#L978)
+- resource.aws_ecs_cluster.this (modules/aws/stages/app-services/main.tf#L178)
+- resource.aws_iam_openid_connect_provider.github (modules/aws/stages/app-services/main.tf#L163)
+- resource.aws_iam_role.deploy (modules/aws/stages/app-services/main.tf#L407)
+- resource.aws_iam_role.execution (modules/aws/stages/app-services/main.tf#L245)
+- resource.aws_iam_role.task (modules/aws/stages/app-services/main.tf#L315)
+- resource.aws_iam_role_policy.deploy (modules/aws/stages/app-services/main.tf#L436)
+- resource.aws_iam_role_policy.execution (modules/aws/stages/app-services/main.tf#L256)
+- resource.aws_iam_role_policy.task (modules/aws/stages/app-services/main.tf#L326)
+- resource.aws_iam_role_policy.task_exec (modules/aws/stages/app-services/main.tf#L334)
+- resource.aws_iam_role_policy.task_queue (modules/aws/stages/app-services/main.tf#L357)
+- resource.aws_iam_role_policy_attachment.task (modules/aws/stages/app-services/main.tf#L394)
+- resource.aws_security_group.database (modules/aws/stages/app-services/main.tf#L565)
+- resource.aws_security_group.service (modules/aws/stages/app-services/main.tf#L512)
+- resource.aws_sns_topic.alarms (modules/aws/stages/app-services/main.tf#L856)
+- resource.aws_sns_topic_policy.alarms (modules/aws/stages/app-services/main.tf#L866)
+- resource.aws_sqs_queue.dlq (modules/aws/stages/app-services/main.tf#L780)
+- resource.aws_sqs_queue.service (modules/aws/stages/app-services/main.tf#L794)
+- resource.aws_sqs_queue_policy.tls_only (modules/aws/stages/app-services/main.tf#L835)
+- resource.aws_sqs_queue_redrive_allow_policy.dlq (modules/aws/stages/app-services/main.tf#L814)
+- resource.aws_vpc_security_group_egress_rule.service_https (modules/aws/stages/app-services/main.tf#L537)
+- resource.aws_vpc_security_group_egress_rule.service_to_db (modules/aws/stages/app-services/main.tf#L552)
+- resource.aws_vpc_security_group_ingress_rule.alb (modules/aws/stages/app-services/main.tf#L497)
+- resource.aws_vpc_security_group_ingress_rule.database_from_service (modules/aws/stages/app-services/main.tf#L577)
+- resource.aws_vpc_security_group_ingress_rule.service_from_alb (modules/aws/stages/app-services/main.tf#L523)
+- data source.aws_caller_identity.current (modules/aws/stages/app-services/main.tf#L155)
+- data source.aws_partition.current (modules/aws/stages/app-services/main.tf#L151)
 
 
 ## Inputs
@@ -126,7 +126,7 @@ The following resources are created:
 | <a name="input_alarm_topic_kms_key_arn"></a> [alarm\_topic\_kms\_key\_arn](#input\_alarm\_topic\_kms\_key\_arn) | CMK ARN encrypting the created alarm topic. null uses kms\_key\_arn. The key policy MUST allow the cloudwatch.amazonaws.com service principal kms:Decrypt and kms:GenerateDataKey* (CloudWatch cannot publish to a topic encrypted with the AWS-managed alias/aws/sns key, and alarms otherwise fail to notify silently). | `string` | `null` | no |
 | <a name="input_alb_access_logs_bucket"></a> [alb\_access\_logs\_bucket](#input\_alb\_access\_logs\_bucket) | S3 bucket for ALB access logs (prefix alb/<environment>). null disables access logging. The bucket policy must allow the regional ELB log-delivery principal. | `string` | `null` | no |
 | <a name="input_alb_certificate_arn"></a> [alb\_certificate\_arn](#input\_alb\_certificate\_arn) | ACM certificate ARN for an HTTPS :443 listener (HTTP :80 then redirects to it). null serves plain HTTP :80 — acceptable only for an internal ALB inside the private network. | `string` | `null` | no |
-| <a name="input_alb_enable_deletion_protection"></a> [alb\_enable\_deletion\_protection](#input\_alb\_enable\_deletion\_protection) | Deletion protection on the shared ALB. Set false only for ephemeral environments. | `bool` | `true` | no |
+| <a name="input_alb_enable_deletion_protection"></a> [alb\_enable\_deletion\_protection](#input\_alb\_enable\_deletion\_protection) | Deprecated: use enable\_alb\_deletion\_protection. Removed in v1.0. | `bool` | `null` | no |
 | <a name="input_alb_ingress_cidrs"></a> [alb\_ingress\_cidrs](#input\_alb\_ingress\_cidrs) | CIDRs allowed to reach the ALB listeners. Empty uses [vpc\_cidr]. | `list(string)` | `[]` | no |
 | <a name="input_alb_internal"></a> [alb\_internal](#input\_alb\_internal) | Whether the shared ALB is internal (default; reachable from the spoke and, via the TGW, the rest of the org). Internet exposure belongs at the edge (CloudFront + WAF); an internet-facing ALB here also needs public alb\_subnet\_ids. | `bool` | `true` | no |
 | <a name="input_alb_subnet_ids"></a> [alb\_subnet\_ids](#input\_alb\_subnet\_ids) | Subnet IDs for the shared ALB. Empty uses service\_subnet\_ids (an internal ALB in the private tier). An internet-facing ALB (alb\_internal = false) needs PUBLIC subnets here. | `list(string)` | `[]` | no |
@@ -135,6 +135,7 @@ The following resources are created:
 | <a name="input_create_github_oidc_provider"></a> [create\_github\_oidc\_provider](#input\_create\_github\_oidc\_provider) | Create the account-wide GitHub OIDC provider in this module. Default false: in baselined member accounts the tfc-oidc-baseline StackSet owns it and the apply boundary denies iam:CreateOpenIDConnectProvider. Set true only in an account outside that baseline. | `bool` | `false` | no |
 | <a name="input_database_subnet_ids"></a> [database\_subnet\_ids](#input\_database\_subnet\_ids) | Subnet IDs for Aurora DB subnet groups (aws-workload stage subnet\_ids\_by\_tier["isolated"] — no route off the VPC). At least two when any service enables a database. | `list(string)` | `[]` | no |
 | <a name="input_enable_alarms"></a> [enable\_alarms](#input\_enable\_alarms) | Create per-service CloudWatch alarms (CPU, memory, unhealthy targets, target 5xx, p99 latency, DLQ depth; thresholds and per-service opt-out in services[*].alarms). Only takes effect when services is non-empty. | `bool` | `true` | no |
+| <a name="input_enable_alb_deletion_protection"></a> [enable\_alb\_deletion\_protection](#input\_enable\_alb\_deletion\_protection) | Deletion protection on the shared ALB. Set false only for ephemeral environments. Null (default) uses the deprecated alb\_enable\_deletion\_protection input, else true. | `bool` | `null` | no |
 | <a name="input_enable_github_oidc"></a> [enable\_github\_oidc](#input\_enable\_github\_oidc) | Enable GitHub Actions OIDC deploy roles for services that set github. The roles trust the account's token.actions.githubusercontent.com provider, which the tfc-oidc-baseline StackSet creates (create\_github\_oidc\_provider there); set create\_github\_oidc\_provider here only for accounts outside that baseline. | `bool` | `false` | no |
 | <a name="input_github_oidc_provider_arn"></a> [github\_oidc\_provider\_arn](#input\_github\_oidc\_provider\_arn) | ARN of the existing token.actions.githubusercontent.com OIDC provider. Null (default) derives this account's provider ARN (arn:<partition>:iam::<account>:oidc-provider/token.actions.githubusercontent.com), the one the tfc-oidc-baseline StackSet creates. | `string` | `null` | no |
 | <a name="input_is_production"></a> [is\_production](#input\_is\_production) | Production environment: every service whose enable\_autoscaling is unset scales on CPU between autoscaling\_min\_capacity and autoscaling\_max\_capacity. An explicit enable\_autoscaling = false keeps a fixed task count. | `bool` | `false` | no |

@@ -39,6 +39,9 @@ data "aws_region" "current" {
 }
 
 locals {
+  # enable_deletion_protection replaces the deprecated delete_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.delete_protection, true)
+
   use_cmk = trimspace(var.kms_key_arn) != ""
 
   create_custom_rules = var.enable_network_firewall && trimspace(var.suricata_rules) != ""
@@ -184,7 +187,7 @@ resource "aws_networkfirewall_firewall" "this" {
 
   # Deletion protection on by default (CKV_AWS_344): a landing-zone inspection
   # firewall should not be torn down accidentally. Toggle off for teardown.
-  delete_protection = var.delete_protection
+  delete_protection = local.enable_deletion_protection
 
   dynamic "subnet_mapping" {
     for_each = toset(var.firewall_subnet_ids)

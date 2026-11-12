@@ -12,6 +12,9 @@
  */
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, true)
+
   vpc_sc = var.vpc_service_controls
 
   # Effective VPC-SC policies. There is no default egress rule: to be safe it
@@ -57,12 +60,12 @@ data "google_project" "host_project" {
 module "host" {
   source = "../net-spoke"
 
-  project_id          = var.host_project.project_id
-  project_prefix      = var.project_prefix
-  region              = var.host_project.region
-  deletion_protection = var.deletion_protection
-  labels              = var.labels
-  additional_regions  = var.network.additional_regions
+  project_id                 = var.host_project.project_id
+  project_prefix             = var.project_prefix
+  region                     = var.host_project.region
+  enable_deletion_protection = local.enable_deletion_protection
+  labels                     = var.labels
+  additional_regions         = var.network.additional_regions
 
   network = {
     name            = coalesce(var.network.name, "${var.project_prefix}-${var.environment}-vpc")
@@ -368,7 +371,7 @@ module "app_services" {
 
   services                       = local.app_services
   bootstrap_image                = var.app_platform.bootstrap_image
-  enable_deletion_protection     = var.deletion_protection
+  enable_deletion_protection     = local.enable_deletion_protection
   require_database_cmek          = var.app_platform.require_database_cmek
   artifact_registry_kms_key_name = var.app_platform.artifact_registry_kms_key_name
   enable_vulnerability_scanning  = var.app_platform.enable_vulnerability_scanning

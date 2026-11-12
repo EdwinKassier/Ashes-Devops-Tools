@@ -199,3 +199,30 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_networkfirewall_firewall.this"
   }
 }
+
+run "deprecated_delete_protection_alias_is_honoured" {
+  command = plan
+
+  variables {
+    delete_protection = false
+  }
+
+  assert {
+    condition     = aws_networkfirewall_firewall.this[0].delete_protection == false
+    error_message = "The deprecated delete_protection = false must still turn protection off."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = true
+    delete_protection          = false
+  }
+
+  assert {
+    condition     = aws_networkfirewall_firewall.this[0].delete_protection == true
+    error_message = "enable_deletion_protection = true must win over the deprecated delete_protection = false."
+  }
+}

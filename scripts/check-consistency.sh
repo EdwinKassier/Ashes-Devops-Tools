@@ -376,6 +376,13 @@ cj_pc="$(awk '/check-jsonschema$/{f=1} f && /rev:/{print $2; exit}' .pre-commit-
 grep -q 'check-jsonschema' scripts/setup.sh || note "scripts/setup.sh does not install check-jsonschema"
 [ -z "$cj_pc" ] || [ "$cj_pc" = "$cj_ci" ] || note "check-jsonschema: CI ${cj_ci}, pre-commit ${cj_pc}"
 
+echo "==> Deletion protection has one input name: enable_<thing>_deletion_protection"
+dp="$(grep -rnE --include='variables.tf' '^variable "(deletion_protection|delete_protection|[a-z_]+_enable_deletion_protection)"' envs modules | grep -v '/\.terraform/' || true)"
+dp_new="$(printf '%s\n' "${dp}" | while IFS=: read -r f n _; do
+  [[ -z "${f}" ]] || sed -n "${n},/^}/p" "${f}" | grep -q 'deprecated *=' || printf '%s\n' "${f}:${n}"
+done || true)"
+[[ -z "${dp_new}" ]] || note "deletion-protection input without the enable_ prefix and no deprecated marker: ${dp_new}"
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

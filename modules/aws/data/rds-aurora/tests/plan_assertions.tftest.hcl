@@ -164,3 +164,30 @@ run "org_backup_tag_opt_out" {
     error_message = "enable_org_backup = false must leave the backup tag off."
   }
 }
+
+run "deprecated_deletion_protection_alias_is_honoured" {
+  command = plan
+
+  variables {
+    deletion_protection = false
+  }
+
+  assert {
+    condition     = aws_rds_cluster.this.deletion_protection == false && length(terraform_data.deletion_guard) == 0
+    error_message = "The deprecated deletion_protection = false must still switch protection and the guard off."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = true
+    deletion_protection        = false
+  }
+
+  assert {
+    condition     = aws_rds_cluster.this.deletion_protection == true && length(terraform_data.deletion_guard) == 1
+    error_message = "enable_deletion_protection = true must win over the deprecated deletion_protection = false."
+  }
+}

@@ -176,10 +176,17 @@ variable "kms_key_arn" {
   default     = ""
 }
 
-variable "delete_protection" {
-  description = "Whether to enable deletion protection on the firewall. On by default so the inspection firewall is not torn down accidentally; set false to allow teardown."
+variable "enable_deletion_protection" {
+  description = "Whether to enable deletion protection on the firewall. On by default so the inspection firewall is not torn down accidentally; set false to allow teardown. Null (default) uses the deprecated delete_protection input, else true."
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "delete_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; delete_protection is removed in v1.0."
 }
 
 variable "region" {

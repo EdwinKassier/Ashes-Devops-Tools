@@ -196,10 +196,10 @@ run "optional_services_can_be_disabled" {
   command = plan
 
   variables {
-    deletion_protection     = true
-    nat                     = { enabled = false }
-    private_service_access  = { enabled = false }
-    private_service_connect = { enabled = false }
+    enable_deletion_protection = true
+    nat                        = { enabled = false }
+    private_service_access     = { enabled = false }
+    private_service_connect    = { enabled = false }
   }
 
   assert {
@@ -362,5 +362,32 @@ run "vpn_advertised_groups_reach_the_router" {
       [for r in module.vpn[0].router.bgp[0].advertised_ip_ranges : r.range] == ["10.10.0.0/16"]
     )
     error_message = "vpn.advertised_groups and advertised_ip_ranges must reach the HA VPN Cloud Router."
+  }
+}
+
+run "deprecated_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    deletion_protection = true
+  }
+
+  assert {
+    condition     = output.network_name == "hub-vpc-core"
+    error_message = "The deprecated deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+    deletion_protection        = true
+  }
+
+  assert {
+    condition     = output.network_name == "hub-vpc-core"
+    error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
   }
 }

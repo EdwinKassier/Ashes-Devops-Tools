@@ -194,7 +194,7 @@ variable "preferred_maintenance_window" {
   }
 }
 
-variable "deletion_protection" {
+variable "enable_deletion_protection" {
   description = <<-EOT
     Whether the cluster is protected from deletion. Secure default is true.
 
@@ -206,9 +206,18 @@ variable "deletion_protection" {
     cluster, first run:
       terraform state rm 'module.<name>.terraform_data.deletion_guard[0]'
     then set this to false and apply.
+
+    Null (default) uses the deprecated deletion_protection input, else true.
   EOT
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 variable "skip_final_snapshot" {

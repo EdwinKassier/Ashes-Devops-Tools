@@ -39,6 +39,9 @@
 # under mock_provider.
 
 locals {
+  # enable_alb_deletion_protection replaces the deprecated alb_enable_deletion_protection input; the new name wins.
+  enable_alb_deletion_protection = coalesce(var.enable_alb_deletion_protection, var.alb_enable_deletion_protection, true)
+
   enabled = length(var.services) > 0
 
   cluster_name = "${var.environment}-apps"
@@ -599,7 +602,7 @@ module "alb" {
   internal                   = var.alb_internal
   create_security_group      = true
   egress_cidr_blocks         = [var.vpc_cidr] # targets are Fargate tasks in this VPC
-  enable_deletion_protection = var.alb_enable_deletion_protection
+  enable_deletion_protection = local.enable_alb_deletion_protection
   drop_invalid_header_fields = true
 
   access_logs = var.alb_access_logs_bucket == null ? null : {
@@ -684,10 +687,10 @@ module "database" {
   master_user_secret_kms_key_id = var.kms_key_arn
   kms_key_id                    = var.kms_key_arn
 
-  backup_retention_period = each.value.database.backup_retention_period
-  deletion_protection     = each.value.database.deletion_protection
-  skip_final_snapshot     = each.value.database.skip_final_snapshot
-  enable_org_backup       = each.value.database.enable_org_backup
+  backup_retention_period    = each.value.database.backup_retention_period
+  enable_deletion_protection = each.value.database.deletion_protection
+  skip_final_snapshot        = each.value.database.skip_final_snapshot
+  enable_org_backup          = each.value.database.enable_org_backup
 
   tags = merge(var.tags, { Service = each.key })
 }

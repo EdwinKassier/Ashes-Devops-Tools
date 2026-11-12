@@ -310,3 +310,30 @@ run "environment_named_prod_without_flag_is_not_production" {
     error_message = "An environment named prod without is_production must keep a fixed task count."
   }
 }
+
+run "deprecated_app_alb_enable_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    app_alb_enable_deletion_protection = false
+  }
+
+  assert {
+    condition     = module.aws_workload.vpc_bpa_exclusion_enabled == false
+    error_message = "The deprecated app_alb_enable_deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_app_alb_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_app_alb_deletion_protection = true
+    app_alb_enable_deletion_protection = false
+  }
+
+  assert {
+    condition     = module.aws_workload.vpc_bpa_exclusion_enabled == false
+    error_message = "Setting enable_app_alb_deletion_protection together with the deprecated alias must still plan."
+  }
+}

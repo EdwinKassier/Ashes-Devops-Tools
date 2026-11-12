@@ -92,11 +92,17 @@ variable "labels" {
   nullable    = false
 }
 
-variable "deletion_protection" {
-  description = "Deletion protection for the network core, Cloud SQL and the GKE cluster."
+variable "enable_deletion_protection" {
+  description = "Deletion protection for the network core, Cloud SQL and the GKE cluster. Null (default) uses the deprecated deletion_protection input, else true."
   type        = bool
-  default     = true
-  nullable    = false
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 # --- Network --------------------------------------------------------------------
