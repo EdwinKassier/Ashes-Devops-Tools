@@ -54,6 +54,22 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
 - [ ] A Terraform Cloud organization with the GCP workspaces (`gcp-bootstrap`, `gcp-organization`, `gcp-guardrails`, `gcp-projects`, `gcp-network-hub` and one `gcp-workload-<env>` per environment). Create them with `envs/tfc-admin` (`gcp.enabled: true` in `config/landing-zone.yaml`, or `enable_gcp = true`; every cloud defaults to disabled). It creates `gcp-bootstrap` in **local** execution mode, so the phase-0 apply below runs on your machine with your ADC while TFC stores the state ([bootstrap runbook](../runbooks/bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass))
 
+### HCP Terraform tier and cost
+
+The landing zone uses these HCP Terraform features. Tiers were checked against HashiCorp's [pricing page](https://www.hashicorp.com/products/terraform/pricing) and [plan overview](https://developer.hashicorp.com/terraform/cloud-docs/overview) on 2026-11-12. The pricing page does not list most of them, so the overview and feature pages are the source. Confirm on the pricing page before you buy.
+
+| Feature | Used for | Where | Tier needed (checked 2026-11-12) |
+|---|---|---|---|
+| Teams with project-level custom permissions | Platform, approvers, security, viewers, state backup | tfc-admin `*_team_id` | Essentials or above. The overview lists Teams and Custom RBAC as not available on Free |
+| Two VCS-sourced OPA policy sets | Guardrails and the mandatory `destroy_guard` | tfc-admin `enable_policy_sets` (on by default for `standard` / `premium`) | Standard or Premium. The overview lists policy enforcement as not available on Free and Essentials |
+| Health assessments | Native drift detection | tfc-admin `enable_health_assessments` | Standard or Premium (the health assessments page) |
+| Agent pools | Node.js for Supabase vault secrets | `execution_mode = "agent"` | The documentation does not name a tier. Concurrent agent runs are listed on every tier (1 on Free and Essentials). Confirm on the pricing page |
+| Audit trail API | Daily export to WORM storage ([state backup](../runbooks/state-backup.md)) | `tfc-audit-trail` workflow | The overview lists audit logging as Premium only. The state backup runbook says Standard or Premium. Confirm on the pricing page |
+
+**Minimum for a production estate: Standard.** Free and Essentials can run the roots with `enable_policy_sets = false` and `enable_health_assessments = false`, but then no policy blocks a destructive change, and the Free tier has no teams at all. That is not a supported production setup. Set `org.tfc.plan` so tfc-admin picks the right defaults.
+
+**Cost.** Paid tiers bill per resource under management (RUM), rated per hour. The pricing page lists "starting at" prices of $0.10 (Essentials), $0.47 (Standard) and $0.99 (Premium) per resource per month, as checked on 2026-11-12. The Free tier is limited to 500 managed resources. Count your own resources from a sandbox apply: `terraform state list | wc -l` in each workspace. Until a sandbox has been applied the count is unknown ([known gaps](../known-gaps.md)).
+
 ---
 
 ## 1. Clone the Repository

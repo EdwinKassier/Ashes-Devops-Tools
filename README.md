@@ -47,6 +47,8 @@
 
 **Execution model:** Terraform Cloud owns all live state and applies. GitHub Actions validates every PR. Tags trigger release metadata — never direct applies.
 
+**HCP Terraform tier:** Standard or above for a production estate ([why](docs/guides/QUICK_START.md#hcp-terraform-tier-and-cost)).
+
 ---
 
 ## Quick Start

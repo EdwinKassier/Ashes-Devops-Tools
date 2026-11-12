@@ -284,12 +284,19 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   This is inherent to StackSets. The control is who can apply
   `aws-organization` (phase-0 role, policy sets, workspace access), not an SCP.
 
+- **Resources-under-management count unknown.** HCP Terraform bills paid
+  tiers per resource under management. Measure the count on the first sandbox
+  apply and publish per-root counts in
+  [QUICK_START](guides/QUICK_START.md#hcp-terraform-tier-and-cost).
+
 - **Essentials-plan support for VCS policy sets is unverified.** tfc-admin
   turns the policy sets on by default only for `org.tfc.plan` `standard` or
   `premium` (`envs/tfc-admin/config.tf`, `local.enable_policy_sets`). Whether
   HCP Terraform Essentials allows VCS-sourced OPA policy sets, and how many
-  policies it allows per set, has not been checked against the current HCP
-  pricing and limits. **Validate:** on an Essentials organization, create both
+  policies it allows per set, is not confirmed on a real organization. The
+  HCP Terraform plan overview (checked 2026-11-12) lists policy enforcement as
+  not available on Free and Essentials, but another HashiCorp page mentions a
+  Free policy set, so the two sources disagree. **Validate:** on an Essentials organization, create both
   sets; if they work, add `essentials` to the default list. Until then an
   Essentials estate sets `enable_policy_sets = true` itself, or runs without
   the destroy guard (the `destructive_changes_guarded` check warns).
