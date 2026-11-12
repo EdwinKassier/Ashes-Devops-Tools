@@ -580,6 +580,11 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   TLS 1.0/1.1-only clients can no longer connect. The production profile sets the org policy
   `gcp.restrictTLSVersion` (denies `TLS_VERSION_1`, `TLS_VERSION_1_1`); opt out with
   `gcp_overrides.restrict_tls_versions = false`. See `UPGRADING.md`.
+- **TLS 1.2 minimum on the cdn and internal-lb modules (breaking, CMP-5).** `modules/gcp/network/cdn`
+  and the L7 HTTPS path of `modules/gcp/network/internal-lb` create a `MODERN` SSL policy with a
+  TLS 1.2 minimum and set it on the HTTPS proxy (inputs `ssl_policy_id`, `min_tls_version`,
+  `ssl_policy_profile`, as in `app-ingress`). TLS 1.0/1.1-only clients can no longer connect.
+  See `UPGRADING.md`.
 - **Hardened audit store for regulated GCP estates (CMP-4).** A `gcp.environments` entry with
   `compliance_class: regulated` fails the `gcp-organization` plan until `gcp.logging_project_id`,
   `gcp.logging_project_number` (not the admin project) and `gcp.enable_audit_bucket_lock: true` are

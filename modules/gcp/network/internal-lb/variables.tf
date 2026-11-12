@@ -278,6 +278,34 @@ variable "ssl_certificates" {
   default     = []
 }
 
+variable "ssl_policy_id" {
+  description = "Optional SSL policy ID (self_link) for the HTTPS proxy, used as is. Null creates a MODERN TLS 1.2 policy (min_tls_version, ssl_policy_profile) in var.region, only for the L7 HTTPS proxy (is_l7 and enable_ssl)."
+  type        = string
+  default     = null
+}
+
+variable "min_tls_version" {
+  description = "Minimum TLS version of the SSL policy this module creates when ssl_policy_id is null."
+  type        = string
+  default     = "TLS_1_2"
+
+  validation {
+    condition     = contains(["TLS_1_2", "TLS_1_3"], var.min_tls_version)
+    error_message = "min_tls_version must be TLS_1_2 or TLS_1_3."
+  }
+}
+
+variable "ssl_policy_profile" {
+  description = "Profile of the created SSL policy: MODERN (default) or RESTRICTED (required for TLS_1_3)."
+  type        = string
+  default     = "MODERN"
+
+  validation {
+    condition     = contains(["MODERN", "RESTRICTED"], var.ssl_policy_profile) && (var.min_tls_version != "TLS_1_3" || var.ssl_policy_profile == "RESTRICTED")
+    error_message = "ssl_policy_profile must be MODERN or RESTRICTED, and RESTRICTED when min_tls_version is TLS_1_3."
+  }
+}
+
 # -----------------------------------------------------------------------------
 # Logging & Firewall
 # -----------------------------------------------------------------------------

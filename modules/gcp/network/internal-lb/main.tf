@@ -170,6 +170,20 @@ resource "google_compute_region_target_http_proxy" "http_proxy" {
   url_map = google_compute_region_url_map.url_map[0].self_link
 }
 
+# TLS floor of the L7 HTTPS proxy when the caller passes no SSL policy.
+# Without one, the proxy uses Google's default COMPATIBLE profile, which accepts
+# TLS 1.0 and 1.1 and older cipher suites.
+resource "google_compute_region_ssl_policy" "this" {
+  count = var.is_l7 && var.enable_ssl && var.ssl_policy_id == null ? 1 : 0
+
+  project         = var.project_id
+  name            = "${var.name}-tls"
+  region          = var.region
+  description     = "TLS ${replace(trimprefix(var.min_tls_version, "TLS_"), "_", ".")} minimum for ${var.name} (internal-lb)."
+  profile         = var.ssl_policy_profile
+  min_tls_version = var.min_tls_version
+}
+
 resource "google_compute_region_target_https_proxy" "https_proxy" {
   count = var.is_l7 && var.enable_ssl ? 1 : 0
 
@@ -178,6 +192,9 @@ resource "google_compute_region_target_https_proxy" "https_proxy" {
   region           = var.region
   url_map          = google_compute_region_url_map.url_map[0].self_link
   ssl_certificates = var.ssl_certificates
+
+  # A caller-supplied policy wins; else the TLS-floor policy above.
+  ssl_policy = var.ssl_policy_id != null ? var.ssl_policy_id : google_compute_region_ssl_policy.this[0].id
 }
 
 # -----------------------------------------------------------------------------

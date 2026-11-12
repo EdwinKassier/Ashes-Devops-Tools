@@ -159,13 +159,14 @@ The following resources are created:
 
 
 - resource.google_compute_address.internal_ip (modules/gcp/network/internal-lb/main.tf#L14)
-- resource.google_compute_firewall.allow_proxy (modules/gcp/network/internal-lb/main.tf#L221)
-- resource.google_compute_forwarding_rule.forwarding_rule (modules/gcp/network/internal-lb/main.tf#L187)
+- resource.google_compute_firewall.allow_proxy (modules/gcp/network/internal-lb/main.tf#L238)
+- resource.google_compute_forwarding_rule.forwarding_rule (modules/gcp/network/internal-lb/main.tf#L204)
 - resource.google_compute_health_check.health_check (modules/gcp/network/internal-lb/main.tf#L34)
-- resource.google_compute_network_firewall_policy_rule.allow_proxy (modules/gcp/network/internal-lb/main.tf#L257)
+- resource.google_compute_network_firewall_policy_rule.allow_proxy (modules/gcp/network/internal-lb/main.tf#L274)
 - resource.google_compute_region_backend_service.backend (modules/gcp/network/internal-lb/main.tf#L85)
+- resource.google_compute_region_ssl_policy.this (modules/gcp/network/internal-lb/main.tf#L176)
 - resource.google_compute_region_target_http_proxy.http_proxy (modules/gcp/network/internal-lb/main.tf#L164)
-- resource.google_compute_region_target_https_proxy.https_proxy (modules/gcp/network/internal-lb/main.tf#L173)
+- resource.google_compute_region_target_https_proxy.https_proxy (modules/gcp/network/internal-lb/main.tf#L187)
 - resource.google_compute_region_url_map.url_map (modules/gcp/network/internal-lb/main.tf#L126)
 
 
@@ -208,11 +209,14 @@ The following resources are created:
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the forwarding rule | `map(string)` | `{}` | no |
 | <a name="input_locality_lb_policy"></a> [locality\_lb\_policy](#input\_locality\_lb\_policy) | Locality load balancing policy for the backend service. Valid values: ROUND\_ROBIN, LEAST\_REQUEST, RING\_HASH, RANDOM, ORIGINAL\_DESTINATION, MAGLEV. | `string` | `"ROUND_ROBIN"` | no |
 | <a name="input_log_sample_rate"></a> [log\_sample\_rate](#input\_log\_sample\_rate) | Sample rate for access logs (0.0 to 1.0) | `number` | `1` | no |
+| <a name="input_min_tls_version"></a> [min\_tls\_version](#input\_min\_tls\_version) | Minimum TLS version of the SSL policy this module creates when ssl\_policy\_id is null. | `string` | `"TLS_1_2"` | no |
 | <a name="input_path_matchers"></a> [path\_matchers](#input\_path\_matchers) | Path matchers for URL mapping (L7 load balancers only).<br/>Every path\_matcher name referenced in host\_rules must have a corresponding entry here. | <pre>list(object({<br/>    name            = string<br/>    default_service = string<br/>    path_rules = optional(list(object({<br/>      paths   = list(string)<br/>      service = string<br/>    })))<br/>  }))</pre> | `[]` | no |
 | <a name="input_port_range"></a> [port\_range](#input\_port\_range) | Port range for the forwarding rule (e.g., '80' or '8080-8090') | `string` | `"80"` | no |
 | <a name="input_proxy_only_subnet_ranges"></a> [proxy\_only\_subnet\_ranges](#input\_proxy\_only\_subnet\_ranges) | CIDR ranges for proxy-only subnets | `list(string)` | `[]` | no |
 | <a name="input_session_affinity"></a> [session\_affinity](#input\_session\_affinity) | Session affinity for the backend service. Valid values: NONE, CLIENT\_IP, GENERATED\_COOKIE. | `string` | `"NONE"` | no |
 | <a name="input_ssl_certificates"></a> [ssl\_certificates](#input\_ssl\_certificates) | List of SSL certificate self\_links (for HTTPS) | `list(string)` | `[]` | no |
+| <a name="input_ssl_policy_id"></a> [ssl\_policy\_id](#input\_ssl\_policy\_id) | Optional SSL policy ID (self\_link) for the HTTPS proxy, used as is. Null creates a MODERN TLS 1.2 policy (min\_tls\_version, ssl\_policy\_profile) in var.region, only for the L7 HTTPS proxy (is\_l7 and enable\_ssl). | `string` | `null` | no |
+| <a name="input_ssl_policy_profile"></a> [ssl\_policy\_profile](#input\_ssl\_policy\_profile) | Profile of the created SSL policy: MODERN (default) or RESTRICTED (required for TLS\_1\_3). | `string` | `"MODERN"` | no |
 
 ## Outputs
 

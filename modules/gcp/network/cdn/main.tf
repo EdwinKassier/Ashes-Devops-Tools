@@ -70,16 +70,33 @@ resource "google_compute_url_map" "default" {
   default_service = google_compute_backend_service.default.id
 }
 
-# 5. Target HTTPS Proxy
+# 5. SSL policy: the TLS floor of the HTTPS proxy when the caller passes none.
+# Without one, the proxy uses Google's default COMPATIBLE profile, which accepts
+# TLS 1.0 and 1.1 and older cipher suites.
+resource "google_compute_ssl_policy" "this" {
+  count = var.ssl_policy_id == null ? 1 : 0
+
+  provider        = google
+  project         = var.project_id
+  name            = "${var.lb_name}-tls"
+  description     = "TLS ${replace(trimprefix(var.min_tls_version, "TLS_"), "_", ".")} minimum for ${var.lb_name} (cdn)."
+  profile         = var.ssl_policy_profile
+  min_tls_version = var.min_tls_version
+}
+
+# 6. Target HTTPS Proxy
 resource "google_compute_target_https_proxy" "default" {
   provider         = google
   project          = var.project_id
   name             = "${var.lb_name}-https-proxy"
   url_map          = google_compute_url_map.default.id
   ssl_certificates = local.create_ssl ? [google_compute_managed_ssl_certificate.default[0].id] : []
+
+  # A caller-supplied policy wins; else the TLS-floor policy above.
+  ssl_policy = var.ssl_policy_id != null ? var.ssl_policy_id : google_compute_ssl_policy.this[0].id
 }
 
-# 6. Global Forwarding Rule
+# 7. Global Forwarding Rule
 resource "google_compute_global_forwarding_rule" "default" {
   provider              = google
   project               = var.project_id
@@ -95,7 +112,7 @@ resource "google_compute_global_forwarding_rule" "default" {
 # HTTP TO HTTPS REDIRECT (Optional but recommended)
 # =============================================================================
 
-# 7. URL Map for HTTP redirect
+# 8. URL Map for HTTP redirect
 resource "google_compute_url_map" "redirect" {
   count    = var.enable_http_redirect ? 1 : 0
   provider = google
@@ -109,7 +126,7 @@ resource "google_compute_url_map" "redirect" {
   }
 }
 
-# 8. HTTP Target Proxy for redirect
+# 9. HTTP Target Proxy for redirect
 resource "google_compute_target_http_proxy" "redirect" {
   count    = var.enable_http_redirect ? 1 : 0
   provider = google
@@ -118,7 +135,7 @@ resource "google_compute_target_http_proxy" "redirect" {
   url_map  = google_compute_url_map.redirect[0].id
 }
 
-# 9. HTTP Forwarding Rule for redirect
+# 10. HTTP Forwarding Rule for redirect
 resource "google_compute_global_forwarding_rule" "http_redirect" {
   count                 = var.enable_http_redirect ? 1 : 0
   provider              = google
