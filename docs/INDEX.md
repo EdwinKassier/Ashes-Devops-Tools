@@ -97,6 +97,7 @@ make plan-gcp-workload APP_ENV=dev
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
 - [Incident Response](runbooks/incident-response.md): quarantine and forensics flow via SCC + VPC-SC
+- [Regulatory Notification](runbooks/regulatory-notification.md): GDPR, DORA, NIS2, HIPAA, PCI and SEC breach-notification deadlines and procedure
 - [Teardown](runbooks/teardown.md): reverse-order destroy, `prevent_destroy` and CMEK caveats
 - [GCP Workspace Rename](runbooks/gcp-workspace-rename.md): migrate live TFC workspaces to the `gcp-organization` / `gcp-workload-<env>` names
 

@@ -34,6 +34,12 @@ We will coordinate public disclosure with you. If you prefer to remain anonymous
 
 ---
 
+## Operators: Regulatory Notification
+
+If you run this landing zone and an incident involves personal data, health data, card data or a regulated service, notification deadlines can start before the investigation ends. See the [regulatory notification runbook](docs/runbooks/regulatory-notification.md). It is a working summary, not legal advice.
+
+---
+
 ## Security Architecture
 
 This landing zone implements defense-in-depth across every layer:

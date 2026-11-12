@@ -214,7 +214,7 @@ building this matrix.
 | Identity lifecycle | Identity provider (Cloud Identity / Workspace, Identity Center external IdP), **MFA enforcement for humans**, joiner/mover/leaver workflow, group membership | CC6.2, CC6.3 | A.5.16, A.5.18, A.8.5 | AC-2, IA-2(1), IA-2(2) |
 | Access reviews | Periodic user and privileged access reviews (Access Analyzer and the IAM-02 role matrix are inputs, not the review) | CC6.2, CC6.3 | A.5.18, A.8.2 | AC-2(3), AC-6(7) |
 | Break-glass procedure | Credential custody, quarterly test, post-use review and rotation ([GCP](../runbooks/break-glass.md), [AWS](../runbooks/aws-break-glass.md) runbooks exist) | CC6.1, CC7.4 | A.8.2, A.5.26 | AC-2, IR-4 |
-| Incident response | IR plan, on-call, triage SLAs, tabletop exercises, breach notification; route LOG-05 and LOG-10 alerts to a staffed channel | CC7.3–CC7.5 | A.5.24–A.5.28, A.6.8 | IR-1–IR-8 |
+| Incident response | IR plan, on-call, triage SLAs, tabletop exercises, breach notification (deadlines and a procedure: [regulatory notification runbook](../runbooks/regulatory-notification.md)); route LOG-05 and LOG-10 alerts to a staffed channel | CC7.3–CC7.5 | A.5.24–A.5.28, A.6.8 | IR-1–IR-8 |
 | Business continuity and DR | BIA, RTO/RPO, DR plan, **DR failover tests** (BCK-02 restore testing covers only backup restorability, single region) | A1.2, A1.3, CC9.1 | A.5.29, A.5.30, A.8.14 | CP-2, CP-4, CP-6, CP-7 |
 | Vulnerability remediation | SLAs and tracking for Inspector, Security Hub, SCC and Trivy findings; penetration testing | CC7.1 | A.8.8 | RA-5, SI-2, CA-8 |
 | Vendor management | Third-party risk for GCP, AWS, HashiCorp, GitHub, Supabase and Vercel; review their SOC 2 reports and your shared-responsibility mapping | CC9.2 | A.5.19–A.5.22 | SR-x, SA-9 |

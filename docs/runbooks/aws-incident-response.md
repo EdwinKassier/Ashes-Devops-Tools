@@ -98,12 +98,13 @@ Only after forensic copies are confirmed:
 
 ## Step 6 — Post-incident review
 
-Within 24 hours, document timeline, root cause, blast radius, and remediation. Confirm the quarantine SG, snapshots, and forensic copies are all accounted for and that no evidence was destroyed. If break-glass access was used, cross-check it per [`aws-break-glass.md`](aws-break-glass.md).
+Within 24 hours, document timeline, root cause, blast radius, and remediation. Confirm the quarantine SG, snapshots, and forensic copies are all accounted for and that no evidence was destroyed. If break-glass access was used, cross-check it per [`aws-break-glass.md`](aws-break-glass.md). If personal data, health data, card data or a regulated service was affected, a legal notification clock may already be running: follow [`regulatory-notification.md`](regulatory-notification.md).
 
 ---
 
 ## See also
 
 - [AWS Landing Zone](../architecture/aws-landing-zone.md#incident-response--forensics) — where incident-response sits in the SRA.
+- [Regulatory incident and breach notification](regulatory-notification.md) — GDPR, DORA, NIS2, HIPAA, PCI and SEC deadlines and who decides.
 - [AWS Break-Glass](aws-break-glass.md) — emergency access if normal paths are down.
 - [AWS Teardown](aws-teardown.md) — backup/log immutability that affects recovery.
