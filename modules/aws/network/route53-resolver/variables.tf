@@ -10,7 +10,7 @@ variable "name_prefix" {
 }
 
 variable "vpc_id" {
-  description = "ID of the VPC that resolver rules, DNS firewall, query logging, DNSSEC, and the Route 53 Profile are associated with."
+  description = "ID of the VPC that hosts the resolver endpoints and that the resolver rules, DNS firewall, query logging and DNSSEC are associated with. Other VPCs get the same rules, firewall and zones by associating the shared Route 53 Profile."
   type        = string
 
   validation {
@@ -19,35 +19,69 @@ variable "vpc_id" {
   }
 }
 
+variable "enable_resolver_endpoints" {
+  description = "Create the inbound and outbound Resolver endpoints (2 ENIs each, about USD 365 per month together). Needed for on-premises resolution in either direction and for forward_rules. Default false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "subnet_ids" {
-  description = "Subnet IDs the inbound and outbound resolver endpoints place IPs in. At least two are required (one per AZ) because the endpoint ip_address block enforces a minimum of two entries."
+  description = "Subnet IDs (one per AZ, at least two) for the endpoint IPs. Required when enable_resolver_endpoints is true."
   type        = list(string)
-  default     = ["subnet-aaaa", "subnet-bbbb"]
+  default     = []
+  nullable    = false
 
   validation {
-    condition     = length(var.subnet_ids) >= 2
-    error_message = "subnet_ids must contain at least two subnets (resolver endpoints require a minimum of two IP addresses)."
+    condition     = !var.enable_resolver_endpoints || length(var.subnet_ids) >= 2
+    error_message = "subnet_ids must contain at least two subnets when enable_resolver_endpoints is true (resolver endpoints require a minimum of two IP addresses)."
   }
 }
 
 variable "security_group_ids" {
-  description = "Security group IDs attached to the inbound and outbound resolver endpoints. At least one is required by the resolver endpoint resource."
+  description = "Security groups for the resolver endpoints. Empty (default) = a module-owned group that admits DNS (TCP and UDP 53) from allowed_cidrs. The provider replaces an endpoint when its security groups change."
   type        = list(string)
-  default     = ["sg-aaaaaaaaaaaaaaaaa"]
+  default     = []
+  nullable    = false
+}
+
+variable "allowed_cidrs" {
+  description = "CIDRs that may send DNS (TCP and UDP 53) to the inbound endpoint when the module owns the security group (for example the org supernet and the on-premises ranges). Required when enable_resolver_endpoints is true and security_group_ids is empty."
+  type        = list(string)
+  default     = []
+  nullable    = false
 
   validation {
-    condition     = length(var.security_group_ids) >= 1
-    error_message = "security_group_ids must contain at least one security group (resolver endpoints require a minimum of one)."
+    condition     = alltrue([for c in var.allowed_cidrs : can(cidrnetmask(c))])
+    error_message = "allowed_cidrs entries must be IPv4 CIDR blocks."
+  }
+
+  validation {
+    condition     = !var.enable_resolver_endpoints || length(var.security_group_ids) > 0 || length(var.allowed_cidrs) > 0
+    error_message = "allowed_cidrs must not be empty when enable_resolver_endpoints is true and security_group_ids is empty: the module-owned security group would admit no DNS."
   }
 }
 
 variable "forward_rules" {
-  description = "FORWARD resolver rules keyed by rule name. Each rule forwards domain_name to target_ips via the outbound endpoint and is associated with the VPC."
+  description = "FORWARD resolver rules keyed by rule name. Each rule forwards domain_name to target_ips via the outbound endpoint, is associated with the VPC and is added to the Route 53 Profile. Needs enable_resolver_endpoints = true."
   type = map(object({
     domain_name = string
     target_ips  = list(string)
   }))
-  default = {}
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = length(var.forward_rules) == 0 || var.enable_resolver_endpoints
+    error_message = "forward_rules need the outbound endpoint: set enable_resolver_endpoints = true."
+  }
+}
+
+variable "profile_hosted_zone_arns" {
+  description = "Private hosted zones to add to the Route 53 Profile, keyed by a plan-known name. Every VPC that associates the profile resolves them."
+  type        = map(string)
+  default     = {}
+  nullable    = false
 }
 
 variable "org_arn" {

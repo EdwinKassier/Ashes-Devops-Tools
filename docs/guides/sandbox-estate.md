@@ -155,7 +155,8 @@ if you need one.
 The **platform team owns the sandbox bill**. It is a platform cost centre
 (`cost_center: platform-sandbox`), not charged back to any workload team. The `starter`
 profile keeps the idle cost low, because it drops Network Firewall, Security Lake, Macie and
-record-all Config. Every preventive control stays.
+record-all Config. The Route 53 Resolver endpoints (about USD 365 per month) are off in every
+profile unless the VPN is on. Every preventive control stays.
 
 ## Teardown
 

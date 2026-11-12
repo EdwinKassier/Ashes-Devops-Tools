@@ -221,9 +221,15 @@ variable "enable_vpn" {
   nullable    = false
 }
 
+variable "enable_resolver_endpoints" {
+  description = "Create the Route 53 Resolver inbound and outbound endpoints in the egress VPC (about USD 365 per month). Their security group admits DNS from top_cidr and vpn.onprem_cidrs. Null (default) = on only when enable_vpn is true, because only on-premises resolution needs them."
+  type        = bool
+  default     = null
+}
+
 variable "vpn" {
   description = <<-EOT
-    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN (not the transit gateway's 64512). static_routes_only = true uses static routing: then onprem_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate and onprem_cidrs is ignored. tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared_key_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state).
+    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN (not the transit gateway's 64512). static_routes_only = true uses static routing: then onprem_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate and onprem_cidrs is used only to admit on-premises DNS to the inbound Resolver endpoint (list the on-premises resolver ranges there). tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared_key_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state).
   EOT
   type = object({
     customer_gateway_ip      = optional(string)

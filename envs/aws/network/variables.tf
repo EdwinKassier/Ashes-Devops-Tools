@@ -311,6 +311,12 @@ variable "enable_vpn" {
   default     = null
 }
 
+variable "enable_resolver_endpoints" {
+  description = "Create the Route 53 Resolver inbound and outbound endpoints in the egress VPC (about USD 365 per month). Null = aws.network.resolver_endpoints.enabled from config/landing-zone.yaml, else on only when the VPN is on."
+  type        = bool
+  default     = null
+}
+
 variable "vpn" {
   description = "Site-to-Site VPN settings (customer_gateway_ip, customer_gateway_bgp_asn, static_routes_only, onprem_cidrs, tunnel_inside_cidrs, enable_acceleration, preshared_key_storage), used only when the VPN is enabled. Null = aws.network.vpn from config/landing-zone.yaml. The tunnel pre-shared keys are never set here: AWS stores them in Secrets Manager."
   # Untyped so this variable and the config-file value (JSON text) share one

@@ -383,13 +383,20 @@ aws:
     # the aws-network output vpn_preshared_key_arn names it). On-premises traffic
     # is inspected: it default-routes to the inspection VPC. With
     # static_routes_only, onprem_cidrs lists the on-premises prefixes (BGP learns
-    # them otherwise). The BGP ASN must differ from the transit gateway's 64512.
+    # them otherwise). With BGP too, list the on-premises resolver ranges in
+    # onprem_cidrs: they are admitted to the inbound Resolver endpoint. The BGP
+    # ASN must differ from the transit gateway's 64512.
     # vpn:
     #   enabled: false
     #   customer_gateway_ip: 203.0.113.10
     #   customer_gateway_bgp_asn: 65000
     #   static_routes_only: false
     #   onprem_cidrs: [192.168.0.0/16]
+    # Route 53 Resolver inbound and outbound endpoints in the egress VPC (about
+    # USD 365 per month). They are needed only for on-premises DNS in either
+    # direction. Unset = on only when vpn.enabled is true.
+    # resolver_endpoints:
+    #   enabled: false
     # Workload spokes wired into the hub (aws-network): accepted, associated with
     # their segment table (prod | nonprod; 0.0.0.0/0 goes to inspection) and
     # propagated into the inspection table. Until a spoke is listed it has NO

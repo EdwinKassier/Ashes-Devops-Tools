@@ -169,3 +169,45 @@ run "spoke_routes_stay_default_to_inspection" {
     error_message = "Spoke segments must keep default-routing to inspection so return traffic to on-premises is inspected."
   }
 }
+
+run "resolver_endpoints_follow_the_vpn" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn = {
+      customer_gateway_ip = "203.0.113.10"
+      static_routes_only  = true
+      onprem_cidrs        = ["192.168.0.0/16"]
+    }
+  }
+
+  assert {
+    condition     = local.enable_resolver_endpoints && local.resolver_allowed_cidrs == tolist(["10.0.0.0/8", "192.168.0.0/16"])
+    error_message = "With the VPN on, the resolver endpoints must be on and admit DNS from top_cidr and the on-premises prefixes."
+  }
+}
+
+run "resolver_endpoints_off_without_the_vpn" {
+  command = plan
+
+  assert {
+    condition     = !local.enable_resolver_endpoints
+    error_message = "Without the VPN the resolver endpoints (about USD 365 per month) must be off by default (ARC-21)."
+  }
+}
+
+run "resolver_endpoints_explicit_override" {
+  command = plan
+
+  variables {
+    enable_vpn                = true
+    vpn                       = { customer_gateway_ip = "203.0.113.10" }
+    enable_resolver_endpoints = false
+  }
+
+  assert {
+    condition     = !local.enable_resolver_endpoints
+    error_message = "An explicit enable_resolver_endpoints = false must win over the VPN default."
+  }
+}

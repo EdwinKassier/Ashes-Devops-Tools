@@ -627,6 +627,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   zone names in each account, so spokes can land in the hub's physical zones. aws-workload gains
   `az_count`. An eu-west-2 estate on the defaults plans no change. The roots now read
   `data.aws_availability_zones` at plan. See `UPGRADING.md`.
+- **Route 53 Resolver endpoints are opt-in, and the profile is valid (ARC-6, ARC-21, breaking).**
+  The resolver module listed the egress VPC as a Route 53 Profile resource, which the API
+  rejects, and its endpoints used a placeholder security group, so the first real `aws-network`
+  apply failed. The endpoints (about USD 365 per month) are now created only with
+  `enable_resolver_endpoints` (aws-network: `aws.network.resolver_endpoints.enabled`, else on only
+  with the VPN), with a module-owned security group that admits DNS from `allowed_cidrs` and sends
+  DNS only to the forward targets. The profile now carries the DNS Firewall rule group, the
+  forward rules and `profile_hosted_zone_arns`. `forward_rules` need the endpoints. New outputs
+  `inbound_endpoint_ips` / `resolver_inbound_endpoint_ips`. See `UPGRADING.md`.
 - **AZs from another region fail at plan (ARC-3).** `modules/aws/network/vpc` now fails the plan
   when an availability zone name does not start with `region`. Before, the default
   `eu-west-2a`/`eu-west-2b` zones reached every subnet in another region and the apply failed with

@@ -892,6 +892,56 @@ databases). Setting IDs is opt-in; nothing sets them for you.
    zones it uses today. Plan again: it must show no subnet change.
 3. New workloads with no per-environment IDs then land in the hub's zones.
 
+#### Route 53 Resolver endpoints are opt-in; the profile carries DNS settings, not a VPC (aws-network)
+
+**Breaking for direct callers of `modules/aws/network/route53-resolver`.**
+
+- The inbound and outbound Resolver endpoints are now created only with
+  `enable_resolver_endpoints = true` (default `false`). In aws-network they
+  follow `aws.network.resolver_endpoints.enabled`, else they are on only when
+  the VPN is on (`enable_resolver_endpoints` on the root and the stage wins).
+- `subnet_ids` and `security_group_ids` now default to `[]`. The old
+  defaults were placeholders (`subnet-aaaa`, `sg-aaaaaaaaaaaaaaaaa`), and
+  aws-network never passed a security group, so the endpoints could not be
+  created. With `security_group_ids` empty the module now owns a security
+  group that admits DNS (TCP and UDP 53) from the new input `allowed_cidrs`
+  and sends DNS only to the `forward_rules` target IPs. aws-network passes
+  `top_cidr` and `vpn.onprem_cidrs`. With BGP, list the on-premises resolver
+  ranges in `vpn.onprem_cidrs` too, or they cannot query the inbound
+  endpoint.
+- `forward_rules` now need `enable_resolver_endpoints = true` (the plan fails
+  otherwise), and each rule is also added to the Route 53 Profile.
+- The profile no longer lists the egress VPC as a resource
+  (`aws_route53profiles_resource_association.vpc`). The Route 53 Profiles API
+  accepts only private hosted zones, DNS Firewall rule groups, Resolver rules
+  and interface VPC endpoints as profile resources, so that association could
+  not be created. The profile now carries the DNS Firewall rule group
+  (priority 101), the forward rules and the zones in the new input
+  `profile_hosted_zone_arns`.
+- `inbound_endpoint_id` and `outbound_endpoint_id` are null when the endpoints
+  are off. New outputs: `inbound_endpoint_ips` (module),
+  `resolver_inbound_endpoint_ips` and `resolver_endpoints_enabled` (stage),
+  and `resolver_inbound_endpoint_ips` (aws-network).
+
+What the plan shows on an existing aws-network estate:
+
+- Nothing changes for the endpoints. They could not be created before, so no
+  live endpoint is removed. If an estate does hold an endpoint in state, the
+  `moved` blocks keep its address, and with the VPN off it is now destroyed:
+  set `aws.network.resolver_endpoints.enabled: true` first to keep it.
+- A `aws_route53profiles_resource_association.vpc` in state (normally none, the
+  API rejected it) is destroyed.
+- The DNS Firewall rule group is added to the profile (create only).
+
+Replacement and outage window: an endpoint's security groups are ForceNew in
+the aws provider (checked in v6.72.0). An endpoint that is in state with other
+security groups (for example one created outside this module's defaults) is
+replaced when it moves to the module-owned group. The new inbound endpoint gets
+new IP addresses: on-premises resolvers that forward to the old IPs fail until
+you point them at `resolver_inbound_endpoint_ips`. The new outbound endpoint is
+replaced in the same apply, and forward rules fail between the destroy and the
+create. Do this in a change window.
+
 #### Access Analyzer in every enabled region (aws-security)
 
 The external analyzer now exists in every `aws.enabled_regions` entry (the home

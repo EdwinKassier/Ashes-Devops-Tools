@@ -41,3 +41,59 @@ run "query_logging_enabled_without_destination_rejected" {
 
   expect_failures = [var.query_log_destination_arn]
 }
+
+run "forward_rules_need_endpoints" {
+  command = plan
+
+  variables {
+    vpc_id                    = "vpc-0123456789abcdef0"
+    org_arn                   = "arn:aws:organizations::111111111111:organization/o-abc1234567"
+    query_log_destination_arn = "arn:aws:s3:::example-log-archive"
+    forward_rules             = { corp = { domain_name = "corp.example.", target_ips = ["192.168.0.10"] } }
+  }
+
+  expect_failures = [var.forward_rules]
+}
+
+run "enabled_endpoints_need_two_subnets" {
+  command = plan
+
+  variables {
+    vpc_id                    = "vpc-0123456789abcdef0"
+    org_arn                   = "arn:aws:organizations::111111111111:organization/o-abc1234567"
+    query_log_destination_arn = "arn:aws:s3:::example-log-archive"
+    enable_resolver_endpoints = true
+    subnet_ids                = ["subnet-0a"]
+    allowed_cidrs             = ["10.64.0.0/10"]
+  }
+
+  expect_failures = [var.subnet_ids]
+}
+
+run "enabled_endpoints_need_a_source" {
+  # A module-owned group with no allowed_cidrs would admit nothing.
+  command = plan
+
+  variables {
+    vpc_id                    = "vpc-0123456789abcdef0"
+    org_arn                   = "arn:aws:organizations::111111111111:organization/o-abc1234567"
+    query_log_destination_arn = "arn:aws:s3:::example-log-archive"
+    enable_resolver_endpoints = true
+    subnet_ids                = ["subnet-0a", "subnet-0b"]
+  }
+
+  expect_failures = [var.allowed_cidrs]
+}
+
+run "allowed_cidrs_must_be_cidrs" {
+  command = plan
+
+  variables {
+    vpc_id                    = "vpc-0123456789abcdef0"
+    org_arn                   = "arn:aws:organizations::111111111111:organization/o-abc1234567"
+    query_log_destination_arn = "arn:aws:s3:::example-log-archive"
+    allowed_cidrs             = ["not-a-cidr"]
+  }
+
+  expect_failures = [var.allowed_cidrs]
+}

@@ -14,7 +14,7 @@ output "inspection_vpc_id" {
 }
 
 output "egress_vpc_id" {
-  description = "The ID of the centralized egress VPC that hosts NAT, interface endpoints, and resolver endpoints."
+  description = "The ID of the centralized egress VPC that hosts NAT, the interface endpoints and the optional resolver endpoints."
   value       = module.egress_vpc.vpc_id
 }
 
@@ -46,6 +46,16 @@ output "inspection_route_table_ids_by_tier" {
 output "vpn_connection_id" {
   description = "ID of the Site-to-Site VPN connection, or null when enable_vpn = false."
   value       = try(module.vpn[0].vpn_connection_id, null)
+}
+
+output "resolver_endpoints_enabled" {
+  description = "Whether the Route 53 Resolver inbound and outbound endpoints exist (enable_resolver_endpoints, else enable_vpn)."
+  value       = local.enable_resolver_endpoints
+}
+
+output "resolver_inbound_endpoint_ips" {
+  description = "IP addresses of the inbound Route 53 Resolver endpoint (point the on-premises conditional forwarders at them), or an empty list when the resolver endpoints are off."
+  value       = module.route53_resolver.inbound_endpoint_ips
 }
 
 output "vpn_tunnel_addresses" {

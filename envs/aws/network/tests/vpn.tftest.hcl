@@ -103,3 +103,64 @@ run "explicit_vpn_variable_reaches_stage" {
     error_message = "an explicit vpn variable must reach the network-hub stage."
   }
 }
+
+run "resolver_endpoints_off_without_the_vpn" {
+  command = plan
+
+  assert {
+    condition     = local.enable_resolver_endpoints == null && !module.aws_network_hub.resolver_endpoints_enabled && length(output.resolver_inbound_endpoint_ips) == 0
+    error_message = "With no VPN and no setting, the resolver endpoints must stay off (ARC-21)."
+  }
+}
+
+run "resolver_endpoints_follow_the_vpn_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-vpn.yaml"
+    landing_zone_name        = null
+    log_archive_bucket_name  = null
+    availability_zones       = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs           = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+  }
+
+  assert {
+    condition     = local.enable_resolver_endpoints == null && module.aws_network_hub.resolver_endpoints_enabled
+    error_message = "With the VPN on from config, the stage must turn the resolver endpoints on."
+  }
+}
+
+run "resolver_endpoints_from_config_without_the_vpn" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-resolver-endpoints.yaml"
+    landing_zone_name        = null
+    log_archive_bucket_name  = null
+    availability_zones       = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs           = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+  }
+
+  assert {
+    condition     = local.enable_vpn == false && local.enable_resolver_endpoints == true && module.aws_network_hub.resolver_endpoints_enabled
+    error_message = "aws.network.resolver_endpoints.enabled must turn the resolver endpoints on without the VPN."
+  }
+}
+
+run "resolver_endpoints_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-resolver-endpoints.yaml"
+    landing_zone_name         = null
+    log_archive_bucket_name   = null
+    availability_zones        = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs            = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+    enable_resolver_endpoints = false
+  }
+
+  assert {
+    condition     = local.enable_resolver_endpoints == false && !module.aws_network_hub.resolver_endpoints_enabled && length(output.resolver_inbound_endpoint_ips) == 0
+    error_message = "An explicit enable_resolver_endpoints variable must win over the config file."
+  }
+}

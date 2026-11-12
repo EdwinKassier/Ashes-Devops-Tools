@@ -1593,6 +1593,16 @@
                 }
               },
               "additionalProperties": false
+            },
+            "resolver_endpoints": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Create the Route 53 Resolver inbound and outbound endpoints in the egress VPC (aws-network, about USD 365 per month). Unset = on only when vpn.enabled is true."
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

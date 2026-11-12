@@ -45,6 +45,9 @@ locals {
     # is a plain conditional; the stage's variable type validates the shape.
     enable_vpn = try(tobool(local.lz.aws.network.vpn.enabled), null)
     vpn        = try(jsonencode(local.lz.aws.network.vpn), null)
+    # aws.network.resolver_endpoints.enabled: the Route 53 Resolver endpoints
+    # (unset = on only with the VPN).
+    enable_resolver_endpoints = try(tobool(local.lz.aws.network.resolver_endpoints.enabled), null)
     # aws.network.spoke_attachments: workload spokes the hub accepts, associates
     # and propagates (JSON text for the same reason as vpn).
     spoke_attachments = try(jsonencode(local.lz.aws.network.spoke_attachments), null)
@@ -100,6 +103,8 @@ locals {
 
   enable_vpn = coalesce(var.enable_vpn, local.cfg.enable_vpn, false)
   vpn        = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
+  # Null = the stage turns the resolver endpoints on only with the VPN.
+  enable_resolver_endpoints = var.enable_resolver_endpoints != null ? var.enable_resolver_endpoints : local.cfg.enable_resolver_endpoints
   # Workload spoke routing (default none: no change).
   spoke_attachments = jsondecode(var.spoke_attachments != null ? jsonencode(var.spoke_attachments) : coalesce(local.cfg.spoke_attachments, "{}"))
 }

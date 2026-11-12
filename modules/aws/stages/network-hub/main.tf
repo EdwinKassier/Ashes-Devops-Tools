@@ -478,6 +478,15 @@ module "vpc_endpoints" {
   tags = var.tags
 }
 
+locals {
+  # Resolver endpoints only serve on-premises resolution, so they follow the
+  # VPN unless set explicitly. Their security group admits DNS from the org
+  # supernet and the on-premises prefixes. Locals so the tests can assert the
+  # wiring of the overridden resolver module.
+  enable_resolver_endpoints = coalesce(var.enable_resolver_endpoints, var.enable_vpn)
+  resolver_allowed_cidrs    = distinct(concat([var.top_cidr], var.vpn.onprem_cidrs))
+}
+
 # ---------------------------------------------------------------------------
 # Route 53 resolver + DNS firewall — associated with the egress VPC
 # ---------------------------------------------------------------------------
@@ -490,6 +499,9 @@ module "route53_resolver" {
   org_arn                   = var.org_arn
   query_log_destination_arn = var.flow_log_destination_arn
   enable_dns_firewall       = true
+
+  enable_resolver_endpoints = local.enable_resolver_endpoints
+  allowed_cidrs             = local.resolver_allowed_cidrs
 
   tags = var.tags
 }

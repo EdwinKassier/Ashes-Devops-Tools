@@ -16,6 +16,22 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   (`tiered-vpc` deletes the default route at creation). Confirm in the sandbox
   that a VM with no external IP in the private tier reaches the internet through
   Cloud NAT, and that the database tier still cannot.
+- **The AWS Route 53 Profile and Resolver endpoints are mock-tested only
+  (ARC-6, ARC-21).** Mock plans prove the profile resources (the DNS Firewall
+  rule group with priority 101, the forward rules, the private hosted zones),
+  the endpoint gate and the endpoint security group, not DNS behaviour. Confirm
+  in the sandbox: the RAM share of the profile reaches a workload account; the
+  profile shows the rule group, the rules and the zones; and with
+  `aws.network.resolver_endpoints.enabled: true`, `aws-network` creates both
+  endpoints with the module-owned security group.
+- **On-premises DNS through the AWS Resolver endpoints has no return route.**
+  The egress VPC `private` route tables send only `top_cidr` to the transit
+  gateway, and the egress attachment's `shared` route table has no on-premises
+  routes. Replies from the inbound endpoint to an on-premises resolver, and
+  queries from the outbound endpoint to a forward target on-premises, follow
+  `0.0.0.0/0` to NAT instead of the VPN. Until the hub routes the on-premises
+  prefixes from the egress VPC to the VPN, the endpoints serve only sources in
+  `top_cidr`.
 - **IAP through the hub hierarchical policy is mock-tested only.** Confirm in
   the sandbox that `gcloud compute ssh --tunnel-through-iap` reaches a
   private-tier VM, and that SSH from any other source is still denied.

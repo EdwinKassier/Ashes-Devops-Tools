@@ -69,8 +69,9 @@ module "aws_network_hub" {
   enable_network_firewall        = local.enable_network_firewall
   enable_network_access_analyzer = var.enable_network_access_analyzer
 
-  enable_vpn = local.enable_vpn
-  vpn        = local.vpn
+  enable_vpn                = local.enable_vpn
+  vpn                       = local.vpn
+  enable_resolver_endpoints = local.enable_resolver_endpoints
 
   spoke_attachments = local.spoke_attachments
 
