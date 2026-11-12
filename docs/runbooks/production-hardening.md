@@ -47,13 +47,25 @@ set (`dry_run_restricted_services`, `dry_run_ingress_policies`,
 (`envs/gcp/network-hub`). Validate the delta's dry-run violations, then copy it
 into the enforced input and clear the override.
 
-**Prod guard.** `envs/gcp/workload` (check `vpc_sc_enforced_in_prod`) and
-`envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`) emit a plan
-**warning** when a production environment has no perimeter or a dry-run one.
-Production is the explicit `is_production = true` attribute on the shared
-`environments` map (surfaced to gcp-workload as
-`environment_config[<env>].is_production`), not a name match. It warns rather
-than fails so the dry-run rollout above stays possible.
+**Prod guard.** `envs/gcp/workload` **fails the plan**
+(`terraform_data.production_vpc_sc_enforced`) when a production environment has
+no perimeter or a dry-run one. For a first rollout, set a time-boxed waiver on
+that workspace in `config/tfc-workspaces.yaml` (reviewed), then remove it once
+the perimeter is enforced:
+
+```yaml
+workspaces:
+  gcp-workload-prod:
+    production_vpc_sc_dry_run_waiver:
+      reason: First rollout, reading the dry-run violation logs
+      expires: "2026-12-31"
+```
+
+The waiver stops working after its `expires` date (UTC), and the plan fails
+again. `envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`)
+emits a plan **warning** for the hub perimeter. Production is the explicit
+`is_production = true` attribute on the shared `environments` map (surfaced to
+gcp-workload as `environment_config[<env>].is_production`), not a name match.
 
 **One access policy per environment.** By default (`enable_scoped_access_policies
 = true` in gcp-bootstrap and gcp-organization) gcp-organization creates a

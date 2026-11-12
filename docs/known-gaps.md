@@ -748,6 +748,11 @@ GCP:
   `dry_run_ingress_policies` / `dry_run_egress_policies`), and the workload and
   network-hub roots warn (check blocks) when a prod-like environment has no
   perimeter or a dry-run one.
+  **SEC-8:** a production gcp-workload environment with no perimeter or a
+  dry-run one now **fails the plan** unless `production_vpc_sc_dry_run_waiver`
+  names a reason and an expiry date (`YYYY-MM-DD`, UTC) that has not passed.
+  An expired waiver fails the plan again. The hub keeps its check-block
+  warning.
 - **G12 — CIS GCP Foundations gaps (2026-11-05)** — ✅ **SHIPPED**, mock-tested
   only. Validate on a non-prod org before you cite these to an auditor.
   (a) CIS 2.4–2.11 log-based metrics and alerts (`cis_log_metrics` in

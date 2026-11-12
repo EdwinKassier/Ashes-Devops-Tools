@@ -479,6 +479,11 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   identities, any source, every resource in the perimeter, the restricted services only (enforced
   plus staged dry-run). Existing perimeters show an in-place update that adds the rule after
   gcp-projects is re-applied.
+- **Production VPC-SC in dry-run fails the plan (SEC-8, breaking).** gcp-workload replaces the
+  `vpc_sc_enforced_in_prod` warning with `terraform_data.production_vpc_sc_enforced`, whose
+  precondition fails an `is_production` environment whose perimeter is absent or in dry-run. The
+  new `production_vpc_sc_dry_run_waiver = { reason, expires }` lets a first rollout plan until its
+  `expires` date (UTC). After that date the plan fails again. See `UPGRADING.md`.
 
 ### Changed
 

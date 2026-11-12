@@ -337,6 +337,25 @@ variable "vpc_sc_enable_dry_run" {
   }
 }
 
+variable "production_vpc_sc_dry_run_waiver" {
+  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its VPC-SC perimeter is in dry-run or absent. reason says why; expires (YYYY-MM-DD, UTC) is the last day it waives. Null (default) fails such a plan, because dry-run gives no exfiltration protection. Set it only for a first rollout while you read the violation logs, through config/tfc-workspaces.yaml (reviewed), then remove it."
+  type = object({
+    reason  = string
+    expires = string
+  })
+  default = null
+
+  validation {
+    condition     = var.production_vpc_sc_dry_run_waiver == null || try(length(trimspace(var.production_vpc_sc_dry_run_waiver.reason)) > 0, false)
+    error_message = "production_vpc_sc_dry_run_waiver.reason must say why the production perimeter is not enforced."
+  }
+
+  validation {
+    condition     = var.production_vpc_sc_dry_run_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", var.production_vpc_sc_dry_run_waiver.expires)) && can(formatdate("YYYY", "${var.production_vpc_sc_dry_run_waiver.expires}T00:00:00Z")), false)
+    error_message = "production_vpc_sc_dry_run_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC)."
+  }
+}
+
 variable "vpc_sc_dry_run_restricted_services" {
   description = "Optional restricted_services to TRIAL in a staged dry-run spec while the perimeter stays ENFORCED (only meaningful with vpc_sc_enable_dry_run = false). Status keeps enforcing vpc_sc_restricted_services; the dry-run spec logs what this list would block. Default null = no staged spec."
   type        = list(string)

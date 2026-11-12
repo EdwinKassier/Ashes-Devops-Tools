@@ -1081,6 +1081,27 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Production VPC-SC dry-run fails the plan (gcp-workload, breaking)
+
+**Breaking: a production `gcp-workload-<env>` plan that passed before now fails.** The `vpc_sc_enforced_in_prod` check only warned. It is replaced by `terraform_data.production_vpc_sc_enforced`, whose precondition fails the plan when the environment is production (`environment_config.<env>.is_production = true`) and its VPC-SC perimeter is absent or in dry-run. Dry-run gives no exfiltration protection.
+
+Before you plan a production workload, do one of these:
+
+1. **Enforce the perimeter (recommended).** Read the dry-run violation logs (`protoPayload.metadata.dryRun = true`) and add an ingress or egress rule for each legitimate caller. The environment's own plan and apply SAs are already admitted once gcp-projects publishes `environment_config.<env>.automation_identities`. Then set `vpc_sc_enable_dry_run = false` (or name the `prod-gcp-workload` preset) and apply.
+2. **Set a time-boxed waiver during a first rollout.** Add it for that workspace in `config/tfc-workspaces.yaml` (CODEOWNERS-reviewed) and re-apply tfc-admin:
+
+   ```yaml
+   workspaces:
+     gcp-workload-prod:
+       production_vpc_sc_dry_run_waiver:
+         reason: First rollout, reading the dry-run violation logs
+         expires: "2026-12-31"
+   ```
+
+   `reason` must not be empty and `expires` must be a real `YYYY-MM-DD` date. The waiver stops working after that date (UTC), and the plan fails again. Remove it when the perimeter is enforced.
+
+The guard is a `terraform_data` resource with no cloud side effect. The first plan of a production workload creates it.
+
 #### Audit-log retention from config (gcp-organization)
 
 `audit_log_retention_days` is now an input of the `gcp-organization` root. Null reads `compliance.audit_log_retention_days` in `config/landing-zone.yaml`, else 365 days, the value the root used before. With neither set, the plan does not change.

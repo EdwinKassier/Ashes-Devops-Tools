@@ -303,13 +303,24 @@ module "environment" {
   }
 }
 
-# Nothing else ties production to an enforced perimeter. Warn (check blocks never
-# fail the plan) when a production environment (environment_config is_production)
-# has no perimeter or only a dry-run one.
-check "vpc_sc_enforced_in_prod" {
-  assert {
-    condition     = !local.is_production || (local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run)
-    error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
+# Production needs an enforced perimeter: dry-run gives no exfiltration
+# protection. production_vpc_sc_dry_run_waiver is the explicit, reviewed
+# exception for a first rollout. It names a reason and an expiry date, and it
+# stops waiving after that date. The guard stops the plan; it changes no
+# resource.
+locals {
+  vpc_sc_prod_enforced = local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run
+  vpc_sc_waiver_until  = try("${var.production_vpc_sc_dry_run_waiver.expires}T23:59:59Z", null)
+}
+
+resource "terraform_data" "production_vpc_sc_enforced" {
+  count = local.is_production ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.vpc_sc_prod_enforced || (local.vpc_sc_waiver_until != null && timecmp(plantimestamp(), coalesce(local.vpc_sc_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
+      error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}${local.vpc_sc_waiver_until == null ? "" : ", and production_vpc_sc_dry_run_waiver expired on ${try(var.production_vpc_sc_dry_run_waiver.expires, "")}"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false. For a first rollout only, set production_vpc_sc_dry_run_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
+    }
   }
 }
 

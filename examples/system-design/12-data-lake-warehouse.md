@@ -370,10 +370,10 @@ Three layers, each catching what the one inside it misses.
 - **GCP: VPC Service Controls.** This repo's environment stage already draws a
   perimeter around each `gcp-workload-<env>` host project, restricting
   `bigquery.googleapis.com` and `storage.googleapis.com` among others, and the
-  root warns at plan (a check block, which never fails the plan) if a
-  production perimeter is absent or in dry-run
-  ([`envs/gcp/workload/main.tf`](../../envs/gcp/workload/main.tf), check
-  `vpc_sc_enforced_in_prod`). Protecting the BigQuery API also protects the
+  root fails the plan if a production perimeter is absent or in dry-run, unless
+  a time-boxed `production_vpc_sc_dry_run_waiver` is set
+  ([`envs/gcp/workload/main.tf`](../../envs/gcp/workload/main.tf),
+  `terraform_data.production_vpc_sc_enforced`). Protecting the BigQuery API also protects the
   BigQuery Storage, Reservation and Connection APIs; the lakehouse catalog is a
   separate service, `biglake.googleapis.com`. BigQuery has known gaps: console
   users inside an ingress rule can save results to a local file, and querying
@@ -539,7 +539,7 @@ gcp:
     prod:
       region: europe-west2
       cidr_block: 10.40.0.0/16
-      is_production: true # gcp-workload-prod then warns on a dry-run perimeter
+      is_production: true # gcp-workload-prod then fails its plan on a dry-run perimeter
   workload:
     presets_by_environment:
       prod: [prod-gcp-workload] # enforces the perimeter

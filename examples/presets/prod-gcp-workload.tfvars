@@ -8,6 +8,10 @@
 # deliberately staying on the legacy org-wide policy.
 # PREREQUISITES: clean dry-run violation logs. Set the environment's is_production
 # attribute to true in the shared environments map so the production checks run.
+# A production environment with a dry-run (or absent) perimeter FAILS its plan.
+# During a first rollout only, set the production_vpc_sc_dry_run_waiver object
+# (a reason and an expires date, YYYY-MM-DD) for that workspace in
+# config/tfc-workspaces.yaml. It stops waiving after the expiry date.
 vpc_sc_enable_dry_run = false
 
 # Cloud Armor WAF on the environment edge, with the OWASP managed rule set.

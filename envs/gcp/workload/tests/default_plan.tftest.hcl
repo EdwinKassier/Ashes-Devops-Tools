@@ -127,9 +127,9 @@ run "enforced_perimeter_stages_dry_run_delta" {
   }
 }
 
-# SOTA M: a production-like environment in dry-run (or with no perimeter) must
-# raise the vpc_sc_enforced_in_prod check warning.
-run "prod_without_enforced_perimeter_warns" {
+# SEC-8: a production environment in dry-run (or with no perimeter) fails the
+# plan unless production_vpc_sc_dry_run_waiver names a reason and a future expiry.
+run "prod_without_enforced_perimeter_fails" {
   command = plan
 
   variables {
@@ -159,7 +159,156 @@ run "prod_without_enforced_perimeter_warns" {
     }
   }
 
-  expect_failures = [check.vpc_sc_enforced_in_prod]
+  expect_failures = [terraform_data.production_vpc_sc_enforced]
+}
+
+# A waiver with a reason and a future expiry lets a first production rollout
+# plan in dry-run. The guard resource still exists.
+run "prod_dry_run_waiver_allows_plan" {
+  command = plan
+
+  variables {
+    environment = "prod"
+    production_vpc_sc_dry_run_waiver = {
+      reason  = "First rollout: reading the dry-run violation logs before enforcing."
+      expires = "2099-12-31"
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(terraform_data.production_vpc_sc_enforced) == 1
+    error_message = "the waiver lets the plan through; the precondition resource still exists."
+  }
+}
+
+# A waiver past its expiry date no longer waives: the plan fails again.
+run "prod_expired_waiver_fails" {
+  command = plan
+
+  variables {
+    environment = "prod"
+    production_vpc_sc_dry_run_waiver = {
+      reason  = "First rollout: reading the dry-run violation logs before enforcing."
+      expires = "2020-01-31"
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_vpc_sc_enforced]
+}
+
+# An enforced production perimeter needs no waiver.
+run "prod_enforced_perimeter_plans" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(terraform_data.production_vpc_sc_enforced) == 1
+    error_message = "an enforced production perimeter must plan without a waiver."
+  }
+}
+
+# A non-production environment has no guard at all.
+run "non_production_has_no_perimeter_guard" {
+  command = plan
+
+  assert {
+    condition     = length(terraform_data.production_vpc_sc_enforced) == 0
+    error_message = "the production perimeter guard must not exist for a non-production environment."
+  }
+}
+
+run "rejects_waiver_without_reason" {
+  command = plan
+
+  variables {
+    production_vpc_sc_dry_run_waiver = { reason = " ", expires = "2099-12-31" }
+  }
+
+  expect_failures = [var.production_vpc_sc_dry_run_waiver]
+}
+
+run "rejects_waiver_with_malformed_expiry" {
+  command = plan
+
+  variables {
+    production_vpc_sc_dry_run_waiver = { reason = "First rollout.", expires = "2099-02-30" }
+  }
+
+  expect_failures = [var.production_vpc_sc_dry_run_waiver]
 }
 
 # Application golden path against the REAL environment stage: the app service
