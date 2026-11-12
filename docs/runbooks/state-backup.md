@@ -41,16 +41,22 @@ itself.
    with no organization permissions.
 2. Set its ID as `state_backup_team_id` on `envs/tfc-admin` and apply. tfc-admin
    grants it custom access on every project except the security-only guardrails
-   project: `state_versions = read`, `runs = read`, `variables = none`. A
-   precondition rejects a team that already holds another grant.
+   project and the saas project: `state_versions = read`, `runs = read`,
+   `variables = none`. A precondition rejects a team that already holds another
+   grant.
 3. `gcp-guardrails` lives in the guardrails project, where only the security
    team has access. To back it up as well, the security team grants the backup
    team the same custom permissions on that project by hand. Otherwise it is
    not exported, and `STATE_BACKUP_WORKSPACES` must not list it.
-4. A self-managed `tfc-admin` workspace sits in the platform project, which is
+4. `saas-*` state holds the Supabase database password and service-role key,
+   so the saas project is left out by default and `STATE_BACKUP_WORKSPACES`
+   must not list `saas-*`. HCP Terraform keeps every state version, so a restore
+   from HCP Terraform stays possible. Set `enable_saas_state_backup = true` on
+   `envs/tfc-admin` to export them as well; the bucket then holds those secrets.
+5. A self-managed `tfc-admin` workspace sits in the platform project, which is
    included. A hand-created one outside any managed project needs the same
    grant by hand.
-5. Create a team token with an expiry (at most 90 days) and store it as the
+6. Create a team token with an expiry (at most 90 days) and store it as the
    secret `TFC_TOKEN_STATE_BACKUP` in a GitHub environment named
    `tfc-state-backup`, with deployment branches limited to `main`
    ([CI secrets](../guides/CI_SECRETS.md#environment-scoped-secrets)).
@@ -145,7 +151,9 @@ If the whole organization is lost:
    apply.
 3. Restore the other workspaces in the run-trigger order: `gcp-bootstrap` and
    `aws-organization`, then the control plane, then the hubs, then the
-   workloads and `saas-*`.
+   workloads and `saas-*` (from the bucket only with
+   `enable_saas_state_backup = true`; without a copy, import the existing
+   Supabase and Vercel resources before the first apply).
 
 ### 3. Push the state
 

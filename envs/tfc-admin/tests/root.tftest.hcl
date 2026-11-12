@@ -865,6 +865,9 @@ run "team_access_least_privilege" {
     viewer_team_ids                 = ["team-viewers1"]
   }
 
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
+
   assert {
     condition = alltrue([
       for p in ["gcp", "aws"] :
@@ -891,7 +894,7 @@ run "team_access_least_privilege" {
 
   assert {
     condition     = tfe_team_project_access.this["aws/team-viewers1"].access == "read"
-    error_message = "viewer teams get read on every project."
+    error_message = "viewer teams get fixed read on every project without secrets in state."
   }
 
   # The saas project holds account-wide Supabase/Vercel tokens: a plan (also a
@@ -948,6 +951,9 @@ run "production_workloads_follow_is_production" {
     control_plane_approvers_team_id = "team-approvers1"
   }
 
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
+
   assert {
     condition     = toset(keys(tfe_team_access.platform_workload)) == toset(["gcp-workload-prod", "aws-workload-prod"])
     error_message = "write follows is_production: live (production) gets none, prod (explicitly non-production) keeps it."
@@ -971,6 +977,9 @@ run "guardrails_project_security_team_only" {
     viewer_team_ids                 = ["team-viewers1"]
     security_team_id                = "team-security1"
   }
+
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
 
   assert {
     condition     = contains(keys(tfe_project.this), "guardrails") && tfe_project.this["guardrails"].name == "landing-zone-guardrails" && module.workspace["gcp-guardrails"].working_directory == "envs/gcp/guardrails"
@@ -1031,7 +1040,7 @@ run "guardrails_project_without_security_team_warns" {
     error_message = "without security_team_id no team may get access to the guardrails project."
   }
 
-  expect_failures = [check.guardrails_project_has_security_team]
+  expect_failures = [check.guardrails_project_has_security_team, check.saas_approvers_dedicated]
 }
 
 run "security_team_must_differ_from_platform" {
@@ -1072,7 +1081,7 @@ run "approvers_must_differ_from_platform" {
     control_plane_approvers_team_id = "team-same1"
   }
 
-  expect_failures = [terraform_data.input_contract]
+  expect_failures = [terraform_data.input_contract, check.saas_approvers_dedicated]
 }
 
 # Opt-in split: workload workspaces move to <prefix><cloud>-workloads projects.
@@ -1087,6 +1096,9 @@ run "split_workload_projects" {
     platform_team_id                = "team-platform1"
     control_plane_approvers_team_id = "team-approvers1"
   }
+
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
 
   assert {
     condition     = toset(keys(tfe_project.this)) == toset(["gcp", "aws", "saas", "gcp-workloads", "aws-workloads", "guardrails"]) && tfe_project.this["gcp-workloads"].name == "landing-zone-gcp-workloads" && tfe_project.this["aws"].name == "landing-zone-aws"
@@ -1126,6 +1138,9 @@ run "split_workload_projects_nonprod_only" {
     control_plane_approvers_team_id = "team-approvers1"
   }
 
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
+
   assert {
     condition     = tfe_team_project_access.this["gcp-workloads/platform"].access == "write" && tfe_team_project_access.this["aws-workloads/platform"].access == "write" && !contains(keys(tfe_team_project_access.this), "aws-workloads/approvers") && !contains(keys(tfe_team_project_access.this), "gcp-workloads/approvers")
     error_message = "a non-production-only workloads project keeps fixed platform write and gets no approvers grant."
@@ -1155,6 +1170,9 @@ run "secret_bearing_production_workload_drops_platform_to_read" {
       }
     }
   }
+
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
 
   assert {
     condition     = tfe_team_project_access.this["gcp-workloads/platform"].access == "custom" && tfe_team_project_access.this["gcp-workloads/platform"].workspace_access[0].runs == "read"
@@ -1199,6 +1217,9 @@ run "saas_bridge_flag_marks_nonprod_workload_secret_bearing" {
       }
     }
   }
+
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
 
   assert {
     condition     = tfe_team_project_access.this["aws-workloads/platform"].access == "custom" && tfe_team_project_access.this["aws-workloads/platform"].workspace_access[0].runs == "read" && contains(keys(tfe_team_project_access.this), "aws-workloads/approvers")
@@ -1349,6 +1370,9 @@ run "service_role_key_name_marks_workspace" {
     }
   }
 
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
+
   assert {
     condition     = module.workspace["aws-workload-dev"].speculative_enabled == false && module.workspace["gcp-workload-dev"].speculative_enabled == false
     error_message = "*_SERVICE_ROLE_KEY and *_PASSWD keys mark the workspace secret-bearing."
@@ -1493,7 +1517,7 @@ run "state_backup_team_reads_state_only" {
   expect_failures = [check.secret_bearing_projects_have_approvers]
 
   assert {
-    condition = toset([for k, g in tfe_team_project_access.this : split("/", k)[0] if g.team_id == "team-backup1"]) == toset(["gcp", "aws", "saas"]) && alltrue([
+    condition = toset([for k, g in tfe_team_project_access.this : split("/", k)[0] if g.team_id == "team-backup1"]) == toset(["gcp", "aws"]) && alltrue([
       for k, g in tfe_team_project_access.this : (
         g.access == "custom" &&
         g.workspace_access[0].state_versions == "read" &&
@@ -1503,7 +1527,7 @@ run "state_backup_team_reads_state_only" {
         g.project_access[0].teams == "none"
       ) if g.team_id == "team-backup1"
     ])
-    error_message = "the state backup team must get custom state_versions = read (runs read, variables none) on every project but guardrails."
+    error_message = "the state backup team must get custom state_versions = read (runs read, variables none) on every project but guardrails and saas."
   }
 }
 
@@ -1706,6 +1730,9 @@ run "tfc_admin_workspace_apply_restricted" {
     control_plane_approvers_team_id  = "team-approvers1"
     platform_team_control_plane_runs = "apply"
   }
+
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
 
   assert {
     condition     = module.workspace["tfc-admin"].auto_apply == false && module.workspace["tfc-admin"].auto_apply_run_trigger == false && module.workspace["tfc-admin"].speculative_enabled == false
@@ -2238,4 +2265,109 @@ run "prod_key_without_flag_is_not_production_by_name" {
     condition     = !contains(local.production_workloads, "gcp-workload-prod")
     error_message = "Only is_production decides production; the key prod alone must not."
   }
+}
+
+# SEC-7: saas-* state holds the Supabase database password and service-role
+# key. Viewers keep run and variable-name visibility there, but no state and no
+# outputs (fixed read includes the full state file).
+run "viewers_cannot_download_saas_state" {
+  command = plan
+
+  variables {
+    viewer_team_ids = ["team-viewer1"]
+  }
+
+  assert {
+    condition = (
+      tfe_team_project_access.this["saas/team-viewer1"].access == "custom" &&
+      tfe_team_project_access.this["saas/team-viewer1"].workspace_access[0].state_versions == "none" &&
+      tfe_team_project_access.this["saas/team-viewer1"].workspace_access[0].runs == "read" &&
+      tfe_team_project_access.this["saas/team-viewer1"].workspace_access[0].variables == "read" &&
+      tfe_team_project_access.this["saas/team-viewer1"].workspace_access[0].locking == false &&
+      tfe_team_project_access.this["saas/team-viewer1"].project_access[0].teams == "none"
+    )
+    error_message = "viewers must not read saas state (it holds the Supabase database password and service-role key); read-outputs would expose them too."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["gcp/team-viewer1"].access == "read" && tfe_team_project_access.this["aws/team-viewer1"].access == "read"
+    error_message = "viewers keep fixed read on projects without secrets in state."
+  }
+}
+
+run "saas_state_backup_opt_in" {
+  command = plan
+
+  variables {
+    platform_team_id         = "team-platform1"
+    state_backup_team_id     = "team-backup1"
+    enable_saas_state_backup = true
+  }
+
+  expect_failures = [check.secret_bearing_projects_have_approvers]
+
+  assert {
+    condition = (
+      tfe_team_project_access.this["saas/state-backup"].team_id == "team-backup1" &&
+      tfe_team_project_access.this["saas/state-backup"].workspace_access[0].state_versions == "read" &&
+      tfe_team_project_access.this["saas/state-backup"].workspace_access[0].variables == "none"
+    )
+    error_message = "enable_saas_state_backup = true grants the backup team state read on saas."
+  }
+}
+
+run "dedicated_saas_approvers" {
+  command = plan
+
+  variables {
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    saas_approvers_team_id          = "team-saasapprove1"
+  }
+
+  assert {
+    condition = (
+      !contains(keys(tfe_team_project_access.this), "saas/approvers") &&
+      tfe_team_project_access.this["saas/saas-approvers"].team_id == "team-saasapprove1" &&
+      tfe_team_project_access.this["saas/saas-approvers"].access == "custom" &&
+      tfe_team_project_access.this["saas/saas-approvers"].workspace_access[0].runs == "apply" &&
+      tfe_team_project_access.this["gcp/approvers"].team_id == "team-approvers1" &&
+      tfe_team_project_access.this["aws/approvers"].team_id == "team-approvers1" &&
+      !contains(keys(tfe_team_project_access.this), "gcp/saas-approvers")
+    )
+    error_message = "with saas_approvers_team_id set, only that team confirms saas applies; the control-plane approvers keep the other projects."
+  }
+}
+
+run "saas_approvers_must_be_dedicated" {
+  command = plan
+
+  variables {
+    platform_team_id       = "team-platform1"
+    saas_approvers_team_id = "team-platform1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "saas_approvers_differ_from_control_plane_approvers" {
+  command = plan
+
+  variables {
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    saas_approvers_team_id          = "team-approvers1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "saas_without_dedicated_approvers_warns" {
+  command = plan
+
+  variables {
+    control_plane_approvers_team_id = "team-approvers1"
+  }
+
+  expect_failures = [check.saas_approvers_dedicated]
 }

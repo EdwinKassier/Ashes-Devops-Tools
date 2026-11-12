@@ -18,7 +18,9 @@ name: Terraform State Backup
 #          team (envs/tfc-admin state_backup_team_id: state_versions = read,
 #          nothing else). It can read every state, including sensitive values,
 #          so it lives in the `tfc-state-backup` GitHub environment, restricted
-#          to the default branch.
+#          to the default branch. saas-* workspaces are not readable by the
+#          backup team by default (tfc-admin enable_saas_state_backup), so
+#          keep them out of STATE_BACKUP_WORKSPACES.
 #   - vars.TFC_ORGANIZATION
 #   - vars.STATE_BACKUP_WORKSPACES  (optional) JSON array of workspace names
 #          that MUST be exported; a missing one fails the run. Default: every

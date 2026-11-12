@@ -752,6 +752,17 @@ locals {
     sentinel_mocks = "none"
     locking        = true
   }
+  # Viewers on projects whose STATE holds secrets (saas: the Supabase database
+  # password and service-role key). Fixed read includes the full state file,
+  # and read-outputs would also return sensitive outputs, so viewers see runs
+  # and variables (sensitive values stay write-only) but no state at all.
+  viewer_secret_state_access = {
+    runs           = "read"
+    variables      = "read"
+    state_versions = "none"
+    sentinel_mocks = "none"
+    locking        = false
+  }
   # State export team (state-backup.yml): reads state versions, nothing else.
   state_backup_custom_access = {
     runs           = "read"
@@ -800,9 +811,13 @@ locals {
   tfc_admin_only_projects = var.manage_tfc_admin_workspace && var.enable_projects ? toset([local.workspace_project_key[var.tfc_admin_workspace_name]]) : toset([])
 
   # The saas project holds the account-wide SUPABASE_ACCESS_TOKEN and
-  # VERCEL_API_TOKEN. Its runs are confirmed by the approvers team, like the
-  # control plane.
+  # VERCEL_API_TOKEN. Its runs are confirmed by saas_approvers_team_id when set,
+  # else by the control-plane approvers team. A team that may confirm an apply
+  # may also queue a plan (HCP Terraform has no apply-only permission), and a
+  # plan can read those tokens.
   saas_projects = setintersection(local.project_keys, toset(["saas"]))
+  # Saas projects that the control-plane approvers team confirms.
+  control_plane_approved_saas_projects = var.saas_approvers_team_id == null ? local.saas_projects : toset([])
 
   # A plan is code execution with the workspace's credentials: anyone who may
   # queue a plan, including a CLI speculative plan with their own unreviewed
@@ -871,12 +886,19 @@ locals {
     for k in local.managed_production_workloads : local.workspace_project_key[k]
     if contains(local.project_keys, local.workspace_project_key[k])
   ])
+  # Secret-bearing projects whose runs the control-plane approvers team
+  # confirms: not the tfc-admin project (the tfc-admin team confirms there) and
+  # not a saas project that has saas_approvers_team_id.
+  control_plane_approved_secret_projects = setsubtract(
+    local.secret_bearing_projects,
+    setunion(local.tfc_admin_only_projects, setsubtract(local.saas_projects, local.control_plane_approved_saas_projects)),
+  )
   platform_custom_projects = setunion(local.control_plane_projects, local.saas_projects, local.production_workload_projects, local.secret_bearing_projects)
   approver_projects = setunion(
     setsubtract(local.control_plane_projects, local.tfc_admin_only_projects),
-    local.saas_projects,
+    local.control_plane_approved_saas_projects,
     local.production_workload_projects,
-    setsubtract(local.secret_bearing_projects, local.tfc_admin_only_projects),
+    local.control_plane_approved_secret_projects,
   )
 
   team_project_access = merge(
@@ -898,9 +920,22 @@ locals {
         custom  = local.approvers_custom_access
       }
     },
+    var.saas_approvers_team_id == null ? {} : {
+      for p in local.saas_projects : "${p}/saas-approvers" => {
+        project = p
+        team_id = var.saas_approvers_team_id
+        access  = "custom"
+        custom  = local.approvers_custom_access
+      }
+    },
     {
       for pair in setproduct(tolist(local.shared_access_projects), var.viewer_team_ids) :
-      "${pair[0]}/${pair[1]}" => { project = pair[0], team_id = pair[1], access = "read", custom = null }
+      "${pair[0]}/${pair[1]}" => {
+        project = pair[0]
+        team_id = pair[1]
+        access  = contains(local.saas_projects, pair[0]) ? "custom" : "read"
+        custom  = contains(local.saas_projects, pair[0]) ? local.viewer_secret_state_access : null
+      }
     },
     var.security_team_id == null || !local.guardrails_project ? {} : {
       "guardrails/security" = { project = "guardrails", team_id = var.security_team_id, access = "custom", custom = local.security_custom_access }
@@ -911,7 +946,7 @@ locals {
         team_id = var.state_backup_team_id
         access  = "custom"
         custom  = local.state_backup_custom_access
-      }
+      } if var.enable_saas_state_backup || !contains(local.saas_projects, p)
     },
   )
 
@@ -1019,6 +1054,13 @@ resource "terraform_data" "input_contract" {
         coalesce(var.state_backup_team_id, "-"),
       )
       error_message = "state_backup_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its token reads every state file, so it must carry nothing else."
+    }
+    precondition {
+      condition = var.saas_approvers_team_id == null || !contains(
+        concat(compact([var.platform_team_id, var.control_plane_approvers_team_id, var.security_team_id, var.tfc_admin_team_id, var.state_backup_team_id]), var.viewer_team_ids, values(var.saas_outputs_reader_team_ids)),
+        coalesce(var.saas_approvers_team_id, "-"),
+      )
+      error_message = "saas_approvers_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, state_backup_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its members can read the account-wide SaaS tokens through a plan."
     }
     precondition {
       condition     = length(distinct(values(var.saas_outputs_reader_team_ids))) == length(var.saas_outputs_reader_team_ids)
@@ -1288,11 +1330,23 @@ check "secret_bearing_control_plane_project" {
 
 # Without an approvers team, only organization owners can confirm runs on a
 # secret-bearing project (the platform team has runs = read there). The
-# tfc-admin project is left out: the tfc-admin team confirms its runs.
+# tfc-admin project is left out: the tfc-admin team confirms its runs. So is a
+# saas project when saas_approvers_team_id confirms its runs.
 check "secret_bearing_projects_have_approvers" {
   assert {
-    condition     = var.platform_team_id == null || var.control_plane_approvers_team_id != null || length(setsubtract(local.secret_bearing_projects, local.tfc_admin_only_projects)) == 0
-    error_message = "control_plane_approvers_team_id is null while these projects are secret-bearing: ${join(", ", sort(tolist(setsubtract(local.secret_bearing_projects, local.tfc_admin_only_projects))))}. The platform team has runs = read there, so only organization owners can queue and confirm their runs. Set control_plane_approvers_team_id."
+    condition     = var.platform_team_id == null || var.control_plane_approvers_team_id != null || length(local.control_plane_approved_secret_projects) == 0
+    error_message = "control_plane_approvers_team_id is null while these projects are secret-bearing: ${join(", ", sort(tolist(local.control_plane_approved_secret_projects)))}. The platform team has runs = read there, so only organization owners can queue and confirm their runs. Set control_plane_approvers_team_id."
+  }
+}
+
+# Whoever confirms a saas-* apply can also queue a plan, and a plan can read
+# the account-wide SUPABASE_ACCESS_TOKEN and VERCEL_API_TOKEN. Without a
+# dedicated saas approvers team the whole control-plane approvers team holds
+# that exposure.
+check "saas_approvers_dedicated" {
+  assert {
+    condition     = length(local.saas_projects) == 0 || var.saas_approvers_team_id != null || var.control_plane_approvers_team_id == null
+    error_message = "saas-* applies are confirmed by control_plane_approvers_team_id. A confirmer can also queue a plan and read SUPABASE_ACCESS_TOKEN and VERCEL_API_TOKEN. Set saas_approvers_team_id to a smaller, dedicated team."
   }
 }
 

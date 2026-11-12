@@ -117,6 +117,24 @@ Also in this change (no manual step): `scripts/check-consistency.sh` (CI) fails
 on a `data "external"`, `data "http"`, provisioner or `hashicorp/external` /
 `hashicorp/http` provider outside the reviewed allowlist.
 
+#### saas state access (tfc-admin)
+
+**Breaking.** `saas-*` state holds the Supabase database password and
+service-role key, and HCP Terraform's fixed `read` includes the full state file.
+
+- `viewer_team_ids` keep fixed `read` on every other project. On the saas
+  project they now get custom access: runs and variables read, `state_versions =
+  none`. They can no longer download saas state or read its outputs.
+- The state-backup team (`state_backup_team_id`) loses the saas project unless
+  `enable_saas_state_backup = true`. Remove `saas-*` from the
+  `STATE_BACKUP_WORKSPACES` repository variable, or the backup job fails on
+  them. HCP Terraform keeps every saas state version.
+- Optional: set `saas_approvers_team_id` to a small, dedicated team. It then
+  confirms `saas-*` applies instead of `control_plane_approvers_team_id`. A
+  team that may confirm an apply may also queue a plan, and a plan can read
+  `SUPABASE_ACCESS_TOKEN` and `VERCEL_API_TOKEN`. While it is unset, the check
+  `saas_approvers_dedicated` warns on every plan.
+
 #### Secret-bearing workspaces are derived from their variables (tfc-admin)
 
 **Breaking.** Before, only the tfc-admin and `saas` projects were

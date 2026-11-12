@@ -431,6 +431,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 - **The committed workspace file cannot set redirection env vars (breaking).** tfc-admin rejects
   `TFE_*`, `TF_TOKEN_*`, `TF_CLI_CONFIG_FILE`, the proxy variables in any case, `SSL_CERT_FILE`
   and `SSL_CERT_DIR` in `workspace_variables_file`. See `UPGRADING.md`.
+- **saas state is not readable by viewers or the backup team, and saas applies can have their own
+  approvers (SEC-7, breaking).** HCP Terraform's fixed `read` includes the full state file, and
+  `saas-*` state holds the Supabase database password and service-role key. On the saas project,
+  viewers now get custom access with `state_versions = none`, and the state-backup team gets no
+  grant unless `enable_saas_state_backup = true`. The new `saas_approvers_team_id` confirms saas
+  applies instead of the control-plane approvers; a `check` warns while it is unset. See
+  `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

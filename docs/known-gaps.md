@@ -994,10 +994,13 @@ side (all mock-tested, secure defaults):
   `supabase_project` has no write-only `database_password`, so the creation-time
   password is in the `saas-<name>` state and its `supabase_database_password`
   output. The service-role key is in the same state as a data-source result and
-  an output. Access to that state is limited to the `saas-*` workspace's
-  writers, the listed `extra_remote_state_consumers` and the
-  `saas-outputs-reader` team (outputs only, read ephemerally by the bridging
-  workloads). Rotation: see
+  an output. Full state read is limited to organization owners, the team that
+  confirms saas applies (`saas_approvers_team_id`, else
+  `control_plane_approvers_team_id`), the listed `extra_remote_state_consumers`
+  and, only with `enable_saas_state_backup = true`, the state-backup team.
+  Viewers get `state_versions = none` there. The platform team and the
+  `saas-outputs-reader` teams read outputs only (the readers ephemerally, for
+  the bridging workloads). Rotation: see
   [saas-bootstrap](runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them).
 
 ## OPEN — WS3 trust-model residuals (2026-11-11 due-diligence audit)

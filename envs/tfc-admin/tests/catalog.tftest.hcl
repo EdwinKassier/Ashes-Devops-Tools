@@ -37,6 +37,9 @@ run "default_catalog_names_unchanged" {
     saas_outputs_reader_team_ids    = { "saas-web" = "team-saasread1" }
   }
 
+  # saas applies are confirmed by the control-plane approvers team.
+  expect_failures = [check.saas_approvers_dedicated]
+
   assert {
     condition = output.workspace_names == tolist([
       "aws-backup", "aws-identity", "aws-network", "aws-organization", "aws-security", "aws-shared-services",

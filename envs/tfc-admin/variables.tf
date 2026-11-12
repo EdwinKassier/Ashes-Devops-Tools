@@ -496,7 +496,7 @@ variable "saas_outputs_reader_team_id" {
 }
 
 variable "state_backup_team_id" {
-  description = "TFC team ID (team-...) whose team token the scheduled state export (.github/workflows/state-backup.yml, docs/runbooks/state-backup.md) uses: custom access with state_versions = read, runs = read and variables = none on every project except the security-only guardrails project. The token can read every state file, including sensitive values, so it must be a dedicated team kept in a branch-restricted GitHub environment. Null = no grant."
+  description = "TFC team ID (team-...) whose team token the scheduled state export (.github/workflows/state-backup.yml, docs/runbooks/state-backup.md) uses: custom access with state_versions = read, runs = read and variables = none on every project except the security-only guardrails project and (unless enable_saas_state_backup = true) the saas project. The token can read every state file it is granted, including sensitive values, so it must be a dedicated team kept in a branch-restricted GitHub environment. Null = no grant."
   type        = string
   default     = null
 
@@ -506,8 +506,25 @@ variable "state_backup_team_id" {
   }
 }
 
+variable "enable_saas_state_backup" {
+  description = "Grant state_backup_team_id state read on the saas project too. Default false: saas-* state holds the Supabase database password and service-role key (a provider limitation), and a backup copy outside HCP Terraform would hold them as well. HCP Terraform keeps every state version, so a restore stays possible without the backup."
+  type        = bool
+  default     = false
+}
+
+variable "saas_approvers_team_id" {
+  description = "TFC team ID (team-...) that confirms saas-* applies (custom runs = apply) instead of control_plane_approvers_team_id. A team that may confirm an apply may also queue a plan, and a plan can read the account-wide SUPABASE_ACCESS_TOKEN and VERCEL_API_TOKEN, so keep this team small and dedicated. Null = control_plane_approvers_team_id confirms saas applies, and a check warns."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.saas_approvers_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.saas_approvers_team_id))
+    error_message = "saas_approvers_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "viewer_team_ids" {
-  description = "TFC team IDs (team-...) granted READ on every landing-zone project."
+  description = "TFC team IDs (team-...) granted fixed READ on every landing-zone project except guardrails. On the saas project they get custom access instead (runs and variables read, state_versions = none): saas-* state holds the Supabase database password and service-role key, and fixed read includes the full state file."
   type        = list(string)
   default     = []
 
