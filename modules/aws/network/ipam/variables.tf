@@ -73,7 +73,7 @@ variable "org_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:organizations::", var.org_arn))
     error_message = "org_arn must be an AWS Organizations ARN beginning with arn:aws:organizations::."
   }
 }
@@ -84,7 +84,7 @@ variable "share_principal_arns" {
   default     = null
 
   validation {
-    condition     = var.share_principal_arns == null || alltrue([for p in(var.share_principal_arns == null ? [] : var.share_principal_arns) : can(regex("^arn:aws(-us-gov|-cn)?:organizations::[0-9]{12}:(organization|ou)/", p))])
+    condition     = var.share_principal_arns == null || alltrue([for p in(var.share_principal_arns == null ? [] : var.share_principal_arns) : can(regex("^arn:aws(-us-gov|-cn|-eusc)?:organizations::[0-9]{12}:(organization|ou)/", p))])
     error_message = "share_principal_arns entries must be AWS Organizations organization or OU ARNs."
   }
 }

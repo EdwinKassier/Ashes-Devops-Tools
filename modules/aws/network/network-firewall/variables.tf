@@ -188,7 +188,7 @@ variable "region" {
   default     = null
 
   validation {
-    condition     = var.region == null || can(regex("^[a-z]{2}(-[a-z]+)+-[0-9]$", var.region))
+    condition     = var.region == null || can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", var.region))
     error_message = "region must be null or an AWS region name such as eu-west-2."
   }
 }

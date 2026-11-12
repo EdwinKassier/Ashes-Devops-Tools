@@ -45,7 +45,8 @@
               "type": "string"
             },
             "aws": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$"
             }
           },
           "additionalProperties": false
@@ -1265,13 +1266,15 @@
         "allowed_regions": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$"
           }
         },
         "enabled_regions": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$"
           }
         },
         "guard_alert_emails": {
@@ -2080,7 +2083,7 @@
             },
             "dr_region": {
               "type": "string",
-              "pattern": "^([a-z]{2}|eusc)(-[a-z]+){1,2}-[1-9][0-9]?$"
+              "pattern": "^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$"
             }
           },
           "additionalProperties": false

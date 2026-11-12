@@ -254,7 +254,7 @@ variable "dr_region" {
   default     = null
 
   validation {
-    condition     = var.dr_region == null || (can(regex("^([a-z]{2}|eusc)(-[a-z]+){1,2}-[1-9][0-9]?$", coalesce(var.dr_region, "x"))) && var.dr_region != var.aws_region)
+    condition     = var.dr_region == null || (can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", coalesce(var.dr_region, "x"))) && var.dr_region != var.aws_region)
     error_message = "dr_region must be null or an AWS region name that differs from aws_region."
   }
 }

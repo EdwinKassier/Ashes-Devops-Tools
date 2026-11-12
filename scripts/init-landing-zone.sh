@@ -323,7 +323,10 @@ if [[ "${CODEOWNERS}" == true ]]; then
   done
 fi
 [[ "${GCP_REGION}" =~ ^[a-z]+-[a-z]+[0-9]+$ ]] || die "--gcp-region '${GCP_REGION}' is not a GCP region name"
-[[ "${AWS_REGION}" =~ ^[a-z]{2}-[a-z]+-[1-9][0-9]?$ ]] || die "--aws-region '${AWS_REGION}' is not an AWS region name"
+# Canonical AWS region regex (scripts/check-consistency.sh): commercial and
+# China names, GovCloud (us-gov-*) and the European Sovereign Cloud (eusc-*).
+aws_region_re='^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$'
+[[ "${AWS_REGION}" =~ ${aws_region_re} ]] || die "--aws-region '${AWS_REGION}' is not an AWS region name"
 
 [[ "${AUDIT_BUCKET_LOCK}" == true || "${AUDIT_BUCKET_LOCK}" == false ]] ||
   die "--audit-bucket-lock must be true or false"

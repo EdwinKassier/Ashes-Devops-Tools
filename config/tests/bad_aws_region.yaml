@@ -1,0 +1,5 @@
+# Expected to FAIL schema validation: "eusc-east-1" has no country segment
+# (the European Sovereign Cloud form is eusc-<cc>-<direction>-<n>).
+version: 1
+aws:
+  allowed_regions: [eu-west-2, us-gov-west-1, eusc-east-1]

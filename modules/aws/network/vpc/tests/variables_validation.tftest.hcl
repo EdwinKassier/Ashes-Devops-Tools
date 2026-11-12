@@ -81,3 +81,42 @@ run "availability_zones_in_region_accepted" {
     error_message = "The module must expose the availability zones it placed subnets in."
   }
 }
+
+# The flow-log destination accepts the GovCloud and European Sovereign Cloud
+# partitions and rejects an unknown one. The region stays eu-west-2: only the
+# ARN is under test here.
+run "accepts_eusc_flow_log_arn" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws-eusc:s3:::example-log-archive-bucket"
+  }
+
+  assert {
+    condition     = var.flow_log_destination_arn == "arn:aws-eusc:s3:::example-log-archive-bucket"
+    error_message = "an aws-eusc S3 ARN must pass the flow-log destination validation."
+  }
+}
+
+run "accepts_govcloud_flow_log_arn" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws-us-gov:s3:::example-log-archive-bucket"
+  }
+
+  assert {
+    condition     = var.flow_log_destination_arn == "arn:aws-us-gov:s3:::example-log-archive-bucket"
+    error_message = "an aws-us-gov S3 ARN must pass the flow-log destination validation."
+  }
+}
+
+run "rejects_unknown_partition_flow_log_arn" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws-iso-x:s3:::example-log-archive-bucket"
+  }
+
+  expect_failures = [var.flow_log_destination_arn]
+}

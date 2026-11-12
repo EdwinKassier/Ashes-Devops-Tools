@@ -13,7 +13,7 @@ variable "org_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:organizations::", var.org_arn))
     error_message = "org_arn must be an AWS Organizations ARN beginning with arn:aws:organizations::."
   }
 }
@@ -24,7 +24,7 @@ variable "aws_region" {
   default     = "eu-west-2"
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.aws_region))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", var.aws_region))
     error_message = "aws_region must be a valid AWS region id (e.g. eu-west-2)."
   }
 }
@@ -134,7 +134,7 @@ variable "flow_log_destination_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:s3:::", var.flow_log_destination_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:s3:::", var.flow_log_destination_arn))
     error_message = "flow_log_destination_arn must be an S3 bucket ARN beginning with arn:aws:s3:::."
   }
 }

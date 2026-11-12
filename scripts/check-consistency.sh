@@ -10,10 +10,23 @@ cd "$(dirname "$0")/.." || exit 1
 fail=0
 note() { echo "  - $1"; fail=1; }
 
-echo "==> AWS region regex is canonical (single form, no single-digit-ordinal drift)"
-# Canonical: ^[a-z]{2}-[a-z]+-[1-9][0-9]?$  ·  Rejected: the older ...-[0-9]$ form.
-drift=$(grep -rln 'a-z]{2}-\[a-z\]+-\[0-9\]\$' --include='*.tf' modules envs 2>/dev/null || true)
-[ -z "$drift" ] || { echo "$drift" | while read -r f; do note "region regex drift (use [1-9][0-9]?\$): $f"; done; fail=1; }
+echo "==> AWS region and ARN partition regexes are canonical (one form each)"
+# Region canonical: ^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$
+#   commercial and China names keep the old two-letter form; GovCloud (us-gov-*)
+#   and the European Sovereign Cloud (eusc-<cc>-*) are named explicitly.
+# Partition canonical (strict ARN checks): arn:aws(-us-gov|-cn|-eusc)?:
+# Every .tf or script regex that starts with a two-letter region prefix must be
+# the canonical one; the older forms (...-[0-9]$, (-[a-z]+)+, the pre-sovereign
+# two-letter-only form) and the pre-sovereign partition list are drift.
+# templates/ is not scanned: templates/aws/root keeps the commercial-only form
+# (known-gaps, "GovCloud and the AWS European Sovereign Cloud").
+region_canon='^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$'
+drift=$(grep -rnoE --include='*.tf' --include='*.sh' --exclude-dir='.terraform' \
+  '\^(\(\[a-z\]\{2\}[^$]*|\[a-z\]\{2\}[^$]*)\$' modules envs scripts 2>/dev/null \
+  | grep -vF -- "${region_canon}" | grep -v '^scripts/check-consistency.sh:' || true)
+[ -z "$drift" ] || { echo "$drift" | while read -r f; do note "region regex drift (use ${region_canon}): $f"; done; fail=1; }
+pdrift=$(grep -rnF --include='*.tf' --exclude-dir='.terraform' 'aws(-us-gov|-cn)?' modules envs templates 2>/dev/null || true)
+[ -z "$pdrift" ] || { echo "$pdrift" | while read -r f; do note "ARN partition drift (use aws(-us-gov|-cn|-eusc)?): $f"; done; fail=1; }
 
 echo "==> Audit-retention framework floors are identical in every root that reads compliance.frameworks"
 # Each such config.tf holds one retention_floor_days line; all copies must match.

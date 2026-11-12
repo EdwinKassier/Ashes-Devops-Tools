@@ -243,3 +243,40 @@ run "rejects_dr_region_without_cmk" {
 
   expect_failures = [var.member_backup_dr_region]
 }
+
+# Partitions: the run-role and break-glass ARNs accept the commercial (`aws`),
+# China (`aws-cn`), GovCloud (`aws-us-gov`) and European Sovereign Cloud
+# (`aws-eusc`) partitions, and nothing else.
+run "accepts_govcloud_and_eusc_arns" {
+  command = plan
+
+  variables {
+    terraform_run_role_arn = "arn:aws-eusc:iam::111111111111:role/tfc-run-role"
+    break_glass_role_arn   = "arn:aws-us-gov:iam::111111111111:role/break-glass"
+  }
+
+  assert {
+    condition     = var.terraform_run_role_arn == "arn:aws-eusc:iam::111111111111:role/tfc-run-role" && var.break_glass_role_arn == "arn:aws-us-gov:iam::111111111111:role/break-glass"
+    error_message = "the European Sovereign Cloud and GovCloud partitions must pass ARN validation."
+  }
+}
+
+run "rejects_unknown_partition_arn" {
+  command = plan
+
+  variables {
+    terraform_run_role_arn = "arn:aws-eu:iam::111111111111:role/tfc-run-role"
+  }
+
+  expect_failures = [var.terraform_run_role_arn]
+}
+
+run "rejects_malformed_eusc_partition_arn" {
+  command = plan
+
+  variables {
+    break_glass_role_arn = "arn:aws-eusc-de:iam::111111111111:role/break-glass"
+  }
+
+  expect_failures = [var.break_glass_role_arn]
+}

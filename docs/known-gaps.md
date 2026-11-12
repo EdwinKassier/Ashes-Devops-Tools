@@ -716,6 +716,23 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   proposes `100.64.0.0/10` for Pods and `100.127.0.0/16` for Services. Google documents
   `100.64.0.0/10` as a valid subnet range, but its GKE pages do not confirm it for Autopilot Pods.
   Test one cluster in the sandbox first. Overlap validation does not cover `secondary_ranges`.
+- **GovCloud and the AWS European Sovereign Cloud pass input validation only.**
+  The strict ARN checks accept the `aws`, `aws-cn`, `aws-us-gov` and `aws-eusc`
+  partitions, and the canonical AWS region regex
+  (`^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$`, enforced by
+  `scripts/check-consistency.sh`) accepts `us-gov-west-1` and `eusc-de-east-1`.
+  Nothing is tested in those partitions. Service availability differs (for
+  example Security Lake, Macie and some GuardDuty features may be missing),
+  service and endpoint names may differ (the VPC module builds gateway endpoint
+  names as `com.amazonaws.<region>.<service>`), and FIPS endpoints are not
+  configured (`use_fips_endpoint` is not set on any provider). The AWS ISO
+  partitions (`aws-iso`, `aws-iso-b`) are not accepted: their public
+  documentation does not give region names to check against. The root template
+  `templates/aws/root` still validates `aws_region` with the commercial-only
+  form `^[a-z]{2}-[a-z]+-[1-9][0-9]?$`; a root built from it rejects GovCloud and
+  sovereign region names until you replace that regex. Refs:
+  <https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/using-govcloud-arns.html>,
+  <https://docs.aws.eu/general/latest/gr/arns.html>
 
 ## OPEN — operator actions and items carried from archived audits
 

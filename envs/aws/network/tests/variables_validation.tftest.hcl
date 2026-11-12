@@ -108,6 +108,72 @@ run "rejects_invalid_aws_region" {
   expect_failures = [var.aws_region]
 }
 
+# Region names: GovCloud (`us-gov-west-1`) and the AWS European Sovereign Cloud
+# (`eusc-de-east-1`) pass; malformed or commercial look-alike names do not. The
+# accepting runs pass the region's zones because the mocked zone lookup returns
+# eu-west-2 zones.
+run "accepts_govcloud_region" {
+  command = plan
+
+  variables {
+    aws_region          = "us-gov-west-1"
+    aws_enabled_regions = ["us-gov-west-1"]
+    availability_zones  = ["us-gov-west-1a", "us-gov-west-1b"]
+    az_count            = 2
+  }
+
+  assert {
+    condition     = local.aws_region == "us-gov-west-1"
+    error_message = "GovCloud region names must pass the region validation."
+  }
+}
+
+run "accepts_eusc_region" {
+  command = plan
+
+  variables {
+    aws_region          = "eusc-de-east-1"
+    aws_enabled_regions = ["eusc-de-east-1"]
+    availability_zones  = ["eusc-de-east-1a", "eusc-de-east-1b"]
+    az_count            = 2
+  }
+
+  assert {
+    condition     = local.aws_region == "eusc-de-east-1"
+    error_message = "AWS European Sovereign Cloud region names must pass the region validation."
+  }
+}
+
+run "rejects_eusc_region_without_country" {
+  command = plan
+
+  variables {
+    aws_region = "eusc-east-1"
+  }
+
+  expect_failures = [var.aws_region]
+}
+
+run "rejects_govcloud_region_zero_ordinal" {
+  command = plan
+
+  variables {
+    aws_region = "us-gov-west-0"
+  }
+
+  expect_failures = [var.aws_region]
+}
+
+run "rejects_four_letter_commercial_prefix" {
+  command = plan
+
+  variables {
+    aws_region = "euwe-west-1"
+  }
+
+  expect_failures = [var.aws_region]
+}
+
 run "rejects_empty_aws_enabled_regions" {
   command = plan
 

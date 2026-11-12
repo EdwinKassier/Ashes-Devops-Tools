@@ -55,7 +55,7 @@ variable "regions" {
   }
 
   validation {
-    condition     = alltrue([for r in var.regions : can(regex("^[a-z]{2}(-[a-z]+)+-[0-9]{1,2}$", r))])
+    condition     = alltrue([for r in var.regions : can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", r))])
     error_message = "regions entries must be valid AWS region ids (e.g. eu-west-2)."
   }
 }
