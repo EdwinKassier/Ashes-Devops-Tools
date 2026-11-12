@@ -450,6 +450,15 @@ unknown at plan time, is reported by the advisory
 
 ### AWS
 
+#### No placeholder SecOps subscriber (CMP-6, aws-security, breaking)
+
+`aws-security` no longer subscribes `secops@example.com` to the security-notifications topic (GuardDuty, Security Hub, root use, console sign-in without MFA, break-glass use) and, unless `cloudtrail_alarm_subscribers` is set, to the CIS alarm topic. That address never delivered.
+
+- **Production fails the plan** until a real subscriber is set. Production means `org.profile = production` (the default), or any `aws.workload_environments` entry with `is_production: true`. Set `notifications.emails` in `config/landing-zone.yaml`, or `aws_overrides.notification_subscribers`. A subscriber on `example.com`, `example.net`, `example.org` (or a subdomain), or on a `.example`, `.invalid` or `.localhost` domain also fails the plan.
+- **Non-production** (`org.profile = starter` and no production workload environment) plans with no subscriber and shows a warning (`check.security_contact_set`).
+
+What you see on apply: the old `secops` subscription is destroyed (with `notifications.emails` set, the new subscriptions are created; each email recipient must confirm). The stage default for `aws.notification_subscribers` is now `{}`, and the stage and `security-notifications` module accept an empty map.
+
 #### Patch Manager now installs patches (CMP-3, systems-manager, aws-security, aws-workload, breaking)
 
 `modules/aws/ops/systems-manager` adds two `AWS-RunPatchBaseline` State Manager associations in every account that runs it: the security-tooling account (aws-security) and each workload account (aws-workload, `enable_ssm` default `true`). Each association is regional: it covers the provider region of that root.

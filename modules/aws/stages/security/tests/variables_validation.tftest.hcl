@@ -216,7 +216,9 @@ run "rejects_non_arn_break_glass_role" {
   expect_failures = [var.aws]
 }
 
-run "rejects_empty_notification_subscribers" {
+# CMP-6: the stage accepts no subscriber (the topic exists, nobody is
+# notified); the aws-security root fails a production plan without one.
+run "accepts_empty_notification_subscribers" {
   command = plan
 
   variables {
@@ -225,7 +227,10 @@ run "rejects_empty_notification_subscribers" {
     })
   }
 
-  expect_failures = [var.aws]
+  assert {
+    condition     = length(var.aws.notification_subscribers) == 0
+    error_message = "an empty notification_subscribers map must plan."
+  }
 }
 
 run "rejects_unknown_security_service" {

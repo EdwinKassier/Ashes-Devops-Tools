@@ -29,6 +29,11 @@ locals {
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
     notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    # aws.workload_environments entries with is_production: true. Any one makes
+    # the security contact guard strict (CMP-6), like a production profile.
+    workload_production = try([
+      for k, e in local.lz.aws.workload_environments : k if try(tobool(e.is_production), false)
+    ], [])
     # compliance: the log-archive retention and the framework floors (CMP-2).
     audit_log_retention_days = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
     compliance_frameworks    = try([for f in local.lz.compliance.frameworks : tostring(f)], [])
@@ -83,10 +88,10 @@ locals {
   management_account_id = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
   aws_enabled_regions   = local.aws.aws_enabled_regions != null ? local.aws.aws_enabled_regions : ["eu-west-2"]
 
-  # aws_overrides > notifications.emails > a placeholder SecOps email.
-  notification_subscribers = local.aws.notification_subscribers != null ? tomap(local.aws.notification_subscribers) : tomap({
-    secops = { protocol = "email", endpoint = "secops@example.com" }
-  })
+  # aws_overrides > notifications.emails > no subscriber. There is no
+  # placeholder: main.tf fails a production plan without a real subscriber
+  # (security_contact_guard) and warns otherwise (CMP-6).
+  notification_subscribers = local.aws.notification_subscribers != null ? tomap(local.aws.notification_subscribers) : tomap({})
 
   # Profile-driven defaults (aws_overrides > profile). starter keeps every
   # preventive and core detective control (CloudTrail, Config, GuardDuty,

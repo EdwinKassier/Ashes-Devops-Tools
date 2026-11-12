@@ -489,7 +489,11 @@ saas:
   #       github_repo: my-org/web
   #       production_branch: main
 
-# One place for alert recipients. Optional: absent = today's behaviour.
+# One place for alert recipients. Optional: absent = today's behaviour, except
+# aws-security: a production estate (org.profile production, or an AWS workload
+# environment with is_production: true) fails its plan without a real security
+# contact here or in aws_overrides.notification_subscribers. Example, .invalid
+# and .localhost domains are rejected.
 # Precedence everywhere: explicit variable > the specific key (gcp.alert_emails,
 # aws.guard_alert_emails) > notifications.emails > the root's built-in default.
 # notifications:

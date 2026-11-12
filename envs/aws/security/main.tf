@@ -95,3 +95,47 @@ check "break_glass_created_by_phase0_stack" {
     error_message = "aws_overrides.create_break_glass = true: the dedicated tfc-mgmt-aws-security role cannot create or edit the management break-glass role (AccessDenied). Use the OrganizationBreakGlass role from templates/aws/bootstrap/phase0-management.yaml and keep aws_overrides.create_break_glass unset (false), or apply this workspace as the phase-0 role."
   }
 }
+
+# ---------------------------------------------------------------------------
+# CMP-6: security notifications must reach a real, staffed address.
+# ---------------------------------------------------------------------------
+
+locals {
+  # The host of each subscriber endpoint: the domain of an email address, the
+  # host of a URL, "" for an ARN or a phone number.
+  subscriber_hosts = {
+    for k, s in local.notification_subscribers : k => lower(try(
+      regex("@([^@]+)$", s.endpoint)[0],
+      regex("^[A-Za-z][A-Za-z0-9+.-]*://([^/:?#@]+)", s.endpoint)[0],
+      ""
+    ))
+  }
+  # Subscribers on a reserved, never-delivered domain (RFC 2606 / RFC 6761):
+  # example.com/.net/.org and their subdomains, *.example, *.invalid, *.localhost.
+  placeholder_subscribers = sort([
+    for k, h in local.subscriber_hosts : k
+    if can(regex("(^|\\.)(example\\.(com|net|org)|example|invalid|localhost)$", h))
+  ])
+  # Production: org.profile = production, or any aws.workload_environments entry
+  # with is_production: true.
+  security_contact_required = local.profile == "production" || length(local.cfg.workload_production) > 0
+}
+
+resource "terraform_data" "security_contact_guard" {
+  input = sort(keys(local.notification_subscribers))
+
+  lifecycle {
+    precondition {
+      condition     = !local.security_contact_required || (length(local.notification_subscribers) > 0 && length(local.placeholder_subscribers) == 0)
+      error_message = "Production security notifications have no real subscriber${length(local.placeholder_subscribers) > 0 ? " (placeholder domain: ${join(", ", local.placeholder_subscribers)})" : ""}. Set notifications.emails in config/landing-zone.yaml, or aws_overrides.notification_subscribers. Example, .invalid and .localhost domains are rejected. Production means org.profile = production or an aws.workload_environments entry with is_production: true."
+    }
+  }
+}
+
+# Non-production: warn only.
+check "security_contact_set" {
+  assert {
+    condition     = length(local.notification_subscribers) > 0 && length(local.placeholder_subscribers) == 0
+    error_message = "No real security notification subscriber is set (notifications.emails or aws_overrides.notification_subscribers): GuardDuty, Security Hub and break-glass alerts will fire without notifying anyone."
+  }
+}

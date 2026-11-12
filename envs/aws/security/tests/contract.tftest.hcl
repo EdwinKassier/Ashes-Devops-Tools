@@ -21,6 +21,8 @@ variables {
   aws_overrides = {
     log_archive_bucket_name = "acme-org-log-archive"
     enable_security_lake    = false
+    # CMP-6: a production plan needs a real security contact.
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
   }
 }
 
@@ -190,8 +192,9 @@ run "emails_feed_security_topic" {
     landing_zone_name        = null
     management_account_id    = null
     aws_overrides = merge(var.aws_overrides, {
-      log_archive_bucket_name = null
-      enable_security_lake    = null
+      log_archive_bucket_name  = null
+      enable_security_lake     = null
+      notification_subscribers = null
     })
   }
 
@@ -216,7 +219,7 @@ run "explicit_subscribers_beat_notifications_emails" {
     aws_overrides = merge(var.aws_overrides, {
       log_archive_bucket_name  = null
       enable_security_lake     = null
-      notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.example.com/hook" } }
+      notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.acme.test/hook" } }
     })
   }
 
@@ -226,14 +229,26 @@ run "explicit_subscribers_beat_notifications_emails" {
   }
 }
 
-# No section: the historical placeholder subscriber is kept.
+# No section and no override: no subscriber at all (CMP-6: the old
+# secops@example.com placeholder is gone). A starter plan only warns.
 run "no_section_is_noop" {
   command = plan
 
-  assert {
-    condition     = length(local.notification_subscribers) == 1 && local.notification_subscribers["secops"].endpoint == "secops@example.com"
-    error_message = "without a notifications section the default placeholder subscriber must be unchanged."
+  variables {
+    profile = "starter"
+    aws_overrides = {
+      log_archive_bucket_name = "acme-org-log-archive"
+      enable_security_lake    = false
+    }
   }
+
+  assert {
+    condition     = length(local.notification_subscribers) == 0
+    error_message = "without a notifications section or an override there must be no subscriber (no placeholder)."
+  }
+
+  # The starter plan warns (check.security_contact_set) instead of failing.
+  expect_failures = [check.security_contact_set]
 }
 
 # Object pass-through precedence: a set aws_overrides key beats the config file
@@ -250,6 +265,7 @@ run "override_wins_over_config" {
       aws_enabled_regions       = ["us-east-1"]
       enabled_security_services = ["macie"]
       enable_incident_response  = false
+      notification_subscribers  = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
     }
   }
 
@@ -273,8 +289,9 @@ run "unset_override_keeps_config_value" {
     landing_zone_name        = null
     management_account_id    = null
     aws_overrides = {
-      log_archive_bucket_name = null
-      aws_enabled_regions     = null
+      log_archive_bucket_name  = null
+      aws_enabled_regions      = null
+      notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
     }
   }
 
@@ -298,7 +315,7 @@ run "unset_everywhere_takes_stage_default" {
     landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    aws_overrides            = {}
+    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
   }
 
   assert {
@@ -316,7 +333,7 @@ run "cloudtrail_delegated_admin_comes_from_config_file" {
     landing_zone_config_path = "tests/fixtures/landing-zone-cloudtrail-da.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    aws_overrides            = {}
+    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
   }
 
   assert {
@@ -332,7 +349,7 @@ run "cloudtrail_delegated_admin_absent_is_off" {
     landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    aws_overrides            = {}
+    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
   }
 
   assert {

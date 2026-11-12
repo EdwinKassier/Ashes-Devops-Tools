@@ -182,15 +182,13 @@ variable "aws" {
     # Operating systems that get a custom patch baseline (set as the account default for that OS) in
     # the security-tooling account. Default Amazon Linux 2023.
     patch_operating_systems = optional(set(string), ["AMAZON_LINUX_2023"])
-    # Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At
-    # least one is required (findings would otherwise fire into a void). Defaults to a placeholder
-    # SecOps email the root is expected to override.
+    # Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name.
+    # Default {} (no subscriber: the topic and rules exist, but nobody is notified). The aws-security
+    # root fails a production plan without a real subscriber and warns otherwise.
     notification_subscribers = optional(map(object({
       protocol = string # one of: email, https, sms, sqs, lambda, etc.
       endpoint = string # e.g. an email address or HTTPS URL
-      })), {
-      secops = { protocol = "email", endpoint = "secops@example.com" }
-    })
+    })), {})
     # Dedicated identity account for IAM Identity Center delegated administration. Default null = the
     # shared-services account (unchanged). Set to a dedicated identity account to tighten the
     # delegated-admin blast radius. PREVIEW: opt-in (default off), not yet validated against a real
@@ -339,11 +337,6 @@ variable "aws" {
       for s in var.aws.enabled_security_services : contains(["macie", "inspector", "detective", "resource-explorer"], s)
     ])
     error_message = "aws_overrides.enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
-  }
-
-  validation {
-    condition     = length(var.aws.notification_subscribers) > 0
-    error_message = "aws_overrides.notification_subscribers must contain at least one subscriber."
   }
 
   validation {

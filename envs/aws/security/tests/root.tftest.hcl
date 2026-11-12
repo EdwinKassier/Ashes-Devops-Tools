@@ -23,6 +23,8 @@ variables {
   aws_overrides = {
     log_archive_bucket_name = "ashes-org-log-archive"
     enable_security_lake    = false
+    # CMP-6: a production plan needs a real security contact.
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
   }
 }
 

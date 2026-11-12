@@ -6,9 +6,10 @@ topic and a set of EventBridge rules that fan the key detective signals
 without MFA, org-access-role and break-glass-role use) into that topic, plus a
 Security Hub automation rule that auto-notes informational findings.
 
-**A subscriber is required when the module is enabled.** Without at least one
-entry in `notification_subscribers`, findings fire into a void — the variable
-validation enforces this.
+**Add a subscriber.** With an empty `notification_subscribers` map the topic
+and rules exist but nobody is notified. The module allows that (a subscriber
+can be added later); the aws-security root fails a production plan without a
+real subscriber and warns otherwise.
 
 These are **detective** controls: they observe and alert, they do not block.
 The preventive counterparts live elsewhere — the B3 SCP carve-out and the F1
@@ -89,7 +90,7 @@ The following resources are created:
 | <a name="input_break_glass_role_arn"></a> [break\_glass\_role\_arn](#input\_break\_glass\_role\_arn) | ARN of the break-glass IAM role to watch for assumption. Any AssumeRole against this ARN raises a notification. The iam-role module defines the role; this module is its detective control. | `string` | `""` | no |
 | <a name="input_cloudtrail_log_group_name"></a> [cloudtrail\_log\_group\_name](#input\_cloudtrail\_log\_group\_name) | Name of the CloudWatch Logs group the organization CloudTrail delivers into. When set (and break\_glass\_role\_arn is set), a metric-filter + CloudWatch metric alarm on break-glass AssumeRole is created there, alarming into the SNS topic. Empty (default) omits the alarm; the always-on EventBridge rule remains the log-group-independent path. | `string` | `""` | no |
 | <a name="input_enable_security_notifications"></a> [enable\_security\_notifications](#input\_enable\_security\_notifications) | Master switch for the security-notifications detective control. When false, no SNS topic, subscriptions, EventBridge rules, or Security Hub automation rule are created. | `bool` | `true` | no |
-| <a name="input_notification_subscribers"></a> [notification\_subscribers](#input\_notification\_subscribers) | Map of subscribers to attach to the SNS topic, keyed by an arbitrary name. A subscriber is required when the module is enabled — otherwise findings fire into a void. | <pre>map(object({<br/>    protocol = string # one of: email, https, sms, sqs, lambda, etc.<br/>    endpoint = string # e.g. an email address or HTTPS URL<br/>  }))</pre> | `{}` | no |
+| <a name="input_notification_subscribers"></a> [notification\_subscribers](#input\_notification\_subscribers) | Map of subscribers to attach to the SNS topic, keyed by an arbitrary name. Empty (default) creates the topic and rules with no subscriber, so findings notify nobody until one is added; the aws-security root requires a real subscriber in production. | <pre>map(object({<br/>    protocol = string # one of: email, https, sms, sqs, lambda, etc.<br/>    endpoint = string # e.g. an email address or HTTPS URL<br/>  }))</pre> | `{}` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 | <a name="input_topic_name"></a> [topic\_name](#input\_topic\_name) | Name of the KMS-encrypted SNS topic that all security notifications are published to. | `string` | `"security-notifications"` | no |
 

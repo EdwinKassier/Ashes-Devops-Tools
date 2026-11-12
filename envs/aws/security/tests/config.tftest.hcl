@@ -5,6 +5,14 @@
 
 mock_provider "aws" {}
 
+# CMP-6: a production scaffold needs a real security contact (notifications.emails,
+# commented out in the scaffold); it is operator-supplied, so it is passed here.
+variables {
+  aws_overrides = {
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
+  }
+}
+
 mock_provider "aws" { alias = "security_tooling" }
 
 mock_provider "aws" { alias = "log_archive" }
@@ -85,7 +93,7 @@ run "override_retention_beats_config" {
 
   variables {
     landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
-    aws_overrides            = { log_archive_retention_days = 2555 }
+    aws_overrides            = { log_archive_retention_days = 2555, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
   }
 
   assert {

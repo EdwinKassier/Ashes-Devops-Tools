@@ -38,9 +38,9 @@ resource "aws_sns_topic_policy" "this" {
   })
 }
 
-# Subscribers (email / https / …). A subscriber is REQUIRED when the module is
-# enabled (enforced by the variable validation) — otherwise findings fire into
-# a void.
+# Subscribers (email / https / …). An empty map is allowed: the topic and rules
+# still exist, and a subscriber can be added later. The aws-security root fails
+# a production plan without a real subscriber (CMP-6).
 resource "aws_sns_topic_subscription" "this" {
   for_each  = var.enable_security_notifications ? var.notification_subscribers : {}
   topic_arn = aws_sns_topic.this[0].arn
