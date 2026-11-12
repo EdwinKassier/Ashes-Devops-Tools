@@ -149,6 +149,7 @@ the ones it manages at its next apply).
 | `STATE_BACKUP_GCS_BUCKET`, `STATE_BACKUP_GCP_WIF_PROVIDER`, `STATE_BACKUP_GCP_SA` | Variables | `state-backup.yml` | GCS target: a bucket with a locked retention policy and the service account the WIF principal impersonates. | No GCS copy. With no target at all the run fails. |
 | `STATE_BACKUP_WORKSPACES` | Variable | `state-backup.yml` | JSON array of workspaces that must be exported; a missing one fails the run. | Every workspace the token can see. |
 | `STATE_BACKUP_PREFIX` | Variable | `state-backup.yml` | Object-name prefix in the bucket. | `tfstate/` |
+| `TFC_TOKEN_AUDIT_TRAIL` | Secret | `tfc-audit-trail.yml` | The organization's audit trail token (`authentication-token?token=audit-trails`; the API refuses user and team tokens). Use it rather than an organization token. Keep it in the `tfc-audit-trail` environment only. The workflow also uses `TFC_ORGANIZATION` and the `STATE_BACKUP_*` target variables. See [audit trail export](../runbooks/state-backup.md#audit-trail-export). | Export off: scheduled runs warn, a manual dispatch fails. HCP Terraform keeps 14 days. |
 | `STATE_BACKUP_OPT_OUT` | Variable | `state-backup.yml` | `true` only to acknowledge running without a state copy outside HCP Terraform: unconfigured scheduled runs then warn instead of failing. | Unset: an unconfigured run fails. |
 | `CODEOWNERS_ENFORCE` | Variable | `terraform-plan.yml` (CODEOWNERS placeholders job) | Set to `true` once `.github/CODEOWNERS` names real teams: any remaining `@your-org/` placeholder then fails the build. | Placeholders produce a warning only, so forks stay green. |
 
@@ -188,12 +189,13 @@ environment, not at repository level, and restrict the environment's deployment 
 | `release` | `RELEASE_APP_PRIVATE_KEY` (plus variable `RELEASE_APP_ID`) | `main` only | `release.yml` |
 | `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
 | `tfc-state-backup` | `TFC_TOKEN_STATE_BACKUP` | `main` only | `state-backup.yml` |
+| `tfc-audit-trail` | `TFC_TOKEN_AUDIT_TRAIL` | `main` only | `tfc-audit-trail.yml` |
 | `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
 | `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label. **Required reviewers: yes** (at least one, prevent self-review) | `sandbox-e2e.yml` |
 
 ```bash
 repo=OWNER/REPO
-for env in tfc-drift tfc-state-backup release docs-bot; do
+for env in tfc-drift tfc-state-backup tfc-audit-trail release docs-bot; do
   gh api -X PUT "repos/$repo/environments/$env" \
     -F 'deployment_branch_policy[protected_branches]=false' \
     -F 'deployment_branch_policy[custom_branch_policies]=true'

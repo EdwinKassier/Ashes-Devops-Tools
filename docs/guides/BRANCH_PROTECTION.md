@@ -142,6 +142,7 @@ Secrets required by CI/CD — scope each to the minimum environment:
 | `TFC_TOKEN` | Environment `tfc-readonly` | Read-only TFC team token for run status verification |
 | `TFC_TOKEN_DRIFT` | Environment `tfc-drift` | Queue plans + read state versions, for the refresh-only drift check |
 | `TFC_TOKEN_STATE_BACKUP` | Environment `tfc-state-backup` | Read state versions, for the scheduled state export ([state backup](../runbooks/state-backup.md)) |
+| `TFC_TOKEN_AUDIT_TRAIL` | Environment `tfc-audit-trail` | Audit trail token (not an organization token), for the scheduled audit trail export ([audit trail export](../runbooks/state-backup.md#audit-trail-export)) |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Repository | WIF provider name for GCP authentication |
 | `GCP_SERVICE_ACCOUNT` | Repository | Terraform admin SA for plan/apply |
 
