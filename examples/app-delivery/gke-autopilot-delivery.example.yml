@@ -3,11 +3,20 @@
 # a workflow for THIS repo (hence the .example.yml suffix), so it never runs
 # here. This is the Kubernetes counterpart to cloud-run-delivery.example.yml.
 #
-# Flow: build -> scan -> push to Artifact Registry -> roll out the new image to a
+# Flow: build -> scan -> push to Artifact Registry -> resolve the pushed image
+# digest -> attest its build provenance -> roll out <repo>@<digest> to a
 # Deployment on the env GKE Autopilot cluster. Auth is keyless: GitHub OIDC ->
 # the app-deploy Workload Identity pool (apps-<env>) in the env host project ->
 # a GKE deploy SA. No service-account keys. Do NOT bind app deploy SAs to the
 # gcp-bootstrap pool: that pool is for the infrastructure pipelines only.
+#
+# Digest, not tag: the pods run exactly the bytes that were scanned and
+# attested. The provenance attestation (SLSA build provenance, signed with the
+# job's OIDC identity through Sigstore) is stored in GitHub and pushed next to
+# the image. Verify it with
+#   gh attestation verify oci://<IMAGE_REPOSITORY>@<digest> --repo <owner>/<app-repo>
+# (docs/guides/deploying-a-service.md). Enforcing it at admission (Binary
+# Authorization) is a separate step this example does not configure.
 #
 # Prerequisites (provisioned by the landing zone, not by this pipeline):
 #   - The cluster: enable_gke_autopilot = true in the gcp-workload-<env>
@@ -59,66 +68,89 @@
 
 name: Deploy service (GKE Autopilot)
 
-on:
+"on":
   push:
-    branches: [main] # must match the ref pinned in the WIF principalSet
+    branches: [main]  # must match the ref pinned in the WIF principalSet
 
-permissions:
-  contents: read
-  id-token: write # required for keyless WIF auth
+permissions: {}
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  IMAGE: ${{ vars.IMAGE_REPOSITORY }}:${{ github.sha }}
-  DEPLOYMENT: my-api # the Kubernetes Deployment to update
-  NAMESPACE: my-api # the namespace the deploy SA's RoleBinding covers
-  CONTAINER: my-api # the container within the Deployment
-
 jobs:
   deploy:
-    runs-on: ubuntu-latest # private control plane: use a runner that can reach it
+    runs-on: ubuntu-latest  # private control plane: use a runner that can reach it
     timeout-minutes: 20
+    # environment: dev  # REQUIRED when the principalSet uses repo_env or repo_ref_env
+    permissions:
+      contents: read
+      id-token: write      # keyless WIF auth and Sigstore signing of the attestation
+      attestations: write  # store the image provenance attestation in GitHub
+    env:
+      REPO: ${{ vars.IMAGE_REPOSITORY }}
+      DEPLOYMENT: my-api  # the Kubernetes Deployment to update
+      NAMESPACE: my-api   # the namespace the deploy SA's RoleBinding covers
+      CONTAINER: my-api   # the container within the Deployment
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build image
-        run: docker build -t "${IMAGE}" .
+        run: docker build -t "${REPO}:${GITHUB_SHA}" .
 
       - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}
+          image-ref: ${{ vars.IMAGE_REPOSITORY }}:${{ github.sha }}
           severity: "CRITICAL,HIGH"
           exit-code: "1"
 
       - name: Authenticate to Google Cloud (keyless WIF)
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
 
-      - name: Push image
+      - name: Push image and resolve its digest
+        id: push
+        env:
+          REGION: ${{ vars.GCP_REGION }}
         run: |
-          gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
-          docker push "${IMAGE}"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker push "${REPO}:${GITHUB_SHA}"
+          digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${REPO}:${GITHUB_SHA}" \
+            | grep -F "${REPO}@" | head -n 1 | cut -d@ -f2)"
+          case "${digest}" in
+            sha256:*) echo "digest=${digest}" >> "${GITHUB_OUTPUT}" ;;
+            *) echo "::error::could not resolve the pushed digest of ${REPO}:${GITHUB_SHA}"; exit 1 ;;
+          esac
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ${{ vars.IMAGE_REPOSITORY }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
       - name: Get cluster credentials
-        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3.0.0
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395  # v3.0.0
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ vars.GCP_REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
-      # Roll out the new image. In a GitOps setup, instead have the pipeline
-      # commit the new image tag to the manifests repo and let Argo CD / Config
-      # Sync apply it, so the cluster never drifts from the app-repo manifests.
+      # Roll out the immutable digest, never the tag: what was scanned and
+      # attested is exactly what runs. In a GitOps setup, instead have the
+      # pipeline commit <repo>@<digest> to the manifests repo and let Argo CD /
+      # Config Sync apply it, so the cluster never drifts from the manifests.
       - name: Roll out the new image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           kubectl set image "deployment/${DEPLOYMENT}" \
-            "${CONTAINER}=${IMAGE}" \
+            "${CONTAINER}=${REPO}@${DIGEST}" \
             --namespace "${NAMESPACE}"
           kubectl rollout status "deployment/${DEPLOYMENT}" \
             --namespace "${NAMESPACE}" --timeout=300s

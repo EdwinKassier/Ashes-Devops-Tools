@@ -700,6 +700,12 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   still reach any bucket in those domains. A China-region target
   (`amazonaws.com.cn`) needs that domain added.
 - **Release:** one SemVer for all 125 modules, no signed tags or build provenance.
+- **Application image provenance is not enforced at admission (CICD-17).** The
+  delivery examples in `examples/app-delivery/` deploy by image digest and attest
+  build provenance (`actions/attest-build-provenance`), and
+  `docs/guides/deploying-a-service.md` shows `gh attestation verify`. No Binary
+  Authorization policy (Cloud Run, GKE) or ECS image signature check rejects an
+  unattested image yet.
 - **Bus factor:** one maintainer. Code cannot fix this; see the operator items below.
 - **Release tags are mutable.** Published examples pin `?ref=vX.Y.Z` tags
   (release-please bumps them) and Checkov CKV_TF_1 is skipped on them. Release

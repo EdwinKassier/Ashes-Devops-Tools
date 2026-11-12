@@ -138,29 +138,89 @@ to `.github/workflows/deploy.yml` in the app repository. Its core steps are:
 ```yaml
 permissions:
   contents: read
-  id-token: write
+  id-token: write      # WIF auth and Sigstore signing
+  attestations: write  # store the provenance attestation
+env:
+  REPO: ${{ vars.IMAGE_REPOSITORY }}
 steps:
-  - uses: google-github-actions/auth@v2 # pin to a SHA in your app repo
+  - uses: google-github-actions/auth@v3 # pin to a SHA in your app repo
     with:
       workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
       service_account: ${{ vars.GCP_DEPLOY_SA }}
-  - run: |
-      gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
-      docker build -t "${{ vars.IMAGE_REPOSITORY }}:${GITHUB_SHA}" .
-      docker push "${{ vars.IMAGE_REPOSITORY }}:${GITHUB_SHA}"
-      gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" --project "${{ vars.GCP_PROJECT_ID }}" \
-        --region "${{ vars.GCP_REGION }}" --image "${{ vars.IMAGE_REPOSITORY }}:${GITHUB_SHA}" --quiet
+  - id: push
+    env:
+      REGION: ${{ vars.GCP_REGION }}
+    run: |
+      gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+      docker build -t "${REPO}:${GITHUB_SHA}" .
+      docker push "${REPO}:${GITHUB_SHA}"
+      digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${REPO}:${GITHUB_SHA}" \
+        | grep -F "${REPO}@" | head -n 1 | cut -d@ -f2)"
+      echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+  - uses: actions/attest-build-provenance@v4 # pin to a SHA in your app repo
+    with:
+      subject-name: ${{ vars.IMAGE_REPOSITORY }}
+      subject-digest: ${{ steps.push.outputs.digest }}
+      push-to-registry: true
+  - env:
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      DIGEST: ${{ steps.push.outputs.digest }}
+    run: |
+      gcloud run deploy "${SERVICE}" --project "${PROJECT}" --region "${REGION}" \
+        --image "${REPO}@${DIGEST}" --quiet
 ```
 
 The full example also scans the image with Trivy, using the same CRITICAL/HIGH bar
-as the IaC gate, before it pushes. The `google-github-actions/deploy-cloudrun`
-action is an equivalent replacement for the `gcloud run deploy` step.
+as the IaC gate, before it pushes, and fails when it cannot resolve the digest. It
+deploys the image digest, not the tag, and attests the image's build provenance;
+see [Image provenance](#image-provenance-deploy-by-digest-and-verify). The
+`google-github-actions/deploy-cloudrun` action is an equivalent replacement for the
+`gcloud run deploy` step. Values from `vars` reach the shell through `env:`, never
+through `${{ }}` inside `run:`, so a variable cannot inject shell code.
 
 **Who owns what:** Terraform owns the service *configuration* (ingress, VPC egress,
 secrets, runtime SA, scaling). The pipeline owns the *image*. The Cloud Run module
 ignores image and client changes, so Terraform runs never roll back a deploy.
 Change configuration in `services` in the YAML, not with `gcloud run deploy --set-*` flags.
 Terraform would revert those flags on its next apply.
+
+## Image provenance: deploy by digest and verify
+
+Each reference pipeline in `examples/app-delivery/` does three things after the
+scan:
+
+1. It pushes the image under the commit-SHA tag and reads back the image
+   **digest** (`sha256:...`) from the push.
+2. It runs `actions/attest-build-provenance` on `<repository>@<digest>`. The
+   action signs a SLSA build-provenance statement with the job's GitHub OIDC
+   identity (Sigstore), stores it in the app repository's attestations, and
+   with `push-to-registry: true` also pushes it to the registry next to the
+   image. The job needs `id-token: write` and `attestations: write`.
+3. It deploys `<repository>@<digest>` (Cloud Run revision, ECS task-definition
+   image, Kubernetes container image), never the tag. The workload runs exactly
+   the bytes that were scanned and attested.
+
+Verify an image before you trust it, for example during an incident or before a
+manual promotion:
+
+```bash
+gh attestation verify oci://<repository>@<digest> --repo <owner>/<app-repo>
+```
+
+The command checks the Sigstore signature and that the provenance names a
+workflow in `<owner>/<app-repo>`. Add `--signer-workflow <owner>/<app-repo>/.github/workflows/deploy.yml`
+to also pin the workflow file. Artifact attestations need a public repository
+or a GitHub plan that offers them for private repositories (GitHub Enterprise
+Cloud); on other plans the attest step fails, so remove it there.
+
+**Not in scope: enforcement.** Nothing in the landing zone rejects an
+unattested image yet. The next step is admission control that checks the
+attestation before a workload starts: Binary Authorization for Cloud Run and
+GKE, and image signature verification for ECS (for example an AWS Signer or
+Sigstore check in the deploy path). Until then, verification is a manual or
+pipeline check.
 
 ## Exposing the service (front door)
 
@@ -398,7 +458,8 @@ on:
 
 permissions:
   contents: read
-  id-token: write # mint the GitHub OIDC token
+  id-token: write      # mint the GitHub OIDC token (AWS role and Sigstore signing)
+  attestations: write  # store the image provenance attestation
 
 concurrency:
   group: deploy-dev
@@ -431,10 +492,21 @@ jobs:
       - name: Log in to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2 # pin to a SHA
 
-      - name: Build and push (immutable tag = commit SHA)
+      - name: Build and push (immutable tag = commit SHA), then read the digest
+        id: push
         run: |
           docker build -t "${ECR_REPOSITORY_URL}:${GITHUB_SHA}" .
           docker push "${ECR_REPOSITORY_URL}:${GITHUB_SHA}"
+          digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${ECR_REPOSITORY_URL}:${GITHUB_SHA}" \
+            | grep -F "${ECR_REPOSITORY_URL}@" | head -n 1 | cut -d@ -f2)"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@v4 # pin to a SHA
+        with:
+          subject-name: ${{ env.ECR_REPOSITORY_URL }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
       - name: Fetch the current task definition
         run: |
@@ -448,7 +520,7 @@ jobs:
         with:
           task-definition: task-definition.json
           container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ env.ECR_REPOSITORY_URL }}:${{ github.sha }}
+          image: ${{ env.ECR_REPOSITORY_URL }}@${{ steps.push.outputs.digest }}
 
       - name: Deploy to ECS and wait for a steady state
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2 # pin to a SHA
@@ -461,7 +533,9 @@ jobs:
 
 The deploy role allows exactly these calls. Anything else, such as tagging the
 task definition (`ecs:TagResource`), creating repositories, or passing another
-role, is denied. Before the push step you can add an image scan, as the
+role, is denied. The task definition names the image digest, not the tag
+([Image provenance](#image-provenance-deploy-by-digest-and-verify) explains the
+attestation and how to verify it). Before the push step you can add an image scan, as the
 reference pipeline
 [`examples/app-delivery/ecs-fargate-delivery.example.yml`](../../examples/app-delivery/ecs-fargate-delivery.example.yml)
 does with Trivy. ECR also scans on push. For promotion to `prod`, add a second
