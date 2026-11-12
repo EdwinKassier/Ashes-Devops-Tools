@@ -86,6 +86,16 @@ policy "no_plan_time_code_execution" {
   enforcement_level = "mandatory"
 }
 
+# ── Mandatory: reviewed code only on the control plane ─────────────────────
+# A run that can apply on a VCS-connected workspace tagged layer:control-plane,
+# layer:bootstrap or tier:production must carry a commit SHA (it came from the
+# connected repository, not an API-uploaded configuration version). PREVIEW:
+# the run field is confirmed by the docs only (docs/known-gaps.md).
+policy "tfc_vcs_run_only" {
+  query             = "data.terraform.policies.tfc_vcs_run_only.deny"
+  enforcement_level = "mandatory"
+}
+
 # ── Mandatory: ownership and cost labels ────────────────────────────────────
 # Ownership and cost keys on listed taggable types: GCP managed-by,
 # environment, cost-center, owner; AWS ManagedBy, Environment, CostCenter,

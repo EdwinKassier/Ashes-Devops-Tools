@@ -566,6 +566,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   precondition fails an `is_production` environment whose perimeter is absent or in dry-run. The
   new `production_vpc_sc_dry_run_waiver = { reason, expires }` lets a first rollout plan until its
   `expires` date (UTC). After that date the plan fails again. See `UPGRADING.md`.
+- **Control-plane and production applies run only code from VCS (SEC-1, PREVIEW).** The new
+  mandatory `tfc_vcs_run_only` rule in the hard-gate `policies/opa` set denies a run that can
+  apply on a VCS-connected workspace tagged `layer:control-plane`, `layer:bootstrap` or
+  `tier:production` when it has no `run.commit_sha`. An approver can no longer upload a
+  configuration version through the API and confirm it without a pull request. Speculative plans
+  and CLI-driven workspaces are not affected. The field is checked against the HCP Terraform docs
+  only: confirm it on one real run (`docs/known-gaps.md`).
 
 ### Changed
 

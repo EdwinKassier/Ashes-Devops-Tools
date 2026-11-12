@@ -64,6 +64,26 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   registers the account again. The root cannot skip the registration:
   `identity_center_admin_account_key` is a `modules/aws/stages/organization`
   input that `envs/aws/organization` does not expose.
+- **PREVIEW: `tfc_vcs_run_only` relies on `run.commit_sha` (SEC-1).** The
+  mandatory rule in the hard-gate `policies/opa` set denies a run that can
+  apply (not speculative) on a VCS-connected workspace tagged
+  `layer:control-plane`, `layer:bootstrap` or `tier:production` when the run
+  has no commit SHA, which is the case for an API-uploaded configuration
+  version. HCP Terraform documents `run.commit_sha` as "The checksum hash
+  (SHA) that identifies the commit", but does not say what it holds for an
+  uploaded version. The rule therefore assumes it is empty or absent there.
+  Only the OPA unit tests prove the rule. Before you rely on it, run one VCS
+  run and one API-upload run on a sandbox control-plane workspace and read
+  `run.commit_sha` in the policy evaluation input. If a VCS run carries no
+  SHA, the rule blocks every control-plane and production apply and no
+  override helps (the set is not overridable). Recover by merging a fix to
+  the policy, because the set is sourced from the main branch. Limits: it does
+  not cover non-production workloads (an approver there can still apply an
+  uploaded version); it trusts the workspace tags, so a hand-created
+  `tfc-admin` workspace (`manage_tfc_admin_workspace = false`) is covered only
+  if it carries `layer:control-plane`; and a run on an older VCS
+  configuration version (`configuration-version-id` on the API) carries that
+  commit's SHA and passes.
 - **GCP Private Service Connect endpoint for Google APIs is mock-tested only
   (ARC-1).** `net-hub` and `net-spoke` name the endpoint by Google's rule
   (1-20 lower-case letters and numbers, starting with a letter) and reserve an
@@ -1324,7 +1344,10 @@ side (all mock-tested, secure defaults):
   the policy seeing it. What limits it today: `scripts/check-plan-time-exec.py`
   in CI fails on a provisioner in any `removed` block in repo code, and confirming an apply needs
   apply rights (the platform team has `runs = read` on secret-bearing
-  projects). A CLI upload by someone with apply rights is not covered.
+  projects). A CLI or API upload by someone with apply rights is not covered,
+  except on VCS-connected control-plane, bootstrap and production
+  workspaces, where the PREVIEW `tfc_vcs_run_only` rule denies a run without
+  a commit SHA.
 - **OPA cannot attest module content.** The provisioner allowlist pins the
   module-call chain and its source strings, not the bytes of
   `modules/supabase/vault-secrets` or its `scripts/*.mjs`. The policy does
