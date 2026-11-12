@@ -1185,12 +1185,32 @@ data "tfe_outputs" "gcp_bootstrap" {
   count        = var.gcp_bootstrap_outputs_from_tfc ? 1 : 0
   organization = local.tfc_organization
   workspace    = "gcp-bootstrap"
+
+  # Fail instead of silently dropping the TFC_* dynamic-credential variables:
+  # the reads in locals use try(), so a renamed or missing output would
+  # otherwise leave every workspace this upstream feeds without credentials.
+  lifecycle {
+    postcondition {
+      condition     = length(setsubtract(["tfc_workload_provider_name", "tfc_plan_service_accounts", "tfc_apply_service_accounts"], keys(try(self.nonsensitive_values.contract, self.nonsensitive_values, {})))) == 0
+      error_message = "gcp_bootstrap_outputs_from_tfc = true but the gcp-bootstrap outputs lack ${join(", ", sort(tolist(setsubtract(["tfc_workload_provider_name", "tfc_plan_service_accounts", "tfc_apply_service_accounts"], keys(try(self.nonsensitive_values.contract, self.nonsensitive_values, {}))))))}. Apply gcp-bootstrap first. If it has applied, its contract output changed (scripts/check-contracts.sh). Without these keys no gcp-* workspace gets TFC_GCP_* dynamic credentials."
+    }
+  }
 }
 
 data "tfe_outputs" "aws_organization" {
   count        = var.aws_organization_outputs_from_tfc ? 1 : 0
   organization = local.tfc_organization
   workspace    = "aws-organization"
+
+  # Fail instead of silently dropping the TFC_* dynamic-credential variables:
+  # the reads in locals use try(), so a renamed or missing output would
+  # otherwise leave every workspace this upstream feeds without credentials.
+  lifecycle {
+    postcondition {
+      condition     = length(setsubtract(["tfc_plan_role_arns", "tfc_apply_role_arns", "tfc_workspace_bindings"], keys(try(self.nonsensitive_values.contract, self.nonsensitive_values, {})))) == 0
+      error_message = "aws_organization_outputs_from_tfc = true but the aws-organization outputs lack ${join(", ", sort(tolist(setsubtract(["tfc_plan_role_arns", "tfc_apply_role_arns", "tfc_workspace_bindings"], keys(try(self.nonsensitive_values.contract, self.nonsensitive_values, {}))))))}. Apply aws-organization first. If it has applied, its contract output changed (scripts/check-contracts.sh). Without these keys no aws-* workspace gets TFC_AWS_* dynamic credentials."
+    }
+  }
 }
 
 # The hand-created tfc-admin workspace, looked up only when it is not

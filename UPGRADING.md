@@ -43,6 +43,11 @@ Manual steps for the next release, grouped by area. A breaking change
 
 ### HCP Terraform and policy
 
+#### tfc-admin fails when an upstream contract lacks the credential keys
+
+**Who:** forks that set `gcp_bootstrap_outputs_from_tfc` or `aws_organization_outputs_from_tfc` to true.
+**What changes:** tfc-admin now fails its plan when the `gcp-bootstrap` outputs lack `tfc_workload_provider_name`, `tfc_plan_service_accounts` or `tfc_apply_service_accounts`, or when the `aws-organization` outputs lack `tfc_plan_role_arns`, `tfc_apply_role_arns` or `tfc_workspace_bindings`. Before, a missing key dropped the `TFC_*` dynamic-credential variables without any error. The error names the missing keys. Apply the upstream workspace first, or fix the renamed output (`scripts/check-contracts.sh`).
+
 #### Every AWS workload needs its own vpc_cidr in the regional pool (tfc-admin)
 
 **Breaking: tfc-admin now fails its plan for configs that passed before.** Spoke VPCs request their `vpc_cidr` from the IPAM pool, so two workloads on the same range collide, and a range outside the home-region pool fails at apply. tfc-admin now fails when:

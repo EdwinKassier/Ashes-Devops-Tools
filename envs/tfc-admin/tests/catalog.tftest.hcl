@@ -164,6 +164,8 @@ run "derived_family_keys_unchanged" {
     values = {
       nonsensitive_values = {
         contract = {
+          tfc_plan_service_accounts  = {}
+          tfc_apply_service_accounts = {}
           admin_project_id           = "acme-admin-1a2b"
           tfc_workload_provider_name = "projects/123456789/locations/global/workloadIdentityPools/tfc-pool/providers/tfc-provider"
         }
@@ -176,8 +178,9 @@ run "derived_family_keys_unchanged" {
     values = {
       nonsensitive_values = {
         contract = {
-          tfc_plan_role_arns  = { workload_dev = "arn:aws:iam::555555555555:role/tfc-plan" }
-          tfc_apply_role_arns = { workload_dev = "arn:aws:iam::555555555555:role/tfc-apply" }
+          tfc_workspace_bindings = {}
+          tfc_plan_role_arns     = { workload_dev = "arn:aws:iam::555555555555:role/tfc-plan" }
+          tfc_apply_role_arns    = { workload_dev = "arn:aws:iam::555555555555:role/tfc-apply" }
         }
       }
     }

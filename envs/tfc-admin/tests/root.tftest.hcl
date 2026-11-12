@@ -2255,7 +2255,11 @@ run "gcp_bootstrap_local_after_handover_warns" {
 
   override_data {
     target = data.tfe_outputs.gcp_bootstrap[0]
-    values = { nonsensitive_values = {} }
+    values = { nonsensitive_values = {
+      tfc_workload_provider_name = null
+      tfc_plan_service_accounts  = {}
+      tfc_apply_service_accounts = {}
+    } }
   }
 
   override_data {
@@ -2541,4 +2545,48 @@ run "platform_cannot_read_saas_outputs" {
     ])
     error_message = "the platform team keeps read-outputs on projects without secrets in state."
   }
+}
+
+# An upstream whose contract lost a credential key (a rename, or an apply that
+# has not happened yet) must stop the plan instead of dropping the TFC_*
+# dynamic-credential variables of every workspace it feeds.
+run "gcp_bootstrap_contract_missing_keys_fails" {
+  command = plan
+
+  variables {
+    gcp_bootstrap_outputs_from_tfc = true
+    workspace_execution_modes      = {}
+  }
+
+  override_data {
+    target = data.tfe_outputs.gcp_bootstrap[0]
+    values = { nonsensitive_values = { contract = { admin_project_id = "admin-proj" } } }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  expect_failures = [data.tfe_outputs.gcp_bootstrap]
+}
+
+run "aws_organization_contract_missing_keys_fails" {
+  command = plan
+
+  variables {
+    aws_organization_outputs_from_tfc = true
+  }
+
+  override_data {
+    target = data.tfe_outputs.aws_organization[0]
+    values = { nonsensitive_values = { contract = { tfc_plan_role_arns = {} } } }
+  }
+
+  override_data {
+    target = data.tfe_workspace.tfc_admin[0]
+    values = { id = "ws-tfcadmin" }
+  }
+
+  expect_failures = [data.tfe_outputs.aws_organization]
 }
