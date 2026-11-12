@@ -175,7 +175,7 @@ Each spoke environment gets two subnets within the configured VPC CIDR:
 | `{prefix}-private` | Application workloads | `10.128.0.0/20` |
 | `{prefix}-database` | Cloud SQL, Memorystore | `10.128.16.0/20` |
 
-Secondary IP ranges for GKE pods and services are allocated within the private subnet when `enable_gke = true`.
+Secondary IP ranges for GKE Pods and Services are set on the private subnet through `secondary_ranges`. The IP plan proposes `100.64.0.0/10` for Pods and `100.127.0.0/16` for Services; see [cidr-plan.md](cidr-plan.md#gke-secondary-ranges) for what is confirmed.
 
 All subnets have VPC Flow Logs enabled and export to BigQuery via the Cloud Audit Logs sink.
 

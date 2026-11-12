@@ -586,6 +586,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   aws-organization stage tests that no target carries more than 5 RCPs, `RCPFullAWSAccess`
   included. The worst case measures 6,485 characters for `scp-deny-tamper` and 2,811 for
   `rcp-data-perimeter`, so no policy is split and no plan changes.
+- **The IP plan states capacity and a GKE secondary range plan (ARC-4).** `docs/architecture/cidr-plan.md`
+  now lists how many GCP environments and AWS workloads each range holds and how to grow it. It
+  proposes `100.64.0.0/10` for GKE Pods and Services, says which parts Google's documentation
+  confirms and which it does not, and `docs/known-gaps.md` records that the ranges are not provisioned.
 - **A regional IPAM pool can grow, and its share can be limited to OUs (ARC-4).** One `/12` pool holds
   14 workloads in the default plan. `aws.network.regional_additional_cidrs` (region => CIDRs) provisions
   extra CIDRs into a region's pool without touching existing allocations. A static hub VPC inside an

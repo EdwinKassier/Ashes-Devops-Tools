@@ -684,6 +684,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   deployable roots always pass resolved zones. A direct stage or module caller
   in another region must set `availability_zones`, or the plan fails at the VPC
   precondition (`availability_zones` must start with the VPC region).
+- **GKE secondary ranges are documented, not provisioned.** An environment that enables GKE
+  must set `secondary_ranges` by hand. [`cidr-plan.md`](architecture/cidr-plan.md#gke-secondary-ranges)
+  proposes `100.64.0.0/10` for Pods and `100.127.0.0/16` for Services. Google documents
+  `100.64.0.0/10` as a valid subnet range, but its GKE pages do not confirm it for Autopilot Pods.
+  Test one cluster in the sandbox first. Overlap validation does not cover `secondary_ranges`.
 
 ## OPEN — operator actions and items carried from archived audits
 

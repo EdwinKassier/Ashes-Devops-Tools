@@ -62,6 +62,37 @@ the aws-network plan.
 | Workload VPC (dev, example) | `10.72.0.0/16` | `aws.workload_environments.<env>.vpc_cidr` (built-in default `10.72.0.0/16`) |
 | Workload VPC (prod, example) | `10.73.0.0/16` | `aws.workload_environments.<env>.vpc_cidr` |
 
+## Capacity
+
+| Space | Unit | Fits | Growth path |
+|---|---|---|---|
+| GCP environments (`10.10.0.0/16` to `10.15.0.0/16`) | one `/16` per environment | 6 environments | Take more space from the Reserved buffer (`10.16.0.0/12` and up) after you update this plan. `10.2.0.0/16` to `10.9.0.0/16` is marked reserved for shared use, so do not hand it to environments without changing this plan. |
+| AWS regional pool (`10.64.0.0/12`) | one `/16` per VPC; the default inspection and egress VPCs use two | 14 workloads per region | `aws.network.regional_additional_cidrs` adds a second `/12` to the pool, for example `10.80.0.0/12` (see [aws-cidr-expansion.md](../runbooks/aws-cidr-expansion.md#region-pool-is-full-add-awsnetworkregional_additional_cidrs)). |
+
+## GKE secondary ranges
+
+GKE Pods and Services use secondary ranges on the private subnet. They are documented here, not provisioned: see [Known gaps](../known-gaps.md).
+This plan proposes `100.64.0.0/10` (RFC 6598 shared address space) for them, so they never use the `/16` of an environment.
+Nothing in this repository uses `100.64.0.0/10` today. The GCP, Reserved and AWS blocks above are all inside `10.0.0.0/8`.
+The GKE control plane keeps `172.16.0.0/28` and the VPN uses `169.254.0.0/16` link-local addresses. Cloud NAT uses external addresses, not a VPC range.
+
+| Environment index `i` (sorted key order, 0 to 14) | Pods (`/14`) | Services (`/20`) |
+|---|---|---|
+| `i` | `cidrsubnet("100.64.0.0/10", 4, i)` | `cidrsubnet("100.127.0.0/16", 4, i)` |
+
+The Services block `100.127.0.0/16` sits inside the last Pod `/14` (`100.124.0.0/14`, `i = 15`), so use indexes 0 to 14 only.
+Every secondary range must be unique across the VPC networks that peer or connect, so give each environment its own pair.
+Set the ranges on the environment's private subnet through `secondary_ranges` (see
+[cidr-expansion.md](../runbooks/cidr-expansion.md)), and name them in
+`app_platform.gke.cluster_secondary_range_name` and `services_secondary_range_name`.
+
+What is confirmed and what is not:
+
+- Confirmed: the Google Cloud VPC documentation lists `100.64.0.0/10` ("Shared address space [RFC 6598]") as a valid subnet range, usable for primary and secondary ranges ([VPC subnets](https://docs.cloud.google.com/vpc/docs/subnets)).
+- Not confirmed: that GKE Autopilot accepts `100.64.0.0/10` for Pods. The GKE page on Pod and Service ranges ([IP ranges for alias IPs](https://docs.cloud.google.com/kubernetes-engine/docs/concepts/alias-ips)) names only RFC 1918 and privately used public ranges and does not mention this block. Test one cluster in a sandbox before you rely on it, and use an RFC 1918 range from the Reserved buffer if it fails.
+- Not checked: how Pod traffic to on-premises is source-translated. If the on-premises network already uses `100.64.0.0/10`, or does not route it, choose another range.
+- Autopilot clusters on GKE 1.27 and later take Service addresses from a Google-managed range by default, so the Services secondary range is optional.
+
 ## Enforcement
 
 tfc-admin reads the whole config file and fails its plan when:
@@ -71,9 +102,11 @@ tfc-admin reads the whole config file and fails its plan when:
 - two fixed AWS VPC ranges overlap, where a workload without `vpc_cidr` counts as
   `10.72.0.0/16`, so two such workloads overlap;
 - a fixed AWS VPC range is outside `aws.network.top_cidr`; or
-- an `aws.workload_environments.*.vpc_cidr` is outside the home-region regional pool
-  (`aws.network.regional_cidrs.<org.regions.aws>`, default `10.64.0.0/12`). The static hub
-  ranges may sit outside the pool; they stay in the overlap checks above.
+- an `aws.workload_environments.*.vpc_cidr` is outside every CIDR of the home-region regional pool
+  (`aws.network.regional_cidrs.<org.regions.aws>`, default `10.64.0.0/12`, plus
+  `aws.network.regional_additional_cidrs.<org.regions.aws>`). The static hub
+  ranges may sit outside the pool; they stay in the overlap checks above; or
+- an `aws.network.regional_additional_cidrs` entry is outside `aws.network.top_cidr` or overlaps another pool CIDR.
 
 The check reads only the config file. A CIDR set as an explicit TFC variable on a
 network workspace is not checked, so keep CIDRs in the config file.
