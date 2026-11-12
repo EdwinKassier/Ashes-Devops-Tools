@@ -43,6 +43,19 @@ Manual steps for the next release, grouped by area. A breaking change
 
 ### HCP Terraform and policy
 
+#### Every AWS workload needs its own vpc_cidr in the regional pool (tfc-admin)
+
+**Breaking: tfc-admin now fails its plan for configs that passed before.** Spoke VPCs request their `vpc_cidr` from the IPAM pool, so two workloads on the same range collide, and a range outside the home-region pool fails at apply. tfc-admin now fails when:
+
+- two `aws.workload_environments` entries share a `vpc_cidr`, or both omit it (an omitted `vpc_cidr` counts as the built-in `10.72.0.0/16`); or
+- a fixed AWS range (a workload `vpc_cidr`, `inspection_cidr` or `egress_cidr`) is outside `aws.network.regional_cidrs.<org.regions.aws>` (default `10.64.0.0/12`).
+
+The error names each config key and the two environments. Before you plan tfc-admin:
+
+1. Give each `aws.workload_environments.<env>` its own `vpc_cidr` inside the regional pool, for example `10.72.0.0/16`, `10.73.0.0/16`, and so on.
+2. Keep the CIDR of a workload whose VPC already exists. Pick new ranges for the others. Do not move an existing VPC to another range in the same change.
+3. Run `terraform plan` in `envs/tfc-admin`. It passes when no two ranges overlap and all sit inside the pool.
+
 #### Production workloads need an approver to apply (tfc-admin)
 
 The platform team no longer has write access on production `gcp-workload-<env>` and `aws-workload-<env>` workspaces. It can queue plans there, but it cannot edit variables or confirm applies. Set `control_plane_approvers_team_id`, or only organization owners can apply production. Production workspaces get the new tag `tier:production`. With `split_workload_projects = true`, a workloads project that holds a production workload becomes custom, and its non-production workloads get write through workspace grants.

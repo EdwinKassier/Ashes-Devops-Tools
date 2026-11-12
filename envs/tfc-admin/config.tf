@@ -189,8 +189,9 @@ locals {
   } : {}
 
   # AWS VPCs with a fixed range: the hub VPCs (aws-network defaults when the
-  # config sets none) and workload VPCs that set vpc_cidr. A workload without
-  # vpc_cidr is allocated from the IPAM pool, which sits inside top_cidr.
+  # config sets none) and the workload VPCs. A workload without vpc_cidr uses
+  # the aws-workload built-in 10.72.0.0/16, so two such workloads overlap and
+  # fail here.
   cidr_aws_top = local.enable_aws ? try(tostring(local.lz.aws.network.top_cidr), "10.64.0.0/10") : null
   cidr_aws_ranges = local.enable_aws ? {
     for k, c in merge(
@@ -198,7 +199,7 @@ locals {
         "aws.network.inspection_cidr" = try(tostring(local.lz.aws.network.inspection_cidr), "10.64.0.0/16")
         "aws.network.egress_cidr"     = try(tostring(local.lz.aws.network.egress_cidr), "10.65.0.0/16")
       },
-      { for env, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : "aws.workload_environments.${env}.vpc_cidr" => try(tostring(e.vpc_cidr), null) },
+      { for env, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : "aws.workload_environments.${env}.vpc_cidr" => try(tostring(e.vpc_cidr), "10.72.0.0/16") },
     ) : k => c if c != null && can(cidrnetmask(c))
   } : {}
 
@@ -227,5 +228,17 @@ locals {
     for k, c in local.cidr_aws_ranges : "${k} (${c}) is outside aws.network.top_cidr (${local.cidr_aws_top})"
     if tonumber(split("/", c)[1]) < tonumber(split("/", local.cidr_aws_top)[1]) ||
     cidrhost("${split("/", c)[0]}/${split("/", local.cidr_aws_top)[1]}", 0) != cidrhost(local.cidr_aws_top, 0)
+  ]
+  # Explicit IPAM allocation (the aws-workload default) fails at apply when the
+  # block is outside the home-region pool, so check it here.
+  cidr_aws_home_region = try(tostring(local.lz.org.regions.aws), "eu-west-2")
+  cidr_aws_pool = local.enable_aws ? try(
+    tostring(local.lz.aws.network.regional_cidrs[local.cidr_aws_home_region]),
+    "10.64.0.0/12",
+  ) : null
+  cidr_outside_aws_pool = local.cidr_aws_pool == null || !can(cidrnetmask(coalesce(local.cidr_aws_pool, "x"))) ? [] : [
+    for k, c in local.cidr_aws_ranges : "${k} (${c}) is outside the ${local.cidr_aws_home_region} regional pool (${local.cidr_aws_pool})"
+    if tonumber(split("/", c)[1]) < tonumber(split("/", local.cidr_aws_pool)[1]) ||
+    cidrhost("${split("/", c)[0]}/${split("/", local.cidr_aws_pool)[1]}", 0) != cidrhost(local.cidr_aws_pool, 0)
   ]
 }

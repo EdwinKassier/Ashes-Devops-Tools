@@ -1036,8 +1036,8 @@ resource "terraform_data" "input_contract" {
       error_message = "GCP service-account IDs are at most 30 characters, so <prefix>-wl-<env>-apply must fit (prefix from gcp_project_prefix or org.prefix): ${join(", ", local.gcp_workload_account_ids_too_long)}. Shorten the gcp.environments key or the prefix."
     }
     precondition {
-      condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0
-      error_message = "config/landing-zone.yaml address plan conflicts (docs/architecture/cidr-plan.md: GCP 10.0.0.0/12, AWS 10.64.0.0/10): ${join("; ", concat(local.cidr_overlaps, local.cidr_outside_aws_top))}."
+      condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_outside_aws_pool) == 0
+      error_message = "config/landing-zone.yaml address plan conflicts (docs/architecture/cidr-plan.md: GCP 10.0.0.0/12, AWS 10.64.0.0/10, one regional pool per region): ${join("; ", concat(local.cidr_overlaps, local.cidr_outside_aws_top, local.cidr_outside_aws_pool))}. Give every aws.workload_environments entry its own vpc_cidr inside aws.network.regional_cidrs.<org.regions.aws>."
     }
     precondition {
       condition     = length(local.file_bad_categories) == 0

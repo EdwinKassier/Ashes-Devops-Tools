@@ -378,3 +378,23 @@ run "config_environment_without_is_production_fails" {
 
   expect_failures = [var.environments]
 }
+
+run "workloads_sharing_the_default_vpc_cidr_fail_the_plan" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-pool.yaml"
+  }
+
+  assert {
+    condition     = contains(local.cidr_overlaps, "aws.workload_environments.dev.vpc_cidr (10.72.0.0/16) overlaps aws.workload_environments.staging.vpc_cidr (10.72.0.0/16)")
+    error_message = "A workload without vpc_cidr takes the built-in 10.72.0.0/16; two of them must be reported as an overlap."
+  }
+
+  assert {
+    condition     = contains(local.cidr_outside_aws_pool, "aws.workload_environments.perf.vpc_cidr (10.96.0.0/16) is outside the eu-west-2 regional pool (10.64.0.0/12)")
+    error_message = "A fixed AWS VPC range outside the home-region pool must be reported."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}

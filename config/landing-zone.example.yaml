@@ -310,7 +310,9 @@ aws:
   # Workload environments => the account key they deploy into. tfc-admin
   # declares one aws-workload-<env> workspace per key and sets its
   # workload_account_key; aws-organization adds the matching OIDC trust binding
-  # (account key => aws-workload-<env>). vpc_cidr is optional.
+  # (account key => aws-workload-<env>). Give each workload its own vpc_cidr
+  # inside the regional pool (aws.network.regional_cidrs): a workload without
+  # one counts as 10.72.0.0/16, and tfc-admin fails when two workloads share it.
   workload_environments:
     dev:
       account_key: workload_dev
@@ -352,7 +354,7 @@ aws:
   network:
     # Addressing (aws-network). docs/architecture/cidr-plan.md gives AWS
     # 10.64.0.0/10 and GCP 10.0.0.0/12; tfc-admin fails its plan when an AWS
-    # range overlaps a GCP one, or a workload vpc_cidr falls outside top_cidr.
+    # range overlaps a GCP one, or a workload vpc_cidr falls outside top_cidr or the regional pool.
     # The values below are the defaults.
     # top_cidr: 10.64.0.0/10
     # regional_cidrs: {eu-west-2: 10.64.0.0/12}

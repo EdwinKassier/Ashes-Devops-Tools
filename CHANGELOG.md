@@ -484,6 +484,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   inside the home-region pool (new output `hub_static_ipam_allocations`). A hub VPC that only partly
   overlaps the pool fails the plan. Check that no spoke holds a hub range before you apply aws-network;
   see `UPGRADING.md`.
+- **tfc-admin fails on shared or out-of-pool AWS workload CIDRs (ARC-1, ARC-4, breaking).** With
+  explicit IPAM allocation, two workloads on the same range collide in the pool, and a range outside
+  the home-region pool fails at apply. tfc-admin now counts a workload without `vpc_cidr` as the
+  built-in `10.72.0.0/16`, reports overlaps among workloads, and reports a fixed AWS range outside
+  `aws.network.regional_cidrs.<org.regions.aws>`. Give every workload its own `vpc_cidr`; see
+  `UPGRADING.md`.
 - `docs/guides/BRANCH_PROTECTION.md` listed `Terraform Tests` (a sharded matrix that only reports
   `Terraform Tests (shard N)`) as a required context, which would block every PR. `Validation Summary` is
   now the only required context.
