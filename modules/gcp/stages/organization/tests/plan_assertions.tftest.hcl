@@ -474,6 +474,7 @@ run "delegated_grants_split_into_ten_role_conditions" {
     projects_apply_service_account = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
     delegated_workload_folder_roles = [
       "organizations/123456789/roles/landingZonePlanViewer",
+      "roles/backupdr.viewer",
       "roles/bigquery.metadataViewer",
       "roles/cloudkms.viewer",
       "roles/cloudsql.admin",
@@ -526,7 +527,7 @@ run "delegated_grants_split_into_ten_role_conditions" {
   # Chunk 0 keeps the folder key as its address; later chunks are <folder>|<i>.
   assert {
     condition     = sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) == sort(["dev", "dev|1", "dev|2", "shared", "shared|1"])
-    error_message = "each folder needs one delegated binding per 10 roles: 3 for the 27 workload roles, 2 for the 13 network roles."
+    error_message = "each folder needs one delegated binding per 10 roles: 3 for the 28 workload roles, 2 for the 13 network roles."
   }
 
   assert {

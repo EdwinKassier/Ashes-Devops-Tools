@@ -864,6 +864,28 @@ GCP:
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.
 
+- **GCP Backup and DR vault for Cloud SQL** (BCK-07, CMP-8,
+  `modules/gcp/backup/backup-vault`; on for `compliance_class: regulated`,
+  else `enable_backup_vault` or `gcp.environments.<env>.backup_vault`).
+  Mock-tested only. Prove in a sandbox:
+  - The workload apply SA creates the vault, plan and associations with
+    `roles/backupdr.admin` on the environment folder (gcp-bootstrap
+    `workload_folder_roles`, granted directly by gcp-organization) and its
+    Cloud SQL roles. Google lists `backupdr.backupPlanAssociations.createForCloudSqlInstance`
+    and `backupdr.backupPlans.useForCloudSqlInstance` as the permissions.
+  - The service agent grant. The Backup and DR guide for Cloud SQL asks for
+    `roles/backupdr.cloudSqlOperator` in the Cloud SQL project only when it is
+    not the vault project; the Cloud SQL quickstart also lists
+    `roles/iam.serviceAccountUser`, which the module does not grant. A
+    CMEK-encrypted instance also needs `roles/cloudkms.cryptoKeyEncrypterDecrypter`
+    for the service agent on its key; the module does not grant it.
+  - Drift on the instance. An associated instance moves to enhanced backups and
+    the plan overwrites its backup schedule and retention. The google provider
+    suppresses diffs on most `backup_configuration` fields once the backup tier
+    is `ENHANCED`, but not on `location`; check that the next plan is clean.
+  - An enforced VPC-SC perimeter that restricts `backupdr.googleapis.com` or
+    `sqladmin.googleapis.com` still lets the service agent back up.
+
 - **Resource-organization policy on the hub interface endpoints**
   (`aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`,
   `modules/aws/network/vpc-endpoints` `endpoint_policy_mode`, CMP-7 D8). It adds

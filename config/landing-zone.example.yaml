@@ -272,9 +272,17 @@ gcp:
       is_production: true
       # Opt-in regulated class (docs/architecture/regulated-environments.md):
       # enforced VPC-SC with no waiver, Cloud Armor and OWASP rules, every flow
-      # logged and kept 365 days. gcp-organization then needs a hardened audit
-      # store (logging_project_id and enable_audit_bucket_lock above).
+      # logged and kept 365 days, and a Backup and DR vault. gcp-organization
+      # then needs a hardened audit store (logging_project_id and
+      # enable_audit_bucket_lock above).
       # compliance_class: regulated
+      # Backup and DR vault for the app-service databases (on when regulated).
+      # lock_effective_time is IRREVERSIBLE: after it nobody can lower the
+      # enforced retention.
+      # backup_vault:
+      #   enabled: true
+      #   enforced_retention_days: 35
+      #   lock_effective_time: "2027-01-01T00:00:00Z"
       iam_group_role_bindings: {}
 
   # Application golden path (gcp-workload-<env>). All optional.

@@ -213,6 +213,15 @@ locals {
   vpc_sc_enable_dry_run = var.vpc_sc_enable_dry_run != null ? var.vpc_sc_enable_dry_run : tobool(lookup(local.preset, "vpc_sc_enable_dry_run", true))
   enable_cloud_armor    = var.enable_cloud_armor != null ? var.enable_cloud_armor : tobool(lookup(local.preset, "enable_cloud_armor", false))
   enable_owasp_rules    = var.enable_owasp_rules != null ? var.enable_owasp_rules : tobool(lookup(local.preset, "enable_owasp_rules", false))
+  # Backup and DR vault (CMP-8): enable_backup_vault > gcp.environments.<env>.
+  # backup_vault.enabled > on for a regulated environment. The lock time is
+  # IRREVERSIBLE, so it is read from the config file only (a committed,
+  # reviewed line) and never derived from compliance_class.
+  backup_vault_config                  = try(local.lz.gcp.environments[var.environment].backup_vault, {})
+  enable_backup_vault                  = var.enable_backup_vault != null ? var.enable_backup_vault : try(tobool(local.backup_vault_config.enabled), local.regulated)
+  backup_vault_enforced_retention_days = coalesce(var.backup_vault_enforced_retention_days, try(tonumber(local.backup_vault_config.enforced_retention_days), null), 35)
+  backup_vault_lock_effective_time     = try(tostring(local.backup_vault_config.lock_effective_time), null)
+
   # VPC flow logs: 10% sampling and a 30-day export unless a preset
   # (regulated-gcp-workload: 1 = every flow, 365 days) or a variable says otherwise.
   flow_log_sampling        = var.log_config_flow_sampling != null ? var.log_config_flow_sampling : tonumber(lookup(local.preset, "log_config_flow_sampling", 0.1))

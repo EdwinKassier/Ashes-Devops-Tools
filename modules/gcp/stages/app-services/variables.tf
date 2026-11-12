@@ -273,7 +273,7 @@ variable "services" {
       enable_high_availability      = optional(bool)
       enable_point_in_time_recovery = optional(bool, true)
       # Region or multi-region of the automated backups (cross-region copy).
-      # Null = Cloud SQL's default, the multi-region nearest the instance.
+      # Null = the instance region (cloud-sql module default, CMP-8).
       backup_location            = optional(string)
       encryption_key_name        = optional(string)
       enable_deletion_protection = optional(bool)

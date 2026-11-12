@@ -1,0 +1,16 @@
+# Test fixture: a standard dev environment that opts in to the Backup and DR
+# vault (gcp.environments.<env>.backup_vault, CMP-8). Used by presets.tftest.hcl.
+version: 1
+org:
+  prefix: acme
+  tfc:
+    organization: acme-tfc
+gcp:
+  environments:
+    dev:
+      cidr_block: 10.10.0.0/16
+      is_production: false
+      backup_vault:
+        enabled: true
+        enforced_retention_days: 90
+        lock_effective_time: "2027-06-01T00:00:00Z"

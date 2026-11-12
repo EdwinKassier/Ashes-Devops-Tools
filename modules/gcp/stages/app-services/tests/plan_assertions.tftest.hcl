@@ -949,8 +949,8 @@ run "production_database_defaults_to_high_availability" {
   }
 
   assert {
-    condition     = module.database["batch"].availability_type == "ZONAL" && module.database["batch"].backup_location == "europe-west2" && module.database["api"].backup_location == null
-    error_message = "enable_high_availability = false must opt a production database out, and backup_location must reach the instance."
+    condition     = module.database["batch"].availability_type == "ZONAL" && module.database["batch"].backup_location == "europe-west2" && module.database["api"].backup_location == "europe-west1"
+    error_message = "enable_high_availability = false must opt a production database out, and backup_location must reach the instance (null = the instance region)."
   }
 }
 

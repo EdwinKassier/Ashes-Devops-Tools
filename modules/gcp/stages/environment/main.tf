@@ -391,6 +391,41 @@ module "app_services" {
 }
 
 # =============================================================================
+# BACKUP AND DR VAULT (CMP-8, BCK-07) — opt-in, on for compliance_class: regulated
+#
+# A vault in the host project and region with enforced retention and
+# organization-only access, plus a daily Backup and DR plan for every
+# app-service database (Cloud SQL enhanced backups). The vault's service agent
+# gets roles/backupdr.cloudSqlOperator in each team project that hosts a
+# database. The workload apply SA needs roles/backupdr.admin on the
+# environment folder (gcp-bootstrap workload_folder_roles, granted by
+# gcp-organization) and grants the operator role with its projectIamAdmin.
+# =============================================================================
+
+locals {
+  # Team projects that host a database. Keys are team names (static).
+  backup_vault_source_projects = {
+    for team, _ in var.service_teams : team => module.service_team[team].project_id
+    if anytrue([for k, s in var.app_services : try(s.database, null) != null if try(s.service_team, null) == team])
+  }
+}
+
+module "backup_vault" {
+  source = "../../backup/backup-vault"
+  count  = var.backup_vault.enabled ? 1 : 0
+
+  project_id              = var.host_project.project_id
+  location                = var.host_project.region
+  vault_id                = "${var.environment}-vault"
+  enforced_retention_days = var.backup_vault.enforced_retention_days
+  lock_effective_time     = var.backup_vault.lock_effective_time
+  labels                  = var.labels
+
+  cloud_sql_instances       = module.app_services.sql_instance_ids
+  cloud_sql_source_projects = local.backup_vault_source_projects
+}
+
+# =============================================================================
 # PUBLIC INGRESS (opt-in) — one global external Application Load Balancer per
 # exposed app service: reserved anycast IP, serverless NEG -> Cloud Run, backend
 # with the environment Cloud Armor policy, Google-managed certificate for the

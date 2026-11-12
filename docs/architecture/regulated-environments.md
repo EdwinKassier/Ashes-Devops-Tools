@@ -33,6 +33,7 @@ A guard does not create or change a resource.
 | Egress inspection | Cloud NAT and the firewall policy (no change). | The Network Firewall is on, on every profile. The egress gate is on: the plan fails unless `aws.network.stateful_default_actions` includes `aws:drop_established` and `aws.network.egress_domain_allowlist` is not empty. `aws.network.egress_alert_only_waived`, `enforce_egress_allowlist = false` and `enable_network_firewall = false` are refused. |
 | Flow logs | Every flow is sampled (`log_config_flow_sampling = 1`), aggregated at `INTERVAL_5_SEC` (the default), and the export is kept 365 days (`vpc_flow_logs_retention_days`). Lower values fail the plan. | No change: VPC flow logs already record `ALL` traffic to the log-archive bucket (LOG-13). Their retention is the log-archive retention, `compliance.audit_log_retention_days` (default 365). |
 | Edge | Cloud Armor with the OWASP managed rules (preset values; an explicit variable can still turn them off). | No change. |
+| Backups | A Backup and DR vault in the host project with enforced retention (default 35 days) and organization-only access, and a daily plan for every app-service database (BCK-07, PREVIEW). `enable_backup_vault = false` fails the plan. The retention lock is never set by the class. | No change. |
 | Audit store | `gcp-organization` fails the plan until the audit bucket is WORM-locked in a separate logging project, or `gcp.audit_store_waived` is true (LOG-03, LOG-04). | No change. |
 
 On GCP the values come from the preset
@@ -51,6 +52,9 @@ for every spoke in the estate, and a starter estate gets the Network Firewall
 - GCP: read the environment's VPC-SC dry-run violation logs and fix them before
   you mark it regulated. Apply `gcp-organization` with scoped access policies
   and `gcp-projects` first, so `environment_config` carries the access policy.
+- GCP: apply `gcp-bootstrap`, then `gcp-organization`, then `gcp-projects`
+  before the first regulated `gcp-workload-<env>` apply, so the workload SAs
+  hold the Backup and DR roles (`roles/backupdr.admin`, `roles/backupdr.viewer`).
 - GCP: full flow-log sampling raises the Cloud Logging and BigQuery cost of the
   environment's VPC.
 - AWS: list every domain your workloads call in
@@ -74,14 +78,15 @@ sandbox. See [`docs/known-gaps.md`](../known-gaps.md).
 - FIPS endpoints.
 - Sovereign partitions (AWS GovCloud, the AWS European Sovereign Cloud,
   Assured Workloads).
-- Data-layer controls: Cloud SQL CMEK, a Backup and DR vault and data
-  classification tags are not tied to the class.
+- Data-layer controls: Cloud SQL CMEK and data classification tags are not
+  tied to the class. The Backup and DR vault is, but its retention lock is
+  not: set `gcp.environments.<env>.backup_vault.lock_effective_time` yourself.
 - Operating evidence. The guards prove the configuration at plan time. Your
   auditor still needs evidence that the controls operated.
 
 ## Framework references
 
-Control matrix row: NET-11 in
+Control matrix rows: NET-11 and BCK-07 in
 [`docs/compliance/control-matrix.md`](../compliance/control-matrix.md). The
 class is designed against NIST SP 800-53 SC-7, SC-7(5), AC-4 and AU-12, PCI DSS
 v4.0.1 requirements 1.3, 1.4 and 10.2, and HIPAA 164.312(e)(1). These are design

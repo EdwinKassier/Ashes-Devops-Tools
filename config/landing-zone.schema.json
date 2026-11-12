@@ -937,11 +937,33 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or gcp.audit_store_waived is true. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), flow-log sampling is 1 and flow-log retention is at least 365 days.",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or gcp.audit_store_waived is true. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), flow-log sampling is 1, flow-log retention is at least 365 days and the Backup and DR vault (backup_vault) is on.",
                 "enum": [
                   "standard",
                   "regulated"
                 ]
+              },
+              "backup_vault": {
+                "type": "object",
+                "description": "Backup and DR vault in the host project with a daily plan for every app-service database (gcp-workload-<env>, CMP-8). PREVIEW.",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Create the vault. Default: true for compliance_class: regulated (which refuses false), else false."
+                  },
+                  "enforced_retention_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3653,
+                    "description": "Minimum enforced retention in days (default 35). Every backup is immutable this long."
+                  },
+                  "lock_effective_time": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+                    "description": "IRREVERSIBLE. RFC 3339 UTC time after which nobody can lower the enforced retention. Absent = no lock."
+                  }
+                },
+                "additionalProperties": false
               },
               "data_classification": {
                 "type": "string",

@@ -162,11 +162,13 @@ run "stage_apply_sas_are_least_privilege" {
     condition = (
       contains(output.workload_folder_roles.apply, "roles/resourcemanager.projectIamAdmin") &&
       contains(output.workload_folder_roles.apply, "roles/secretmanager.admin") &&
+      contains(output.workload_folder_roles.apply, "roles/backupdr.admin") &&
+      contains(output.delegated_workload_folder_roles, "roles/backupdr.viewer") &&
       length(setintersection(toset(output.delegated_workload_folder_roles), toset([
         "roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.serviceAccountKeyAdmin",
         "roles/iam.serviceAccountTokenCreator", "roles/iam.workloadIdentityPoolAdmin", "roles/iam.serviceAccountUser",
         "roles/secretmanager.admin", "roles/cloudkms.admin", "roles/storage.admin", "roles/run.admin",
-        "roles/bigquery.admin", "roles/pubsub.admin", "roles/artifactregistry.admin", "roles/resourcemanager.projectCreator",
+        "roles/bigquery.admin", "roles/pubsub.admin", "roles/artifactregistry.admin", "roles/backupdr.admin", "roles/resourcemanager.projectCreator",
       ]))) == 0 &&
       contains(output.delegated_workload_folder_roles, "roles/compute.admin") &&
       length(setintersection(toset(output.delegated_network_folder_roles), toset(["roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.workloadIdentityPoolAdmin"]))) == 0
@@ -191,10 +193,10 @@ run "legacy_org_level_folder_delegation_is_opt_in" {
   }
 
   # IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list.
-  # The default lists are 27 workload roles and 13 network roles (32 distinct),
-  # so the legacy binding must split into ceil(32 / 10) = 4 conditions.
+  # The default lists are 28 workload roles and 13 network roles (33 distinct),
+  # so the legacy binding must split into ceil(33 / 10) = 4 conditions.
   assert {
-    condition     = length(output.delegated_workload_folder_roles) == 27 && length(output.delegated_network_folder_roles) == 13
+    condition     = length(output.delegated_workload_folder_roles) == 28 && length(output.delegated_network_folder_roles) == 13
     error_message = "the default delegated role lists changed size; update this suite and the organization stage suite delegated_grants_split_into_ten_role_conditions."
   }
 

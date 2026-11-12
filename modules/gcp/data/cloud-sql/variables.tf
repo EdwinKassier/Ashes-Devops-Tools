@@ -113,7 +113,7 @@ variable "backup_start_time" {
 }
 
 variable "backup_location" {
-  description = "Location of the automated backups: a region (e.g. europe-west2) or a multi-region (eu, us, asia). Pick a region other than the instance's to survive a regional outage. Null (default) = Cloud SQL's default, the multi-region nearest the instance."
+  description = "Location of the automated backups: a region (e.g. europe-west2) or a multi-region (eu, us, asia). Pick a region other than the instance's to survive a regional outage. Null (default) = the instance region, so backups stay where gcp.resourceLocations allows. Cloud SQL's own default (the multi-region nearest the instance) is used only if you set that multi-region here."
   type        = string
   default     = null
 

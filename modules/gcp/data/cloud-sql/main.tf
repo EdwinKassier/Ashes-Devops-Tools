@@ -126,8 +126,10 @@ resource "google_sql_database_instance" "this" {
       point_in_time_recovery_enabled = var.enable_point_in_time_recovery
       start_time                     = var.backup_start_time
       transaction_log_retention_days = var.transaction_log_retention_days
-      # Null = Cloud SQL's default (the multi-region nearest the instance).
-      location = var.backup_location
+      # Null = the instance region, so backups obey gcp.resourceLocations
+      # (Cloud SQL's own default is the nearest multi-region). Set a region or a
+      # multi-region (eu, us, asia) explicitly if the residency policy allows it.
+      location = coalesce(var.backup_location, var.region)
     }
 
     dynamic "database_flags" {

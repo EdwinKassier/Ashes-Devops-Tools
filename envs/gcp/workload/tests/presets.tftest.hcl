@@ -212,6 +212,12 @@ run "regulated_env_applies_regulated_preset" {
     condition     = module.environment.components.cloud_armor && length(module.environment.components.vpc_sc_perimeters) > 0 && module.environment.components.psc_target == "vpc-sc"
     error_message = "The regulated preset must reach the environment stage (Cloud Armor on, an enforced perimeter, so PSC targets vpc-sc)."
   }
+
+  # CMP-8: a regulated environment gets the Backup and DR vault, unlocked.
+  assert {
+    condition     = local.enable_backup_vault && module.environment.components.backup_vault && local.backup_vault_enforced_retention_days == 35 && local.backup_vault_lock_effective_time == null
+    error_message = "compliance_class: regulated must turn the Backup and DR vault on (35-day enforced retention, no lock)."
+  }
 }
 
 run "regulated_env_rejects_dry_run_perimeter" {
@@ -354,9 +360,99 @@ run "standard_env_in_a_regulated_estate_is_unchanged" {
       local.vpc_sc_enable_dry_run &&
       !local.enable_cloud_armor &&
       local.flow_log_sampling == 0.1 &&
-      local.flow_logs_retention_days == 30
+      local.flow_logs_retention_days == 30 &&
+      !local.enable_backup_vault &&
+      !module.environment.components.backup_vault
     )
-    error_message = "A standard environment in a regulated estate must keep today's defaults."
+    error_message = "A standard environment in a regulated estate must keep today's defaults (no backup vault)."
+  }
+}
+
+# CMP-8: a regulated environment may not switch the Backup and DR vault off.
+run "regulated_env_refuses_disabled_backup_vault" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    enable_backup_vault      = false
+    projects_contract = {
+      environment_config = {
+        prod = {
+          folder_id               = "folders/333"
+          host_project_id         = "acme-prod-host-abcd"
+          host_project_number     = "333333333333"
+          region                  = "europe-west2"
+          cidr_block              = "10.30.0.0/16"
+          is_production           = false
+          vpc_sc_access_policy_id = "555555555"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.regulated_backup_vault_guard]
+}
+
+# A standard environment opts in through gcp.environments.<env>.backup_vault;
+# the lock time is read from the config file only.
+run "backup_vault_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-backup-vault.yaml"
+    environment              = "dev"
+    projects_contract = {
+      environment_config = {
+        dev = {
+          folder_id           = "folders/111"
+          host_project_id     = "acme-dev-host-abcd"
+          host_project_number = "222222222222"
+          is_production       = false
+          region              = "europe-west2"
+          cidr_block          = "10.10.0.0/16"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      local.compliance_class == "standard" &&
+      local.enable_backup_vault &&
+      module.environment.components.backup_vault &&
+      local.backup_vault_enforced_retention_days == 90 &&
+      local.backup_vault_lock_effective_time == "2027-06-01T00:00:00Z"
+    )
+    error_message = "gcp.environments.<env>.backup_vault must turn the vault on with its retention and lock time."
+  }
+}
+
+# An explicit variable wins over the config file.
+run "backup_vault_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path             = "tests/fixtures/landing-zone-backup-vault.yaml"
+    environment                          = "dev"
+    enable_backup_vault                  = false
+    backup_vault_enforced_retention_days = 60
+    projects_contract = {
+      environment_config = {
+        dev = {
+          folder_id           = "folders/111"
+          host_project_id     = "acme-dev-host-abcd"
+          host_project_number = "222222222222"
+          is_production       = false
+          region              = "europe-west2"
+          cidr_block          = "10.10.0.0/16"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = !local.enable_backup_vault && !module.environment.components.backup_vault && local.backup_vault_enforced_retention_days == 60
+    error_message = "enable_backup_vault and backup_vault_enforced_retention_days must win over the config file."
   }
 }
 

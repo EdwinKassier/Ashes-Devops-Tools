@@ -356,6 +356,19 @@ variable "vm_operations" {
   nullable = false
 }
 
+# --- Backup and DR vault -----------------------------------------------------------
+
+variable "backup_vault" {
+  description = "Backup and DR vault in the host project (modules/gcp/backup/backup-vault), off by default. enabled creates the vault and a daily plan for every app-service database. enforced_retention_days (default 35) makes each backup immutable that long. lock_effective_time (RFC 3339 UTC) is IRREVERSIBLE: after it nobody can lower the enforced retention. Null = no lock."
+  type = object({
+    enabled                 = optional(bool, false)
+    enforced_retention_days = optional(number, 35)
+    lock_effective_time     = optional(string)
+  })
+  default  = {}
+  nullable = false
+}
+
 # --- SaaS secret bridge -------------------------------------------------------------
 
 variable "saas_secret_bridge" {

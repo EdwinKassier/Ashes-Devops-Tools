@@ -18,8 +18,8 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-125-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-346-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-126-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-348-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
@@ -123,7 +123,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-125 modules — **65 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
+126 modules — **66 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -232,7 +232,7 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Scheduled backups / snapshots | [`backup/backup-plan`](modules/gcp/backup/backup-plan/) (snapshot schedules + retention) | [`backup/backup-vault`](modules/aws/backup/backup-vault/) |
+| Scheduled backups / snapshots | [`backup/backup-plan`](modules/gcp/backup/backup-plan/) (snapshot schedules + retention), [`backup/backup-vault`](modules/gcp/backup/backup-vault/) (Backup and DR vault for Cloud SQL) | [`backup/backup-vault`](modules/aws/backup/backup-vault/) |
 | Org-wide backup policy | *(per-project resource policies)* | [`backup/backup-org-policy`](modules/aws/backup/backup-org-policy/) |
 
 </details>

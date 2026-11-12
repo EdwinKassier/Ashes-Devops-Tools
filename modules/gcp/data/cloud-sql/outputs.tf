@@ -41,6 +41,6 @@ output "availability_type" {
 }
 
 output "backup_location" {
-  description = "Location of the automated backups, or null for Cloud SQL's default (the multi-region nearest the instance)."
-  value       = var.backup_location
+  description = "Location of the automated backups: backup_location, else the instance region."
+  value       = coalesce(var.backup_location, var.region)
 }

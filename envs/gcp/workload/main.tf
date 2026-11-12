@@ -271,6 +271,13 @@ module "environment" {
     os_patch_deployments       = var.os_patch_deployments
   }
 
+  # Backup and DR vault (CMP-8): on for a regulated environment.
+  backup_vault = {
+    enabled                 = local.enable_backup_vault
+    enforced_retention_days = local.backup_vault_enforced_retention_days
+    lock_effective_time     = local.backup_vault_lock_effective_time
+  }
+
   saas_secret_bridge = {
     enabled          = var.enable_saas_secret_bridge
     secret_name      = var.saas_secret_name
@@ -380,6 +387,20 @@ resource "terraform_data" "regulated_flow_logs_guard" {
     precondition {
       condition     = local.flow_log_sampling == 1 && local.flow_logs_retention_days >= 365
       error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so VPC flow logs must sample every flow (log_config_flow_sampling = 1, now ${local.flow_log_sampling}) and keep the export at least 365 days (vpc_flow_logs_retention_days, now ${local.flow_logs_retention_days}). Remove the overriding variable: the regulated preset sets both."
+    }
+  }
+}
+
+# CMP-8: a regulated environment keeps its Cloud SQL backups in an
+# enforced-retention, organization-only Backup and DR vault.
+resource "terraform_data" "regulated_backup_vault_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    precondition {
+      condition     = local.enable_backup_vault
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so it needs the Backup and DR vault. Remove enable_backup_vault = false (or gcp.environments.${var.environment}.backup_vault.enabled: false)."
     }
   }
 }

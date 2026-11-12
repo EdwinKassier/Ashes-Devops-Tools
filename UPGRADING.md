@@ -1450,7 +1450,21 @@ leave the setting out of the policy.
 
 ### GCP
 
-#### TLS 1.2 minimum on public ingress and Google APIs (gcp-workload, gcp-organization, breaking, CMP-5)
+#### Cloud SQL backups stay in the instance region; Backup and DR vault for regulated environments (gcp-workload, gcp-bootstrap, gcp-organization, breaking, CMP-8)
+
+**Cloud SQL backups stay in the instance region.** `backup_location = null` (`modules/gcp/data/cloud-sql`, and `database.backup_location` of an app service) now means the instance region, not Cloud SQL's nearest multi-region. Before, an instance in `europe-west2` wrote its backups to the `eu` multi-region, which can be outside `gcp.allowed_regions`; Cloud SQL backups fail when they land in a region the organization policy does not allow ([Create and manage on-demand and automatic backups](https://docs.cloud.google.com/sql/docs/postgres/backup-recovery/backing-up)). The next `gcp-workload-<env>` plan shows an in-place update of `settings.backup_configuration.location` on every app-service database that does not set `backup_location`. Existing backups stay where they are; new ones land in the region. Set `backup_location: eu` (or `us`, `asia`) on the service's `database` to keep multi-region backups.
+
+**Backup and DR vault.** A `compliance_class: regulated` environment now gets a Backup and DR vault in its host project with a daily plan for every app-service database (BCK-07, PREVIEW). Any other environment can opt in with `gcp.environments.<env>.backup_vault.enabled: true` or `enable_backup_vault = true`. The plan replaces the instance's own backup schedule and retention (Cloud SQL enhanced backups). Every backup is immutable for `enforced_retention_days` (default 35). The vault sets no retention lock unless `gcp.environments.<env>.backup_vault.lock_effective_time` is set; that lock is irreversible.
+
+Apply order for an estate that uses the vault:
+
+1. `gcp-bootstrap`: the workload folder roles gain `roles/backupdr.admin` (apply) and `roles/backupdr.viewer` (plan). `roles/backupdr.admin` is non-delegable: projects-apply cannot grant it.
+2. `gcp-organization`: grants `roles/backupdr.admin` to each workload apply SA on its environment folder.
+3. `gcp-projects`: grants `roles/backupdr.viewer` to the workload plan SAs through the delegated folder IAM.
+4. `gcp-workload-<env>`.
+
+A regulated environment fails the plan with `enable_backup_vault = false`.
+ on public ingress and Google APIs (gcp-workload, gcp-organization, breaking, CMP-5)
 
 **Breaking for old clients.** Each `public_ingress` load balancer (`modules/gcp/network/app-ingress`) now gets a new SSL policy, `<env>-<service>-tls`: profile `MODERN`, minimum TLS 1.2. Before, the HTTPS proxy had no SSL policy, so Google used `COMPATIBLE` with a TLS 1.0 minimum ([SSL policies overview](https://docs.cloud.google.com/load-balancing/docs/ssl-policies-concepts)). The first `gcp-workload-<env>` apply creates the policy and updates the proxy in place. After it:
 

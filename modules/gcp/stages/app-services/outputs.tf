@@ -50,6 +50,11 @@ output "sql_connection_names" {
   value       = { for k, s in local.services_with_db : k => module.database[k].connection_name }
 }
 
+output "sql_instance_ids" {
+  description = "Cloud SQL instance resource name (projects/<project>/instances/<instance>) per service key that declares a database. The Backup and DR plan association takes this form."
+  value       = { for k, s in local.services_with_db : k => "projects/${local.service_project[k]}/instances/${module.database[k].name}" }
+}
+
 output "workload_identity_pool_name" {
   description = "Full resource name of the app-deploy Workload Identity pool, or null when enable_app_deploy_wif = false."
   value       = local.wif_pool_name

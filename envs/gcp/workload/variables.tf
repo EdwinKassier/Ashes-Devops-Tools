@@ -747,6 +747,18 @@ variable "os_patch_deployments" {
   }
 }
 
+variable "enable_backup_vault" {
+  description = "Create a Backup and DR vault in the host project with a daily plan for every app-service database (modules/gcp/backup/backup-vault). Null = gcp.environments.<env>.backup_vault.enabled, else true for compliance_class: regulated and false otherwise. A regulated environment fails the plan with false. Apply gcp-bootstrap and gcp-organization first: the workload apply SA needs roles/backupdr.admin on the environment folder."
+  type        = bool
+  default     = null
+}
+
+variable "backup_vault_enforced_retention_days" {
+  description = "Minimum enforced retention of the Backup and DR vault, in days (1-3653). Every backup is immutable this long. Null = gcp.environments.<env>.backup_vault.enforced_retention_days, else 35. The retention lock (IRREVERSIBLE) is set only by gcp.environments.<env>.backup_vault.lock_effective_time in the config file."
+  type        = number
+  default     = null
+}
+
 # -----------------------------------------------------------------------------
 # Public ingress (modules/gcp/network/app-ingress) + first-revision image
 # -----------------------------------------------------------------------------

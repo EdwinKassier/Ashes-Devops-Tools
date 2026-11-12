@@ -171,6 +171,7 @@ variable "non_delegable_workload_folder_roles" {
     "roles/bigquery.admin",
     "roles/pubsub.admin",
     "roles/artifactregistry.admin",
+    "roles/backupdr.admin",
     "roles/resourcemanager.projectCreator",
   ]
   nullable = false

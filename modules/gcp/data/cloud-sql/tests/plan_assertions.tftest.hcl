@@ -160,9 +160,38 @@ run "edition_defaults_to_enterprise" {
   }
 }
 
-# Backups default to Cloud SQL's own location; backup_location moves them to
-# another region (or multi-region) so they survive a regional outage.
-run "backup_location_default_and_cross_region" {
+# Backups stay in the instance region unless backup_location says otherwise
+# (CMP-8). Cloud SQL's own default is the multi-region nearest the instance,
+# which can be outside gcp.resourceLocations.
+run "backups_stay_in_instance_region" {
+  command = plan
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].location == "europe-west1" && output.backup_location == "europe-west1"
+    error_message = "with no backup_location, backups must stay in the instance region (gcp.resourceLocations), not Cloud SQL's multi-region default."
+  }
+
+  assert {
+    condition     = output.availability_type == "ZONAL"
+    error_message = "By default the instance is zonal."
+  }
+}
+
+# An explicit region (to survive a regional outage) or multi-region wins.
+run "explicit_backup_location_kept" {
+  command = plan
+
+  variables {
+    backup_location = "eu"
+  }
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].location == "eu" && output.backup_location == "eu"
+    error_message = "an explicit backup_location must win."
+  }
+}
+
+run "backup_location_cross_region" {
   command = plan
 
   variables {
@@ -172,14 +201,5 @@ run "backup_location_default_and_cross_region" {
   assert {
     condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].location == "europe-west2" && output.backup_location == "europe-west2"
     error_message = "backup_location must set the automated backups' location."
-  }
-}
-
-run "backup_location_unset_by_default" {
-  command = plan
-
-  assert {
-    condition     = output.backup_location == null && output.availability_type == "ZONAL"
-    error_message = "By default the backups use Cloud SQL's location and the instance is zonal."
   }
 }

@@ -552,6 +552,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   Network Firewall and egress gate on every profile and refuses the alert-only waiver.
   `aws.network.vpc_endpoint_policy_mode` adds `aws:ResourceOrgID` to the hub endpoint policy
   (PREVIEW, off by default). See `docs/architecture/regulated-environments.md`.
+- **Cloud SQL backups stay in region; Backup and DR vault (breaking, CMP-8).** `backup_location =
+  null` now means the instance region, not Cloud SQL's nearest multi-region, so new backups stay
+  inside `gcp.allowed_regions`. The new `modules/gcp/backup/backup-vault` creates a Backup and DR
+  vault (enforced retention, organization-only access) with a daily plan for the app-service
+  databases. It is on for `compliance_class: regulated` and opt-in elsewhere
+  (`gcp.environments.<env>.backup_vault`); the retention lock is never set by default. The
+  workload folder roles gain `roles/backupdr.admin` (non-delegable) and `roles/backupdr.viewer`.
+  PREVIEW. See `UPGRADING.md`.
 - **No placeholder SecOps subscriber (breaking, CMP-6).** `aws-security` no longer subscribes
   `secops@example.com`. A production plan (`org.profile = production` or a production AWS workload
   environment) fails until `notifications.emails` or `aws_overrides.notification_subscribers` names

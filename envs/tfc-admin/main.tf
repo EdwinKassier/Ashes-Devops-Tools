@@ -151,6 +151,7 @@ locals {
       "examples/presets",
       "modules/gcp/artifact-registry",
       "modules/gcp/backup/backup-plan",
+      "modules/gcp/backup/backup-vault",
       "modules/gcp/compute/cloud-run",
       "modules/gcp/compute/cloud-run-job",
       "modules/gcp/compute/gke-autopilot",

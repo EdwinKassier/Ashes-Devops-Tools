@@ -600,3 +600,70 @@ run "network_name_from_caller" {
     error_message = "network.name must name the spoke VPC."
   }
 }
+
+# CMP-8: the Backup and DR vault is off by default and, when on, protects every
+# app-service database. A team database is in the team project, so the vault's
+# service agent gets its Cloud SQL operator role there; the host-project
+# database needs no grant.
+run "backup_vault_off_by_default" {
+  command = plan
+
+  variables {
+    app_services = { api = { database = {} } }
+  }
+
+  assert {
+    condition     = length(module.backup_vault) == 0 && output.components.backup_vault == false
+    error_message = "The Backup and DR vault must be off unless backup_vault.enabled is true."
+  }
+}
+
+run "backup_vault_protects_every_database" {
+  command = plan
+
+  variables {
+    backup_vault = { enabled = true, enforced_retention_days = 90 }
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+    app_services = {
+      api    = { service_team = "payments", database = {} }
+      orders = { database = {} }
+      worker = {}
+    }
+  }
+
+  override_module {
+    target = module.service_team["payments"]
+    outputs = {
+      project_id            = "payments-1a2b"
+      project_number        = "333333333333"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "acme-dev-host-abcd"
+    }
+  }
+
+  assert {
+    condition     = output.components.backup_vault && module.backup_vault[0].enforced_retention_days == 90
+    error_message = "backup_vault.enabled must create the vault with the configured enforced retention."
+  }
+
+  assert {
+    condition = module.backup_vault[0].protected_instances == {
+      api    = "projects/payments-1a2b/instances/api-db"
+      orders = "projects/acme-dev-host-abcd/instances/orders-db"
+    }
+    error_message = "Every app-service database, in the host or a team project, must be associated with the vault's Cloud SQL plan."
+  }
+
+  assert {
+    condition     = local.backup_vault_source_projects == { payments = "payments-1a2b" }
+    error_message = "Only a team project that hosts a database is a source project (it gets the Cloud SQL operator grant); the host project needs none."
+  }
+}

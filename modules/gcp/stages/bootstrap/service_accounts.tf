@@ -254,7 +254,8 @@ locals {
   # them, so a delegate may grant any role on its allow-list to itself. These
   # roles are never delegable: IAM and identity control, every data-plane admin
   # role that carries setIamPolicy (it could grant itself read on every
-  # production secret, key, bucket or dataset), actAs, and project creation
+  # production secret, key, bucket or dataset; backupdr.admin can also restore
+  # any backup into a project it controls), actAs, and project creation
   # (the creator owns the new project). gcp-organization grants these to the
   # workload SAs directly (its non_delegable_workload_folder_roles, same default
   # list; scripts/check-consistency.sh keeps the three lists equal) and drops
@@ -274,6 +275,7 @@ locals {
     "roles/bigquery.admin",
     "roles/pubsub.admin",
     "roles/artifactregistry.admin",
+    "roles/backupdr.admin",
     "roles/resourcemanager.projectCreator",
   ]
   delegated_workload_folder_roles = sort(setsubtract(toset(concat(local.effective_workload_folder_roles.plan, local.effective_workload_folder_roles.apply)), toset(local.non_delegable_folder_roles)))
