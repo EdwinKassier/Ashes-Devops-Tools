@@ -450,6 +450,14 @@ unknown at plan time, is reported by the advisory
 
 ### AWS
 
+#### Developer is refused in production accounts (CMP-14, aws-identity, breaking)
+
+**Breaking: the `aws-identity` plan now fails for configs that passed before.** A new plan guard (`terraform_data.production_assignment_guard`) refuses an assignment of any set in `production_restricted_permission_sets` (default `["Developer"]`, which is PowerUserAccess) in a production workload account. A production account is the `account_key` of an `aws.workload_environments` entry with `is_production: true`, or the list in `production_account_keys`. The check covers `aws.identity.groups`, `identity_groups` and `assignments` (by `account_key` or `account_id`). The error names each assignment key. Before you plan `aws-identity`:
+
+1. Find the assignments the error names. Move those groups to a read-only or scoped set (for example `ReadOnly`) in the production account.
+2. For time-boxed write access, use identity-provider access requests on a group bound to a scoped set ([ADR 0011](docs/adr/0011-temporary-elevated-access.md)), not a standing `Developer` assignment.
+3. Only if you must keep the assignment, set `production_restricted_permission_sets = []` (or a shorter list) and record the reason next to it. The first apply also creates the guard's `terraform_data` resource; it holds no cloud object.
+
 #### No placeholder SecOps subscriber (CMP-6, aws-security, breaking)
 
 `aws-security` no longer subscribes `secops@example.com` to the security-notifications topic (GuardDuty, Security Hub, root use, console sign-in without MFA, break-glass use) and, unless `cloudtrail_alarm_subscribers` is set, to the CIS alarm topic. That address never delivered.

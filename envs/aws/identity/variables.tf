@@ -142,6 +142,19 @@ variable "identity_groups" {
   }
 }
 
+variable "production_restricted_permission_sets" {
+  description = "Permission sets that must not be assigned in production workload accounts. The plan fails on any such assignment. Default [\"Developer\"] (PowerUserAccess): give production a read-only or scoped set, with time-boxed elevation through the identity provider (docs/adr/0011-temporary-elevated-access.md). An empty list is the explicit opt-out; record the reason with it."
+  type        = list(string)
+  default     = ["Developer"]
+  nullable    = false
+}
+
+variable "production_account_keys" {
+  description = "Account keys (of the organization contract account_ids) treated as production by the assignment guard. Null = the account_key of every aws.workload_environments entry with is_production: true in config/landing-zone.yaml."
+  type        = list(string)
+  default     = null
+}
+
 # -----------------------------------------------------------------------------
 # Attribute-based access control (ABAC)
 # -----------------------------------------------------------------------------
