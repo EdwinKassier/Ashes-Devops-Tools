@@ -17,7 +17,8 @@
 Understand the design before you rely on it:
 
 - **Created by the phase-0 stack (default).** [`templates/aws/bootstrap/phase0-management.yaml`](../../templates/aws/bootstrap/phase0-management.yaml) creates `OrganizationBreakGlass` in the **management account**. Pass its ARN in as `aws.break_glass_role_arn` / `break_glass_role_arn`, and keep `aws_overrides.create_break_glass` unset (false) on `aws-security`. The least-privilege `aws-security` management role is deliberately **denied** any access to the break-glass role, which every member break-glass role trusts. A pipeline that could edit it could promote itself to break-glass.
-- **In-repo alternative (`aws_overrides.create_break_glass = true`).** This works only when `aws-security` applies as the phase-0 management role. The dedicated `tfc-mgmt-aws-security-*` role has no IAM write permissions, so the apply fails with AccessDenied.
+- **The phase-0 role changes only through a human-run stack update.** The phase-0 roles `tfc-mgmt-plan` and `tfc-mgmt-apply` carry a `deny-self-tampering` policy that denies editing `OrganizationBreakGlass`, and the dedicated `tfc-mgmt-aws-security-*` role has no IAM write permissions. No Terraform run can change the role.
+- **In-repo alternative (`aws_overrides.create_break_glass = true`, not recommended).** The dedicated `tfc-mgmt-aws-security-*` role fails with AccessDenied. Applied as `tfc-mgmt-apply`, it can only create a role with a name other than `OrganizationBreakGlass`, which gives you a second break-glass role to keep in step with the SCP exemptions.
 - **Disabled by default.** The break-glass role carries a **deny-all standing policy**. In normal operation it can do nothing — it is inert until activated (Step 2).
 - **MFA-required.** Its trust policy requires MFA and bounds the MFA session age, so a leaked credential alone cannot use it. Trust is scoped to `break_glass_trusted_principals` (a small set of senior responders).
 - **Monitored.** Every assumption of the role is alarmed by `modules/aws/security/security-notifications`: an always-on EventBridge rule, plus a CloudWatch metric alarm when the org CloudTrail log group is set. The alarm watches the **effective** ARN (the stage-created role when `create_break_glass` is true), so management and monitoring never drift apart.
@@ -57,7 +58,7 @@ Break-glass is off until you deliberately turn it on. Activation means **replaci
   The command changes only `BreakGlassActive`. An existing stack keeps its current value of every other parameter, `TrustSecurityAndBackup` included (`UsePreviousValue=true`).
 
   If CloudFormation itself is unavailable, delete the `standby-deny-all` inline policy by hand and record it. Step 4 restores it.
-- **In-repo role (`aws_overrides.create_break_glass = true`, applied as the phase-0 role):** set `aws_overrides.break_glass_active = true` on `aws-security` and apply as the phase-0 role. Flip it back in Step 4. The dedicated aws-security pipeline role cannot do this.
+- **In-repo role (`aws_overrides.create_break_glass = true`, another role name, applied as `tfc-mgmt-apply`):** set `aws_overrides.break_glass_active = true` on `aws-security` and apply as the phase-0 role. Flip it back in Step 4. The dedicated aws-security pipeline role cannot do this.
 
 Then:
 

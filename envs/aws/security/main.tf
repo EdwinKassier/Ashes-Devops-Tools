@@ -87,12 +87,16 @@ module "aws_security" {
 }
 
 # The dedicated least-privilege aws-security management role (tfc-management-
-# roles) has no IAM write and is denied the break-glass role: creating it here
-# only works when this workspace applies as the phase-0 management role.
+# roles) has no IAM write and is denied the break-glass role. The phase-0 roles
+# tfc-mgmt-plan and tfc-mgmt-apply are denied editing OrganizationBreakGlass
+# too (deny-self-tampering in templates/aws/bootstrap/phase0-management.yaml),
+# so that role changes only through a human-run update of the phase-0 stack.
+# create_break_glass can only create a role with another name, applied as
+# tfc-mgmt-apply, which leaves a second break-glass role to keep in step.
 check "break_glass_created_by_phase0_stack" {
   assert {
     condition     = !coalesce(try(local.aws.create_break_glass, null), false)
-    error_message = "aws_overrides.create_break_glass = true: the dedicated tfc-mgmt-aws-security role cannot create or edit the management break-glass role (AccessDenied). Use the OrganizationBreakGlass role from templates/aws/bootstrap/phase0-management.yaml and keep aws_overrides.create_break_glass unset (false), or apply this workspace as the phase-0 role."
+    error_message = "aws_overrides.create_break_glass = true: the dedicated tfc-mgmt-aws-security role cannot create or edit the management break-glass role (AccessDenied). Use the OrganizationBreakGlass role from templates/aws/bootstrap/phase0-management.yaml and keep aws_overrides.create_break_glass unset (false). That role changes only through a human-run update of the phase-0 stack: the phase-0 roles are denied editing it too."
   }
 }
 
