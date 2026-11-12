@@ -212,7 +212,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 }
 
 resource "aws_s3_bucket_policy" "this" {
-  bucket = aws_s3_bucket.this.id
+  bucket = aws_s3_bucket.this.bucket
   policy = local.bucket_policy
 }
 

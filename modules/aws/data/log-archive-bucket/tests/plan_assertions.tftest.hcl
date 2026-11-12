@@ -225,3 +225,12 @@ run "retention_outputs_read_object_lock" {
     error_message = "retention_days must also set the lifecycle expiry."
   }
 }
+
+run "policy_attached_bucket_name_is_the_bucket" {
+  command = plan
+
+  assert {
+    condition     = output.policy_attached_bucket_name == var.log_archive_bucket_name
+    error_message = "policy_attached_bucket_name must equal the bucket name (and depend on the bucket policy)."
+  }
+}

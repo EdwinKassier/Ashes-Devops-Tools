@@ -52,8 +52,9 @@ override_module {
 override_module {
   target = module.log_archive_bucket
   outputs = {
-    bucket_arn  = "arn:aws:s3:::ashes-org-log-archive"
-    bucket_name = "ashes-org-log-archive"
+    bucket_arn                  = "arn:aws:s3:::ashes-org-log-archive"
+    bucket_name                 = "ashes-org-log-archive"
+    policy_attached_bucket_name = "ashes-org-log-archive"
   }
 }
 

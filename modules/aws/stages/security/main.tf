@@ -221,7 +221,7 @@ module "cloudtrail" {
     aws = aws.management
   }
 
-  log_archive_bucket = module.log_archive_bucket.bucket_name
+  log_archive_bucket = module.log_archive_bucket.policy_attached_bucket_name
   kms_key_arn        = module.log_cmk.key_arn
 
   # CIS AWS 3.8/3.9: S3 object-level data events (WriteOnly by default; the
@@ -243,8 +243,6 @@ module "cloudtrail" {
   alarm_sns_topic_arn                  = var.aws.cloudtrail_alarm_sns_topic_arn
   alarm_subscriptions                  = coalesce(var.aws.cloudtrail_alarm_subscribers, var.aws.notification_subscribers)
   cis_alarms_excluded                  = var.aws.cloudtrail_cis_alarms_excluded
-
-  depends_on = [module.log_archive_bucket]
 }
 
 # ---------------------------------------------------------------------------
@@ -271,7 +269,7 @@ module "cloudtrail_delegated_admin" {
 
   trail_name             = var.aws.cloudtrail_delegated_admin_trail_name
   trail_owner_account_id = var.management_account_id
-  log_archive_bucket     = module.log_archive_bucket.bucket_name
+  log_archive_bucket     = module.log_archive_bucket.policy_attached_bucket_name
   kms_key_arn            = module.log_cmk.key_arn
 
   cloudtrail_s3_data_events           = var.aws.cloudtrail_s3_data_events
@@ -289,8 +287,6 @@ module "cloudtrail_delegated_admin" {
   cloudwatch_logs_kms_key_manager_arns          = []
   alarm_subscriptions                           = coalesce(var.aws.cloudtrail_alarm_subscribers, var.aws.notification_subscribers)
   cis_alarms_excluded                           = var.aws.cloudtrail_cis_alarms_excluded
-
-  depends_on = [module.log_archive_bucket]
 }
 
 # ---------------------------------------------------------------------------

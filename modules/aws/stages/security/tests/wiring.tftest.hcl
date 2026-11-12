@@ -74,6 +74,13 @@ run "log_archive_and_config_wiring" {
     error_message = "aws.log_archive_bucket_name must reach module.log_archive_bucket."
   }
 
+  # CloudTrail receives the policy-attached name, so it is ordered after the
+  # bucket policy by data flow (no module-level depends_on).
+  assert {
+    condition     = module.log_archive_bucket.policy_attached_bucket_name == "acme-wiring-log-archive"
+    error_message = "the bucket policy output CloudTrail consumes must carry the configured bucket name."
+  }
+
   # With no config_role_arn the Config child builds the service-linked role ARN
   # from the account_id the stage passes (security_tooling_account_id).
   assert {

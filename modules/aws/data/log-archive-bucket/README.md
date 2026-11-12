@@ -127,6 +127,7 @@ The following resources are created:
 | <a name="output_bucket_id"></a> [bucket\_id](#output\_bucket\_id) | The name (ID) of the log-archive bucket. |
 | <a name="output_bucket_name"></a> [bucket\_name](#output\_bucket\_name) | The deterministic bucket name (equals var.log\_archive\_bucket\_name); the cross-root naming contract the B3 SCP references. |
 | <a name="output_object_lock_mode"></a> [object\_lock\_mode](#output\_object\_lock\_mode) | The planned Object Lock default retention mode (COMPLIANCE or GOVERNANCE). |
+| <a name="output_policy_attached_bucket_name"></a> [policy\_attached\_bucket\_name](#output\_policy\_attached\_bucket\_name) | The bucket name, taken from the bucket policy resource so a log producer wired to it (CloudTrail, Config) is created after the policy that lets it write. Use it instead of a module-level depends\_on, which defers every data source in the calling module to apply time. |
 | <a name="output_retention_days"></a> [retention\_days](#output\_retention\_days) | The planned Object Lock default retention in days (also the lifecycle expiry). It applies to new objects only. |
 <!-- END_TF_DOCS -->
 
