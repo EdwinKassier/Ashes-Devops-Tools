@@ -817,6 +817,88 @@ run "workspace_variables_file_rejects_redirection_env" {
   expect_failures = [terraform_data.input_contract]
 }
 
+# Env vars that make the runner execute other code (loader, interpreter,
+# shell and git hooks, the CLI config) are refused from both sources: the
+# committed file and workspace_variables.
+run "code_exec_env_pattern_covers_loader_and_interpreter_vars" {
+  command = plan
+
+  assert {
+    condition = alltrue([for k in [
+      "TERRAFORM_CONFIG", "TF_CLI_CONFIG_FILE", "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT",
+      "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "NODE_OPTIONS", "NODE_PATH",
+      "GIT_CONFIG_GLOBAL", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_SSH_COMMAND", "GIT_SSH", "GIT_ASKPASS",
+      "BASH_ENV", "ENV", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME", "PATH",
+    ] : can(regex(local.code_exec_env_pattern, k)) && can(regex(local.reserved_env_pattern, k))])
+    error_message = "an env var that runs other code is not reserved in both patterns."
+  }
+
+  assert {
+    condition     = can(regex(local.reserved_env_pattern, "NODE_EXTRA_CA_CERTS"))
+    error_message = "NODE_EXTRA_CA_CERTS re-trusts HTTPS for node and must be reserved in the committed file."
+  }
+
+  # The documented workspace_variables uses stay open: tokens for the tfe,
+  # Supabase and Vercel providers, TF_CLI_ARGS_plan (add-environment.md) and
+  # dynamic-credential overrides and a corporate proxy or CA bundle.
+  # tfc_admin_guard flags TFC_* and TF_CLI_ARGS*.
+  assert {
+    condition = !anytrue([for k in [
+      "TFE_TOKEN", "SUPABASE_ACCESS_TOKEN", "VERCEL_API_TOKEN", "TF_CLI_ARGS_plan", "TFC_AWS_APPLY_ROLE_ARN",
+      "HTTPS_PROXY", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS",
+      "NODE_OPTIONS_X", "ENVIRONMENT", "APP_ENV", "PATHS", "MY_PATH", "LD", "GITHUB_REPO",
+    ] : can(regex(local.code_exec_env_pattern, k))])
+    error_message = "a documented workspace_variables env var or an ordinary name is refused."
+  }
+}
+
+run "workspace_variables_rejects_code_exec_env" {
+  command = plan
+
+  variables {
+    workspace_variables = {
+      "aws-network" = {
+        LD_PRELOAD = { value = "/tmp/evil.so", category = "env" }
+      }
+      "gcp-organization" = {
+        NODE_OPTIONS = { value = "--require /tmp/evil.js", category = "env" }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "workspace_variables_file_rejects_code_exec_env" {
+  command = plan
+
+  variables {
+    workspace_variables_file = "tests/fixtures/tfc-workspaces-exec-env.yaml"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# A terraform-category variable with the same name is an input, not an env
+# var, and stays allowed.
+run "workspace_variables_terraform_category_named_like_env_allowed" {
+  command = plan
+
+  variables {
+    workspace_variables = {
+      "aws-network" = {
+        PATH             = { value = "x", category = "terraform" }
+        TF_CLI_ARGS_plan = { value = "-var-file=../../../examples/staging.tfvars", category = "env" }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(local.workspace_variables_exec_entries) == 0
+    error_message = "a terraform-category input or a documented env var must not be refused."
+  }
+}
+
 # gcp-guardrails is security_only: the platform-editable committed file must
 # not reach it (its inputs live in its security-owned root).
 run "workspace_variables_file_rejects_security_only_workspace" {

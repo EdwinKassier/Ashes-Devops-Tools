@@ -315,6 +315,22 @@ Remove them from the file. If a workspace really needs one (a corporate
 proxy, for example), set it through `workspace_variables` in tfc-admin, which
 the tfc-admin owners review.
 
+#### Env vars that run other code are refused (tfc-admin, breaking)
+
+**Breaking if you set one of these.** The tfc-admin plan now fails, and names
+the keys, when an env-category variable in `workspace_variables` or in
+`workspace_variables_file` is one of: `TERRAFORM_CONFIG`,
+`TF_CLI_CONFIG_FILE`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `GIT_*`,
+`BASH_ENV`, `ENV`, `PYTHON*` or `PATH`. Each one makes the run load or start
+code that is not in the reviewed configuration. Before, `workspace_variables`
+accepted all of them, and the committed file accepted all but
+`TF_CLI_CONFIG_FILE`. The committed file now also rejects
+`NODE_EXTRA_CA_CERTS`, like `SSL_CERT_FILE`. Remove the keys before you
+upgrade. A corporate CA bundle or proxy still goes through
+`workspace_variables`. Private module downloads that need git credentials
+belong in the HCP Terraform VCS connection or an agent host, not in a
+workspace variable.
+
 #### Run triggers auto-apply explicitly non-prod workloads (tfc-admin)
 
 **Trust change on the upgrade apply (estates with policy sets on).** tfc-admin's

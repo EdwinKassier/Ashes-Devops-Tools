@@ -573,6 +573,11 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   configuration version through the API and confirm it without a pull request. Speculative plans
   and CLI-driven workspaces are not affected. The field is checked against the HCP Terraform docs
   only: confirm it on one real run (`docs/known-gaps.md`).
+- **tfc-admin refuses env vars that run other code (SEC-6, breaking).** `workspace_variables` and
+  the committed `workspace_variables_file` reject env-category `TERRAFORM_CONFIG`,
+  `TF_CLI_CONFIG_FILE`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `GIT_*`, `BASH_ENV`, `ENV`,
+  `PYTHON*` and `PATH`. Before, `workspace_variables` was not checked at all. The committed file
+  also rejects `NODE_EXTRA_CA_CERTS`. See `UPGRADING.md`.
 
 ### Changed
 

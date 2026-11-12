@@ -1367,7 +1367,14 @@ side (all mock-tested, secure defaults):
   `AWS_ENDPOINT_URL_STS`, `HTTPS_PROXY`, `TFE_HOSTNAME`) and an AWS shared
   config file (`endpoint_url`) never appear in the plan. Workspace variables
   that tfc-admin writes go through its reviewed configuration; a variable that
-  a person adds by hand in the HCP Terraform UI does not.
+  a person adds by hand in the HCP Terraform UI does not. tfc-admin refuses
+  env vars that run other code (`TERRAFORM_CONFIG`, `TF_CLI_CONFIG_FILE`,
+  `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `GIT_*`, `BASH_ENV`, `ENV`,
+  `PYTHON*`, `PATH`) from both the committed file and `workspace_variables`
+  (SEC-6). That is a denylist, so a name it does not list (another
+  interpreter's start-up variable, say) still passes. An allowlist would
+  break the documented uses of `workspace_variables` (provider tokens,
+  `TF_CLI_ARGS_plan`, dynamic-credential overrides, a corporate proxy).
 - **Credential-file arguments are not checked.** The policy does not look at
   the aws provider's `shared_config_files`, `shared_credentials_files` or
   `profile` (a file can set `credential_process`, which runs a command, or

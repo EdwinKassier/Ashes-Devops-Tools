@@ -358,7 +358,7 @@ variable "aws_workspace_account_keys" {
 }
 
 variable "workspace_variables" {
-  description = "Per-workspace variables, workspace name => {key => {value, category (terraform|env, default terraform), hcl?, sensitive?, description?, version?}}. Overrides derived values (e.g. environment) and dynamic-credential env vars. Sensitive values are written write-only; increment `version` to rotate."
+  description = "Per-workspace variables, workspace name => {key => {value, category (terraform|env, default terraform), hcl?, sensitive?, description?, version?}}. Overrides derived values (e.g. environment) and dynamic-credential env vars. Sensitive values are written write-only; increment `version` to rotate. Env vars that make the run execute other code are refused: TERRAFORM_CONFIG, TF_CLI_CONFIG_FILE, LD_*, DYLD_*, NODE_OPTIONS, NODE_PATH, GIT_*, BASH_ENV, ENV, PYTHON* and PATH."
   type = map(map(object({
     value       = string
     category    = optional(string, "terraform")
