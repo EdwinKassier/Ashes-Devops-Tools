@@ -41,9 +41,39 @@ variable "max_retention_days" {
   default     = 3650
 }
 
+variable "allow_copy_from_organization_id" {
+  description = "AWS Organizations ID (o-...). When set, a vault access policy lets principals in that organization copy recovery points into this vault (backup:CopyIntoBackupVault), so it can be the destination of the org BACKUP_POLICY copy actions. Null (default) = no vault access policy."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.allow_copy_from_organization_id == null || can(regex("^o-[a-z0-9]{10,32}$", coalesce(var.allow_copy_from_organization_id, "x")))
+    error_message = "allow_copy_from_organization_id must be null or an AWS Organizations ID (o- followed by 10-32 lowercase letters or digits)."
+  }
+}
+
 # -----------------------------------------------------------------------------
 # Restore testing plan
 # -----------------------------------------------------------------------------
+
+variable "create_restore_testing" {
+  description = "Create the restore testing plan, its selections and (when restore_testing_role_arn is null) the restore-testing role. Set false for a vault that receives no recovery points: testing it proves nothing."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "restore_testing_resource_types" {
+  description = "Resource types the restore testing plan restores from this vault, one selection each. EBS selects by the restore_testing_tag_key/value tag; every other type selects all protected resources of that type in the vault. Default [\"EBS\"]."
+  type        = list(string)
+  default     = ["EBS"]
+  nullable    = false
+
+  validation {
+    condition     = length(var.restore_testing_resource_types) > 0 && alltrue([for t in var.restore_testing_resource_types : contains(["EBS", "EC2", "RDS", "Aurora", "S3", "DynamoDB", "EFS", "FSx", "DocumentDB", "Neptune"], t)])
+    error_message = "restore_testing_resource_types must be a non-empty list of EBS, EC2, RDS, Aurora, S3, DynamoDB, EFS, FSx, DocumentDB, Neptune."
+  }
+}
 
 variable "restore_testing_plan_name" {
   description = "Name of the AWS Backup restore testing plan. AWS restricts this to alphanumeric characters and underscores."
@@ -84,7 +114,7 @@ variable "start_window_hours" {
 # -----------------------------------------------------------------------------
 
 variable "restore_testing_selection_name" {
-  description = "Name of the restore testing selection (the resource set that gets restored). AWS restricts this to alphanumeric characters and underscores."
+  description = "Name of the EBS restore testing selection. Other resource types use <name>_<type in lower case>. AWS restricts this to alphanumeric characters and underscores."
   type        = string
   default     = "ebs_restore_test"
 

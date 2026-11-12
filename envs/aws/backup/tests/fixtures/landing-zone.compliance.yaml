@@ -1,0 +1,25 @@
+# Test fixture: compliance.backup for the aws-backup root (config.tftest.hcl).
+# aws.contracts.organization replaces the aws-organization remote-state read.
+version: 1
+org:
+  name: cfgco
+  regions:
+    aws: eu-west-2
+  tfc:
+    organization: cfg-tfc
+aws:
+  management_account_id: "012345678901"
+  contracts:
+    organization:
+      organization_id: o-cfgco12345
+      account_ids:
+        backup: "044444444444"
+      account_role_arns:
+        backup: arn:aws:iam::044444444444:role/cross-account
+      ou_ids:
+        Workloads: ou-cfgo-workloads0
+compliance:
+  backup:
+    copy_to_central_vault: true
+    copy_retention_days: 400
+    dr_region: eu-west-1

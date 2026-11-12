@@ -265,6 +265,13 @@ variable "serverless_v2_max_capacity" {
   }
 }
 
+variable "enable_org_backup" {
+  description = "Tag the cluster backup = true so the organization BACKUP_POLICY (aws-backup) backs it up daily, next to the RDS automated backups. Default true. For cross-account copy to the central copy vault the kms_key_id key policy must also let the backup account use the key."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "tags" {
   description = "Tags applied to every resource created by this module."
   type        = map(string)

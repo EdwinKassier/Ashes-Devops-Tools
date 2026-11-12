@@ -103,6 +103,24 @@ variable "changeable_for_days" {
   }
 }
 
+variable "enable_central_copy" {
+  description = "Copy every member recovery point to a new CMK-encrypted, Compliance-mode Vault-Locked copy vault (org-backup-copy-vault) in the backup account, enable org-wide cross-account backup and point the BACKUP_POLICY at the <vault_name>-cmk member vault. IRREVERSIBLE after changeable_for_days (UPGRADING.md). Apply aws-organization first with the same compliance.backup settings. Null = compliance.backup.copy_to_central_vault from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
+}
+
+variable "copy_retention_days" {
+  description = "Days each copy is kept in the central copy vault; must lie between min_retention_days and max_retention_days. Null = compliance.backup.copy_retention_days from config/landing-zone.yaml, else 365."
+  type        = number
+  default     = null
+}
+
+variable "dr_region" {
+  description = "Second region for a cross-region copy to the member <vault_name>-cmk vault there (aws-organization creates it from the same compliance.backup.dr_region). Must differ from aws_region and be in aws.allowed_regions. Null = compliance.backup.dr_region from config/landing-zone.yaml, else no cross-region copy."
+  type        = string
+  default     = null
+}
+
 # -----------------------------------------------------------------------------
 # IAM role ARNs (operator-supplied)
 # -----------------------------------------------------------------------------

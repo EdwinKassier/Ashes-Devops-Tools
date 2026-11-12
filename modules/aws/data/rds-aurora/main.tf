@@ -43,7 +43,7 @@ resource "aws_db_subnet_group" "this" {
 
 resource "aws_rds_cluster" "this" {
   # checkov:skip=CKV2_AWS_27:Query logging needs a caller-owned cluster parameter group (log_statement); export via enabled_cloudwatch_logs_exports.
-  # checkov:skip=CKV2_AWS_8:Backups are governed org-wide by the AWS Backup tag policy (modules/aws/backup/backup-org-policy), not a per-module plan.
+  # checkov:skip=CKV2_AWS_8:Backups are governed org-wide by the AWS Backup BACKUP_POLICY (modules/aws/backup/backup-org-policy), which selects the backup = true tag set here (enable_org_backup), not a per-module plan.
   cluster_identifier = var.name
   engine             = "aurora-postgresql"
   engine_mode        = "provisioned"
@@ -89,7 +89,8 @@ resource "aws_rds_cluster" "this" {
     }
   }
 
-  tags = var.tags
+  # backup = true: the org BACKUP_POLICY selects resources by this tag.
+  tags = merge(var.tags, var.enable_org_backup ? { backup = "true" } : {})
 }
 
 # ── Cluster instances ─────────────────────────────────────────────────────────

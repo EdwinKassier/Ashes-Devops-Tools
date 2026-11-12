@@ -94,3 +94,55 @@ run "scaffold_gcp_aws_saas_plans" {
     error_message = "aws.management_account_id from the config file must resolve into the root locals."
   }
 }
+
+run "compliance_backup_section_turns_on_copy" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.enable_central_copy == true && local.dr_region == "eu-west-1" && local.copy_retention_days == 400
+    error_message = "compliance.backup.* must feed the backup root."
+  }
+
+  assert {
+    condition     = module.aws_backup.copy_destination_vault_arns == ["arn:aws:backup:eu-west-2:044444444444:backup-vault:org-backup-copy-vault", "arn:aws:backup:eu-west-1:$account:backup-vault:org-backup-vault-cmk"]
+    error_message = "the root must pass the backup account and the DR region to the stage."
+  }
+}
+
+run "compliance_backup_absent_keeps_copy_off" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+  }
+
+  assert {
+    condition     = local.enable_central_copy == false && local.dr_region == null && module.aws_backup.copy_destination_vault_arns == []
+    error_message = "without compliance.backup the root must not copy."
+  }
+}
+
+# The copy vault policy admits copies from the organization ID: a contract
+# without organization_id must fail the plan, naming the key, when central copy
+# is on.
+run "central_copy_needs_organization_id" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    landing_zone_name        = "acme"
+    management_account_id    = "111111111111"
+    enable_central_copy      = true
+    organization_contract = {
+      ou_ids            = { Workloads = "ou-abcd-workloads0" }
+      account_ids       = { backup = "444444444444" }
+      account_role_arns = { backup = "arn:aws:iam::444444444444:role/cross-account" }
+    }
+  }
+
+  expect_failures = [terraform_data.backup_copy_guard]
+}

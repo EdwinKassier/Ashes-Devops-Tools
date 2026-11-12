@@ -453,3 +453,17 @@ run "management_role_keeps_trail_write_by_default" {
     error_message = "By default the aws-security role keeps its trail grants and the cloudtrail delegation."
   }
 }
+
+# aws_backup_global_settings (central backup copy) runs in the management
+# account as the aws-backup apply role.
+run "aws_backup_role_can_enable_cross_account_backup" {
+  command = plan
+
+  assert {
+    condition = contains(
+      flatten([for s in jsondecode(output.apply_policies["aws-backup"]).Statement : s.Action if s.Sid == "BackupGlobalSettings"]),
+      "backup:UpdateGlobalSettings"
+    )
+    error_message = "the aws-backup apply role must be able to set isCrossAccountBackupEnabled."
+  }
+}

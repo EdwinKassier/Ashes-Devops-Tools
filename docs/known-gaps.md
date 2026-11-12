@@ -30,6 +30,22 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   encrypted with it, that the DR StackSet does the same in
   `member_backup_dr_region`, and that a copy job from that vault to the backup
   account succeeds with the `BackupAccountCopy` key-policy grant.
+- **The central backup copy is mock-tested only (CMP-1, ARC-8).** Mock tests
+  prove the BACKUP_POLICY document, the copy vault, its key policy and the
+  wiring, not AWS Backup behaviour. With
+  `compliance.backup.copy_to_central_vault: true` (and `dr_region`), confirm in
+  the sandbox: the `aws-backup` management apply role sets
+  `isCrossAccountBackupEnabled`; the backup account's `tfc-apply` role creates
+  the `backup-copy-vault` key (tagged `protected = true`, break-glass as the
+  only `kms:PutKeyPolicy` holder) and `org-backup-copy-vault` with it; a daily
+  job writes to `org-backup-vault-cmk` and the copy jobs to the copy vault and
+  to the DR vault succeed for each resource type (EBS on a customer managed key,
+  EC2, RDS, Aurora, S3, DynamoDB, EFS); the copy vault key grants are enough
+  for copy-in and for restores (the key admits backup-account principals only
+  through Backup, EC2, RDS, S3, DynamoDB and EFS); and the restore-testing
+  plan restores RDS and Aurora without restore metadata overrides. Do this in a
+  throwaway vault first or within `changeable_for_days`: the lock cannot be
+  removed after that window.
 
 - **The explicit-CIDR IPAM default for spoke VPCs needs the sandbox proof (ARC-1).**
   `modules/aws/network/vpc` requests `cidr_block` from the IPAM pool by default.
@@ -587,18 +603,17 @@ architectural change and is documented here rather than rushed.
 
 AWS:
 
-- **A5 — single-region backups, no cross-region / air-gapped copy** (MEDIUM,
-  BEHAVIOR-CHANGING). `modules/aws/backup/backup-org-policy` writes recovery
-  points to one region; there is no `copy_actions` stanza or Logically
-  Air-Gapped destination vault. Latest AWS Backup guidance makes cross-region /
-  cross-account copy the resilience baseline. Add a `copy_actions` destination +
-  second-region vault (needs a real apply). Member-account vaults now exist
-  (aws-organization `create_member_backup_vault`). By default they use the AWS
-  managed key, which cross-account copy cannot use. The opt-in
-  `member_backup_vault_encryption = "cmk"` adds a customer managed key vault
-  (and, with `member_backup_dr_region`, one in a second region), but the
-  BACKUP_POLICY does not copy to the backup account, so backups still share
-  the workload account's blast radius. Ref:
+- **A5 — cross-account and cross-region backup copy is opt-in and unproven**
+  (MEDIUM, PREVIEW). By default `modules/aws/backup/backup-org-policy` writes
+  recovery points to one vault in one region of each member account, on the
+  AWS managed key, so backups share the workload account's blast radius.
+  `compliance.backup.copy_to_central_vault: true` (aws-organization, then
+  aws-backup) adds `copy_actions` to a CMK-encrypted, Compliance-locked copy
+  vault in the backup account, and `compliance.backup.dr_region` adds a copy to
+  a member vault in a second region. Still to validate: copy job success for
+  each resource type, restore testing metadata for RDS and Aurora, and the
+  fact that EBS volumes on the AWS managed `aws/ebs` key cannot be copied across
+  accounts. No Logically Air-Gapped vault is offered. Ref:
   <https://aws.amazon.com/blogs/storage/aws-backup-2025-year-in-review-advancing-recovery-resilience/>
 - **A6 — log-analytics primary lags the June-2026 SRA** (MEDIUM, SAFE-DOC done /
   re-plumb BEHAVIOR-CHANGING). The June-2026 SRA names **CloudWatch Unified Data

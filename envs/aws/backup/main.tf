@@ -69,6 +69,28 @@ module "aws_backup" {
   backup_role_arn          = var.backup_role_arn
   backup_role_name         = var.backup_role_name
   restore_testing_role_arn = var.restore_testing_role_arn
+
+  # Central copy and cross-region copy (compliance.backup). Off by default.
+  # A missing organization ID is tolerated here so that
+  # terraform_data.backup_copy_guard, which names the key, fails the plan.
+  enable_central_copy   = local.enable_central_copy && try(local.org.organization_id, null) != null
+  organization_id       = local.org.organization_id
+  management_account_id = local.management_account_id
+  backup_account_id     = lookup(local.org.account_ids, "backup", null)
+  copy_retention_days   = local.copy_retention_days
+  dr_region             = local.dr_region
+}
+
+# The copy vault admits copies from the organization ID in the contract. The
+# backup account ID needs no guard here: the aws.backup provider already reads
+# account_ids["backup"] on every plan.
+resource "terraform_data" "backup_copy_guard" {
+  lifecycle {
+    precondition {
+      condition     = !local.enable_central_copy || try(local.org.organization_id, null) != null
+      error_message = "compliance.backup.copy_to_central_vault needs the organization ID: the aws-organization contract has no organization_id (organization_contract / aws.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output)."
+    }
+  }
 }
 
 # Fail early, naming the contract field, when the effective aws-organization contract

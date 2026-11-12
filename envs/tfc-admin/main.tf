@@ -28,6 +28,7 @@ locals {
     "envs/aws/backup" = [
       "modules/aws/backup/backup-org-policy",
       "modules/aws/backup/backup-vault",
+      "modules/aws/data/kms-key",
       "modules/aws/stages/backup",
     ]
     "envs/aws/identity" = [

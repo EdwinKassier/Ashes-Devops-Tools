@@ -363,6 +363,43 @@ variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
 ### AWS
 
+#### Aurora clusters are tagged for the organization backup policy (rds-aurora, app-services)
+
+`modules/aws/data/rds-aurora` now tags every cluster `backup = true` (new input `enable_org_backup`, default `true`). The organization BACKUP_POLICY from `aws-backup` selects resources by this tag, so after the next apply of each workload that uses the module, AWS Backup also backs up its Aurora clusters daily and keeps each recovery point for 365 days. The RDS automated backups do not change.
+
+What you see on apply: an in-place tag update on each `aws_rds_cluster`. No replacement.
+
+What to do:
+
+- Expect AWS Backup storage cost for each Aurora cluster in the member vault.
+- To keep a cluster out of the organization backup, set `enable_org_backup = false` on the module.
+- For cross-account copy to the central copy vault (below), the cluster's `kms_key_id` key policy must let the backup account use the key. Otherwise the copy job for that cluster fails.
+
+#### Central backup copy to a locked vault (opt-in, IRREVERSIBLE lock) (aws-backup)
+
+No change unless you opt in. With the defaults the `aws-backup` plan changes no backup resource: the BACKUP_POLICY document is now built with `jsonencode()` instead of a template file, with the same content, and the restore-testing plan and selection move in state (`moved` blocks).
+
+You opt in with `compliance.backup.copy_to_central_vault: true` in `config/landing-zone.yaml` (or `enable_central_copy = true` on the root). Apply `aws-organization` first with the same `compliance.backup` settings: it creates the `<vault_name>-cmk` member vaults and their keys. Then apply `aws-backup`. It:
+
+- creates `org-backup-copy-vault` in the backup account, encrypted with a new customer managed key (alias `backup-copy-vault`, rotating, tagged `protected = true`), with a **Compliance-mode Vault Lock**, and a vault access policy that accepts copies only from your organization
+- enables org-wide cross-account backup (`aws_backup_global_settings`) in the management account
+- points the BACKUP_POLICY at `<vault_name>-cmk` in each member account and copies every recovery point to the copy vault, kept for `compliance.backup.copy_retention_days` (default 365)
+- with `compliance.backup.dr_region`, also copies every recovery point to `<vault_name>-cmk` in that region of the same member account, kept 35 days. `dr_region` alone, without the central copy, does only this cross-region copy.
+- moves restore testing from the empty `org-backup-vault` to the copy vault (EBS, EC2, RDS, Aurora, S3, DynamoDB, EFS). Unless you pass `restore_testing_role_arn`, it uses a new role, `aws-backup-restore-testing-copy`. The old restore-testing plan, selection and role are destroyed. The old `org-backup-vault` in the backup account stays; it is locked and empty.
+
+What you cannot undo:
+
+- The copy vault lock is in Compliance mode. `changeable_for_days` (default 3) is your window to back out: during those days after the apply you can still delete the lock (`aws backup delete-backup-vault-lock-configuration --backup-vault-name org-backup-copy-vault` in the backup account) and then delete the vault's recovery points and the vault. After that window nobody can remove the lock or delete the vault while it holds recovery points, including the root user and AWS, and recovery points in it cannot be deleted before `min_retention_days`.
+- Turning `copy_to_central_vault` off again stops the copies, but the plan stops at the copy vault key's deletion guard (`prevent_destroy`). Keep the key, or remove the guard from state first as the kms-key module describes.
+- Check `min_retention_days` (default 7), `max_retention_days` (default 3650) and `copy_retention_days` before the apply. `copy_retention_days` must lie between the two, or every copy job fails. After the window you cannot lower `max_retention_days` or raise `min_retention_days` beyond what the lock allows.
+- The copy vault key is tagged `protected = true`. Only break-glass can disable it, schedule its deletion or change its key policy. Its key policy names the backup account's `break-glass` role (`copy_vault_key_policy_admin_role_name`), which must exist before the apply (aws-organization `enable_member_break_glass_role`, default on). Later changes to the key policy fail as the pipeline; apply them as break-glass.
+
+What cross-account copy also needs:
+
+- Each source resource's key must be shareable with the backup account. Aurora and RDS encrypted with a customer managed key need a key policy that lets the backup account use the key.
+- EBS volumes encrypted with the AWS managed `aws/ebs` key cannot be copied across accounts. Use a customer managed key for EBS (for example `account-baseline` `kms_key_arn`) before you rely on the copy.
+- The copy runs only for resources the BACKUP_POLICY selects (tag `backup = true`).
+
 #### Opt-in customer managed key member backup vaults (aws-organization)
 
 No change unless you opt in. With the defaults the Backup service-role StackSet template stays the same, so the plan shows no StackSet change.

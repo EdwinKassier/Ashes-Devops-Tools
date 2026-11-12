@@ -111,6 +111,13 @@ variable "via_services" {
   default     = []
 }
 
+variable "enable_key_user_grants" {
+  description = "Add a KeyUserGrants statement: key_user_arns may call kms:CreateGrant, ListGrants and RevokeGrant for AWS resources only (kms:GrantIsForAWSResource = true), scoped by via_services when set. Services such as AWS Backup, EBS and RDS use a customer managed key through grants. Default false (no grant statement)."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "service_principals" {
   description = "Optional list of AWS service principals (e.g. sns.amazonaws.com, ssm.amazonaws.com, cloudwatch.amazonaws.com) granted general-usage (Encrypt/Decrypt/GenerateDataKey/etc.) on the CMK, scoped per service_principal_scope (default: the key's own account via aws:SourceAccount). Unlike log_service_principals these carry no CloudTrail EncryptionContext condition. Empty by default (no service-principal statement)."
   type        = list(string)

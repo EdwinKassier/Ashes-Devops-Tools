@@ -327,7 +327,9 @@ What exists today:
   attaches a `BACKUP_POLICY` to the Workloads OU: one daily rule at 05:00
   UTC, 365-day retention, selecting resources tagged `backup=true`, one
   region, a vault named `org-backup-vault`
-  ([policy template](../../modules/aws/backup/backup-org-policy/policies/backup-policy.json)).
+  ([policy document](../../modules/aws/backup/backup-org-policy/main.tf)).
+  Copy actions to a locked vault in the backup account and to a second region
+  are opt-in (`compliance.backup`, below).
 - **AWS central vault.** [`modules/aws/backup/backup-vault`](../../modules/aws/backup/backup-vault/)
   creates the vault in the backup account with a **Compliance-mode Vault
   Lock** (`changeable_for_days` default 3, `min_retention_days` 7,
@@ -355,19 +357,25 @@ Gaps this design must close, each checked against the code:
    checked 2026-11). The repo creates `org-backup-vault` only in the backup
    account, so workload accounts have no target. **Verify before relying on**
    whether something outside this repo creates it.
-2. **Single region, no cross-account copy.** No `copy_actions`
+2. **Single region, no cross-account copy by default.** `copy_actions` to a
+   locked copy vault in the backup account and to a DR region are opt-in
+   (`compliance.backup.copy_to_central_vault`, `compliance.backup.dr_region`)
+   and not yet proven against a real apply
    ([known gaps A5](../../docs/known-gaps.md#modernization--latest-best-practice-gaps-2026-review)).
-3. **Databases not selected.** `modules/aws/stages/app-services` tags each
-   Aurora cluster with its stage-wide `tags` plus `Service`. Setting
-   `backup=true` in the stage-wide tags would select every taggable resource;
-   there is no per-service tag input to select only the orders cluster.
+3. **Database selection is all or nothing.** `modules/aws/data/rds-aurora`
+   tags every cluster `backup=true` by default (`enable_org_backup`), so the
+   policy selects every Aurora cluster. `modules/aws/stages/app-services` does
+   not forward `enable_org_backup`, so there is no per-service input to leave a
+   cluster out.
 4. **The vault key.** `kms_key_arn` defaults to `""`, the AWS-managed backup
    key. Cross-account copies of resources that AWS Backup does not fully
    manage need a customer-managed key, and a source encrypted with a CMK must
    share that key with the destination account
    ([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/create-cross-account-backup.html),
    checked 2026-11). Aurora here uses the workload CMK.
-5. **Restore testing covers EBS only** (`protected_resource_type = "EBS"`).
+5. **Restore testing covers EBS only by default** (`restore_testing_resource_types`).
+   With the central copy on, it tests the copy vault for EBS, EC2, RDS, Aurora,
+   S3, DynamoDB and EFS.
 6. **No cross-region database replicas.** `rds-aurora` has no global-cluster
    input, and `cloud-sql` has no replica, backup-location, retained-backup
    count or `retain_backups_on_delete` input. The app-services database call

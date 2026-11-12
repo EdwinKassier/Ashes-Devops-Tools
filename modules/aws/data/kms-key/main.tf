@@ -25,6 +25,10 @@
 #   * Optional general-usage grant for var.key_user_arns, optionally scoped by
 #     var.via_services. This ViaService scoping applies only to generic
 #     application usage, never to the log-service grants above.
+#   * Optional grant management for var.key_user_arns (enable_key_user_grants):
+#     CreateGrant / ListGrants / RevokeGrant for AWS resources only, scoped by
+#     var.via_services, for services that use the key through grants (AWS
+#     Backup vaults, EBS, RDS).
 #   * Optional service-principal grant for var.service_principals — one Allow for
 #     the whole list, scoped by default to the key's OWN account
 #     (aws:SourceAccount = key_account_id), so a service acting for another org
@@ -100,6 +104,25 @@ locals {
         Condition = { StringEquals = { "kms:ViaService" = var.via_services } }
       } : {},
     )
+  ] : []
+
+  # Optional grant-management statement for key_user_arns
+  # (enable_key_user_grants): kms:CreateGrant / ListGrants / RevokeGrant only
+  # for grants on AWS resources (kms:GrantIsForAWSResource), the pattern AWS
+  # Backup, EBS and RDS need to use a customer managed key. Scoped by
+  # via_services like KeyUsage.
+  key_user_grant_statements = var.enable_key_user_grants && length(var.key_user_arns) > 0 ? [
+    {
+      Sid       = "KeyUserGrants"
+      Effect    = "Allow"
+      Principal = { AWS = var.key_user_arns }
+      Action    = ["kms:CreateGrant", "kms:ListGrants", "kms:RevokeGrant"]
+      Resource  = "*"
+      Condition = merge(
+        { Bool = { "kms:GrantIsForAWSResource" = "true" } },
+        length(var.via_services) > 0 ? { StringEquals = { "kms:ViaService" = var.via_services } } : {},
+      )
+    }
   ] : []
 
   # Optional grant for local AWS service principals (SNS/SSM/CloudWatch/...) that
@@ -183,6 +206,7 @@ locals {
       [local.key_admin_statement, local.key_policy_admin_statement],
       local.log_service_statements,
       local.key_user_statements,
+      local.key_user_grant_statements,
       local.service_principal_statements,
     )
   })

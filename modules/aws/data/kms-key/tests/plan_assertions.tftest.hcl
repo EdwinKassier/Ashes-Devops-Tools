@@ -284,3 +284,37 @@ run "deletion_guard_can_be_disabled" {
     error_message = "enable_deletion_protection = false must omit the guard"
   }
 }
+
+# enable_key_user_grants: key users may create grants for AWS resources (the
+# pattern AWS Backup and EBS need), scoped like KeyUsage by via_services.
+run "key_user_grants_opt_in" {
+  command = plan
+
+  variables {
+    key_user_arns          = ["arn:aws:iam::111122223333:root"]
+    via_services           = ["backup.eu-west-2.amazonaws.com"]
+    enable_key_user_grants = true
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUserGrants"]).Action == ["kms:CreateGrant", "kms:ListGrants", "kms:RevokeGrant"] &&
+      one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUserGrants"]).Condition.Bool["kms:GrantIsForAWSResource"] == "true" &&
+      one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUserGrants"]).Condition.StringEquals["kms:ViaService"] == ["backup.eu-west-2.amazonaws.com"]
+    )
+    error_message = "KeyUserGrants must allow grant management for AWS resources only, through via_services."
+  }
+}
+
+run "no_key_user_grants_by_default" {
+  command = plan
+
+  variables {
+    key_user_arns = ["arn:aws:iam::111122223333:role/LogReader"]
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUserGrants"]) == 0
+    error_message = "KeyUserGrants must be opt-in."
+  }
+}

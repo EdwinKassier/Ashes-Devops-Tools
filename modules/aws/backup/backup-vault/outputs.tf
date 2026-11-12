@@ -10,10 +10,10 @@ output "vault_name" {
 
 output "restore_testing_plan_arn" {
   description = "The ARN of the restore testing plan, if one was created."
-  value       = try(aws_backup_restore_testing_plan.this.arn, null)
+  value       = try(aws_backup_restore_testing_plan.this[0].arn, null)
 }
 
 output "restore_testing_role_arn" {
-  description = "ARN of the role restore testing jobs assume (created here when restore_testing_role_arn was null)."
+  description = "ARN of the role restore testing jobs assume (created here when restore_testing_role_arn was null). Null when create_restore_testing is false."
   value       = local.restore_testing_role_arn
 }

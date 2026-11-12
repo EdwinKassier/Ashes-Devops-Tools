@@ -34,3 +34,27 @@ run "bad_target_ou_id_rejected" {
 
   expect_failures = [var.target_ou_id]
 }
+
+run "copy_action_without_vault_arn_rejected" {
+  command = plan
+
+  variables {
+    backup_role_arn = "arn:aws:iam::123456789012:role/OrgBackupRole"
+    target_ou_id    = "ou-abcd-1example"
+    copy_actions    = [{ destination_vault_arn = "org-backup-copy-vault", delete_after_days = 30 }]
+  }
+
+  expect_failures = [var.copy_actions]
+}
+
+run "zero_retention_rejected" {
+  command = plan
+
+  variables {
+    backup_role_arn = "arn:aws:iam::123456789012:role/OrgBackupRole"
+    target_ou_id    = "ou-abcd-1example"
+    retention_days  = 0
+  }
+
+  expect_failures = [var.retention_days]
+}
