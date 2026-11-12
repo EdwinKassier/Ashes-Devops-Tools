@@ -424,6 +424,19 @@ jobs:
             fi
           fi
 
+      # Removing or renaming a module input or output (or deleting a module)
+      # needs a breaking-change commit, which the step above ties to an
+      # UPGRADING.md entry. Policy: docs/policies/versioning-and-compatibility.md.
+      # `make module-api` runs the same check locally.
+      - name: Module API removals must be marked breaking
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git rev-parse --verify --quiet "origin/${BASE_REF}" >/dev/null \
+            || git fetch --no-tags origin "${BASE_REF}"
+          ./scripts/check-module-api.sh "origin/${BASE_REF}"
+
       # zizmor (GitHub Actions static analysis), hash-locked like commitizen,
       # offline audits only (no token), with the rules in .github/zizmor.yml.
       # `make zizmor` runs the same version and arguments.

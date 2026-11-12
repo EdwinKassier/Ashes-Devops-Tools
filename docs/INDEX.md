@@ -129,6 +129,7 @@ make plan-gcp-workload APP_ENV=dev
 
 - [Security Policy](../SECURITY.md): vulnerability reporting, disclosure timeline, and security architecture
 - [Changelog](../CHANGELOG.md): release notes, breaking changes, and migration guides
+- [Versioning and Compatibility](policies/versioning-and-compatibility.md): one SemVer for the repository, what counts as breaking, support window, provider floors, how to pin a release
 - [Branch Protection](guides/BRANCH_PROTECTION.md): recommended GitHub branch protection and tag ruleset settings
 - [Known Gaps](known-gaps.md): open / unvalidated / deferred items
 - [Compliance Control Matrix](compliance/control-matrix.md): implemented controls mapped to SOC 2, ISO 27001:2022, NIST 800-53 r5 and CIS, with gaps and audit-evidence sources

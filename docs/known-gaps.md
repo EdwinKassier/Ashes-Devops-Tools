@@ -699,7 +699,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   the bucket and regional endpoints come from repository variables; a job can
   still reach any bucket in those domains. A China-region target
   (`amazonaws.com.cn`) needs that domain added.
-- **Release:** one SemVer for all 125 modules, no signed tags or build provenance.
+- **Release:** one SemVer for all modules by policy
+  (`docs/policies/versioning-and-compatibility.md`); release tags are not signed
+  and releases carry no build provenance. The module API guard
+  (`scripts/check-module-api.sh`) catches removed module inputs and outputs, not
+  changed types, defaults, validations, root inputs or config keys.
 - **Application image provenance is not enforced at admission (CICD-17).** The
   delivery examples in `examples/app-delivery/` deploy by image digest and attest
   build provenance (`actions/attest-build-provenance`), and

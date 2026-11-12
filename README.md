@@ -350,7 +350,9 @@ Drift detection and the sandbox end-to-end job fail on schedule until a sandbox 
 
 **Releasing:** the repository is versioned `vX.Y.Z` by release-please from Conventional Commits once the
 release GitHub App is set up. Until then a maintainer tags releases by hand (`v0.1.0` was cut that way).
-See [CHANGELOG.md](CHANGELOG.md). Separately, a per-workspace deployment tag records release metadata
+See [CHANGELOG.md](CHANGELOG.md). What a version promises, what counts as a breaking change and how
+to pin a release: [versioning and compatibility policy](docs/policies/versioning-and-compatibility.md).
+Separately, a per-workspace deployment tag records release metadata
 for a Terraform Cloud run:
 
 ```bash

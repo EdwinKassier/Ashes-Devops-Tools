@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live security-contact-live backend-check cfn-lint shellcheck test test-scripts ci ci-quick yamllint markdownlint-check zizmor commit-check module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload plan-aws-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live security-contact-live backend-check cfn-lint shellcheck test test-scripts ci ci-quick yamllint markdownlint-check zizmor commit-check module-api module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload plan-aws-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -236,6 +236,9 @@ commit-check: ## Conventional-commit check and the UPGRADING.md rule for breakin
 		git diff --name-only "$$base..HEAD" | grep -qx 'UPGRADING.md' || { echo "A commit is marked breaking (!: or BREAKING CHANGE) but UPGRADING.md is not in the diff. Add an entry under 'Unreleased'."; exit 1; }; \
 	fi; echo "commit-check: OK"
 
+module-api: ## Fail when a module input or output is removed without a breaking-change commit, merge-base(COMMIT_BASE)..HEAD (CI: meta-lint)
+	@./scripts/check-module-api.sh $(COMMIT_BASE)
+
 module-usage: ## Fail on unreferenced modules that are not marked library-only (CI: meta-lint)
 	@python3 scripts/check-module-usage.py --check
 
@@ -271,6 +274,7 @@ ci: ## Run the local CI pipeline: every workstation-runnable gate of terraform-p
 	@$(MAKE) markdownlint-check
 	@$(MAKE) zizmor
 	@$(MAKE) commit-check
+	@$(MAKE) module-api
 	@$(MAKE) codeowners-check
 	@$(MAKE) backend-check
 	@$(MAKE) validate-all
