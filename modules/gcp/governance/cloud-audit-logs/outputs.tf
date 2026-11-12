@@ -90,3 +90,8 @@ output "log_analytics_linked_dataset" {
   description = "Name of the linked BigQuery dataset on the Log Analytics bucket, or null when disabled."
   value       = local.enable_log_analytics && var.enable_log_analytics_linked_dataset ? google_logging_linked_dataset.audit_analytics[0].name : null
 }
+
+output "log_retention_days" {
+  description = "Days the audit-log bucket keeps objects: the age of its lifecycle Delete rule (and of the locked retention policy when enable_bucket_lock is true)."
+  value       = one([for r in google_storage_bucket.audit_logs.lifecycle_rule : one(r.condition).age if one(r.action).type == "Delete"])
+}

@@ -23,6 +23,11 @@ output "audit_logs_bucket_name" {
   value       = module.audit_logs.storage_bucket_name
 }
 
+output "audit_log_retention_days" {
+  description = "Days the org audit bucket keeps audit logs, as planned on the bucket's lifecycle Delete rule."
+  value       = module.audit_logs.log_retention_days
+}
+
 output "billing_export_dataset_id" {
   description = "BigQuery dataset ID for Cloud Billing export data"
   value       = google_bigquery_dataset.billing_export.dataset_id

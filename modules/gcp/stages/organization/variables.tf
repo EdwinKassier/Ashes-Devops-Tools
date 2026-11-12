@@ -545,13 +545,17 @@ variable "budget_threshold_rules" {
 
 variable "audit_log_retention_days" {
   description = <<-EOT
-    Number of days to retain audit logs in Cloud Storage. Adjust to meet your
-    compliance requirements:
-      - Default (365 days) — sufficient for most cloud security baselines.
-      - PCI-DSS requires 12 months online + 12 months archival.
-      - HIPAA requires 6 years.
-      - FedRAMP requires 3 years.
-    Must be >= 1.
+    Days to retain audit logs in Cloud Storage. Set it from your retention
+    schedule (compliance.audit_log_retention_days in the gcp-organization root).
+    Reference points, not a statement that any framework is met:
+      - PCI DSS v4.0.1 10.5.1: at least 12 months, the latest 3 months
+        immediately available (this bucket is immediately available).
+      - HIPAA: 45 CFR 164.316(b)(2)(i) keeps required documentation for 6
+        years; applying it to audit logs is a common reading. Confirm with
+        counsel.
+      - FedRAMP Rev5 AU-11 / OMB M-21-31: 12 months active plus 18 months
+        cold storage (913 days in total when kept in one bucket).
+    Must be >= 1. On a locked bucket it can only be increased.
   EOT
   type        = number
   default     = 365

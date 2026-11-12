@@ -1016,6 +1016,23 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Audit-log retention from config (gcp-organization)
+
+`audit_log_retention_days` is now an input of the `gcp-organization` root. Null reads `compliance.audit_log_retention_days` in `config/landing-zone.yaml`, else 365 days, the value the root used before. With neither set, the plan does not change.
+
+The value sets the age of the lifecycle Delete rule on the audit bucket and on its access-log bucket. With `gcp.enable_audit_bucket_lock: true` it is also the locked retention period. The plan fails when:
+
+- the value is below the floor of a listed `compliance.frameworks` entry (pci_dss 365, hipaa 2190, fedramp_moderate 913 days); or
+- the lock is on and the value is below 365. A bucket that this root locked earlier is locked at 365 days, and GCS refuses any decrease of a locked retention period.
+
+A floor is a minimum. It does not prove that a framework is met.
+
+Before you raise the value:
+
+- More days mean more stored audit logs and a higher storage cost.
+- On a locked bucket, a raised period cannot be lowered again. Every object then stays undeletable for the new period, even by an administrator. Set the period from your retention schedule before you apply.
+- On an unlocked bucket, a lower value later makes the lifecycle rule delete older logs sooner.
+
 #### Spokes resolve the internal zone through the hub VPC (gcp-bootstrap, gcp-organization, gcp-projects, gcp-network-hub)
 
 **Breaking: apply the GCP layers in order.** Each `gcp-workload-<env>` peering zone `internal-peering` targets the hub VPC. The `internal-root` zone was bound only to the DNS anchor VPC (`dns-vpc-core`), so the hub VPC had no zone for the internal domain and every lookup from a spoke returned NXDOMAIN. Creating that peering zone also needs `roles/dns.peer` on the hub project, which the workload apply SAs did not hold.

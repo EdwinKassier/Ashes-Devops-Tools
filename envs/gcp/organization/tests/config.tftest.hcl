@@ -112,3 +112,46 @@ run "scaffold_gcp_aws_saas_plans" {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
   }
 }
+
+# CMP-2: compliance.audit_log_retention_days reaches the audit bucket. The
+# assertion reads the lifecycle age the cloud-audit-logs module plans.
+run "compliance_retention_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.audit_log_retention_days == 2190 && module.organization.audit_log_retention_days == 2190
+    error_message = "compliance.audit_log_retention_days must reach the organization stage and the audit bucket."
+  }
+}
+
+run "explicit_retention_beats_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    audit_log_retention_days = 2555
+  }
+
+  assert {
+    condition     = local.audit_log_retention_days == 2555 && module.organization.audit_log_retention_days == 2555
+    error_message = "the explicit variable must win over compliance.audit_log_retention_days."
+  }
+}
+
+# A config file without a compliance section keeps today's 365 days.
+run "retention_default_unchanged" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = local.audit_log_retention_days == 365 && module.organization.audit_log_retention_days == 365
+    error_message = "with no compliance section the retention must stay 365 days."
+  }
+}

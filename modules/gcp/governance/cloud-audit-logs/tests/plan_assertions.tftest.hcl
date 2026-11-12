@@ -173,3 +173,19 @@ run "module_labels_applied" {
     error_message = "var.labels must land on the audit-log buckets."
   }
 }
+
+# The retention output reads the planned lifecycle rule, and the lock uses the
+# same number of days.
+run "retention_output_reads_lifecycle" {
+  command = plan
+
+  variables {
+    log_retention_days = 2190
+    enable_bucket_lock = true
+  }
+
+  assert {
+    condition     = output.log_retention_days == 2190 && tonumber(google_storage_bucket.audit_logs.retention_policy[0].retention_period) == 2190 * 86400
+    error_message = "log_retention_days must set the lifecycle Delete age, the output and the locked retention period."
+  }
+}

@@ -15,6 +15,14 @@ echo "==> AWS region regex is canonical (single form, no single-digit-ordinal dr
 drift=$(grep -rln 'a-z]{2}-\[a-z\]+-\[0-9\]\$' --include='*.tf' modules envs 2>/dev/null || true)
 [ -z "$drift" ] || { echo "$drift" | while read -r f; do note "region regex drift (use [1-9][0-9]?\$): $f"; done; fail=1; }
 
+echo "==> Audit-retention framework floors are identical in every root that reads compliance.frameworks"
+# Each such config.tf holds one retention_floor_days line; all copies must match.
+floors="$(grep -rhoE 'retention_floor_days *= *\{[^}]*\}' --include='config.tf' --exclude-dir='.terraform' envs 2>/dev/null | sed 's/  */ /g' | sort -u || true)"
+[ "$(printf '%s\n' "$floors" | grep -c . || true)" -le 1 ] || note "retention_floor_days drift: $(printf '%s' "$floors" | tr '\n' '|')"
+nofloor=$(grep -rl 'local\.lz\.compliance\.frameworks' --include='config.tf' --exclude-dir='.terraform' envs 2>/dev/null \
+  | while read -r f; do grep -q 'retention_floor_days *=' "$f" || echo "$f"; done || true)
+[ -z "$nofloor" ] || { echo "$nofloor" | while read -r f; do note "reads compliance.frameworks without retention_floor_days: $f"; done; fail=1; }
+
 echo "==> AWS provider pin is the canonical floored pin in every AWS versions.tf"
 badaws=$(grep -rl 'source *= *"hashicorp/aws"' --include='versions.tf' --exclude-dir='.terraform' modules/aws envs/aws 2>/dev/null \
   | while read -r f; do grep -q '">= 6.46.0, < 7.0.0"' "$f" || echo "$f"; done)

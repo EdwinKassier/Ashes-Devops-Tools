@@ -151,6 +151,7 @@ The following resources are created:
 | <a name="output_log_analytics_bucket_location"></a> [log\_analytics\_bucket\_location](#output\_log\_analytics\_bucket\_location) | Location of the audit Log Analytics bucket, or null when disabled. |
 | <a name="output_log_analytics_linked_dataset"></a> [log\_analytics\_linked\_dataset](#output\_log\_analytics\_linked\_dataset) | Name of the linked BigQuery dataset on the Log Analytics bucket, or null when disabled. |
 | <a name="output_log_analytics_sink_writer_identity"></a> [log\_analytics\_sink\_writer\_identity](#output\_log\_analytics\_sink\_writer\_identity) | Writer identity of the org sink feeding the Log Analytics bucket, or null when disabled. |
+| <a name="output_log_retention_days"></a> [log\_retention\_days](#output\_log\_retention\_days) | Days the audit-log bucket keeps objects: the age of its lifecycle Delete rule (and of the locked retention policy when enable\_bucket\_lock is true). |
 | <a name="output_log_sink_name"></a> [log\_sink\_name](#output\_log\_sink\_name) | The name of the log sink |
 | <a name="output_log_sink_writer_identity"></a> [log\_sink\_writer\_identity](#output\_log\_sink\_writer\_identity) | The service account that writes audit logs to the storage bucket |
 | <a name="output_org_log_sink_name"></a> [org\_log\_sink\_name](#output\_org\_log\_sink\_name) | The name of the organization-level log sink (if created) |

@@ -60,7 +60,7 @@ This landing zone implements defense-in-depth across every layer:
 
 ### Audit & Compliance
 
-- **Cloud Audit Logs**: Data Access logs on for all services. The audit bucket retention is the organization stage variable `audit_log_retention_days` (default 365 days). The landing zone does not enforce framework minimums. In the gcp-organization root the retention is fixed at 365 days: the root does not pass `audit_log_retention_days`, so only a direct caller of the stage can change it. Exposing it through `config/landing-zone.yaml` is planned (WS4 Task 5). Until then, root users who need a longer period for PCI DSS, HIPAA or FedRAMP must call the stage directly.
+- **Cloud Audit Logs**: Data Access logs on for all services. The audit bucket retention is `compliance.audit_log_retention_days` in `config/landing-zone.yaml` (or the `gcp-organization` root variable `audit_log_retention_days`), default 365 days. When `compliance.frameworks` lists `pci_dss`, `hipaa` or `fedramp_moderate`, the plan fails for a retention below that framework's floor (365, 2190 or 913 days). The floors are minimums; they do not prove that a framework is met. With the WORM lock on, the retention must be at least 365 days and can only be increased.
 - **Security Command Center**: a Pub/Sub notification of every ACTIVE finding (CMEK topic). The SCC tier is activated outside Terraform.
 - **Org Policies** — domain-restricted sharing, uniform bucket access, disable SA key creation
 

@@ -40,6 +40,8 @@ locals {
     enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    audit_log_retention_days  = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
+    compliance_frameworks     = try([for f in local.lz.compliance.frameworks : tostring(f)], [])
     # gcp.contracts.bootstrap: stage contract override (same shape as the
     # bootstrap_contract variable). Present => the remote-state read is skipped.
     bootstrap_contract = try(local.lz.gcp.contracts.bootstrap.admin_project_number, null) == null ? null : {
@@ -87,6 +89,11 @@ locals {
     ])
   }
 
+  # Framework audit-retention floors in days. Canonical copy: every root that
+  # reads compliance.frameworks holds this exact line (check-consistency.sh).
+  retention_floor_days = { pci_dss = 365, hipaa = 2190, fedramp_moderate = 913, soc2 = 0, iso27001 = 0, nist_800_53 = 0, dora = 0, nis2 = 0, gdpr = 0 }
+  retention_floor      = max(0, [for f in local.cfg.compliance_frameworks : lookup(local.retention_floor_days, f, 0)]...)
+
   # The gcp section as the stage's gcp object (config-backed keys only; every
   # other key is unset here). Config fallbacks between keys are resolved here, so
   # the effective object below keeps gcp_overrides > config file > stage default.
@@ -118,6 +125,8 @@ locals {
   tfc_organization  = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   environments      = var.environments != null ? var.environments : local.cfg.environments
   default_region    = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
+  # Audit bucket retention: variable > compliance.audit_log_retention_days > 365.
+  audit_log_retention_days = coalesce(var.audit_log_retention_days, local.cfg.audit_log_retention_days, 365)
 
   # Admin containment follows the estate: on whenever a production environment
   # exists or a break-glass principal is set, unless explicitly set

@@ -257,6 +257,27 @@ variable "monthly_budget_amount" {
   }
 }
 
+variable "audit_log_retention_days" {
+  description = "Days the org audit bucket keeps audit logs: its lifecycle Delete age, and the locked retention period when the WORM lock (gcp.enable_audit_bucket_lock) is on. Null = compliance.audit_log_retention_days from config/landing-zone.yaml, else 365. It must be at least the floor of every compliance.frameworks entry (retention_floor_days in config.tf): pci_dss 365 (PCI DSS v4.0.1 10.5.1: 12 months, the latest 3 months immediately available), hipaa 2190 (45 CFR 164.316(b)(2)(i): 6 years for required documentation, a common reading for audit logs; confirm with counsel), fedramp_moderate 913 (OMB M-21-31, referenced by FedRAMP Rev5 AU-11: 12 months active plus 18 months cold storage). A floor is a minimum, not proof that a framework is met. With the lock on it must be at least 365, and GCS refuses any decrease of a locked period at apply."
+  type        = number
+  default     = null
+
+  # The effective value is inlined: local.audit_log_retention_days reads this
+  # variable, so referencing it here would form a cycle. local.retention_floor
+  # reads only the config file.
+  validation {
+    condition     = coalesce(var.audit_log_retention_days, local.cfg.audit_log_retention_days, 365) >= max(1, local.retention_floor)
+    error_message = "The audit retention (audit_log_retention_days, else compliance.audit_log_retention_days, else 365) is ${coalesce(var.audit_log_retention_days, local.cfg.audit_log_retention_days, 365)} days. It must be at least 1 and at least the ${local.retention_floor}-day floor of compliance.frameworks (${join(", ", local.cfg.compliance_frameworks)})."
+  }
+
+  # Every bucket this root locked before the value became a root input is
+  # locked at 365 days, and GCS never shortens a locked retention period.
+  validation {
+    condition     = !coalesce(try(var.gcp_overrides.enable_audit_bucket_lock, null), local.cfg.enable_audit_bucket_lock, false) || coalesce(var.audit_log_retention_days, local.cfg.audit_log_retention_days, 365) >= 365
+    error_message = "The audit bucket WORM lock (gcp.enable_audit_bucket_lock) is on, so the audit retention (audit_log_retention_days, else compliance.audit_log_retention_days) must be at least 365 days. A locked GCS retention period can be increased, never decreased."
+  }
+}
+
 variable "profile" {
   description = "Cost/assurance profile: production (default) or starter. starter requires a monthly budget (monthly_budget_amount or org.monthly_budget_usd) and alerts at 50/80/100% of it. Null = org.profile from config/landing-zone.yaml, else production."
   type        = string

@@ -82,6 +82,7 @@ module "organization" {
   delegated_network_folder_roles  = try(local.bootstrap.delegated_network_folder_roles, [])
 
   default_region               = local.default_region
+  audit_log_retention_days     = local.audit_log_retention_days
   monthly_budget_amount        = local.monthly_budget_amount
   budget_threshold_rules       = local.budget_threshold_rules
   budget_notify_alert_channels = local.notify_budget_channels
