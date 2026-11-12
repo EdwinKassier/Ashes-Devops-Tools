@@ -407,35 +407,30 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Security
 
-- **Plan-time execution policy covers Lambda, actions and inline credentials (SEC-2, breaking).**
-  `no_plan_time_code_execution` also denies `data "aws_lambda_invocation"`, every `action` block
-  whose type is not on the new, empty `allowed_action_types`, and the provider keys `credentials`
-  and `token_url`. See `UPGRADING.md`.
-- **Plan-time execution gate review fixes (SEC-2 / CICD-2, breaking).** The gate has no fallback
-  parse: a file that python-hcl2 cannot parse fails (`envs/aws/workload/main.tf` now ends lines
-  with `?` and `:`). `.tf.json` files with duplicate keys fail. Files come from `git ls-files`, and
-  a tracked symlink, a submodule or a path under `.terraform/` or `node_modules/` fails. The policy
-  lists must be plain string literals, defined once. Module sources must match exactly.
-  `regex` in the parser lock is pinned to 2026.9.29.
+- **Plan-time execution policy is exact and covers Lambda, actions and inline credentials (SEC-2, breaking).**
+  `no_plan_time_code_execution` allows a provisioner only in `module.saas_workload.module.vault_secrets`
+  with the exact source strings of `envs/saas`; a source that only ends in `supabase/vault-secrets` is
+  denied. `external`, `http` and `aws_lambda_invocation` data sources are denied everywhere, and so is every
+  `action` block whose type is not on the new, empty `allowed_action_types`. A provider allowlist covers
+  every provider the repo declares. Provider endpoint, proxy and TLS overrides and the provider keys
+  `credentials` and `token_url` are denied, and `terraform_remote_state` must use the `cloud` or `remote`
+  backend. Forks extend `policies/opa/no_plan_time_code_execution_allowlist.rego`. HCP Terraform runs the
+  policy after the plan, so it stops the apply and detects, but does not prevent, plan-time execution. See
+  `UPGRADING.md`.
+- **The plan-time execution gate parses HCL (SEC-2 / CICD-2, breaking).**
+  `scripts/check-plan-time-exec.py` replaces the grep in `scripts/check-consistency.sh`. It parses every
+  `.tf` (python-hcl2, hash-locked in `.github/requirements/hcl2.txt`, `regex` pinned to 2026.9.29) and
+  `.tf.json` file, so bare labels, qualified and version-only provider sources, `check`-scoped data,
+  `removed` provisioners, `dynamic` endpoint blocks, endpoint overrides, remote-state backends and
+  non-local module sources are caught before the merge. It reads its lists from the OPA policy files and
+  fails when the policy's provisioner chain and the code differ. It has no fallback parse: a file that
+  python-hcl2 cannot parse fails (`envs/aws/workload/main.tf` now ends lines with `?` and `:`), as do
+  `.tf.json` files with duplicate keys, a tracked symlink, a submodule and a path under `.terraform/` or
+  `node_modules/`. Files come from `git ls-files`, the policy lists must be plain string literals defined
+  once, and module sources must match exactly. See `UPGRADING.md`.
 - **The committed workspace file cannot set redirection env vars (breaking).** tfc-admin rejects
   `TFE_*`, `TF_TOKEN_*`, `TF_CLI_CONFIG_FILE`, the proxy variables in any case, `SSL_CERT_FILE`
   and `SSL_CERT_DIR` in `workspace_variables_file`. See `UPGRADING.md`.
-- **The plan-time execution gate parses HCL (SEC-2 / CICD-2, breaking).**
-  `scripts/check-plan-time-exec.py` replaces the grep in `scripts/check-consistency.sh`. It parses
-  every `.tf` (python-hcl2, hash-locked in `.github/requirements/hcl2.txt`) and `.tf.json` file, so
-  bare labels, `.tf.json`, qualified and version-only provider sources, `check`-scoped data,
-  `removed` provisioners, `dynamic` endpoint blocks, endpoint overrides, remote-state backends and
-  non-local module sources are caught before the merge. It reads its lists from the OPA policy files
-  and fails when the policy's provisioner chain and the code differ. See `UPGRADING.md`.
-- **Plan-time execution policy is exact (SEC-2, breaking).** `no_plan_time_code_execution` allows a
-  provisioner only in `module.saas_workload.module.vault_secrets` with the exact source strings of
-  `envs/saas`; a source that only ends in `supabase/vault-secrets` is denied. `external` / `http`
-  data sources are denied everywhere. A new provider allowlist covers every provider the repo
-  declares, provider endpoint, proxy and TLS overrides are denied, and `terraform_remote_state`
-  must use the `cloud` or `remote` backend. Forks extend
-  `policies/opa/no_plan_time_code_execution_allowlist.rego`. The policy header and docs
-  now say that it runs after the plan: it stops the apply, and it detects (does not prevent)
-  plan-time execution. See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no
@@ -469,6 +464,29 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 - `modules/gcp/stages/host` — the network god-module facade (no in-repo callers) is **removed in
   `v1.0.0`**. Migrate to `stages/net-hub`, `stages/dns-anchor` and `stages/net-spoke`; see the module
   README for the per-use mapping and reference `moved.tf` files.
+
+- **The real config file is schema-validated (IAC-2).** `make config-check` and the pre-commit hook
+  validate a fork's committed `config/landing-zone.yaml` against `config/landing-zone.schema.json`, and a
+  consistency check fails when a root reads a `local.lz` key that the schema lacks. An unknown key fails
+  CI. Keys that no root reads yet are marked as reserved in the schema. See `UPGRADING.md`.
+- **Locked central backup copy, DR copy and restore testing (CMP-1, breaking, opt-in).** With
+  `compliance.backup.copy_to_central_vault`, aws-backup creates `org-backup-copy-vault` in the backup
+  account: a customer managed key, a Compliance-mode Vault Lock and a vault policy that admits copies from
+  the organization only. aws-organization creates customer-managed-key member vaults, and
+  `compliance.backup.dr_region` adds a copy in a second region. Restore testing covers EBS, EC2, RDS,
+  Aurora, S3, DynamoDB and EFS and moves to the copy vault. The vaults send notifications for failed backup,
+  copy and restore jobs, and the `tfc-apply` boundary denies the pipeline deleting the copy vault, its lock
+  or its policy. The default does not change (decision D3); a production scaffold turns the copy on. Two
+  changes break existing users: `rds-aurora` tags every cluster `backup = true` (opt out per service with
+  `database.enable_org_backup = false`), and the Compliance lock becomes irreversible after
+  `changeable_for_days`. See `UPGRADING.md`.
+- **Audit and log retention come from config, with framework floors (CMP-2).**
+  `compliance.audit_log_retention_days` feeds the GCP audit bucket (`gcp-organization`) and the AWS log
+  archive (`aws-security`, with a configurable Object Lock mode). The plan fails when the value is below the
+  floor of a listed `compliance.frameworks` entry (pci_dss 365, hipaa 2190, fedramp_moderate 913), or
+  below 365 days while the GCP audit bucket lock is on. On AWS it also fails when frameworks are set and
+  the lock mode is `GOVERNANCE`. Unset keys keep 365 days and the plan does not change. See
+  `UPGRADING.md`.
 
 ### Fixed
 
