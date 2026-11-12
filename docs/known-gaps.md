@@ -833,6 +833,12 @@ GCP:
   definition could be added as opt-in scaffolding once a tier exists. Target
   **Premium** — the Enterprise tier sunsets 2027-05-21. Ref:
   <https://docs.cloud.google.com/security-command-center/docs/service-tiers>
+  The tier itself has no Terraform resource: activation is a manual console or
+  billing step, listed as control matrix row DET-07 and as step 1 of
+  [Production Hardening section 4](runbooks/production-hardening.md#4-manual-identity-and-posture-steps).
+  Related manual or customer rows: DET-06 (no file integrity monitoring; PCI DSS
+  11.5.2 needs a host agent you deploy) and IAM-16 (Identity Center MFA mode and
+  Google 2-Step Verification have no Terraform API).
 - **G11 — VPC-SC dry-run-first default** — ✅ **SHIPPED**. Flipped the default
   of `vpc_sc_enable_dry_run` (hub, via `envs/gcp/organization` + `network-hub`)
   and the per-perimeter `enable_dry_run` (host stage) and the workload perimeter

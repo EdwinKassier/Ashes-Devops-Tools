@@ -131,6 +131,46 @@ Both are in `examples/presets/nonprod-aws-security.tfvars`.
 Keep the full posture for production. See the cost model in
 [`docs/audit/archive/2026-11-04-finops-deep-dive.md`](../audit/archive/2026-11-04-finops-deep-dive.md).
 
+## 4. Manual identity and posture steps (CMP-15, CMP-16)
+
+These controls have no Terraform API, so the landing zone cannot apply them.
+Do them once per organization, then keep the evidence for the audit period.
+Control matrix rows: IAM-16 (MFA) and DET-07 (SCC tier).
+
+1. **Activate the Security Command Center Premium tier (GCP, DET-07).**
+   In the Google Cloud console, select the organization, open
+   **Security Command Center → Settings → Tier**, and activate **Premium** at the
+   organization level (pay-as-you-go or subscription). Do not choose
+   Enterprise: Google shuts that tier down on 2027-05-21
+   (<https://docs.cloud.google.com/security-command-center/docs/service-tiers>).
+   The landing zone already ships the findings notification (DET-03); the tier
+   adds Security Health Analytics, threat detection and compliance reports.
+   **Evidence to keep:** a dated screenshot of the Tier page that shows the
+   organization and the active tier; the output of
+   `gcloud scc manage services list --organization=<ORG_ID>`; and the billing
+   record or subscription for the tier.
+2. **Require MFA for every human sign-in (AWS and Google, IAM-16).**
+   - AWS IAM Identity Center (identity source: Identity Center directory): open
+     the IAM Identity Center console, **Settings → Authentication →
+     Multi-factor authentication → Configure**, and set **Prompt users for MFA**
+     to **Every time they sign in (always-on)**. With an external identity
+     provider this section is not shown; enforce MFA in that provider instead
+     (<https://docs.aws.amazon.com/singlesignon/latest/userguide/mfa-getting-started.html>).
+   - Google Cloud Identity or Workspace: in the Google Admin console open
+     **Security → Authentication → 2-Step Verification**, allow users to turn
+     it on, and set **Enforcement** to **On** for every organizational unit
+     that holds a Google Cloud administrator or engineer.
+
+   **Evidence to keep:** a dated screenshot of the Identity Center MFA settings
+   (no API reads them) or the external provider's MFA policy export;
+   `aws iam generate-credential-report` then `aws iam get-credential-report`
+   (column `mfa_active` for any IAM user with a password); the Security Hub
+   `IAM.5` findings; a dated screenshot of the Google 2-Step Verification
+   enforcement page; and a Directory API `users.list` export with the
+   read-only fields `isEnrolledIn2Sv` and `isEnforcedIn2Sv` for every user.
+   The landing zone alerts on AWS console sign-ins without MFA (LOG-09,
+   LOG-10); keep those alert records too.
+
 ## Contain the automation identity (audit C2)
 
 The GCP `terraform-admin` service account holds org-wide roles (orgpolicy,
