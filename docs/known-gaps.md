@@ -585,6 +585,15 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   same plan creates a workspace (`workspace_ids` is unknown).
 - **gcp-guardrails state is backed up only** if the security team grants the
   state-backup team access by hand.
+- **Secret-bearing workspaces have no drift check on HCP Terraform tiers
+  without health assessments.** `drift_team_id` gets no grant on the
+  secret-bearing projects (`saas-*`, tfc-admin, and any project that holds a
+  workload with a static secret), because a refresh-only plan runs with the
+  workspace's variables. There, HCP health assessments
+  (`enable_health_assessments`) are the only drift check. On a tier without
+  them, an organization owner can queue a refresh-only, plan-only run on each
+  such workspace by hand on a schedule, or the estate can move to a tier that
+  has health assessments.
 - **One `config/landing-zone.yaml` edit still queues a plan on every workspace.**
   Trigger patterns are now scoped to each root's modules, but the file itself is
   shared. Splitting it per layer and environment is open.
