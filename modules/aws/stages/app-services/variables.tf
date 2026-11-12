@@ -167,6 +167,7 @@ variable "services" {
       backup_retention_period = optional(number, 7)
       deletion_protection     = optional(bool, true)
       skip_final_snapshot     = optional(bool, false)
+      enable_org_backup       = optional(bool, true) # false keeps the cluster out of the org backup policy (no backup tag)
     }))
 
     # Per-service CloudWatch alarms (with var.enable_alarms): ECS CPU and memory,

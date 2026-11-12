@@ -723,3 +723,30 @@ run "service_https_egress_is_port_443_only" {
     error_message = "the egress rule must exist for the service, otherwise this test checks nothing."
   }
 }
+
+# ── Aurora is tagged for the org backup policy, and a service can opt out ───
+
+run "database_org_backup_tag_default_and_opt_out" {
+  command = plan
+
+  variables {
+    services = {
+      orders = {
+        database = {}
+      }
+      billing = {
+        database = { enable_org_backup = false }
+      }
+    }
+  }
+
+  assert {
+    condition     = lookup(module.database["orders"].cluster_tags, "backup", null) == "true"
+    error_message = "a service database must carry backup = true by default."
+  }
+
+  assert {
+    condition     = !contains(keys(module.database["billing"].cluster_tags), "backup")
+    error_message = "database.enable_org_backup = false must leave the backup tag off."
+  }
+}

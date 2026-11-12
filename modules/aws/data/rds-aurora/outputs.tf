@@ -42,3 +42,8 @@ output "publicly_accessible" {
   description = "Whether ANY cluster instance is publicly accessible. Always false — instances are hard-wired to publicly_accessible = false; exported so composing stages can assert it."
   value       = anytrue([for i in aws_rds_cluster_instance.this : i.publicly_accessible])
 }
+
+output "cluster_tags" {
+  description = "Tags set on the cluster. Contains backup = true when enable_org_backup is true; exported so composing stages can assert it."
+  value       = aws_rds_cluster.this.tags
+}

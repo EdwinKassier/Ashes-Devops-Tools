@@ -382,7 +382,7 @@ What a change does:
 - A lower value applies to new objects only and makes the lifecycle expire objects sooner.
 - Apply it through the `aws-security` workspace. The deny-tamper SCP statement `DenyLogArchiveObjectLockTampering` lets only the pipeline roles and break-glass change the bucket configuration.
 
-#### Aurora clusters are tagged for the organization backup policy (rds-aurora, app-services)
+#### **Breaking:** Aurora clusters are tagged for the organization backup policy (rds-aurora, app-services)
 
 `modules/aws/data/rds-aurora` now tags every cluster `backup = true` (new input `enable_org_backup`, default `true`). The organization BACKUP_POLICY from `aws-backup` selects resources by this tag, so after the next apply of each workload that uses the module, AWS Backup also backs up its Aurora clusters daily and keeps each recovery point for 365 days. The RDS automated backups do not change.
 
@@ -391,7 +391,7 @@ What you see on apply: an in-place tag update on each `aws_rds_cluster`. No repl
 What to do:
 
 - Expect AWS Backup storage cost for each Aurora cluster in the member vault.
-- To keep a cluster out of the organization backup, set `enable_org_backup = false` on the module.
+- To keep a cluster out of the organization backup, set `enable_org_backup = false` in the `database` block of that service (`services.<name>.database` in the `aws.workload_environments.<env>` entry of `config/landing-zone.yaml`, or in the `services` variable of `envs/aws/workload`). The default is `true`. If you call `modules/aws/data/rds-aurora` directly, set the module input `enable_org_backup`.
 - For cross-account copy to the central copy vault (below), the cluster's `kms_key_id` key policy must let the backup account use the key. Otherwise the copy job for that cluster fails.
 
 #### Central backup copy to a locked vault (opt-in, IRREVERSIBLE lock) (aws-backup)

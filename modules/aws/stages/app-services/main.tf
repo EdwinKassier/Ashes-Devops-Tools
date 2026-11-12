@@ -687,6 +687,7 @@ module "database" {
   backup_retention_period = each.value.database.backup_retention_period
   deletion_protection     = each.value.database.deletion_protection
   skip_final_snapshot     = each.value.database.skip_final_snapshot
+  enable_org_backup       = each.value.database.enable_org_backup
 
   tags = merge(var.tags, { Service = each.key })
 }

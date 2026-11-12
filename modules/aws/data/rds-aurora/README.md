@@ -116,6 +116,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_cluster_arn"></a> [cluster\_arn](#output\_cluster\_arn) | ARN of the Aurora cluster. |
 | <a name="output_cluster_identifier"></a> [cluster\_identifier](#output\_cluster\_identifier) | Identifier of the Aurora cluster. |
+| <a name="output_cluster_tags"></a> [cluster\_tags](#output\_cluster\_tags) | Tags set on the cluster. Contains backup = true when enable\_org\_backup is true; exported so composing stages can assert it. |
 | <a name="output_database_name"></a> [database\_name](#output\_database\_name) | Name of the initial database. |
 | <a name="output_endpoint"></a> [endpoint](#output\_endpoint) | Writer (primary) endpoint of the cluster. |
 | <a name="output_instance_identifiers"></a> [instance\_identifiers](#output\_instance\_identifiers) | Identifiers of the cluster instances (writer + readers). |

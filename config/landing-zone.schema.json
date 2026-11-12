@@ -1391,6 +1391,9 @@
                         },
                         "skip_final_snapshot": {
                           "type": "boolean"
+                        },
+                        "enable_org_backup": {
+                          "type": "boolean"
                         }
                       },
                       "additionalProperties": false
