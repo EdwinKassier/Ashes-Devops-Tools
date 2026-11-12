@@ -1,11 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Renovate owns: Terraform providers and .terraform.lock.hcl files; the toolchain (.tool-versions, .terraform-version, .tflint.hcl plugins and every in-repo copy of a tool version); and the pre-commit hook revs.",
+    "Dependabot owns (.github/dependabot.yml): GitHub Actions uses: lines, the hash-locked pip requirements in .github/requirements and the vault-secrets npm package. No dependency has two owners, so the bots never edit the same line.",
+    "checkov is not managed here: CI runs the image that bridgecrewio/checkov-action pins, so .tool-versions checkov follows that action (a Dependabot bump)."
+  ],
   "extends": [
     "config:recommended"
   ],
   "enabledManagers": [
-    "terraform"
+    "terraform",
+    "terraform-version",
+    "tflint-plugin",
+    "asdf",
+    "custom.regex"
   ],
+  "dependencyDashboard": true,
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -16,11 +26,137 @@
   },
   "commitMessagePrefix": "fix(deps):",
   "labels": [
-    "dependencies",
-    "terraform"
+    "dependencies"
   ],
   "prConcurrentLimit": 5,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Terraform CLI copies outside .tool-versions and .terraform-version (scripts/check-consistency.sh fails when they differ)",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/",
+        "/^envs/tfc-admin/variables\\.tf$/",
+        "/^scripts/setup\\.sh$/"
+      ],
+      "matchStrings": [
+        "TERRAFORM_VERSION: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
+        "variable \"terraform_version\" \\{[\\s\\S]*?default\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
+        "_tool_version terraform (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ],
+      "depNameTemplate": "hashicorp/terraform",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "OPA copies outside .tool-versions: the CI opa job, and the HCP Terraform policy set",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/",
+        "/^envs/tfc-admin/variables\\.tf$/",
+        "/^scripts/setup\\.sh$/"
+      ],
+      "matchStrings": [
+        "OPA_VERSION: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
+        "variable \"opa_version\" \\{[\\s\\S]*?default\\s*=\\s*\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
+        "_tool_version opa (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ],
+      "depNameTemplate": "open-policy-agent/opa",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "terraform-docs copies outside .tool-versions (CI verifies the download against the upstream checksum file)",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/",
+        "/^scripts/setup\\.sh$/"
+      ],
+      "matchStrings": [
+        "TDOCS_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)",
+        "_tool_version terraform-docs (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ],
+      "depNameTemplate": "terraform-docs/terraform-docs",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "shellcheck copy in the CI shellcheck job",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "SC_VERSION: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "koalaman/shellcheck",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Trivy binary that trivy-action runs (the action itself is a Dependabot update)",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/",
+        "/^scripts/setup\\.sh$/"
+      ],
+      "matchStrings": [
+        "version: 'v(?<currentValue>\\d+\\.\\d+\\.\\d+)'",
+        "_tool_version trivy (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "TFLint binary that setup-tflint installs (the action itself is a Dependabot update)",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/",
+        "/^scripts/setup\\.sh$/"
+      ],
+      "matchStrings": [
+        "tflint_version: \"v(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
+        "_tool_version tflint (?<currentValue>\\d+\\.\\d+\\.\\d+)\\)"
+      ],
+      "depNameTemplate": "terraform-linters/tflint",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "check-jsonschema installed inline by the meta-lint job (not a requirements file, so Dependabot does not see it)",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "pip install check-jsonschema==(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "check-jsonschema",
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "pre-commit hooks. A regex manager, not the pre-commit manager: most revs are a commit SHA with a version comment, which the pre-commit manager cannot update. Renovate rewrites the SHA and the comment together.",
+      "managerFilePatterns": [
+        "/^\\.pre-commit-config\\.yaml$/"
+      ],
+      "matchStrings": [
+        "repo: https://github\\.com/(?<depName>[^\\s]+)\\n\\s+rev: (?<currentDigest>[0-9a-f]{40})\\s+#\\s+(?<currentValue>v?\\d+(?:\\.\\d+)+)",
+        "repo: https://github\\.com/(?<depName>[^\\s]+)\\n\\s+rev: (?<currentValue>v?\\d+(?:\\.\\d+)+)\\n"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depTypeTemplate": "pre-commit-hook"
+    }
+  ],
   "packageRules": [
+    {
+      "matchManagers": [
+        "terraform"
+      ],
+      "addLabels": [
+        "terraform"
+      ]
+    },
     {
       "description": "One reviewed PR for all hashicorp/* provider updates within their current major",
       "matchManagers": [
@@ -44,6 +180,71 @@
       ],
       "matchUpdateTypes": [
         "major"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "required_version (>= 1.17, < 2.0) is the supported-CLI floor, a deliberate policy change, not an update",
+      "matchManagers": [
+        "terraform"
+      ],
+      "matchDepTypes": [
+        "required_version",
+        "tfe_workspace"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "One toolchain PR: every copy of a tool version moves together. Toolchain releases wait 14 days, like every other pin in this repository.",
+      "matchManagers": [
+        "asdf",
+        "terraform-version",
+        "tflint-plugin",
+        "custom.regex"
+      ],
+      "groupName": "toolchain",
+      "commitMessagePrefix": "build(deps):",
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "description": "pre-commit hook revs move in their own PR",
+      "matchDepTypes": [
+        "pre-commit-hook"
+      ],
+      "groupName": "pre-commit hooks",
+      "commitMessagePrefix": "build(deps):",
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "description": "Hooks that mirror a toolchain pin move with the toolchain: shellcheck-py tracks .tool-versions shellcheck (make shellcheck runs shellcheck-py <shellcheck>.1) and check-jsonschema matches the meta-lint pip pin",
+      "matchDepTypes": [
+        "pre-commit-hook"
+      ],
+      "matchPackageNames": [
+        "shellcheck-py/shellcheck-py",
+        "python-jsonschema/check-jsonschema"
+      ],
+      "groupName": "toolchain"
+    },
+    {
+      "description": "CI checks the OPA and shellcheck downloads against a pinned SHA-256, so the toolchain PR stays red until the reviewer refreshes it",
+      "matchPackageNames": [
+        "open-policy-agent/opa",
+        "opa",
+        "koalaman/shellcheck",
+        "shellcheck"
+      ],
+      "prBodyNotes": [
+        "Refresh the pinned SHA-256 in .github/workflows/terraform-plan.yml in this PR: `scripts/tool-checksums.sh <tool> <new version>`. For OPA, also confirm HCP Terraform offers the new version (envs/tfc-admin opa_version)."
+      ]
+    },
+    {
+      "description": "checkov follows the image that bridgecrewio/checkov-action pins (a Dependabot update); bump .tool-versions checkov by hand to match that image",
+      "matchManagers": [
+        "asdf"
+      ],
+      "matchDepNames": [
+        "checkov"
       ],
       "enabled": false
     }

@@ -1376,11 +1376,17 @@ side (all mock-tested, secure defaults):
 - **Toolchain currency automation.** Renovate owns Terraform providers and
   lockfiles (`renovate.json`: weekly `lockFileMaintenance`, one grouped
   `hashicorp/*` PR, labelled for review, never auto-merged, provider majors
-  disabled); Dependabot keeps GitHub Actions and the CI Python tooling. The
-  Renovate GitHub App still has to be installed by an operator. Open calls:
-  `semanticCommits` is off (the `fix(deps):` prefix is set by hand; Dependabot
-  also updates the `pg` package of `vault-secrets`), and
-  `required_version` / provider-major bumps stay manual by design.
+  disabled), the toolchain (one `toolchain` PR for `.tool-versions` and every
+  copy of a tool version) and the pre-commit hook revs; Dependabot keeps
+  GitHub Actions, the CI Python tooling and the `pg` package of
+  `vault-secrets`. The Renovate GitHub App has to be installed by an
+  operator; until it runs, the weekly `dependency-heartbeat.yml` check fails
+  on the upstream repository. Open calls: `semanticCommits` is off (the
+  `fix(deps):` and `build(deps):` prefixes are set by hand); `checkov` follows
+  the `checkov-action` image, so its `.tool-versions` pin is bumped by hand;
+  CI-pinned SHA-256 digests (OPA, shellcheck) are refreshed by the reviewer
+  with `scripts/tool-checksums.sh`; and `required_version` / provider-major
+  bumps stay manual by design.
 - **Spoke traffic to the central AWS interface endpoints is inspected (ARC-6,
   D5).** It crosses Network Firewall in both directions, so it pays the per-GB
   processing charge, and under a fail-closed production allowlist

@@ -91,7 +91,7 @@ run "vcs_repo_and_pinned_opa_from_config" {
   }
 
   assert {
-    condition     = tfe_policy_set.opa[0].vcs_repo[0].identifier == "cfg/landing-zone" && tfe_policy_set.opa[0].vcs_repo[0].branch == "main" && tfe_policy_set.opa[0].policy_tool_version == "1.22.2"
+    condition     = tfe_policy_set.opa[0].vcs_repo[0].identifier == "cfg/landing-zone" && tfe_policy_set.opa[0].vcs_repo[0].branch == "main" && can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.opa_version)) && tfe_policy_set.opa[0].policy_tool_version == var.opa_version
     error_message = "vcs_repo must fall back to org.tfc.vcs_repo (branch default main) and opa_version must be pinned by default."
   }
 }

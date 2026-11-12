@@ -338,11 +338,13 @@ make plan-aws-workload APP_ENV=dev
 | [`security-scan.yml`](.github/workflows/security-scan.yml) | Push + weekly | Trivy · Checkov · Gitleaks → SARIF |
 | [`documentation.yml`](.github/workflows/documentation.yml) | Module `*.tf` changes | Auto-generate docs → open PR |
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |
+| [`dependency-heartbeat.yml`](.github/workflows/dependency-heartbeat.yml) | Weekly | Fail when Renovate has not updated an issue or PR for 8 days (forks: warning unless `RENOVATE_HEARTBEAT_REQUIRED=true`) |
 
 **CI status.** The two workflow badges at the top are live and show the state of `main`.
 A red badge means a gate is failing on `main` now. Open the latest run to see which one.
 Known causes are tracked in [`docs/known-gaps.md`](docs/known-gaps.md).
 The Release workflow fails until the release GitHub App exists.
+The Dependency heartbeat fails on schedule until the Renovate GitHub App is installed and has run.
 Drift detection and the sandbox end-to-end job fail on schedule until a sandbox is funded
 ([sandbox E2E](docs/guides/sandbox-e2e.md)).
 

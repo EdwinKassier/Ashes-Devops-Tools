@@ -1,8 +1,13 @@
-# Dependabot covers GitHub Actions (SHA-pinned), the hash-locked CI Python
-# tooling and the one npm dependency that ships to apply runners (pg, used by
-# modules/supabase/vault-secrets with production database credentials).
-# Terraform providers and .terraform.lock.hcl files are owned by Renovate
-# (renovate.json), so there is deliberately no terraform ecosystem here.
+# Dependabot covers GitHub Actions (SHA-pinned `uses:` lines), the hash-locked
+# CI Python tooling and the one npm dependency that ships to apply runners (pg,
+# used by modules/supabase/vault-secrets with production database credentials).
+# Renovate (renovate.json) owns everything else: Terraform providers and
+# .terraform.lock.hcl files, the toolchain (.tool-versions, .terraform-version,
+# .tflint.hcl plugins, tool versions inside workflows such as TERRAFORM_VERSION)
+# and the pre-commit hook revs. Each dependency has exactly one owner, so the
+# two bots never edit the same line. Do not add a terraform, pre-commit or
+# docker ecosystem here, and do not enable Renovate's github-actions, pip or
+# npm managers.
 #
 # Required one-time repo setup (labels must exist or PR creation warns):
 #   gh label create dependencies --force

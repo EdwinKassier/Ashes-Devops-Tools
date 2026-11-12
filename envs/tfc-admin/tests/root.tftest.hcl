@@ -1682,13 +1682,15 @@ run "guardrails_release_reader_id_is_validated" {
   expect_failures = [var.guardrails_release_reader_team_id]
 }
 
-# TFC applies with the exact version CI tests.
+# TFC applies with the exact version CI tests. The default itself must equal
+# .tool-versions (scripts/check-consistency.sh), so this test does not repeat the
+# number and a Renovate toolchain bump does not need to edit it.
 run "terraform_version_is_exact" {
   command = plan
 
   assert {
-    condition     = alltrue([for ws in output.workspace_names : module.workspace[ws].terraform_version == "1.17.1"])
-    error_message = "every workspace must run the exact Terraform version CI pins (.tool-versions)."
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.terraform_version)) && alltrue([for ws in output.workspace_names : module.workspace[ws].terraform_version == var.terraform_version])
+    error_message = "the terraform_version default must be an exact release and every workspace must run it (the version CI pins in .tool-versions)."
   }
 }
 

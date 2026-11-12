@@ -153,6 +153,7 @@ the ones it manages at its next apply).
 | `TFC_TOKEN_AUDIT_TRAIL` | Secret | `tfc-audit-trail.yml` | The organization's audit trail token (`authentication-token?token=audit-trails`; the API refuses user and team tokens). Use it rather than an organization token. Keep it in the `tfc-audit-trail` environment only. The workflow also uses `TFC_ORGANIZATION` and the `STATE_BACKUP_*` target variables. See [audit trail export](../runbooks/state-backup.md#audit-trail-export). | Export off: scheduled runs warn, a manual dispatch fails. HCP Terraform keeps 14 days. |
 | `STATE_BACKUP_OPT_OUT` | Variable | `state-backup.yml` | `true` only to acknowledge running without a state copy outside HCP Terraform: unconfigured scheduled runs then warn instead of failing. | Unset: an unconfigured run fails. |
 | `CODEOWNERS_ENFORCE` | Variable | `terraform-plan.yml` (CODEOWNERS placeholders job) | Set to `true` once `.github/CODEOWNERS` names real teams: any remaining `@your-org/` placeholder then fails the build. | Placeholders produce a warning only, so forks stay green. |
+| `RENOVATE_HEARTBEAT_REQUIRED` | Variable | `dependency-heartbeat.yml` | Set to `true` in a fork that uses Renovate: the weekly heartbeat then fails when `renovate[bot]` has not updated an issue or pull request for 8 days. The upstream repository always fails on a stale heartbeat. | A fork gets a warning only, so a fork without Renovate stays green. |
 
 ## Sandbox E2E
 
