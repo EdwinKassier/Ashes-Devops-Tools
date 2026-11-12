@@ -20,7 +20,11 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    project_prefix            = try(tostring(local.lz.org.prefix), null)
+    project_prefix = try(tostring(local.lz.org.prefix), null)
+    # org.cost_center / org.owner: the cost-center and owner provider default
+    # labels (providers.tf), the same keys as the AWS roots' default_tags.
+    cost_center               = try(tostring(local.lz.org.cost_center), null)
+    owner                     = try(tostring(local.lz.org.owner), null)
     organization_name         = try(tostring(local.lz.org.display_name), null)
     domain                    = try(tostring(local.lz.org.domain), null)
     default_region            = try(tostring(local.lz.org.regions.gcp), null)
@@ -51,6 +55,7 @@ locals {
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
         labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
         is_production           = tobool(try(e.is_production, false))
+        data_classification     = tostring(try(e.data_classification, "internal"))
       }
     }
     # Environment keys whose is_production is missing or not a boolean. The

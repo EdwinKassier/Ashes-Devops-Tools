@@ -41,12 +41,28 @@ variable "environments" {
       name            = string
       billing_account = optional(string)
       labels          = map(string)
+      # Resource-manager tag bindings on this project: static key => tag
+      # value ID (tagValues/<n>). gcp-projects binds data-classification to
+      # each environment host project.
+      tag_bindings = optional(map(string), {})
     }))
   }))
 
   validation {
     condition     = length(var.environments) > 0
     error_message = "At least one environment must be defined."
+  }
+}
+
+variable "owner" {
+  description = "Value of the owner label on every project (GCP label form: lowercase letters, digits, '_' and '-', at most 63 characters). The gcp-projects root passes org.owner."
+  type        = string
+  default     = "platform-team"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-z0-9_-]{1,63}$", var.owner))
+    error_message = "owner must be a GCP label value: 1-63 lowercase letters, digits, '_' or '-'."
   }
 }
 

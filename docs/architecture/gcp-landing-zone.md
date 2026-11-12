@@ -72,7 +72,7 @@ Apply the four control-plane roots in order (`gcp-bootstrap` → `gcp-organizati
 
 **Cross-root outputs** consumed by `gcp-workload` via `terraform_remote_state`, by publishing root:
 
-- From `gcp-projects` — `environment_config` (per-env map: `folder_id`, `host_project_id`, `host_project_number`, `region`, `cidr_block`, `labels`, `tag_value_ids.environment`), plus `project_ids` / `project_numbers`.
+- From `gcp-projects` — `environment_config` (per-env map: `folder_id`, `host_project_id`, `host_project_number`, `region`, `cidr_block`, `labels`, `tag_value_ids.environment`, `tag_value_ids.data_classification`), plus `project_ids` / `project_numbers`.
 - From `gcp-network-hub` — `hub_network` (`vpc_self_link`, `vpc_name`, `dns_zone_name`, `dns_domain`).
 - From `gcp-organization` — `cmek_key_names`, `billing_account`, `org_id`, `folders`, `tag_values`/`tag_keys`, `audit_logs_bucket_name`, `billing_export_dataset_id`, `scc_pubsub_topic_id`, and `admin_project_number` (re-exported from bootstrap).
 - From `gcp-bootstrap` — `admin_project_id`, `terraform_admin_email`, `suffix`, GitHub/TFC OIDC pool + provider IDs.
@@ -149,7 +149,7 @@ The GCP security stack is centralized in the organization stage plus the network
 
 **Prod folder only** (`strict_folder_policy_environment_keys`, default `["prod"]`): disable nested virtualization, disable guest-attributes access, require OS Login, disable internet-gateway use.
 
-Tag keys `environment`, `business-unit`, `data-classification` are created org-wide (`modules/gcp/governance/tags`) and the `environment` tag is bound to each folder. **Essential Contacts** (security + billing) are registered at the org.
+Tag keys `environment`, `business-unit`, `data-classification` are created org-wide (`modules/gcp/governance/tags`) and the `environment` tag is bound to each folder. `gcp-projects` binds the `data-classification` value named by `gcp.environments.<env>.data_classification` (default `internal`) to each environment host project. **Essential Contacts** (security + billing) are registered at the org.
 
 ### Automation identity & break-glass
 

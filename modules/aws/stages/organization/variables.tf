@@ -649,3 +649,10 @@ variable "enable_config_recorder_scp" {
     error_message = "enable_config_recorder_scp needs a security_tooling account (accounts / workload_accounts): its tfc-apply keeps managing the aggregator recorder."
   }
 }
+
+variable "tag_policy_required_resource_types" {
+  description = "Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL_SUPPORTED) for which the root tag policy reports CostCenter, Environment, Owner and DataClassification as required (report_required_tag_for). Empty = no key is required. The AWS provider fails or warns at plan on a listed resource that lacks a key when the workspace sets TF_AWS_TAG_POLICY_COMPLIANCE to error or warning; the plan role then needs tag:ListRequiredTags."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}

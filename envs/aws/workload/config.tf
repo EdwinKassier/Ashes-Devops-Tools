@@ -31,6 +31,8 @@ locals {
     # Production flags (is_production is required on every entry). The
     # environment name is never read.
     workload_is_production = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tobool(e.is_production) if try(tobool(e.is_production), null) != null }
+    # Data sensitivity per environment (DataClassification default tag).
+    workload_data_classification = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.data_classification) if try(e.data_classification, null) != null }
     # Availability zone IDs (azs.tf): per environment, else the hub's
     # (aws.network.availability_zone_ids).
     workload_availability_zone_ids = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => [for id in e.availability_zone_ids : tostring(id)] if try(e.availability_zone_ids, null) != null }
@@ -82,6 +84,10 @@ locals {
   # Production: explicit variable > aws.workload_environments.<env>.is_production
   # > false. Production turns ECS autoscaling on by default.
   is_production = coalesce(var.is_production, try(local.cfg.workload_is_production[local.environment], null), false)
+
+  # DataClassification tag: explicit variable > aws.workload_environments.<env>
+  # .data_classification > internal.
+  data_classification = coalesce(var.data_classification, try(local.cfg.workload_data_classification[local.environment], null), "internal")
 
   # Services: explicit variable > aws.workload_environments.<env>.services >
   # none. For-expressions (not a conditional) so the differently-typed sources

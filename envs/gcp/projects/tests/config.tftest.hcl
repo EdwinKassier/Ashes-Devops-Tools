@@ -34,7 +34,12 @@ override_data {
           dev  = { id = "folders/111", display_name = "dev" }
           prod = { id = "folders/222", display_name = "Production" }
         }
-        tag_values = { "environment-dev" = "tagValues/1", "environment-prod" = "tagValues/2" }
+        tag_values = {
+          "environment-dev"                = "tagValues/1"
+          "environment-prod"               = "tagValues/2"
+          "data-classification-internal"   = "tagValues/902"
+          "data-classification-restricted" = "tagValues/900000000004"
+        }
       }
     }
   }
@@ -189,4 +194,28 @@ run "config_environment_without_is_production_fails" {
   }
 
   expect_failures = [var.environments]
+}
+
+# gcp.environments.<env>.data_classification and org.cost_center / org.owner
+# from the config file (CMP-10, ARC-17).
+run "data_classification_and_cost_labels_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.classified.yaml"
+  }
+
+  assert {
+    condition = (
+      output.contract.environment_config["prod"].tag_value_ids.data_classification == "tagValues/900000000004" &&
+      local.project_environments["prod"].projects.host.tag_bindings == { data_classification = "tagValues/900000000004" } &&
+      output.contract.environment_config["dev"].tag_value_ids.data_classification == "tagValues/902"
+    )
+    error_message = "each environment's host project must be bound to its data-classification tag value (prod restricted, dev the internal default)."
+  }
+
+  assert {
+    condition     = local.gcp_default_labels["cost-center"] == "fin-42" && local.gcp_default_labels["owner"] == "data-team"
+    error_message = "org.cost_center / org.owner must reach the provider default labels in label form (lowercase, other characters as '-')."
+  }
 }

@@ -86,6 +86,15 @@ policy "no_plan_time_code_execution" {
   enforcement_level = "mandatory"
 }
 
+# ── Mandatory: ownership and cost labels ────────────────────────────────────
+# Ownership and cost keys on listed taggable types: GCP managed-by,
+# environment, cost-center, owner; AWS ManagedBy, Environment, CostCenter,
+# Owner. Every root writes them through provider default_labels / default_tags.
+policy "require_labels" {
+  query             = "data.terraform.policies.require_labels.deny"
+  enforcement_level = "mandatory"
+}
+
 # ── Advisory ────────────────────────────────────────────────────────────────
 policy "aws_s3_bucket_public_access_block_present" {
   query             = "data.terraform.policies.aws_s3_public_access.warn"
@@ -99,10 +108,5 @@ policy "aws_iam_federated_trust_unknown" {
 
 policy "gcp_wif_principalset_repo_wide" {
   query             = "data.terraform.policies.gcp_wif_principalset_pinned.repo_wide"
-  enforcement_level = "advisory"
-}
-
-policy "require_labels" {
-  query             = "data.terraform.policies.require_labels.deny"
   enforcement_level = "advisory"
 }

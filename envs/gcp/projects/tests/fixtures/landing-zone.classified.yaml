@@ -1,0 +1,28 @@
+# Test fixture: data classification and cost labels for the gcp-projects root
+# (config.tftest.hcl run data_classification_and_cost_labels_from_config).
+version: 1
+org:
+  prefix: cfgco
+  display_name: Config Co
+  owner: Data Team
+  cost_center: FIN 42
+  regions:
+    gcp: europe-west2
+  tfc:
+    organization: cfg-tfc
+gcp:
+  environments:
+    dev:
+      is_production: false
+      cidr_block: 10.10.0.0/16
+      budget_monthly_limit: 100
+      labels:
+        tier: non-production
+      iam_group_role_bindings:
+        devs@cfg.example.com: [roles/viewer]
+    prod:
+      display_name: Production
+      region: europe-west1
+      cidr_block: 10.30.0.0/16
+      is_production: true
+      data_classification: restricted

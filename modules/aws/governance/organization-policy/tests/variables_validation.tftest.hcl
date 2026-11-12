@@ -211,3 +211,13 @@ run "wildcard_stackset_managed_policy_name_rejected" {
 
   expect_failures = [var.stackset_managed_policy_names]
 }
+
+run "rejects_bad_tag_policy_resource_type" {
+  command = plan
+
+  variables {
+    tag_policy_required_resource_types = ["ec2"]
+  }
+
+  expect_failures = [var.tag_policy_required_resource_types]
+}

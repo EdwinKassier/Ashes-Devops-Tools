@@ -605,3 +605,14 @@ variable "member_backup_dr_region" {
   type        = string
   default     = null
 }
+
+variable "tag_policy_required_resource_types" {
+  description = "Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL_SUPPORTED) for which the root tag policy reports CostCenter, Environment, Owner and DataClassification as required (report_required_tag_for). Empty = no key is required. The AWS provider fails or warns at plan on a listed resource that lacks a key when the workspace sets TF_AWS_TAG_POLICY_COMPLIANCE to error or warning; the plan role then needs tag:ListRequiredTags. Null = aws.tagging.required_for from config/landing-zone.yaml, else []."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = alltrue([for t in coalesce(var.tag_policy_required_resource_types, local.cfg.tag_policy_required_resource_types, []) : can(regex("^[a-z0-9-]+:[A-Za-z0-9_-]+$", t))])
+    error_message = "tag_policy_required_resource_types (or aws.tagging.required_for in config/landing-zone.yaml) entries must look like service:type, for example ec2:instance or ec2:ALL_SUPPORTED."
+  }
+}

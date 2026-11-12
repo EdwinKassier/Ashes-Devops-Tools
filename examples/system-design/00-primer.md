@@ -492,27 +492,30 @@ component key.
   ([`envs/gcp/workload/providers.tf:26`](../../envs/gcp/workload/providers.tf)):
   `managed-by = "terraform"`, `landing-zone = <org.prefix>`,
   `workspace = "gcp-workload-<env>"`, `environment = <env>`.
-- **The four shared keys** are managed-by, landing-zone, workspace and
-  environment, in each cloud's casing. AWS adds two cost-allocation keys,
-  `CostCenter` and `Owner`, so it carries six. The `LandingZone` value comes
-  from `org.name` on AWS and `landing-zone` from `org.prefix` on GCP.
+- **The shared keys** are managed-by, landing-zone, workspace, environment,
+  cost-center and owner, in each cloud's casing. `CostCenter` and `Owner` come
+  from `org.cost_center` and `org.owner`. AWS also carries
+  `DataClassification`, so it has seven. The `LandingZone` value comes from
+  `org.name` on AWS and `landing-zone` from `org.prefix` on GCP.
 - **Component key.** Add the component name the way app-services does: AWS
   `tags = { Service = "<component>" }`
   ([`modules/aws/stages/app-services/main.tf:250`](../../modules/aws/stages/app-services/main.tf)),
   GCP `labels = merge(local.labels, { service = "<component>" })`
   ([`modules/gcp/stages/app-services/main.tf:770`](../../modules/gcp/stages/app-services/main.tf)).
 - **Enforcement.** [`policies/opa/require_labels.rego`](../../policies/opa/require_labels.rego)
-  checks that each covered resource type carries at least one label or tag, and
-  provider defaults count. It is **advisory**: a violation is reported but
-  does not block the run
-  ([`policies/opa/policies.hcl:83`](../../policies/opa/policies.hcl)). The
-  default tags and labels, not the policy, are what put the keys on every
-  resource.
+  checks that each covered resource type carries managed-by, environment,
+  cost-center and owner (AWS: `ManagedBy`, `Environment`, `CostCenter`,
+  `Owner`), and provider defaults count. It is **mandatory**: a violation stops
+  the run ([`policies/opa/policies.hcl`](../../policies/opa/policies.hcl)). The
+  default tags and labels put the keys on every resource. A Cloud SQL instance
+  is the exception on GCP: its `settings.user_labels` never receive the
+  provider defaults, so pass the keys in its labels.
 - **AWS tag casing.** The org tag policy
-  [`modules/aws/governance/organization-policy/policies/tag-policy.json`](../../modules/aws/governance/organization-policy/policies/tag-policy.json)
-  standardises the key casing of `CostCenter`, `Environment` and `Owner`. A raw
-  resource that sets any of these keys must use exactly that casing, never
-  `costcenter` or `environment`.
+  ([`modules/aws/governance/organization-policy/main.tf`](../../modules/aws/governance/organization-policy/main.tf),
+  `tag_policy_content`) standardises the key casing of `CostCenter`,
+  `Environment`, `Owner` and `DataClassification`. A raw resource that sets any
+  of these keys must use exactly that casing, never `costcenter` or
+  `environment`.
 - GCP labels are lowercase, at most 63 characters, and at most 64 per resource
   ([Google Cloud docs](https://docs.cloud.google.com/resource-manager/docs/labels-overview),
   checked 2026-11). AWS tag keys and values are case-sensitive

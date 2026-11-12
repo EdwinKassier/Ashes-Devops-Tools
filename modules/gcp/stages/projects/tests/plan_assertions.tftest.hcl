@@ -144,3 +144,36 @@ run "additional_project_services_reach_only_the_named_project" {
     error_message = "Other projects must keep only project_services."
   }
 }
+
+# Per-project tag bindings (gcp-projects binds data-classification to each
+# environment host project) and the owner label (org.owner in the roots).
+run "project_tag_bindings_and_owner_label" {
+  command = plan
+
+  variables {
+    owner = "data-team"
+    environments = {
+      dev = {
+        display_name = "Development"
+        description  = "Development environment"
+        projects = {
+          host = {
+            name         = "host"
+            labels       = {}
+            tag_bindings = { data_classification = "tagValues/900000000004" }
+          }
+          tools = { name = "tools", labels = {} }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      module.project["dev-host"].tag_bindings == { data_classification = "tagValues/900000000004" } &&
+      length(module.project["dev-tools"].tag_bindings) == 0 &&
+      module.project["dev-host"].labels["owner"] == "data-team"
+    )
+    error_message = "a project's tag_bindings must reach the project primitive (only that project), and var.owner must set the owner label."
+  }
+}

@@ -134,7 +134,10 @@ locals {
     spoke_network_name      = null
   })
 
-  labels = merge({ environment = var.environment, managed-by = "terraform" }, local.env_config.labels, var.extra_labels)
+  # Module labels. They repeat the four keys the mandatory require_labels OPA
+  # policy checks because some labels never receive the provider
+  # default_labels (Cloud SQL settings.user_labels).
+  labels = merge({ environment = var.environment, managed-by = "terraform", cost-center = local.gcp_label_cost_center, owner = local.gcp_label_owner }, local.env_config.labels, var.extra_labels)
 
   # Access policy for the environment perimeter: an explicit
   # vpc_sc_access_policy_name (legacy org-wide policy) wins; otherwise the

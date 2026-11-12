@@ -33,14 +33,17 @@ locals {
       # account ID) to import when enable_cloudtrail_delegated_admin turns on.
       cloudtrail_delegated_admin_account_id = try(tostring(local.lz.aws.adopt.cloudtrail_delegated_admin_account_id), null)
     }
-    management_account_id   = try(tostring(local.lz.aws.management_account_id), null)
-    log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
-    allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
-    aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
-    guard_alert_emails      = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
-    profile                 = try(tostring(local.lz.org.profile), null)
-    monthly_budget_usd      = try(tonumber(local.lz.org.monthly_budget_usd), null)
-    notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    management_account_id = try(tostring(local.lz.aws.management_account_id), null)
+    # aws.tagging.required_for: types the root tag policy reports the four
+    # tag keys as required for (CMP-10, ARC-17).
+    tag_policy_required_resource_types = try([for t in local.lz.aws.tagging.required_for : tostring(t)], null)
+    log_archive_bucket_name            = try(tostring(local.lz.aws.log_archive_bucket_name), null)
+    allowed_regions                    = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
+    aws_enabled_regions                = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
+    guard_alert_emails                 = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
+    profile                            = try(tostring(local.lz.org.profile), null)
+    monthly_budget_usd                 = try(tonumber(local.lz.org.monthly_budget_usd), null)
+    notification_emails                = try([for e in local.lz.notifications.emails : tostring(e)], null)
     # Config recorder migration flags (docs/runbooks/aws-config-recorder-migration.md).
     enable_org_config_recorders = try(tobool(local.lz.aws.enable_org_config_recorders), null)
     enable_config_recorder_scp  = try(tobool(local.lz.aws.enable_config_recorder_scp), null)
@@ -138,6 +141,8 @@ locals {
   # Same precedence and fallback as the aws-security root: the guard alerts
   # forward from every region the security services run in.
   aws_enabled_regions = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
+  # Explicit variable > aws.tagging.required_for > [] (no required-tag reporting).
+  tag_policy_required_resource_types = coalesce(var.tag_policy_required_resource_types, local.cfg.tag_policy_required_resource_types, [])
   # variable > aws.guard_alert_emails > notifications.emails > none.
   notification_emails = coalesce(local.cfg.notification_emails, [])
   guard_alert_emails = var.guard_alert_emails != null ? var.guard_alert_emails : (

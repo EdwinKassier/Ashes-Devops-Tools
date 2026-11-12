@@ -16,5 +16,12 @@ locals {
     landing-zone = local.project_prefix
     workspace    = "gcp-guardrails"
     environment  = "shared"
+    cost-center  = local.gcp_label_cost_center
+    owner        = local.gcp_label_owner
   }
+  # org.cost_center / org.owner (defaults platform / platform-team, as in the
+  # AWS roots) in label form: lowercase letters, digits, '_' and '-', at most
+  # 63 characters. Any other character becomes '-'.
+  gcp_label_cost_center = substr(replace(lower(coalesce(local.cfg.cost_center, "platform")), "/[^a-z0-9_-]/", "-"), 0, 63)
+  gcp_label_owner       = substr(replace(lower(coalesce(local.cfg.owner, "platform-team")), "/[^a-z0-9_-]/", "-"), 0, 63)
 }

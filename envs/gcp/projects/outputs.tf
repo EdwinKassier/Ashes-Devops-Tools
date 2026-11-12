@@ -25,6 +25,8 @@ locals {
         labels             = env.labels
         tag_value_ids = {
           environment = try(local.org.tag_values["environment-${env_key}"], null)
+          # The data-classification tag value bound to the host project.
+          data_classification = try(local.org.tag_values["data-classification-${env.data_classification}"], null)
         }
         # Explicit production marker for the workload guardrail checks.
         is_production = env.is_production
@@ -70,7 +72,7 @@ output "contract" {
       region                  = string
       cidr_block              = string
       labels                  = map(string)
-      tag_value_ids           = object({ environment = string })
+      tag_value_ids           = object({ environment = string, data_classification = string })
       is_production           = bool
       vpc_sc_access_policy_id = string
       automation_identities   = list(string)
@@ -100,7 +102,7 @@ output "project_numbers" {
 # org folders/tag values (remote state) with this root's project IDs/numbers and
 # the environment definitions. gcp-workload reads this.
 output "environment_config" {
-  description = "Deprecated: read contract.environment_config (removed in v1.0). Per-environment config: folder, host project, region, CIDR, labels, environment tag value, is_production, the environment's folder-scoped VPC-SC access policy ID, and its own plan/apply automation identities."
+  description = "Deprecated: read contract.environment_config (removed in v1.0). Per-environment config: folder, host project, region, CIDR, labels, environment and data-classification tag values, is_production, the environment's folder-scoped VPC-SC access policy ID, and its own plan/apply automation identities."
   value       = local.contract.environment_config
 }
 

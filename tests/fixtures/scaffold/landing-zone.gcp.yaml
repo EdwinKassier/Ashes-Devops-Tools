@@ -227,6 +227,10 @@ gcp:
       is_production: false
       labels:
         tier: non-production
+      # Data sensitivity: public, internal (default), confidential or
+      # restricted. gcp-projects binds the matching data-classification tag
+      # value to this environment's host project.
+      # data_classification: internal
       # Extra regions of this environment's spoke VPC (gcp-workload-<env>),
       # same shape as gcp.network.additional_regions; off by default. Under
       # network_connectivity: ncc the NCC spoke exports every subnet range.
@@ -277,6 +281,7 @@ gcp:
       # then needs a hardened audit store (logging_project_id and
       # enable_audit_bucket_lock above).
       # compliance_class: regulated
+      # data_classification: confidential
       # Backup and DR vault for the app-service databases (on when regulated).
       # lock_effective_time is IRREVERSIBLE: after it nobody can lower the
       # enforced retention.
@@ -310,6 +315,15 @@ aws:
   # 12-digit management (payer) account ID, QUOTED (aws-organization,
   # aws-security, aws-backup).
   management_account_id: "123456789012"
+  # Organization tag policy (aws-organization). It always defines the key case
+  # of CostCenter, Environment, Owner and DataClassification and the allowed
+  # DataClassification values. required_for lists the resource types for which
+  # it reports the four keys as required. A workspace with the environment
+  # variable TF_AWS_TAG_POLICY_COMPLIANCE=error (config/tfc-workspaces.yaml)
+  # then fails the plan on a listed resource that lacks a key; its plan role
+  # needs tag:ListRequiredTags. Absent = no key is required.
+  # tagging:
+  #   required_for: [ec2:instance, s3:bucket, rds:db, lambda:function]
   # Regions permitted by the region-restriction SCP (aws-organization) and the
   # Regions baselined by aws-security / aws-network / aws-workload.
   allowed_regions:
@@ -363,6 +377,10 @@ aws:
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
       is_production: false
+      # Data sensitivity, written as the DataClassification tag by
+      # aws-workload-<env>: public, internal (default), confidential or
+      # restricted.
+      # data_classification: internal
       # AZ IDs for this spoke only. Unset = aws.network.availability_zone_ids,
       # else the region's first three available zones.
       # availability_zone_ids: [euw2-az2, euw2-az3]
@@ -382,6 +400,7 @@ aws:
       # Firewall on and egress fail-closed on every profile, no alert-only waiver,
       # and at least 365 days of log-archive retention (the VPC flow logs).
       # compliance_class: regulated
+      # data_classification: confidential
 
   # IAM Identity Center access by name (aws-identity): Identity Store group
   # DISPLAY NAME => list of {permission_set, accounts}. Accounts are keys of the

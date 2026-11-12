@@ -114,8 +114,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L304)
-- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L321)
+- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L330)
+- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L347)
 
 
 ## Inputs
@@ -147,6 +147,7 @@ The following resources are created:
 | <a name="input_stackset_execution_role_names"></a> [stackset\_execution\_role\_names](#input\_stackset\_execution\_role\_names) | Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles); themselves protected break-glass-only by DenyPrivilegedRoleTampering. | `list(string)` | <pre>[<br/>  "stacksets-exec-*"<br/>]</pre> | no |
 | <a name="input_stackset_managed_policy_names"></a> [stackset\_managed\_policy\_names](#input\_stackset\_managed\_policy\_names) | Member-account customer-managed policy names (optionally path-prefixed) that a service-managed StackSet owns, by default the tfc-oidc-baseline tfc-apply permissions boundary and the tfc-plan read-deny policy. DenyStackSetPolicyTampering stops everyone except break-glass and stackset\_execution\_role\_names from creating, versioning, deleting or tagging them. Empty omits the statement. | `list(string)` | <pre>[<br/>  "tfc-apply-boundary",<br/>  "tfc-plan-data-read-deny"<br/>]</pre> | no |
 | <a name="input_stackset_managed_role_names"></a> [stackset\_managed\_role\_names](#input\_stackset\_managed\_role\_names) | Member-account role names (optionally path-prefixed) that a service-managed StackSet owns — by default the tfc-oidc-baseline tfc-plan / tfc-apply roles. Together with the break-glass role name they are protected by DenyStackSetRoleTampering, whose only exemptions are break-glass and stackset\_execution\_role\_names. Every other pipeline\_role\_names entry (OrganizationAccountAccessRole, stacksets-exec-*) is protected break-glass-only. The pipeline roles are never exempt from either statement. | `list(string)` | <pre>[<br/>  "tfc-plan",<br/>  "tfc-apply"<br/>]</pre> | no |
+| <a name="input_tag_policy_required_resource_types"></a> [tag\_policy\_required\_resource\_types](#input\_tag\_policy\_required\_resource\_types) | Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL\_SUPPORTED) for which the tag policy reports CostCenter, Environment, Owner and DataClassification as required (report\_required\_tag\_for). Empty (default) = no key is required. The AWS provider fails or warns at plan on a listed resource that lacks a key when the workspace sets TF\_AWS\_TAG\_POLICY\_COMPLIANCE to error or warning; the plan role then needs tag:ListRequiredTags. | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs

@@ -1038,3 +1038,40 @@ run "protected_key_alias_retarget_is_break_glass_only" {
     error_message = "the protected-key statements must not deny CreateAlias or CreateKey (the kms-key module creates the key and its alias together)."
   }
 }
+
+# ── Tag policy: required keys and data classification (CMP-10, ARC-17) ──────
+run "tag_policy_requires_keys" {
+  command = plan
+
+  variables {
+    tag_policy_required_resource_types = ["ec2:instance", "s3:bucket", "rds:ALL_SUPPORTED"]
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_organizations_policy.policy["tag-policy"].content).tags.DataClassification.tag_key["@@assign"] == "DataClassification" &&
+      toset(jsondecode(aws_organizations_policy.policy["tag-policy"].content).tags.DataClassification.tag_value["@@assign"]) == toset(["public", "internal", "confidential", "restricted"]) &&
+      alltrue([
+        for k in ["CostCenter", "Environment", "Owner", "DataClassification"] :
+        toset(jsondecode(aws_organizations_policy.policy["tag-policy"].content).tags[k].report_required_tag_for["@@assign"]) == toset(["ec2:instance", "s3:bucket", "rds:ALL_SUPPORTED"])
+      ])
+    )
+    error_message = "the tag policy must define DataClassification values and report all four keys as required for the listed types."
+  }
+}
+
+run "tag_policy_default_reports_nothing" {
+  command = plan
+
+  assert {
+    condition = (
+      alltrue([
+        for k in ["CostCenter", "Environment", "Owner", "DataClassification"] :
+        !can(jsondecode(aws_organizations_policy.policy["tag-policy"].content).tags[k].report_required_tag_for)
+      ]) &&
+      !can(jsondecode(aws_organizations_policy.policy["tag-policy"].content).tags.CostCenter.tag_value) &&
+      !can(jsondecode(aws_organizations_policy.policy["tag-policy"].content).tags.CostCenter.enforced_for)
+    )
+    error_message = "with no resource types the tag policy must not require any key, and the free-form keys must not restrict values or enforce anything."
+  }
+}

@@ -2177,6 +2177,60 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 ### All clouds
 
+#### `require_labels` is now mandatory; data classification on both clouds (CMP-10, ARC-17)
+
+**Who:** every fork that attaches the OPA policy set (`enable_policy_sets`).
+**What changes:** the `require_labels` policy in `policies/opa` is now
+**mandatory** and checks four keys instead of "at least one". A listed GCP
+resource (`google_storage_bucket`, `google_kms_crypto_key`, `google_project`,
+`google_sql_database_instance` and the others in
+`policies/opa/require_labels.rego`) must carry `managed-by`, `environment`,
+`cost-center` and `owner`, and a listed AWS resource `ManagedBy`,
+`Environment`, `CostCenter` and `Owner`. A violation stops the run, and the set
+is not overridable. Every root already writes these keys through its provider
+`default_labels` / `default_tags`, so the shipped roots pass. Code of your own
+fails when it adds a provider block without the defaults, or a Cloud SQL
+instance whose `settings.user_labels` lack the four keys (provider default
+labels never reach `user_labels`; `gcp-workload` now passes them in its module
+labels).
+
+Other changes in the same release:
+
+- **GCP labels.** Every GCP root's provider `default_labels` gain `cost-center`
+  and `owner`, from `org.cost_center` and `org.owner` (defaults `platform` and
+  `platform-team`, as on AWS), lowercased with any character other than a
+  letter, digit, `_` or `-` changed to `-`. The first plan of every GCP root
+  updates the labels of existing resources in place. The `gcp-projects` owner
+  label on projects now follows `org.owner` too.
+- **GCP data classification.** `gcp.environments.<env>.data_classification`
+  (`public`, `internal` (default), `confidential` or `restricted`) is now read.
+  `gcp-projects` binds the organization `data-classification` tag value of that
+  name to each environment host project and publishes its ID as
+  `environment_config.<env>.tag_value_ids.data_classification`. Apply
+  `gcp-organization` first: it grants `projects-apply`
+  `roles/resourcemanager.tagUser` on the `data-classification` tag key and on
+  each environment folder, which the binding needs. A supplied organization
+  contract (`organization_contract` / `gcp.contracts.organization`) must now
+  list `data-classification-<value>` in `tag_values` for every value in use, or
+  the `gcp-projects` plan fails and names the missing keys.
+- **AWS tag policy.** The organization tag policy is built in
+  `modules/aws/governance/organization-policy/main.tf` (`tag_policy_content`);
+  `policies/tag-policy.json` is gone. It adds `DataClassification` with the
+  four allowed values (an in-place policy update). `aws.tagging.required_for`
+  (input `tag_policy_required_resource_types`, default empty) adds
+  `report_required_tag_for` for the four keys. A tag policy alone never blocks
+  an untagged resource. To fail plans on a missing key, set the workspace
+  environment variable `TF_AWS_TAG_POLICY_COMPLIANCE=error` in
+  `config/tfc-workspaces.yaml`, after you confirm in the sandbox that the plan
+  and apply roles can call `tag:ListRequiredTags`.
+- **AWS `DataClassification` tag.** Every AWS root adds it to its
+  `default_tags`: `aws-workload-<env>` from
+  `aws.workload_environments.<env>.data_classification` (variable
+  `data_classification`, default `internal`), `aws-security` and `aws-backup`
+  `confidential`, the other shared roots `internal`. Override a shared root with
+  `default_tags = { DataClassification = "..." }`. The first plan updates the
+  tags of existing resources in place.
+
 #### `compliance_class: regulated` (CMP-7, opt-in)
 
 **Who:** forks that mark an environment as holding regulated data. Nothing

@@ -22,6 +22,17 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   sandbox and replace the targets with measurements. The `dr_region` input is
   documented to differ from the home region and to be in `aws.allowed_regions`,
   but no plan check enforces that.
+- **Tag enforcement is mock-tested only (CMP-10, ARC-17).** Mock plans and
+  the OPA unit tests prove the tag policy content, the data-classification
+  binding inputs and the `require_labels` rule. Two permission paths are not
+  proven. (1) The `gcp-projects` binding of the `data-classification` tag to
+  each host project relies on the `roles/resourcemanager.tagUser` grants that
+  `gcp-organization` gives `projects-apply` on the tag key and on each
+  environment folder. Confirm in the sandbox that the binding applies. (2) The
+  AWS provider check `TF_AWS_TAG_POLICY_COMPLIANCE` calls
+  `tag:ListRequiredTags`. Confirm in the sandbox that the `tfc-plan` and
+  `tfc-apply` roles may call it before a workspace sets the variable to
+  `error`. The AWS tag policy itself never blocks an untagged resource.
 - **GCP Cloud NAT egress route is mock-tested only.** `net-hub` / `net-spoke`
   now add a `0.0.0.0/0` route to the default internet gateway when NAT is on
   (`tiered-vpc` deletes the default route at creation). Confirm in the sandbox

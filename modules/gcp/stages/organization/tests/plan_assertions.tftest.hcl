@@ -1460,3 +1460,65 @@ run "restrict_tls_versions_off_by_default" {
     error_message = "the stage default must not set gcp.restrictTLSVersion."
   }
 }
+
+# ── projects-apply binds data-classification on host projects only ──────────
+# gcp-projects binds each environment host project to a data-classification
+# tag value. That needs tagUser on the tag value side (granted on the
+# data-classification key only, so no other tag such as containment) and on
+# the resource side (granted on each environment folder only).
+run "projects_apply_can_bind_only_data_classification" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        description             = "Shared"
+        iam_group_role_bindings = {}
+      }
+      dev = {
+        display_name            = "Development"
+        description             = "Development environment"
+        iam_group_role_bindings = {}
+      }
+    }
+    projects_apply_service_account = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }, shared = { id = "222222222", name = "folders/222222222", display_name = "Shared" } } }
+  }
+
+  override_module {
+    target  = module.tags
+    outputs = { tag_keys = { "data-classification" = "tagKeys/700", "environment" = "tagKeys/701" }, tag_values = { "environment-dev" = "tagValues/1", "environment-shared" = "tagValues/2", "data-classification-internal" = "tagValues/902" } }
+  }
+
+  assert {
+    condition = (
+      google_tags_tag_key_iam_member.projects_apply_classification[0].tag_key == "tagKeys/700" &&
+      google_tags_tag_key_iam_member.projects_apply_classification[0].role == "roles/resourcemanager.tagUser" &&
+      google_tags_tag_key_iam_member.projects_apply_classification[0].member == "serviceAccount:acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+    )
+    error_message = "projects-apply must hold tagUser on the data-classification tag key only."
+  }
+
+  assert {
+    condition = (
+      keys(google_folder_iam_member.projects_apply_tag_user) == ["dev"] &&
+      google_folder_iam_member.projects_apply_tag_user["dev"].folder == "folders/111111111" &&
+      google_folder_iam_member.projects_apply_tag_user["dev"].role == "roles/resourcemanager.tagUser"
+    )
+    error_message = "projects-apply must hold tagUser on each environment folder, never the shared folder or the org."
+  }
+}
+
+run "projects_apply_tag_grants_absent_without_sa" {
+  command = plan
+
+  assert {
+    condition     = length(google_tags_tag_key_iam_member.projects_apply_classification) == 0 && length(google_folder_iam_member.projects_apply_tag_user) == 0
+    error_message = "without projects_apply_service_account no tag grant may be made."
+  }
+}

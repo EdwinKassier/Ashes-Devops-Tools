@@ -439,3 +439,51 @@ run "explicit_vault_encryption_wins_over_config" {
     error_message = "an explicit member_backup_vault_encryption must win over compliance.backup."
   }
 }
+
+# aws.tagging.required_for feeds the tag policy's required-tag reporting
+# (CMP-10); absent = none; the variable wins; a malformed entry is rejected.
+run "tag_policy_required_types_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = jsonencode(local.tag_policy_required_resource_types) == jsonencode(["ec2:instance", "s3:bucket"])
+    error_message = "aws.tagging.required_for must feed tag_policy_required_resource_types."
+  }
+}
+
+run "tag_policy_required_types_absent_is_empty" {
+  command = plan
+
+  assert {
+    condition     = length(local.tag_policy_required_resource_types) == 0
+    error_message = "without aws.tagging.required_for the tag policy must require no key."
+  }
+}
+
+run "tag_policy_required_types_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path           = "tests/fixtures/landing-zone.compliance.yaml"
+    tag_policy_required_resource_types = []
+  }
+
+  assert {
+    condition     = length(local.tag_policy_required_resource_types) == 0
+    error_message = "an explicit tag_policy_required_resource_types must win over the config file, even when empty."
+  }
+}
+
+run "tag_policy_required_types_rejects_bad_entry" {
+  command = plan
+
+  variables {
+    tag_policy_required_resource_types = ["s3"]
+  }
+
+  expect_failures = [var.tag_policy_required_resource_types]
+}

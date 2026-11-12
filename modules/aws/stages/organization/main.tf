@@ -104,6 +104,9 @@ module "policies" {
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
   ec2_allowed_images                 = var.ec2_allowed_images
 
+  # Required-tag reporting on the root tag policy (CMP-10, ARC-17).
+  tag_policy_required_resource_types = var.tag_policy_required_resource_types
+
   # Recorder SCP: after the recorder migration only the StackSet execution
   # role, break-glass and security tooling's tfc-apply (its aggregator
   # recorder) may change recorders.

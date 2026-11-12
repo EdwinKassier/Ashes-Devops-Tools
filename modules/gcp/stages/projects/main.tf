@@ -4,7 +4,7 @@
 locals {
   project_labels = {
     managed-by = "terraform"
-    owner      = "platform-team"
+    owner      = var.owner
     # GCP label values allow only lowercase letters, digits, '_' and '-' (max
     # 63): "My Organization" becomes "my-organization". Already-valid names are
     # unchanged, so existing labels do not churn.
@@ -54,6 +54,8 @@ module "project" {
   # example networkconnectivity.googleapis.com on the hub and host projects
   # when Network Connectivity Center is in use).
   services = distinct(concat(var.project_services, lookup(var.additional_project_services, each.key, [])))
+
+  tag_bindings = each.value.proj.tag_bindings
 
   # Foundation projects must not be deletable by a routine plan.
   deletion_policy = "PREVENT"

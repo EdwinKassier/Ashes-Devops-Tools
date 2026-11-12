@@ -72,6 +72,9 @@ module "aws_organization" {
   allow_vpc_bpa_exclusions = var.allow_vpc_bpa_exclusions
 
   ec2_allowed_images = var.ec2_allowed_images
+
+  # Required-tag reporting on the root tag policy (aws.tagging.required_for).
+  tag_policy_required_resource_types = local.tag_policy_required_resource_types
 }
 
 # The starter profile must have a budget: an unmetered sandbox is the failure

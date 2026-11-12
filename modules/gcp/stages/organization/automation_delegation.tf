@@ -143,3 +143,34 @@ resource "google_folder_iam_member" "workload_non_delegable_folder_roles" {
   role   = each.value.role
   member = each.value.member
 }
+
+# 4. Data-classification tag bindings (CMP-10). gcp-projects binds each
+#    environment host project to a data-classification tag value. A tag binding
+#    needs tagUser on BOTH sides: on the tag value (tagValueBindings.create) and
+#    on the resource (hierarchyNodes.createTagBinding). projects-apply gets the
+#    value side on the data-classification KEY only, so it cannot bind, or
+#    remove, any other tag (environment, containment), and the resource side on
+#    each environment folder only, never the shared folder, the admin project or
+#    the org. organization-apply makes both grants through its unconditional
+#    tagAdmin (tag key IAM) and folderIamAdmin (folder IAM).
+locals {
+  projects_apply_tag_user_folders = var.projects_apply_service_account == null ? [] : sort([
+    for k in keys(var.environments) : k if k != var.shared_folder_key
+  ])
+}
+
+resource "google_tags_tag_key_iam_member" "projects_apply_classification" {
+  count = var.projects_apply_service_account == null ? 0 : 1
+
+  tag_key = module.tags.tag_keys["data-classification"]
+  role    = "roles/resourcemanager.tagUser"
+  member  = "serviceAccount:${var.projects_apply_service_account}"
+}
+
+resource "google_folder_iam_member" "projects_apply_tag_user" {
+  for_each = toset(local.projects_apply_tag_user_folders)
+
+  folder = module.organization.folders[each.key].name
+  role   = "roles/resourcemanager.tagUser"
+  member = "serviceAccount:${var.projects_apply_service_account}"
+}

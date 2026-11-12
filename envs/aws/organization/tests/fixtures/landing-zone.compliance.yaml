@@ -1,4 +1,5 @@
-# Test fixture: compliance.backup for the aws-organization root (config.tftest.hcl).
+# Test fixture: compliance.backup and aws.tagging for the aws-organization root
+# (config.tftest.hcl).
 # The DR region differs from org.regions.aws (the home vault region).
 version: 1
 org:
@@ -14,6 +15,8 @@ aws:
   break_glass_role_arn: arn:aws:iam::012345678901:role/break-glass
   log_archive_bucket_name: cfgco-org-log-archive
   guard_alert_emails: [secops@cfg.test]
+  tagging:
+    required_for: [ec2:instance, s3:bucket]
   accounts:
     log_archive: {email: aws+log-archive@cfg.test, ou: Security}
     security_tooling: {email: aws+security-tooling@cfg.test, ou: Security}

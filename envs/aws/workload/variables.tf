@@ -457,6 +457,17 @@ variable "is_production" {
   default     = null
 }
 
+variable "data_classification" {
+  description = "Data sensitivity of this environment, written as the DataClassification tag through the provider default_tags: public, internal, confidential or restricted (the organization tag policy allows only these). Null = aws.workload_environments.<environment>.data_classification from config/landing-zone.yaml, else internal."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = contains(["public", "internal", "confidential", "restricted"], coalesce(var.data_classification, try(local.cfg.workload_data_classification[local.environment], null), "internal"))
+    error_message = "data_classification (or aws.workload_environments.<environment>.data_classification in config/landing-zone.yaml) must be public, internal, confidential or restricted."
+  }
+}
+
 variable "services" {
   description = "Services to run in this environment, keyed by service name. Full field reference: modules/aws/stages/app-services (variable services). Null (default) = aws.workload_environments.<environment>.services from config/landing-zone.yaml, else nothing; an explicit value replaces the config."
   type = map(object({

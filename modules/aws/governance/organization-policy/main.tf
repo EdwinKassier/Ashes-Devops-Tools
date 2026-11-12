@@ -269,7 +269,7 @@ locals {
     }
     tag-policy = {
       type    = "TAG_POLICY"
-      content = templatefile("${path.module}/policies/tag-policy.json", {})
+      content = local.tag_policy_content
     }
     backup-policy = {
       type = "BACKUP_POLICY"
@@ -287,6 +287,32 @@ locals {
     { for k, p in local.default_policies : k => p if !contains(var.disabled_policies, k) },
     var.policy_overrides,
   )
+}
+
+# Tag policy (org root). Defines the tag key case for the four ownership and
+# cost keys every AWS root writes through provider default_tags, and the
+# allowed DataClassification values. A tag policy alone never blocks an
+# untagged resource: AWS evaluates only tags that are present. With
+# tag_policy_required_resource_types set, report_required_tag_for marks the keys
+# as required for those types, which the AWS provider checks at plan when the
+# workspace sets TF_AWS_TAG_POLICY_COMPLIANCE (error or warning). No
+# enforced_for: tagging operations are never blocked by this policy.
+locals {
+  tag_policy_keys = {
+    CostCenter         = null
+    Environment        = null
+    Owner              = null
+    DataClassification = ["public", "internal", "confidential", "restricted"]
+  }
+  tag_policy_content = jsonencode({
+    tags = {
+      for k, allowed in local.tag_policy_keys : k => merge(
+        { tag_key = { "@@assign" = k } },
+        allowed == null ? {} : { tag_value = { "@@assign" = allowed } },
+        length(var.tag_policy_required_resource_types) == 0 ? {} : { report_required_tag_for = { "@@assign" = var.tag_policy_required_resource_types } },
+      )
+    }
+  })
 }
 
 # AWS Organizations "Maximum size of a policy document" per type (checked

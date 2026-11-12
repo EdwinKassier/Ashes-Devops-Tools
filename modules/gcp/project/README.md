@@ -129,4 +129,5 @@ The following resources are created:
 | <a name="output_project_id"></a> [project\_id](#output\_project\_id) | The project ID. Depends on API enablement, so consumers wait until var.services are live. |
 | <a name="output_services"></a> [services](#output\_services) | Sorted list of APIs this module enables on the project. |
 | <a name="output_shared_vpc_host_project_id"></a> [shared\_vpc\_host\_project\_id](#output\_shared\_vpc\_host\_project\_id) | The Shared VPC host project this project is attached to (null when not attached). |
+| <a name="output_tag_bindings"></a> [tag\_bindings](#output\_tag\_bindings) | Resource-manager tag bindings on the project: the tag\_bindings input, key => tag value ID (tagValues/<n>). |
 <!-- END_TF_DOCS -->

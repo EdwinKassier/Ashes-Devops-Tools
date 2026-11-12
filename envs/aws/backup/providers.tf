@@ -44,6 +44,9 @@ provider "aws" {
 # Canonical tag set written by EVERY aws provider in this root (default_tags).
 # Keys match the org tag policy + the cost-governance cost-allocation tags
 # (CostCenter, Environment, Owner) so the activated tags are actually populated.
+# DataClassification is the tag policy's data-sensitivity key. The OPA policy
+# require_labels (mandatory) denies a listed resource without ManagedBy,
+# Environment, CostCenter and Owner.
 # Values are plan-known, non-empty strings: a computed or empty default tag
 # would make the provider plan a perpetual diff. Module-level `tags` only ADD
 # keys (Name, Tier, ...), so the two never fight.
@@ -56,6 +59,9 @@ locals {
       Environment = "shared"
       CostCenter  = local.cost_center
       Owner       = local.owner
+      # Org tag policy key (CMP-10): this root holds copies of workload data.
+      # Override with default_tags = { DataClassification = "..." }.
+      DataClassification = "confidential"
     },
     var.default_tags,
   )

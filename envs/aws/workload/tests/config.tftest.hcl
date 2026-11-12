@@ -243,3 +243,51 @@ run "is_production_variable_wins_over_config" {
     error_message = "An explicit is_production variable must win over the config file."
   }
 }
+
+# DataClassification default tag (CMP-10): aws.workload_environments.<env>
+# .data_classification, else internal; an explicit variable wins; any value
+# outside the tag policy's four is rejected.
+run "data_classification_tag_from_config" {
+  command = plan
+
+  variables {
+    environment = "prod"
+  }
+
+  assert {
+    condition     = local.aws_default_tags["DataClassification"] == "restricted"
+    error_message = "the DataClassification default tag must come from aws.workload_environments.<env>.data_classification."
+  }
+}
+
+run "data_classification_tag_defaults_to_internal" {
+  command = plan
+
+  assert {
+    condition     = local.aws_default_tags["DataClassification"] == "internal"
+    error_message = "an environment without data_classification must be tagged DataClassification = internal."
+  }
+}
+
+run "data_classification_variable_wins" {
+  command = plan
+
+  variables {
+    data_classification = "confidential"
+  }
+
+  assert {
+    condition     = local.aws_default_tags["DataClassification"] == "confidential"
+    error_message = "an explicit data_classification must win over the config file."
+  }
+}
+
+run "data_classification_rejects_unknown_value" {
+  command = plan
+
+  variables {
+    data_classification = "secret"
+  }
+
+  expect_failures = [var.data_classification]
+}

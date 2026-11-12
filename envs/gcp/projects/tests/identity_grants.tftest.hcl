@@ -70,7 +70,8 @@ override_data {
           dev    = { id = "folders/111", name = "folders/111", display_name = "Development" }
         }
         tag_values = {
-          "environment-dev" = "tagValues/123"
+          "environment-dev"              = "tagValues/123"
+          "data-classification-internal" = "tagValues/902"
         }
       }
     }

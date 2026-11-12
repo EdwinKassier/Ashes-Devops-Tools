@@ -967,7 +967,7 @@
               },
               "data_classification": {
                 "type": "string",
-                "description": "Reserved: no root reads this key yet.",
+                "description": "Data sensitivity of the environment (default internal). gcp-projects binds the organization data-classification tag value of this name to the environment's host project and publishes its ID as environment_config.<env>.tag_value_ids.data_classification.",
                 "enum": [
                   "public",
                   "internal",
@@ -1239,6 +1239,20 @@
         },
         "management_account_id": {
           "type": "string"
+        },
+        "tagging": {
+          "type": "object",
+          "properties": {
+            "required_for": {
+              "type": "array",
+              "description": "Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL_SUPPORTED) for which the organization tag policy reports CostCenter, Environment, Owner and DataClassification as required (aws-organization). Absent or empty = no key is required. A workspace with TF_AWS_TAG_POLICY_COMPLIANCE=error then fails the plan on a listed resource that lacks a key.",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]+:[A-Za-z0-9_-]+$"
+              }
+            }
+          },
+          "additionalProperties": false
         },
         "allowed_regions": {
           "type": "array",
@@ -1559,7 +1573,7 @@
               },
               "data_classification": {
                 "type": "string",
-                "description": "Reserved: no root reads this key yet.",
+                "description": "Data sensitivity of the environment (default internal). aws-workload-<env> writes it as the DataClassification tag through the provider default_tags; the organization tag policy allows only these four values.",
                 "enum": [
                   "public",
                   "internal",
