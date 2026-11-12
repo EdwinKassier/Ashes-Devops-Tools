@@ -586,7 +586,7 @@ saas:
 #     copy_to_central_vault: true          # IRREVERSIBLE lock on the copy vault (UPGRADING.md)
 #     copy_retention_days: 365
 #     dr_region: eu-west-1                 # must be in aws.allowed_regions
-#   breach_notification_contacts: [dpo@my-org.example.com]   # reserved: read by no root yet
+#   breach_notification_contacts: [dpo@my-org.example.com]   # AWS security and GCP control-plane alerts
 
 # Presets: named overlays from examples/presets/<name>.yaml, applied by the
 # root the preset targets (precedence: explicit variable > preset > this file).

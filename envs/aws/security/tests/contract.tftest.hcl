@@ -208,6 +208,99 @@ run "emails_feed_security_topic" {
   }
 }
 
+# compliance.breach_notification_contacts adds one email subscriber each
+# (notify-dpo-<i>) to the security-notifications topic.
+run "breach_contacts_feed_security_topic" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-breach-contacts.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name  = null
+      enable_security_lake     = null
+      notification_subscribers = null
+    })
+  }
+
+  assert {
+    condition = (
+      toset(keys(local.notification_subscribers)) == toset(["notify-0", "notify-1", "notify-dpo-0"]) &&
+      local.notification_subscribers["notify-dpo-0"].endpoint == "dpo@cfg-corp.io" &&
+      local.notification_subscribers["notify-dpo-0"].protocol == "email"
+    )
+    error_message = "compliance.breach_notification_contacts must add email subscribers next to notifications.emails."
+  }
+}
+
+# Breach contacts alone build the subscriber map, and a real one satisfies the
+# production security contact guard.
+run "breach_contacts_alone_satisfy_production" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-breach-only.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    profile                  = "production"
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name  = null
+      enable_security_lake     = false
+      notification_subscribers = null
+    })
+  }
+
+  assert {
+    condition     = keys(local.notification_subscribers) == tolist(["notify-dpo-0"]) && length(local.placeholder_subscribers) == 0
+    error_message = "breach contacts alone must build the subscriber map."
+  }
+}
+
+# A placeholder breach contact is flagged like any other subscriber, next to
+# real notifications.emails: starter warns.
+run "breach_contact_placeholder_warns_on_starter" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-breach-placeholder.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name  = null
+      enable_security_lake     = null
+      notification_subscribers = null
+    })
+  }
+
+  assert {
+    condition     = local.placeholder_subscribers == tolist(["notify-dpo-0"])
+    error_message = "a placeholder breach contact must be flagged."
+  }
+
+  expect_failures = [check.security_contact_set]
+}
+
+# Production rejects a placeholder breach contact even when
+# notifications.emails is real (CMP-6 guard).
+run "breach_contact_placeholder_fails_in_production" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-breach-placeholder.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    profile                  = "production"
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_bucket_name  = null
+      enable_security_lake     = false
+      notification_subscribers = null
+    })
+  }
+
+  expect_failures = [terraform_data.security_contact_guard, check.security_contact_set]
+}
+
 # An explicit variable beats the config section.
 run "explicit_subscribers_beat_notifications_emails" {
   command = plan

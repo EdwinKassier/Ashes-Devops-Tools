@@ -583,7 +583,7 @@ saas:
 compliance:
   # frameworks: [soc2, pci_dss]            # plan fails below their retention floor
   # audit_log_retention_days: 400          # GCP audit bucket and AWS log archive
-  # breach_notification_contacts: [dpo@acme.example]   # reserved: read by no root yet
+  # breach_notification_contacts: [dpo@acme.example]   # AWS security and GCP control-plane alerts
   backup:
     # Production profile: copy every AWS recovery point to the locked central
     # copy vault (apply aws-organization, then aws-backup). Its Compliance-mode

@@ -556,6 +556,46 @@ run "emails_feed_gcp_channels" {
   }
 }
 
+# compliance.breach_notification_contacts joins the control-plane alert
+# channels, without duplicates.
+run "breach_contacts_join_gcp_channels" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-breach-contacts.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = join(",", local.gcp.alert_notification_emails) == "alerts@acme.io,dpo@acme.io"
+    error_message = "compliance.breach_notification_contacts must join notifications.emails in the alert channels, once each."
+  }
+}
+
+run "breach_contacts_alone_feed_gcp_channels" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-breach-only.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = join(",", local.gcp.alert_notification_emails) == "dpo@acme.io"
+    error_message = "compliance.breach_notification_contacts alone must feed the alert channels."
+  }
+}
+
 # Precedence: gcp_overrides > gcp.alert_emails > notifications.emails.
 run "gcp_alert_emails_beat_notifications_emails" {
   command = plan

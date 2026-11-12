@@ -29,8 +29,17 @@ notification). It does not start when the investigation ends.
 Put the people who must see the first signal in `notifications.emails` in
 `config/landing-zone.yaml`. It feeds the AWS security notification and CIS alarm
 topics and the GCP control-plane alert channels (see
-`config/landing-zone.example.yaml`). The landing zone has no separate list for
-breach contacts. Keep the roles table above current in your own records.
+`config/landing-zone.example.yaml`). Put the breach contacts, for example the
+data protection officer, in `compliance.breach_notification_contacts`. The key
+adds their addresses to the security and control-plane alert channels: one email
+subscriber each on the aws-security notifications topic (`notify-dpo-<i>`, which
+the CIS alarm topic reuses unless `aws_overrides.cloudtrail_alarm_subscribers`
+is set), and one control-plane alert channel each in gcp-organization. An
+explicit `aws_overrides.notification_subscribers` or
+`gcp_overrides.alert_notification_emails` replaces the config list, these
+addresses included. A production aws-security plan rejects a placeholder address
+(example, `.invalid`, `.localhost` or `.test` domain). Keep the roles table
+above current in your own records.
 
 ## 2. Deadlines at a glance
 

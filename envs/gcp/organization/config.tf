@@ -39,6 +39,8 @@ locals {
     monthly_budget_usd        = try(tonumber(local.lz.org.monthly_budget_usd), null)
     alert_emails              = try([for e in local.lz.gcp.alert_emails : tostring(e)], null)
     notification_emails       = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    # compliance.breach_notification_contacts: added to the alert channels.
+    breach_contacts           = try([for e in local.lz.compliance.breach_notification_contacts : tostring(e)], [])
     admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
     principal_access_boundary = try(tobool(local.lz.gcp.principal_access_boundary), null)
     enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
@@ -112,6 +114,14 @@ locals {
   # The gcp section as the stage's gcp object (config-backed keys only; every
   # other key is unset here). Config fallbacks between keys are resolved here, so
   # the effective object below keeps gcp_overrides > config file > stage default.
+  # Control-plane alert recipients from the config file: gcp.alert_emails, else
+  # notifications.emails, plus compliance.breach_notification_contacts, each
+  # address once. Empty = unset.
+  config_alert_emails = distinct(concat(
+    length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : coalesce(local.cfg.notification_emails, []),
+    local.cfg.breach_contacts,
+  ))
+
   lz_gcp = {
     admin_email                      = local.cfg.admin_email
     organization_admin_groups        = local.cfg.organization_admin_groups
@@ -125,10 +135,7 @@ locals {
     enable_principal_access_boundary = local.cfg.principal_access_boundary
     # gcp.break_glass_group as an IAM v2 principal.
     containment_exempt_principals = local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : null
-    # gcp.alert_emails > notifications.emails > unset.
-    alert_notification_emails = length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : (
-      length(coalesce(local.cfg.notification_emails, [])) > 0 ? local.cfg.notification_emails : null
-    )
+    alert_notification_emails     = length(local.config_alert_emails) > 0 ? local.config_alert_emails : null
   }
   # A set (non-null) override key wins; an unset one keeps the config value.
   gcp = merge(local.lz_gcp, { for k, v in var.gcp_overrides : k => v if v != null })

@@ -2103,7 +2103,7 @@
         },
         "breach_notification_contacts": {
           "type": "array",
-          "description": "Reserved: no root reads this key yet.",
+          "description": "Email addresses that must see the first signal of a breach (for example the data protection officer). aws-security adds one email subscriber each (notify-dpo-<i>) to the security-notifications topic; gcp-organization adds them to the control-plane alert channels. An explicit aws_overrides.notification_subscribers or gcp_overrides.alert_notification_emails replaces the config list, these addresses included.",
           "items": {
             "type": "string"
           }

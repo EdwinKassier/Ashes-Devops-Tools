@@ -2333,6 +2333,14 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 A TFC workspace variable with an old name keeps working through the alias. Rename it when convenient. `scripts/check-consistency.sh` fails when a deletion-protection input has neither the `enable_` form nor a `deprecated` marker. The `services.<name>.database.deletion_protection` object field of `app-services` and `envs/aws/workload` is unchanged.
 
+#### `compliance.breach_notification_contacts` reaches the alert channels (aws-security, gcp-organization)
+
+**Who:** forks that set `compliance.breach_notification_contacts`. Before, no root read the key.
+
+**What changes:** aws-security adds one email subscription per address (`notify-dpo-<i>`) to the security-notifications topic, and the CIS alarm topic when it reuses those subscribers. gcp-organization adds one email notification channel per address to the control-plane alerts (each address once, next to `gcp.alert_emails` or `notifications.emails`). Each address gets an AWS subscription confirmation email. A production aws-security plan fails when a breach contact uses a placeholder domain (example, `.invalid`, `.localhost` or `.test`). An explicit `aws_overrides.notification_subscribers` or `gcp_overrides.alert_notification_emails` still replaces the config list, these addresses included.
+
+With `budget_notify_alert_channels`, the extra GCP channels count toward the budget's limit of 5 channels.
+
 #### `require_labels` is now mandatory; data classification on both clouds (CMP-10, ARC-17)
 
 **Who:** every fork that attaches the OPA policy set (`enable_policy_sets`).
