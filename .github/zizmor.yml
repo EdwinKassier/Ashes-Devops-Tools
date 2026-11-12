@@ -1,0 +1,8 @@
+# zizmor configuration (GitHub Actions static analysis). CI runs it in
+# meta-lint and locally through `make zizmor`, both with this file and the
+# offline audits only. Every rule turned off here has a one-line reason.
+rules:
+  # Reusable workflows stay ./.github/workflows/<file>.yml: actionlint 1.7.12
+  # rejects the newer $/ form ("not following the format"), and ./ still works.
+  self-repository:
+    disable: true

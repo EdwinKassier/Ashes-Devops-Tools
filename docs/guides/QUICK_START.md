@@ -421,7 +421,7 @@ Any root: `make plan-gcp-<root>` or `make plan-aws-<root>` (a read-only plan in 
 | `make plan-gcp-organization` | Plan control-plane changes |
 | `make plan-gcp-workload APP_ENV=dev` | Plan an app environment (add `APP_VARS=examples/dev.tfvars.example` for local tuning knobs) |
 | `make ci-quick` | The fast offline subset of `make ci`, no `terraform init`: fmt-check, consistency, config-check, scaffold-fixtures-check, count-check, links, examples-refs, required-checks, shellcheck, test-scripts, docs-check (needs check-jsonschema) |
-| `make ci` | Every workstation-runnable CI gate: `ci-quick`, then yamllint, markdownlint-check, commit-check, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, check-jsonschema, opa 1.22.2 and a fetched origin/main) |
+| `make ci` | Every workstation-runnable CI gate: `ci-quick`, then yamllint, markdownlint-check, zizmor, commit-check, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, uv for zizmor, check-jsonschema, opa 1.22.2 and a fetched origin/main) |
 
 ---
 

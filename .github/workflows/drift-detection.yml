@@ -66,9 +66,9 @@ on:
         required: false
         default: ""
 
-permissions:
-  contents: read
-  issues: write
+# Nothing by default; each job grants only what it needs. Only detect-drift
+# (it opens the drift issue) gets issues: write.
+permissions: {}
 
 concurrency:
   group: drift-detection
@@ -84,6 +84,8 @@ jobs:
     name: Resolve drift workspaces
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       workspaces: ${{ steps.resolve.outputs.workspaces }}
       source: ${{ steps.resolve.outputs.source }}
@@ -137,6 +139,8 @@ jobs:
     # branch; an environment secret only by runs its branch policy allows.
     environment: tfc-drift
     timeout-minutes: 5
+    permissions:
+      contents: read
     outputs:
       configured: ${{ steps.check.outputs.configured }}
     steps:
@@ -187,6 +191,9 @@ jobs:
     timeout-minutes: 30
     needs: [resolve-workspaces, check-credentials]
     if: needs.check-credentials.outputs.configured == 'true'
+    permissions:
+      contents: read
+      issues: write  # gh issue list/create in "Open drift issue"
     strategy:
       fail-fast: false
       matrix:
@@ -476,6 +483,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [resolve-workspaces, check-credentials, detect-drift]
     if: always()
+    permissions:
+      contents: read
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
       - name: Harden runner

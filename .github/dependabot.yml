@@ -22,7 +22,8 @@ updates:
       - "dependencies"
       - "github-actions"
 
-  # Hash-locked CI tooling: commitizen (conventional-commit check), yamllint
+  # Hash-locked CI tooling: commitizen (conventional-commit check), zizmor
+  # (GitHub Actions static analysis), yamllint
   # (script tests) and python-hcl2 (scripts/check-plan-time-exec.py). Dependabot
   # regenerates each --generate-hashes lock from its .in file.
   - package-ecosystem: "pip"

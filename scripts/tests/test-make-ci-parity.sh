@@ -7,7 +7,7 @@
 #
 # Deliberately CI-only: the sharded validate/test matrices (make validate-all and
 # make test cover the same set), SARIF upload, harden-runner and the Validation
-# Summary gate. zizmor is not a CI gate yet, so it has no make target.
+# Summary gate.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 block() { awk -v t="$1" '$0 ~ "^" t ":" {f=1;next} f&&/^[^\t]/{f=0} f' "${REPO_ROOT}/Makefile"; }
@@ -23,7 +23,7 @@ else
   printf '  FAIL make ci does not run ci-quick\n' >&2
   failures=$((failures + 1))
 fi
-for target in fmt-check consistency yamllint markdownlint-check commit-check codeowners-check \
+for target in fmt-check consistency yamllint markdownlint-check zizmor commit-check codeowners-check \
   scaffold-fixtures-check config-check count-check links examples-refs required-checks \
   backend-check shellcheck test-scripts docs-check validate-all lint test \
   opa-test security; do
@@ -36,7 +36,7 @@ for target in fmt-check consistency yamllint markdownlint-check commit-check cod
 done
 # ci-quick is the offline subset: these need init, pre-commit, git history or the network.
 for target in validate-all lint test security backend-check opa-test yamllint markdownlint-check \
-  commit-check codeowners-check; do
+  zizmor commit-check codeowners-check; do
   if runs "${quick_block}" "${target}"; then
     printf '  FAIL make ci-quick runs %s, which is not an offline gate\n' "${target}" >&2
     failures=$((failures + 1))

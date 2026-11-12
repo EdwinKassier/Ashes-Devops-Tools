@@ -14,10 +14,11 @@ on:
     - cron: '0 0 * * 0'  # Weekly on Sunday at midnight
   workflow_dispatch:
 
+# Read-only by default. Only the two jobs that upload SARIF get
+# security-events: write (actions: read lets upload-sarif read the run on a
+# private fork).
 permissions:
   contents: read
-  security-events: write
-  actions: read
 
 concurrency:
   # Scheduled scans get their own concurrency group so a push to main never
@@ -29,6 +30,10 @@ concurrency:
 jobs:
   static-analysis:
     name: Trivy + Checkov
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     uses: ./.github/workflows/reusable-security.yml
     with:
       sarif_output: true
@@ -37,6 +42,10 @@ jobs:
     name: Trivy Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
       - name: Harden runner
@@ -46,6 +55,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Run Trivy scanner
         # Scope decision: Trivy intentionally scans the whole repo, including
@@ -86,6 +97,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: GitLeaks Scan
@@ -112,27 +124,37 @@ jobs:
           egress-policy: audit
 
       - name: Generate Summary
+        env:
+          STATIC_RESULT: ${{ needs.static-analysis.result }}
+          TRIVY_RESULT: ${{ needs.trivy.result }}
+          SECRET_RESULT: ${{ needs.secret-scan.result }}
+          REPO: ${{ github.repository }}
         run: |
-          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Trivy + Checkov | ${{ needs.static-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Trivy | ${{ needs.trivy.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Secret Scan | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          SECURITY_TAB="https://github.com/${{ github.repository }}/security/code-scanning"
-          echo "View detailed results in the [Security tab](${SECURITY_TAB})" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Security Scan Summary"
+            echo ""
+            echo "| Scanner | Status |"
+            echo "|---------|--------|"
+            echo "| Trivy + Checkov | ${STATIC_RESULT} |"
+            echo "| Trivy | ${TRIVY_RESULT} |"
+            echo "| Secret Scan | ${SECRET_RESULT} |"
+            echo ""
+            echo "View detailed results in the [Security tab](https://github.com/${REPO}/security/code-scanning)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check for failures
         if: >-
           needs.static-analysis.result == 'failure' ||
           needs.trivy.result == 'failure' ||
           needs.secret-scan.result == 'failure'
+        env:
+          STATIC_RESULT: ${{ needs.static-analysis.result }}
+          TRIVY_RESULT: ${{ needs.trivy.result }}
+          SECRET_RESULT: ${{ needs.secret-scan.result }}
         run: |
           failed=""
-          [ "${{ needs.static-analysis.result }}" = "failure" ] && failed="${failed} Trivy+Checkov"
-          [ "${{ needs.trivy.result }}" = "failure" ]           && failed="${failed} Trivy"
-          [ "${{ needs.secret-scan.result }}" = "failure" ]     && failed="${failed} GitLeaks"
+          [ "${STATIC_RESULT}" = "failure" ] && failed="${failed} Trivy+Checkov"
+          [ "${TRIVY_RESULT}" = "failure" ]  && failed="${failed} Trivy"
+          [ "${SECRET_RESULT}" = "failure" ] && failed="${failed} GitLeaks"
           echo "::error::Security scan(s) failed:${failed}. Check the Security tab for details."
           exit 1

@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live security-contact-live backend-check cfn-lint shellcheck test test-scripts ci ci-quick yamllint markdownlint-check commit-check module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload plan-aws-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live security-contact-live backend-check cfn-lint shellcheck test test-scripts ci ci-quick yamllint markdownlint-check zizmor commit-check module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload plan-aws-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -15,6 +15,10 @@ OPA_VERSION := $(shell awk '$$1=="opa"{print $$2}' .tool-versions)
 # binary gives a false green. Prefer an exact-version uvx run; otherwise the
 # local binary is used and `make security` refuses to run on a version mismatch.
 CHECKOV_VERSION := $(shell awk '$$1=="checkov"{print $$2}' .tool-versions)
+# zizmor MUST match the hash-locked version meta-lint installs: the pin lives in
+# .github/requirements/zizmor.in and is read from there.
+ZIZMOR_VERSION := $(shell sed -nE 's/^zizmor==([0-9.]+).*/\1/p' .github/requirements/zizmor.in)
+ZIZMOR_ARGS := --offline --config .github/zizmor.yml .github/workflows
 CHECKOV := $(shell if command -v uvx >/dev/null 2>&1; then echo "uvx --python 3.12 checkov==$(CHECKOV_VERSION)"; else echo checkov; fi)
 TERRAFORM_DOCS := terraform-docs
 PRE_COMMIT := pre-commit
@@ -209,6 +213,17 @@ markdownlint-check: ## markdownlint as CI, check-only (manual-stage hook without
 	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "pre-commit not found: pipx install pre-commit (or brew install pre-commit)"; exit 1; }
 	@$(PRE_COMMIT) run markdownlint-check --all-files --hook-stage manual
 
+zizmor: ## GitHub Actions static analysis, offline audits, .github/zizmor.yml (CI: meta-lint)
+	@if command -v uvx >/dev/null 2>&1; then \
+		uvx zizmor==$(ZIZMOR_VERSION) $(ZIZMOR_ARGS); \
+	elif command -v zizmor >/dev/null 2>&1; then \
+		v="$$(zizmor --version | awk '{print $$2}')"; \
+		[ "$$v" = "$(ZIZMOR_VERSION)" ] || { echo "zizmor $$v does not match the CI-pinned $(ZIZMOR_VERSION) (.github/requirements/zizmor.in)."; exit 1; }; \
+		zizmor $(ZIZMOR_ARGS); \
+	else \
+		echo "zizmor not found: install uv (uvx) or pip install zizmor==$(ZIZMOR_VERSION)"; exit 1; \
+	fi
+
 # CI (meta-lint) checks the commits of the PR: merge-base with the base branch..HEAD.
 COMMIT_BASE ?= origin/main
 commit-check: ## Conventional-commit check and the UPGRADING.md rule for breaking commits, merge-base(COMMIT_BASE)..HEAD (CI: meta-lint)
@@ -254,6 +269,7 @@ ci: ## Run the local CI pipeline: every workstation-runnable gate of terraform-p
 	@$(MAKE) ci-quick
 	@$(MAKE) yamllint
 	@$(MAKE) markdownlint-check
+	@$(MAKE) zizmor
 	@$(MAKE) commit-check
 	@$(MAKE) codeowners-check
 	@$(MAKE) backend-check

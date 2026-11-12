@@ -110,7 +110,7 @@ make count          # print live module/root/test-suite counts (make count-check
 make links          # fail on broken repo-relative Markdown links
 make shellcheck     # shellcheck scripts/*.sh
 make ci-quick       # fast offline gates (no terraform init): fmt, consistency, config, fixtures, counts, links, refs, required checks, shellcheck, script tests, docs
-make ci             # ci-quick + yamllint, markdownlint-check, commit-check, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (every workstation-runnable CI gate; needs pre-commit, cz, check-jsonschema, opa 1.22.2, a fetched origin/main)
+make ci             # ci-quick + yamllint, markdownlint-check, zizmor, commit-check, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (every workstation-runnable CI gate; needs pre-commit, cz, uv (zizmor), check-jsonschema, opa 1.22.2, a fetched origin/main)
 ```
 
 ---

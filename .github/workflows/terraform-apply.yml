@@ -58,30 +58,38 @@ jobs:
         run: |
           if [[ "$TAG_NAME" == gcp-organization/* ]]; then
             VERSION="${TAG_NAME##*/}"
-            echo "workspace=gcp-organization" >> "$GITHUB_OUTPUT"
-            echo "release_name=GCP Organization ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=gcp-organization"
+              echo "release_name=GCP Organization ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$TAG_NAME" == gcp-workload/* ]]; then
             # Tag shape: gcp-workload/<env>/v1.2.3 -> workspace gcp-workload-<env>
             ENVIRONMENT=$(echo "$TAG_NAME" | cut -d'/' -f2)
             VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
-            echo "workspace=gcp-workload-${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
-            echo "release_name=GCP Workload ${ENVIRONMENT} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=gcp-workload-${ENVIRONMENT}"
+              echo "release_name=GCP Workload ${ENVIRONMENT} ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$TAG_NAME" == aws-workload/* ]]; then
             # Tag shape: aws-workload/<env>/v1.2.3 -> workspace aws-workload-<env>
             ENVIRONMENT=$(echo "$TAG_NAME" | cut -d'/' -f2)
             VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
-            echo "workspace=aws-workload-${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
-            echo "release_name=AWS Workload ${ENVIRONMENT} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=aws-workload-${ENVIRONMENT}"
+              echo "release_name=AWS Workload ${ENVIRONMENT} ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$TAG_NAME" == saas/* ]]; then
             # Tag shape: saas/<name>/v1.2.3 -> workspace saas-<name>
             NAME=$(echo "$TAG_NAME" | cut -d'/' -f2)
             VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
-            echo "workspace=saas-${NAME}" >> "$GITHUB_OUTPUT"
-            echo "release_name=SaaS ${NAME} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=saas-${NAME}"
+              echo "release_name=SaaS ${NAME} ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$TAG_NAME" == gcp-bootstrap/* || "$TAG_NAME" == gcp-guardrails/* \
                 || "$TAG_NAME" == gcp-projects/* \
                 || "$TAG_NAME" == gcp-network-hub/* || "$TAG_NAME" == tfc-admin/* \
@@ -91,9 +99,11 @@ jobs:
             # Tag shape: <root>/v1.2.3 -> single-account root workspace == first path segment
             WORKSPACE=$(echo "$TAG_NAME" | cut -d'/' -f1)
             VERSION=$(echo "$TAG_NAME" | cut -d'/' -f2)
-            echo "workspace=${WORKSPACE}" >> "$GITHUB_OUTPUT"
-            echo "release_name=${WORKSPACE} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=${WORKSPACE}"
+              echo "release_name=${WORKSPACE} ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "::error::Unrecognized release tag '$TAG_NAME'." >&2
             echo "Expected: gcp-{bootstrap,organization,guardrails,projects,network-hub}/v*," >&2
@@ -236,14 +246,23 @@ jobs:
         # applied run's source commit matches this tag (L7), so a release tag can
         # never assert a deploy that is only queued, plan-only, or of a different
         # configuration than the tag points at.
+        # The runner's gh CLI does this with the job token, so no third-party
+        # action holds contents: write. A re-run updates the existing release.
         if: needs.verify-run.outputs.status == 'applied' && needs.verify-run.outputs.commit_match == 'true'
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
-        with:
-          name: ${{ needs.verify-run.outputs.release_name }}
-          tag_name: ${{ github.ref_name }}
-          body: >-
-            Terraform Cloud workspace `${{ needs.verify-run.outputs.workspace }}`
-            was successfully applied (status `${{ needs.verify-run.outputs.status }}`).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+          RELEASE_NAME: ${{ needs.verify-run.outputs.release_name }}
+          WORKSPACE: ${{ needs.verify-run.outputs.workspace }}
+          STATUS: ${{ needs.verify-run.outputs.status }}
+        run: |
+          notes="Terraform Cloud workspace \`${WORKSPACE}\` was successfully applied (status \`${STATUS}\`)."
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --title "$RELEASE_NAME" --notes "$notes"
+          else
+            gh release create "$TAG_NAME" --verify-tag --title "$RELEASE_NAME" --notes "$notes"
+          fi
 
       - name: Release held (not applied or commit mismatch)
         # Non-applied statuses (apply_queued / planned_and_finished) or a tag whose
