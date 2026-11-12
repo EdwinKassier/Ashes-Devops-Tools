@@ -31,6 +31,9 @@ locals {
     backup_copy_to_central_vault = try(tobool(local.lz.compliance.backup.copy_to_central_vault), null)
     backup_copy_retention_days   = try(tonumber(local.lz.compliance.backup.copy_retention_days), null)
     backup_dr_region             = try(tostring(local.lz.compliance.backup.dr_region), null)
+    # aws.allowed_regions: the region SCP allow-list (aws-organization). The
+    # dr_region validation uses the same fallback, ["eu-west-2"].
+    allowed_regions = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
     # aws.contracts.organization: stage contract override (same type as
     # var.organization_contract, identical in every aws root). Present => the
     # aws-organization read is skipped.

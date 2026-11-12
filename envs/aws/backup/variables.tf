@@ -116,9 +116,19 @@ variable "copy_retention_days" {
 }
 
 variable "dr_region" {
-  description = "Second region for a cross-region copy to the member <vault_name>-cmk vault there (aws-organization creates it from the same compliance.backup.dr_region). Must differ from aws_region and be in aws.allowed_regions. Null = compliance.backup.dr_region from config/landing-zone.yaml, else no cross-region copy."
+  description = "Second region for a cross-region copy to the member <vault_name>-cmk vault there (aws-organization creates it from the same compliance.backup.dr_region). Must differ from aws_region and be in aws.allowed_regions (else [\"eu-west-2\"], the aws-organization default). Null = compliance.backup.dr_region from config/landing-zone.yaml, else no cross-region copy."
   type        = string
   default     = null
+
+  # The region SCP denies every region outside aws.allowed_regions, so a copy
+  # there would fail at run time. Same fallback list as envs/aws/organization.
+  validation {
+    condition = (var.dr_region != null ? var.dr_region : local.cfg.backup_dr_region) == null || (
+      contains(coalesce(local.cfg.allowed_regions, ["eu-west-2"]), coalesce(var.dr_region, local.cfg.backup_dr_region, "unset")) &&
+      coalesce(var.dr_region, local.cfg.backup_dr_region, "unset") != coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
+    )
+    error_message = "dr_region (or compliance.backup.dr_region in config/landing-zone.yaml) must be in aws.allowed_regions (default [\"eu-west-2\"]) and differ from aws_region (org.regions.aws)."
+  }
 }
 
 variable "copy_vault_notification_topic_arn" {

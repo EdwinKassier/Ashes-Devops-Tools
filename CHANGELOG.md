@@ -728,6 +728,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$` in the modules, roots, scaffolder and
   config schema. The commercial form is unchanged. The partitions are not tested against a live
   account.
+- **aws-backup checks `dr_region` at plan.** The effective `dr_region` (variable, else
+  `compliance.backup.dr_region`) must be in `aws.allowed_regions` (else `["eu-west-2"]`, as in
+  aws-organization) and differ from the home region. Before, a region the region SCP denies passed
+  the plan, and the cross-region copy failed at run time.
 - **The AWS root template writes the required tags and accepts every partition's regions.**
   `templates/aws/root` sets provider `default_tags` (`ManagedBy`, `Environment`, `CostCenter`,
   `Owner` from `org.cost_center` and `org.owner`, `DataClassification`) and validates `aws_region`

@@ -131,6 +131,42 @@ run "compliance_backup_section_turns_on_copy" {
   }
 }
 
+# dr_region must be in aws.allowed_regions (the region SCP of aws-organization
+# denies any other region) and differ from the home region. The root checks it
+# with the same fallback as aws-organization: ["eu-west-2"] when the key is unset.
+run "dr_region_outside_allowed_regions_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    dr_region                = "ap-south-1"
+  }
+
+  expect_failures = [var.dr_region]
+}
+
+run "dr_region_equal_to_home_region_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    dr_region                = "eu-west-2"
+  }
+
+  expect_failures = [var.dr_region]
+}
+
+run "dr_region_without_allowed_regions_uses_default_list" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    dr_region                = "eu-central-1"
+  }
+
+  expect_failures = [var.dr_region]
+}
+
 run "compliance_backup_absent_keeps_copy_off" {
   command = plan
 

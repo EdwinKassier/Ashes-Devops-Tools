@@ -9,6 +9,9 @@ org:
     organization: cfg-tfc
 aws:
   management_account_id: "012345678901"
+  allowed_regions:
+    - eu-west-2
+    - eu-west-1
   contracts:
     organization:
       organization_id: o-cfgco12345
