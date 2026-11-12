@@ -723,6 +723,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$` in the modules, roots, scaffolder and
   config schema. The commercial form is unchanged. The partitions are not tested against a live
   account.
+- **The AWS root template writes the required tags and accepts every partition's regions.**
+  `templates/aws/root` sets provider `default_tags` (`ManagedBy`, `Environment`, `CostCenter`,
+  `Owner` from `org.cost_center` and `org.owner`, `DataClassification`) and validates `aws_region`
+  with the canonical region regex, which `scripts/check-consistency.sh` now checks in `templates/`.
 - **Key allowlists of untyped inputs live in one place and are checked against the stage types
   (IAC-4).** The `type = any` inputs keep a misspelled key visible, and a validation rejects keys
   outside an allowlist. Each allowlist now lives in the owner's `allowed_keys.tf` (gcp-workload,

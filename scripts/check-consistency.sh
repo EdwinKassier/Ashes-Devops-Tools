@@ -18,11 +18,9 @@ echo "==> AWS region and ARN partition regexes are canonical (one form each)"
 # Every .tf or script regex that starts with a two-letter region prefix must be
 # the canonical one; the older forms (...-[0-9]$, (-[a-z]+)+, the pre-sovereign
 # two-letter-only form) and the pre-sovereign partition list are drift.
-# templates/ is not scanned: templates/aws/root keeps the commercial-only form
-# (known-gaps, "GovCloud and the AWS European Sovereign Cloud").
 region_canon='^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$'
 drift=$(grep -rnoE --include='*.tf' --include='*.sh' --exclude-dir='.terraform' \
-  '\^(\(\[a-z\]\{2\}[^$]*|\[a-z\]\{2\}[^$]*)\$' modules envs scripts 2>/dev/null \
+  '\^(\(\[a-z\]\{2\}[^$]*|\[a-z\]\{2\}[^$]*)\$' modules envs scripts templates 2>/dev/null \
   | grep -vF -- "${region_canon}" | grep -v '^scripts/check-consistency.sh:' || true)
 [ -z "$drift" ] || { echo "$drift" | while read -r f; do note "region regex drift (use ${region_canon}): $f"; done; fail=1; }
 pdrift=$(grep -rnF --include='*.tf' --exclude-dir='.terraform' 'aws(-us-gov|-cn)?' modules envs templates 2>/dev/null || true)

@@ -1,6 +1,8 @@
 ---
 # Minimal config/landing-zone.yaml fixture for the template root's config-fallback test.
 org:
+  cost_center: fixture-cc
+  owner: fixture-owner
   regions:
     aws: us-east-1
   tfc:

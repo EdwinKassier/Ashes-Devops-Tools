@@ -79,6 +79,54 @@ run "invalid_region_rejected" {
   expect_failures = [var.aws_region]
 }
 
+# GovCloud and the European Sovereign Cloud use the canonical region regex
+# (scripts/check-consistency.sh), so a root built from this template accepts them.
+run "govcloud_region_accepted" {
+  command = plan
+
+  variables {
+    aws_region            = "us-gov-west-1"
+    organization_contract = { account_ids = { workload = "111111111111" } }
+  }
+
+  assert {
+    condition     = output.aws_region == "us-gov-west-1"
+    error_message = "a GovCloud region name must pass the aws_region validation"
+  }
+}
+
+run "sovereign_region_accepted" {
+  command = plan
+
+  variables {
+    aws_region            = "eusc-de-east-1"
+    organization_contract = { account_ids = { workload = "111111111111" } }
+  }
+
+  assert {
+    condition     = output.aws_region == "eusc-de-east-1"
+    error_message = "a European Sovereign Cloud region name must pass the aws_region validation"
+  }
+}
+
+# Every root writes the four keys that the mandatory require_labels OPA policy
+# checks through provider default_tags.
+run "default_tags_carry_required_keys" {
+  command = plan
+
+  variables {
+    organization_contract = { account_ids = { workload = "111111111111" } }
+  }
+
+  assert {
+    condition = alltrue([
+      for k in ["ManagedBy", "Environment", "CostCenter", "Owner", "DataClassification"] :
+      try(length(local.aws_default_tags[k]) > 0, false)
+    ])
+    error_message = "the default tags must carry ManagedBy, Environment, CostCenter, Owner and DataClassification"
+  }
+}
+
 run "invalid_contract_account_id_rejected" {
   command = plan
 
@@ -110,6 +158,11 @@ run "config_file_fallback" {
   assert {
     condition     = length(data.terraform_remote_state.aws_organization) == 0 && output.account_ids["workload"] == "333333333333"
     error_message = "aws.contracts.organization in the config file must replace the remote-state read"
+  }
+
+  assert {
+    condition     = local.aws_default_tags["CostCenter"] == "fixture-cc" && local.aws_default_tags["Owner"] == "fixture-owner"
+    error_message = "CostCenter and Owner default tags must come from org.cost_center and org.owner"
   }
 }
 

@@ -772,10 +772,7 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   names as `com.amazonaws.<region>.<service>`), and FIPS endpoints are not
   configured (`use_fips_endpoint` is not set on any provider). The AWS ISO
   partitions (`aws-iso`, `aws-iso-b`) are not accepted: their public
-  documentation does not give region names to check against. The root template
-  `templates/aws/root` still validates `aws_region` with the commercial-only
-  form `^[a-z]{2}-[a-z]+-[1-9][0-9]?$`; a root built from it rejects GovCloud and
-  sovereign region names until you replace that regex. Refs:
+  documentation does not give region names to check against. Refs:
   <https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/using-govcloud-arns.html>,
   <https://docs.aws.eu/general/latest/gr/arns.html>
 

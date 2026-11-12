@@ -52,10 +52,11 @@ variable "aws_region" {
   type        = string
   default     = null
 
-  # AWS region names are short (well under the RE2 1000-repeat cap). Shape:
-  # <geo>-<direction>-<number>, e.g. eu-west-2, us-east-1, ap-southeast-3.
+  # The canonical AWS region regex (scripts/check-consistency.sh): commercial
+  # and China names (<geo>-<direction>-<number>, e.g. eu-west-2), GovCloud
+  # (us-gov-west-1) and the European Sovereign Cloud (eusc-de-east-1).
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
     error_message = "aws_region (config key org.regions.aws) must be a valid AWS region name, e.g. eu-west-2."
   }
 }
