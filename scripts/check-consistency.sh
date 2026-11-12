@@ -383,6 +383,25 @@ dp_new="$(printf '%s\n' "${dp}" | while IFS=: read -r f n _; do
 done || true)"
 [[ -z "${dp_new}" ]] || note "deletion-protection input without the enable_ prefix and no deprecated marker: ${dp_new}"
 
+echo "==> An example's provider constraints equal its module's"
+# provider_pin <versions.tf> <name>: the version string of required_providers.<name>.
+provider_pin() {
+  awk -v p="$2" '
+    $0 ~ "^[[:space:]]*" p "[[:space:]]*=[[:space:]]*\\{" { inblk = 1; next }
+    inblk && /version[[:space:]]*=/ { sub(/.*version[[:space:]]*=[[:space:]]*/, ""); gsub(/"/, ""); print; exit }
+    inblk && /}/ { inblk = 0 }
+  ' "$1" 2>/dev/null
+}
+while IFS= read -r ex; do
+  mod="${ex%%/examples/*}"
+  [[ -f "${mod}/versions.tf" ]] || continue
+  for p in archive random null tls time; do
+    m="$(provider_pin "${mod}/versions.tf" "$p")"
+    e="$(provider_pin "${ex}/versions.tf" "$p")"
+    [[ -z "$m" || -z "$e" || "$m" == "$e" ]] || note "${ex}/versions.tf ${p} \"${e}\" differs from ${mod}/versions.tf \"${m}\""
+  done
+done < <(find modules -path '*/examples/*' -name versions.tf ! -path '*/.terraform/*' -exec dirname {} \; | sort)
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else
