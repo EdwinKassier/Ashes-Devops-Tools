@@ -64,15 +64,25 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   policy so that copies stop arriving. After the window, AWS rejects every lock
   change. Three more limits: the boundary caps only `tfc-apply`, so a run that
   assumes `OrganizationAccountAccessRole` (the aws-backup legacy path without
-  TFC dynamic credentials) or a local administrator is not covered; the deny is
-  not in the deny-tamper SCP because that SCP has no room left under the
-  5,120-character AWS limit with long names (5,007 characters with the long
-  test names on 2026-11-12); and the protection exists only after aws-organization
+  TFC dynamic credentials) or a local administrator is not covered; the
+  deny-tamper SCP does not carry the same deny, so no SCP covers those
+  principals; and the protection exists only after aws-organization
   applies the updated StackSet. Mitigation: keep `changeable_for_days` short
   and watch `PutBackupVaultLockConfiguration` and `PutBackupVaultAccessPolicy`
   in CloudTrail for the backup account during the window. Confirm in the
   sandbox that tfc-apply gets AccessDenied on the three Delete calls and that
   the first aws-backup apply still creates the lock and the policy.
+
+- **Organization policy size quotas are checked on the rendered string only
+  (ARC-18).** `modules/aws/governance/organization-policy` fails the plan when
+  a policy is longer than the AWS Organizations quota for its type: SCP 10,240
+  characters, RCP 5,120, AI services opt-out 2,500, other types 10,000 (AWS
+  documentation checked on 2026-11-12). With every option that adds statements
+  turned on and long names, mock tests measure `scp-deny-tamper` at 6,485
+  characters and `rcp-data-perimeter` at 2,811. AWS counts whitespace when a
+  policy is saved through the API, and the module sends the content as
+  rendered. A real `CreatePolicy` and `UpdatePolicy` in the sandbox is still
+  the proof that AWS counts the same way.
 
 - **The explicit-CIDR IPAM default for spoke VPCs needs the sandbox proof (ARC-1).**
   `modules/aws/network/vpc` requests `cidr_block` from the IPAM pool by default.

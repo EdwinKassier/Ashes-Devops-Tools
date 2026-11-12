@@ -160,10 +160,10 @@ run "deny_tamper_scp_hardened" {
     error_message = "DenyProtectedKeyDestruction must be scoped to keys tagged protected=true"
   }
 
-  # SCP size quota (5,120 characters).
+  # SCP size quota (10,240 characters; AWS Organizations quotas, 2026-11-12).
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
-    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
+    error_message = "deny-tamper SCP must stay within the 10,240-character SCP size quota"
   }
 }
 
@@ -210,8 +210,8 @@ run "privileged_role_tamper_never_exempts_the_pipeline" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
-    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
+    error_message = "deny-tamper SCP must stay within the 10,240-character SCP size quota"
   }
 }
 
@@ -268,8 +268,8 @@ run "baseline_scp_identity_and_perimeter_guards" {
 
   # Every SCP stays under the 10,240-character quota.
   assert {
-    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 10240 if p.type == "SERVICE_CONTROL_POLICY"])
-    error_message = "every SCP must stay under the 10,240-character SCP size quota"
+    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) <= 10240 if p.type == "SERVICE_CONTROL_POLICY"])
+    error_message = "every SCP must stay within the 10,240-character SCP size quota"
   }
 }
 
@@ -284,13 +284,13 @@ run "deny_tamper_scp_size_with_custom_names" {
   }
 
   assert {
-    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) < 10240 if p.type == "SERVICE_CONTROL_POLICY"])
-    error_message = "every SCP (incl. baseline with the identity/perimeter guards) must stay under the 10,240-character quota"
+    condition     = alltrue([for k, p in aws_organizations_policy.policy : length(p.content) <= 10240 if p.type == "SERVICE_CONTROL_POLICY"])
+    error_message = "every SCP (incl. baseline with the identity/perimeter guards) must stay within the 10,240-character quota"
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
-    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
+    error_message = "deny-tamper SCP must stay within the 10,240-character SCP size quota"
   }
 
   assert {
@@ -471,8 +471,8 @@ run "federation_tenant_pins_render" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 10240
-    error_message = "the RCP with every pin and all built-in IdP denies must stay under the 10,240-character quota."
+    condition     = length(aws_organizations_policy.policy["rcp-data-perimeter"].content) <= 5120
+    error_message = "the RCP with every pin and all built-in IdP denies must fit the 5,120-character RCP quota."
   }
 }
 
@@ -495,8 +495,8 @@ run "central_detection_scoped_to_security_accounts" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
-    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota with the central-detection statement."
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
+    error_message = "deny-tamper SCP must stay within the 10,240-character SCP size quota with the central-detection statement."
   }
 }
 
@@ -580,10 +580,10 @@ run "federation_completeness" {
     condition = (
       contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyIdentityProviderChanges"]).Action, "iam:CreateOpenIDConnectProvider") &&
       contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-baseline"].content).Statement : s if s.Sid == "DenyDataPerimeterTagTampering"]).Action, "ecr:TagResource") &&
-      length(aws_organizations_policy.policy["scp-baseline"].content) < 10240 &&
-      length(aws_organizations_policy.policy["rcp-data-perimeter"].content) < 10240
+      length(aws_organizations_policy.policy["scp-baseline"].content) <= 10240 &&
+      length(aws_organizations_policy.policy["rcp-data-perimeter"].content) <= 5120
     )
-    error_message = "the baseline SCP must deny IdP changes and ECR/Logs dp:* tagging, and both policies must fit the 10,240-character quota."
+    error_message = "the baseline SCP must deny IdP changes and ECR/Logs dp:* tagging, and the SCP must fit the 10,240-character SCP quota and the RCP the 5,120-character RCP quota."
   }
 }
 
@@ -732,7 +732,7 @@ run "suspended_deny_all_exempts_stacksets_and_breakglass" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-suspended-deny-all"].content) < 10240
+    condition     = length(aws_organizations_policy.policy["scp-suspended-deny-all"].content) <= 10240
     error_message = "SCPs are limited to 10,240 characters"
   }
 }
@@ -759,7 +759,7 @@ run "sandbox_has_guard" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-sandbox-guard"].content) < 10240
+    condition     = length(aws_organizations_policy.policy["scp-sandbox-guard"].content) <= 10240
     error_message = "SCPs are limited to 10,240 characters"
   }
 }
@@ -898,8 +898,8 @@ run "stackset_boundary_policy_protected" {
   }
 
   assert {
-    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) < 10240
-    error_message = "deny-tamper SCP must stay under the 10,240-character SCP size quota"
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
+    error_message = "deny-tamper SCP must stay within the 10,240-character SCP size quota"
   }
 }
 
@@ -914,4 +914,105 @@ run "stackset_policy_statement_omitted_when_no_policy_names" {
     condition     = length([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetPolicyTampering"]) == 0
     error_message = "an empty stackset_managed_policy_names must omit the statement (an SCP Resource cannot be empty)"
   }
+}
+
+# Policy size quotas (AWS Organizations "Maximum size of a policy document",
+# checked 2026-11-12): SCP 10,240 characters, RCP 5,120, declarative / backup /
+# tag 10,000, AI services opt-out 2,500. Whitespace counts when the policy is
+# saved through the API (as Terraform does), so the rendered content string is
+# what is measured. The worst case turns on every input that adds statements or
+# lengthens ARNs: path-prefixed role names, central detection, the Config
+# recorder SCP, StackSet policy names, trusted accounts and federation pins.
+run "policies_fit_aws_size_quotas_with_long_names" {
+  command = plan
+
+  variables {
+    allowed_regions         = ["eu-west-2", "eu-west-1", "eu-central-1", "us-east-1"]
+    terraform_run_role_arn  = "arn:aws:iam::111111111111:role/landing-zone/tfc-apply-organization-management-account-role"
+    break_glass_role_arn    = "arn:aws:iam::111111111111:role/landing-zone/break-glass-organization-administrator-role"
+    log_archive_bucket_name = "sra-log-archive-111111111111-eu-west-2-organization-trail-logs"
+  }
+
+  assert {
+    condition = alltrue([
+      for k, p in aws_organizations_policy.policy :
+      length(p.content) <= lookup({ SERVICE_CONTROL_POLICY = 10240, RESOURCE_CONTROL_POLICY = 5120, AISERVICES_OPT_OUT_POLICY = 2500 }, p.type, 10000)
+    ])
+    error_message = "every policy must fit its AWS size quota: ${jsonencode({ for k, p in aws_organizations_policy.policy : k => length(p.content) })}"
+  }
+}
+
+run "policies_fit_aws_size_quotas_worst_case" {
+  command = plan
+
+  variables {
+    org_id                             = "o-abcdefghij0123456789abcdefghij01"
+    allowed_regions                    = ["eu-west-2", "eu-west-1", "eu-central-1", "eu-north-1", "us-east-1", "us-west-2"]
+    terraform_run_role_arn             = "arn:aws:iam::111111111111:role/landing-zone/tfc-apply-organization-management-account-role"
+    break_glass_role_arn               = "arn:aws:iam::111111111111:role/landing-zone/break-glass-organization-administrator-role"
+    log_archive_bucket_name            = "sra-log-archive-111111111111-eu-west-2-organization-trail-logs"
+    pipeline_role_names                = ["landing-zone/tfc-plan-member-account-pipeline-role", "landing-zone/tfc-apply-member-account-pipeline-role", "OrganizationAccountAccessRole", "stacksets-exec-*"]
+    break_glass_role_names             = ["landing-zone/break-glass-organization-administrator-role"]
+    stackset_managed_role_names        = ["landing-zone/tfc-plan-member-account-pipeline-role", "landing-zone/tfc-apply-member-account-pipeline-role"]
+    stackset_managed_policy_names      = ["landing-zone/tfc-apply-member-account-permissions-boundary", "landing-zone/tfc-plan-member-account-data-read-deny"]
+    central_detection_account_ids      = ["222222222222", "333333333333"]
+    enable_config_recorder_scp         = true
+    config_recorder_pipeline_role_arns = ["arn:aws:iam::222222222222:role/landing-zone/tfc-apply-member-account-pipeline-role"]
+    kms_protection_tag_key             = "landing-zone:protected"
+    data_perimeter_trusted_account_ids = ["444444444444", "555555555555", "666666666666"]
+    federation_tenant_pins = {
+      tfc_organization = "acme-corporation-platform-engineering"
+      github_owners    = ["acme-corporation-platform-engineering", "acme-corporation-applications"]
+      github_owner_ids = ["123456789", "987654321"]
+    }
+  }
+
+  # Non-vacuous: every statement-adding option is on.
+  assert {
+    condition = length(setsubtract(
+      ["DenyConfigRecorderChanges", "DenyCentralDetectionOutsideSecurityAccounts", "DenyPrivilegedRoleTampering", "DenyStackSetPolicyTampering"],
+      [for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s.Sid]
+      )) == 0 && length(setsubtract(
+      ["PinTfcFederationToOrg", "PinGithubFederationToOwners", "DenyBuiltinIdpCognitoIdentity"],
+      [for s in jsondecode(aws_organizations_policy.policy["rcp-data-perimeter"].content).Statement : s.Sid]
+    )) == 0
+    error_message = "the worst case must render every optional deny-tamper and RCP statement"
+  }
+
+  assert {
+    condition = alltrue([
+      for k, p in aws_organizations_policy.policy :
+      length(p.content) <= lookup({ SERVICE_CONTROL_POLICY = 10240, RESOURCE_CONTROL_POLICY = 5120, AISERVICES_OPT_OUT_POLICY = 2500 }, p.type, 10000)
+    ])
+    error_message = "every policy must fit its AWS size quota: ${jsonencode({ for k, p in aws_organizations_policy.policy : k => length(p.content) })}"
+  }
+}
+
+# An input that pushes a policy past its quota fails the plan, not the apply.
+run "oversized_rcp_fails_at_plan" {
+  command = plan
+
+  variables {
+    data_perimeter_trusted_account_ids = [for i in range(150) : format("%012d", 400000000000 + i)]
+  }
+
+  expect_failures = [aws_organizations_policy.policy]
+}
+
+run "oversized_scp_override_fails_at_plan" {
+  command = plan
+
+  variables {
+    policy_overrides = {
+      scp-oversized = {
+        type = "SERVICE_CONTROL_POLICY"
+        content = jsonencode({
+          Version   = "2012-10-17"
+          Statement = [{ Sid = "Oversized", Effect = "Deny", Action = "s3:DeleteBucket", Resource = [for i in range(400) : "arn:aws:s3:::oversized-bucket-${i}"] }]
+        })
+      }
+    }
+  }
+
+  expect_failures = [aws_organizations_policy.policy]
 }

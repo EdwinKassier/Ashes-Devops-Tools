@@ -62,10 +62,18 @@ The only exemption is the member-account break-glass role-name pattern
 (`arn:aws:iam::*:role/<break_glass_role_names>`), as in deny-tamper. The
 Terraform run role is not exempt: global services are in `NotAction`.
 
-The rendered SCP is minified and tested to stay under the 10,240-character quota.
+The rendered SCP is tested to stay within the 10,240-character quota.
 A role with the break-glass name must exist in member accounts for break-glass
 to work there: the aws-organization stage deploys it to every member account
 (`modules/aws/iam/tfc-oidc-baseline`, `enable_member_break_glass_role`).
+
+### Policy size quotas
+
+Every policy fails the plan when its rendered content is longer than the AWS
+Organizations quota for its type: SCP 10,240 characters, RCP 5,120, AI services
+opt-out 2,500, other types 10,000. AWS counts whitespace for policies saved
+through the API, so the module measures the string it sends. Tests render every
+policy with long role names and every option that adds statements turned on.
 
 <!-- BEGIN_TF_DOCS -->
 
@@ -106,8 +114,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L291)
-- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L299)
+- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L303)
+- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L320)
 
 
 ## Inputs

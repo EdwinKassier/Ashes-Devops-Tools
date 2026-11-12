@@ -472,6 +472,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Fixed
 
+- **Organization policies are checked against the real AWS size quotas (ARC-18).** The tests
+  held the RCP to 10,240 characters, but AWS caps an RCP at 5,120 (an SCP at 10,240).
+  `modules/aws/governance/organization-policy` now fails the plan when a rendered policy is over
+  its type's quota (SCP 10,240, RCP 5,120, AI services opt-out 2,500, other types 10,000), so long
+  role names, many trusted accounts or an override fail at plan, not at apply. New tests render
+  every policy with long names and with every option that adds statements, and the
+  aws-organization stage tests that no target carries more than 5 RCPs, `RCPFullAWSAccess`
+  included. The worst case measures 6,485 characters for `scp-deny-tamper` and 2,811 for
+  `rcp-data-perimeter`, so no policy is split and no plan changes.
 - **Spoke VPCs get the CIDR their subnets use (ARC-1, breaking).** An IPAM-backed VPC now
   requests `cidr_block` explicitly from the pool by default (`ipam_allocation = "explicit_cidr"`
   in `modules/aws/network/vpc`, `ipam_explicit_cidr = true` in aws-workload). Before, it asked

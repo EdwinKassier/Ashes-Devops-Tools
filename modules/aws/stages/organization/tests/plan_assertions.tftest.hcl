@@ -572,6 +572,20 @@ run "per_target_scp_count_le_10" {
   }
 }
 
+run "per_target_rcp_count_le_5" {
+  command = plan
+
+  # RCPFullAWSAccess is attached by AWS to every target, cannot be detached and
+  # counts toward the 5-RCP quota, so at most 4 managed RCPs per target.
+  assert {
+    condition = length([for k, a in local.effective_attachments : k if module.policies.policy_types[a.policy_key] == "RESOURCE_CONTROL_POLICY"]) > 0 && alltrue([
+      for t in distinct([for k, a in local.effective_attachments : a.target_id]) :
+      length([for k, a in local.effective_attachments : k if a.target_id == t && module.policies.policy_types[a.policy_key] == "RESOURCE_CONTROL_POLICY"]) <= 4
+    ])
+    error_message = "a target may carry at most 5 RCPs including RCPFullAWSAccess"
+  }
+}
+
 run "missing_sandbox_ou_skips_guard_attachment" {
   command = plan
 

@@ -288,12 +288,33 @@ locals {
   )
 }
 
+# AWS Organizations "Maximum size of a policy document" per type (checked
+# 2026-11-12). The API stores the content exactly as sent, whitespace included,
+# so the rendered string is what counts. Types not listed here are capped at
+# 10,000 characters.
+locals {
+  policy_size_quotas = {
+    SERVICE_CONTROL_POLICY    = 10240
+    RESOURCE_CONTROL_POLICY   = 5120
+    AISERVICES_OPT_OUT_POLICY = 2500
+  }
+}
+
 resource "aws_organizations_policy" "policy" {
   for_each = local.effective_policies
   name     = each.key
   type     = each.value.type
   content  = each.value.content
   tags     = var.tags
+
+  lifecycle {
+    # Fail at plan, not at CreatePolicy/UpdatePolicy: long role names, extra
+    # trusted accounts or federation pins, or an override can grow a policy.
+    precondition {
+      condition     = length(each.value.content) <= lookup(local.policy_size_quotas, each.value.type, 10000)
+      error_message = "Policy ${each.key} (${each.value.type}) renders to ${length(each.value.content)} characters, over the AWS Organizations quota of ${lookup(local.policy_size_quotas, each.value.type, 10000)}. Shorten the inputs that feed it (role names, account lists, federation pins) or split the policy."
+    }
+  }
 }
 
 resource "aws_organizations_policy_attachment" "attach" {
