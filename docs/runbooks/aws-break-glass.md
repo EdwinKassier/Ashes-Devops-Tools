@@ -54,6 +54,8 @@ Break-glass is off until you deliberately turn it on. Activation means **replaci
       ParameterKey=BreakGlassTrustedPrincipalArn,UsePreviousValue=true ParameterKey=BreakGlassMfaMaxAgeSeconds,UsePreviousValue=true
   ```
 
+  The command changes only `BreakGlassActive`. An existing stack keeps its current value of every other parameter, `TrustSecurityAndBackup` included (`UsePreviousValue=true`).
+
   If CloudFormation itself is unavailable, delete the `standby-deny-all` inline policy by hand and record it. Step 4 restores it.
 - **In-repo role (`aws_overrides.create_break_glass = true`, applied as the phase-0 role):** set `aws_overrides.break_glass_active = true` on `aws-security` and apply as the phase-0 role. Flip it back in Step 4. The dedicated aws-security pipeline role cannot do this.
 

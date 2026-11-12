@@ -61,10 +61,10 @@ aws cloudformation deploy --stack-name ashes-phase0 \
 aws cloudformation describe-stacks --stack-name ashes-phase0 --query 'Stacks[0].Outputs'
 ```
 
-After aws-organization has created the dedicated `aws-security` / `aws-backup` roles, update the stack with `TrustSecurityAndBackup=false`. Keep `aws_overrides.create_break_glass` unset (false) in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
+The stack starts with `TrustSecurityAndBackup=false`: the admin role `tfc-mgmt-apply` trusts only `aws-organization`. Apply `aws-organization` and bind the dedicated `tfc-mgmt-aws-security-*` and `tfc-mgmt-aws-backup-*` roles in tfc-admin before the first `aws-security` or `aws-backup` run. Pass `TrustSecurityAndBackup=true` only when those roles cannot exist (`enable_tfc_management_roles = false`) or for a recovery run, and set it back afterwards. The plan role `tfc-mgmt-plan` has `ReadOnlyAccess` plus an inline `data-read-deny` policy. It denies the same data-plane and secret-bearing reads (object contents, secret values, parameters, decrypt, table items, log events, API key values and more) as the member-account `tfc-plan` role, so a speculative plan cannot read data. Keep `aws_overrides.create_break_glass` unset (false) in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
 
 1. An IAM OIDC identity provider for `https://app.terraform.io` with audience `aws.workload.identity`.
-2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess`, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Each trusts only the management-account workspaces, for its own run phase:
+2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess` and the `data-read-deny` inline policy from the template, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Each trusts only the management-account workspaces, for its own run phase:
 
 ```json
 {

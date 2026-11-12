@@ -28,13 +28,14 @@ Parameters:
     Description: TFC project of the aws-* workspaces (org.tfc.aws_project, default <project_name_prefix>aws).
   TrustSecurityAndBackup:
     Type: String
-    Default: "true"
+    Default: "false"
     AllowedValues: ["true", "false"]
     Description: >-
-      Also trust aws-security and aws-backup. Set "false" (stack update) once
-      aws-organization has created their dedicated tfc-mgmt-aws-security-* /
-      tfc-mgmt-aws-backup-* roles and tfc-admin has bound them, so only
-      aws-organization can reach the management admin role.
+      Also trust aws-security and aws-backup on the management ADMIN role.
+      Default "false": the first aws-organization apply creates their dedicated
+      tfc-mgmt-aws-security-* / tfc-mgmt-aws-backup-* roles, and tfc-admin binds
+      them. Set "true" only for a recovery run (or when
+      enable_tfc_management_roles is false), then set it back.
   BreakGlassTrustedPrincipalArn:
     Type: String
     Description: >-
@@ -79,10 +80,88 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: tfc-mgmt-plan
-      Description: Terraform Cloud PLAN phase for the management-account workspaces (read-only).
+      Description: Terraform Cloud PLAN phase for the management-account workspaces (read-only, no data-plane reads).
       MaxSessionDuration: 3600
       ManagedPolicyArns:
         - Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/ReadOnlyAccess"
+      # ReadOnlyAccess includes data-plane and secret-bearing reads. This is the
+      # same deny as the member-account tfc-plan role (modules/aws/iam/
+      # tfc-oidc-baseline: plan_role_data_read_deny_actions and the API key
+      # paths). scripts/tests/test-phase0-template.sh fails when the two differ.
+      # No management-account root manages a resource whose refresh needs a
+      # denied read, so there is no exempt-ARN list here.
+      Policies:
+        - PolicyName: data-read-deny
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DenyDataPlaneReads
+                Effect: Deny
+                Action:
+                  - "s3:GetObject*"
+                  - "s3-object-lambda:GetObject*"
+                  - "secretsmanager:GetSecretValue"
+                  - "secretsmanager:BatchGetSecretValue"
+                  - "ssm:GetParameter*"
+                  - "kms:Decrypt"
+                  - "kms:GenerateDataKey*"
+                  - "ec2:GetPasswordData"
+                  - "ec2:GetConsoleOutput"
+                  - "ec2:GetConsoleScreenshot"
+                  - "ec2:GetLaunchTemplateData"
+                  - "ec2:DescribeLaunchTemplateVersions"
+                  - "autoscaling:DescribeLaunchConfigurations"
+                  - "glue:GetConnection"
+                  - "glue:GetConnections"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:BatchGetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+                  - "dynamodb:PartiQLSelect"
+                  - "dynamodb:GetRecords"
+                  - "sqs:ReceiveMessage"
+                  - "kinesis:GetRecords"
+                  - "logs:GetLogEvents"
+                  - "logs:FilterLogEvents"
+                  - "logs:StartQuery"
+                  - "logs:GetQueryResults"
+                  - "logs:StartLiveTail"
+                  - "rds-data:*"
+                  - "redshift-data:GetStatementResult"
+                  - "athena:GetQueryResults"
+                  - "timestream:Select"
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  - "ecr:GetAuthorizationToken"
+                  - "ssm:GetCommandInvocation"
+                  - "logs:GetLogRecord"
+                  - "rds:DownloadDBLogFilePortion"
+                  - "es:ESHttpGet"
+                  - "cassandra:Select"
+                  - "codecommit:GitPull"
+                  - "codecommit:GetFile"
+                  - "codecommit:GetBlob"
+                  - "codeartifact:ReadFromRepository"
+                  - "codebuild:BatchGetProjects"
+                  - "codebuild:BatchGetBuilds"
+                  - "lambda:GetLayerVersion"
+                  - "cognito-idp:DescribeUserPoolClient"
+                  - "appsync:ListApiKeys"
+                  - "states:GetExecutionHistory"
+                  - "states:DescribeExecution"
+                  - "lightsail:GetInstanceAccessDetails"
+                  - "lightsail:GetRelationalDatabaseMasterUserPassword"
+                  - "glacier:GetJobOutput"
+                  - "elasticbeanstalk:DescribeConfigurationSettings"
+                Resource: "*"
+              - Sid: DenyApiKeyValueReads
+                Effect: Deny
+                Action: "apigateway:GET"
+                Resource:
+                  - Fn::Sub: "arn:${AWS::Partition}:apigateway:*::/apikeys"
+                  - Fn::Sub: "arn:${AWS::Partition}:apigateway:*::/apikeys/*"
+                  - Fn::Sub: "arn:${AWS::Partition}:apigateway:*::/usageplans/*/keys"
+                  - Fn::Sub: "arn:${AWS::Partition}:apigateway:*::/usageplans/*/keys/*"
       AssumeRolePolicyDocument:
         Fn::Sub: |-
           {

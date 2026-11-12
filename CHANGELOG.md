@@ -460,6 +460,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   branch, tag and environment of the repository could deploy, also in production. It is now bound
   on `attribute.repo_env/<repository_id>/<var.environment>`, as AWS app-services does. The deploy
   job must declare `environment: <env>`, or the entry sets `ref`. See `UPGRADING.md`.
+- **Management plan role denies data-plane reads; security/backup are not trusted by the admin role
+  by default (SEC-6, breaking).** The phase-0 `tfc-mgmt-plan` role was plain `ReadOnlyAccess`. It
+  now has the same data-read deny as the member-account `tfc-plan` role, and
+  `scripts/tests/test-phase0-template.sh` keeps the two lists equal. `TrustSecurityAndBackup`
+  defaults to `"false"`, so a new stack lets only `aws-organization` apply as management admin.
+  See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

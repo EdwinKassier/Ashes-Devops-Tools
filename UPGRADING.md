@@ -388,6 +388,21 @@ variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
 ### AWS
 
+#### The phase-0 management stack: plan-role read deny, admin role trusts only aws-organization (breaking)
+
+**Breaking for a stack update that takes the template default.** `templates/aws/bootstrap/phase0-management.yaml` changes in two ways:
+
+- `tfc-mgmt-plan` gets an inline `data-read-deny` policy. It is the same deny as the member-account `tfc-plan` role (`tfc-oidc-baseline`): object contents, secret values, parameters, decrypt, table items, log events, API key values and more. No management-account root plans a resource whose refresh needs these reads.
+- `TrustSecurityAndBackup` now defaults to `"false"`. With `"false"`, the admin role `tfc-mgmt-apply` trusts only `aws-organization`.
+
+What to do:
+
+1. Check which apply role `aws-security` and `aws-backup` use: their `TFC_AWS_APPLY_ROLE_ARN` workspace variable. With `enable_tfc_management_roles` (default true) and `aws_organization_outputs_from_tfc = true`, tfc-admin binds `tfc-mgmt-aws-security-apply` and `tfc-mgmt-aws-backup-apply`. If either still uses `tfc-mgmt-apply`, apply `aws-organization` and then tfc-admin first, so both are bound to their dedicated roles.
+2. Update the stack with the new template. `aws cloudformation deploy` keeps the current value of every parameter you do not override, so an existing stack keeps `TrustSecurityAndBackup`. `aws cloudformation update-stack` and the console take the new default `"false"` unless you pass `ParameterKey=TrustSecurityAndBackup,UsePreviousValue=true`.
+3. Once step 1 is done, set `TrustSecurityAndBackup=false` if it is still `"true"`. Keep `"true"` only when `enable_tfc_management_roles = false`: then `aws-security` and `aws-backup` have no other management apply role.
+
+The deny is added with any update of the stack, whatever the parameter values.
+
 #### Log-archive retention and lock mode from config (aws-security)
 
 The log-archive bucket retention is now set from `compliance.audit_log_retention_days` in `config/landing-zone.yaml`, the same key as the GCP audit bucket. `aws_overrides.log_archive_retention_days` wins over it. With neither set it stays 365 days, and the plan does not change. `aws_overrides.log_archive_object_lock_mode` sets the Object Lock mode for new objects (default `COMPLIANCE`).
