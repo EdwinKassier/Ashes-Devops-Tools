@@ -334,7 +334,7 @@ make plan-aws-workload APP_ENV=dev
 |:---------|:--------|:-------------|
 | [`terraform-plan.yml`](.github/workflows/terraform-plan.yml) | Pull Request | fmt · docs-check · validate (sharded) · lint · Trivy · Checkov · tests · meta-lint → `Validation Summary` |
 | [`terraform-apply.yml`](.github/workflows/terraform-apply.yml) | Workspace tags (`gcp-*/v*` including `gcp-guardrails/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*`) | Verify TFC run → publish release metadata |
-| [`release.yml`](.github/workflows/release.yml) | Push to `main` | release-please: maintains the release PR; merging it tags `vX.Y.Z` and updates CHANGELOG. **Fails until a maintainer creates the release GitHub App** ([CI secrets](docs/guides/CI_SECRETS.md#release_app)) |
+| [`release.yml`](.github/workflows/release.yml) | Push to `main` | release-please: maintains the release PR; merging it tags `vX.Y.Z` (CHANGELOG is written by hand). **Fails until a maintainer creates the release GitHub App** ([CI secrets](docs/guides/CI_SECRETS.md#release_app)) |
 | [`security-scan.yml`](.github/workflows/security-scan.yml) | Push + weekly | Trivy · Checkov · Gitleaks → SARIF |
 | [`documentation.yml`](.github/workflows/documentation.yml) | Module `*.tf` changes | Auto-generate docs → open PR |
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |

@@ -273,6 +273,7 @@ make plan-gcp-workload APP_ENV=dev
 - [ ] New modules have non-empty `outputs.tf`
 - [ ] New validation blocks have a corresponding test (both accept and reject cases)
 - [ ] No hardcoded project IDs, org IDs, or personal email addresses
+- [ ] Every user-facing commit adds a CHANGELOG Unreleased line by hand; release-please only tags and bumps versions
 
 Additional guidelines:
 

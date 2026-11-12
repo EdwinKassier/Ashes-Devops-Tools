@@ -11,7 +11,9 @@ The repository has one [Semantic Versioning](https://semver.org/) number,
 `vX.Y.Z`. release-please cuts it from Conventional Commits
 (`release-please-config.json`, `.github/workflows/release.yml`); until the
 release GitHub App exists, a maintainer tags releases by hand with the same
-rules (`README.md`, "Releasing"). All modules and
+rules (`README.md`, "Releasing"). Every user-facing commit adds a CHANGELOG
+Unreleased line by hand; release-please only tags and bumps versions
+(`"skip-changelog": true` in `release-please-config.json`). All modules and
 roots share it: a release is one tested set, and every module in it was tested
 with every other module at that commit.
 

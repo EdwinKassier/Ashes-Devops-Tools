@@ -7,12 +7,16 @@ follows [Semantic Versioning](https://semver.org/) (pre-1.0: a minor bump may br
 
 **Versioning.** The repository as a whole is released as `vX.Y.Z` by
 [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release.yml`,
-`release-please-config.json`): every merge to `main` updates a release PR whose version and notes
-are derived from Conventional Commit subjects (`feat:` → minor, `fix:` → patch while pre-1.0).
+`release-please-config.json`): every merge to `main` updates a release PR whose version is
+derived from Conventional Commit subjects (`feat:` → minor, `fix:` → patch while pre-1.0).
 Merging that PR tags `vX.Y.Z` and publishes the GitHub Release. These repo-version tags are
 distinct from the per-workspace **deployment** tags (`gcp-organization/vX.Y.Z`,
 `gcp-workload/<env>/vX.Y.Z`, `aws-*/vX.Y.Z`, …) that `terraform-apply.yml` uses to record
 release metadata for a Terraform Cloud run.
+
+**How this file is written.** Every user-facing commit adds a line to the Unreleased section by
+hand. release-please only tags and bumps versions: `"skip-changelog": true` in
+`release-please-config.json` stops it from writing this file.
 
 **Status:** release-please is configured but does not run until a maintainer creates the release
 GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
@@ -382,6 +386,33 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Added
 
+- **HCP Terraform audit trail export (CMP-13).** `.github/workflows/tfc-audit-trail.yml` copies
+  the audit trail daily to the write-once state-backup buckets under `tfc-audit/`. HCP keeps 14
+  days. The export is off until its token secret is set.
+- **Patch install target tag.** `patch_install_target_tag` (aws-workload variable,
+  `aws_overrides` in aws-security) limits the weekly patch install, and its reboots, to tagged
+  instances. Null keeps every SSM-managed instance.
+- **gcp-guardrails deployment tags.** The release workflow verifies `gcp-guardrails/v*` tags with
+  a guardrails-only read token (`TFC_TOKEN_GUARDRAILS`, tfc-admin
+  `guardrails_release_reader_team_id`).
+- **AWS account quota pre-flight.** `make aws-preflight` (`scripts/aws-preflight.sh`) checks that
+  the Organizations account quota fits the accounts in the config file.
+- **Read-only plan targets.** `make plan-gcp-<root>`, `make plan-aws-<root>` and
+  `make plan-aws-workload` plan any root in HCP Terraform. Every `apply-gcp-*` and `apply-aws-*`
+  target refuses.
+- **`make ci-quick`.** Runs the offline gates that need no `terraform init`; `make ci` runs it
+  first. `make install` installs `check-jsonschema` at the CI version.
+- **Module API check and versioning policy (IAC-3).** `scripts/check-module-api.sh`
+  (`make module-api`, meta-lint) fails when a module input, output or directory is removed
+  without a breaking-change commit. `docs/policies/versioning-and-compatibility.md` states what a
+  version promises.
+- **Renovate owns the toolchain (CICD-13, IAC-6).** Renovate updates `.tool-versions`,
+  `.terraform-version`, the TFLint plugins, every in-repo tool version and the pre-commit hook
+  revs. The weekly `dependency-heartbeat.yml` workflow fails when Renovate has been silent for 8
+  days (on a fork it only warns, unless `RENOVATE_HEARTBEAT_REQUIRED=true`).
+- **HCP health assessments are the drift source.** With the repository variable
+  `TFC_HEALTH_ASSESSMENTS=true`, the drift workflow skips; unset, it runs as the Free-tier
+  fallback.
 - **Release discipline** — release-please (`release-please-config.json`, `.release-please-manifest.json`,
   `.github/workflows/release.yml`) cuts SemVer `vX.Y.Z` releases from Conventional Commits; baseline `0.1.0`.
 - **Docs drift gates** — `scripts/check-docs-counts.sh` (`make count` / `make count-check`) recomputes the
@@ -414,6 +445,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Security
 
+- **CI hardening (CICD-12, CICD-16, CICD-18).** zizmor scans every workflow (`make zizmor`,
+  meta-lint), template injection and broad drift permissions are removed, and every job that holds
+  a secret or an OIDC token blocks egress except to its listed endpoints
+  (`scripts/check-github-governance.sh` enforces it).
 - **Plan-time execution policy is exact and covers Lambda, actions and inline credentials (SEC-2, breaking).**
   `no_plan_time_code_execution` allows a provisioner only in `module.saas_workload.module.vault_secrets`
   with the exact source strings of `envs/saas`; a source that only ends in `supabase/vault-secrets` is
@@ -583,9 +618,28 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `gcp-workload-<env>` fails the plan for an app-service database without `encryption_key_name` or
   without deletion protection (`require_cmek` in `cloud-sql`, `require_database_cmek` in
   app-services). An existing database is never replaced to add a key. See `UPGRADING.md`.
-- **aws-backup is tagged `DataClassification = restricted`.** The backup account holds copies of
-  every data class, so its default tag moves from `confidential` to the highest class (in-place
-  tag update).
+- **Required tags and data classification on both clouds (breaking, CMP-10, ARC-17).** The OPA
+  `require_labels` policy is mandatory (not overridable) and checks four keys: GCP
+  `managed-by`, `environment`, `cost-center` and `owner` (Cloud SQL from `settings.user_labels`),
+  AWS `ManagedBy`, `Environment`, `CostCenter` and `Owner` (in `tags` or `tags_all`). `org.cost_center` and
+  `org.owner` feed the GCP default labels and the AWS default tags. Every AWS root adds a
+  `DataClassification` default tag: `confidential` in aws-security, `restricted` in aws-backup,
+  `internal` in the other layer roots, and `aws.workload_environments.<env>.data_classification`
+  in each workload. gcp-projects binds the GCP data-classification tag value to each host project
+  (projects-apply gets `tagUser`). The AWS tag policy is built with `jsonencode` and reports the
+  four keys as required for the resource types in `aws.tagging.required_for`. Resources get
+  in-place label and tag updates. See `UPGRADING.md`.
+- **Developer is refused in production accounts (breaking, CMP-14).** aws-identity fails the plan
+  when an assignment gives a set in `production_restricted_permission_sets` (default `Developer`,
+  which is `PowerUserAccess`) in a production workload account. See `UPGRADING.md`.
+- **Hub network alarms (breaking).** The AWS network hub alarms on transit gateway
+  `PacketDropCountBlackhole`, NAT gateway `ErrorPortAllocation` (one alarm per gateway) and, with
+  the VPN, `TunnelState`. The alarms publish to an SNS topic in the network account, with the
+  `notifications.emails` subscribers, or to `alarm_sns_topic_arn`. A production aws-network plan
+  fails without a subscriber or a supplied topic. See `UPGRADING.md`.
+- **CloudTrail ordering follows data flow (IAC-10).** The CloudTrail modules in aws-security take
+  their bucket name from the log-archive bucket policy, not from a module `depends_on`, so data
+  sources in the stage stay known at plan time. No plan change.
 - **No placeholder SecOps subscriber (breaking, CMP-6).** `aws-security` no longer subscribes
   `secops@example.com`. A production plan (`org.profile = production` or a production AWS workload
   environment) fails until `notifications.emails` or `aws_overrides.notification_subscribers` names
@@ -622,6 +676,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Deprecated
 
+- **Deletion-protection inputs use `enable_*deletion_protection` (IAC-8).** Ten inputs are renamed:
+  `deletion_protection` and `delete_protection` become `enable_deletion_protection`,
+  `alb_enable_deletion_protection` becomes `enable_alb_deletion_protection` and
+  `app_alb_enable_deletion_protection` becomes `enable_app_alb_deletion_protection`. The old
+  names stay as deprecated aliases until v1.0; when both are set, the new name wins. No plan or
+  state change. See `UPGRADING.md`.
 - `modules/gcp/stages/host` — the network god-module facade (no in-repo callers) is **removed in
   `v1.0.0`**. Migrate to `stages/net-hub`, `stages/dns-anchor` and `stages/net-spoke`; see the module
   README for the per-use mapping and reference `moved.tf` files.
@@ -651,6 +711,18 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Fixed
 
+- **tfc-admin fails the plan when an upstream contract lacks the credential keys (IAC-9).** The
+  reads of the gcp-bootstrap and aws-organization outputs have a postcondition that names each
+  missing `TFC_*` dynamic-credential key. Before, a renamed or missing output dropped those
+  variables from every workspace silently.
+- **The internal DNS domain comes from config.** `gcp.network.internal_domain` (variable
+  `internal_domain` in gcp-network-hub) sets the internal root zone. The default stays
+  `internal.local`, so no plan changes. A later change replaces the zone. See `UPGRADING.md`.
+- **AWS validations accept GovCloud and the European Sovereign Cloud.** ARN checks accept the
+  `aws-eusc` partition next to `aws`, `aws-cn` and `aws-us-gov`, and region checks use
+  `^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$` in the modules, roots, scaffolder and
+  config schema. The commercial form is unchanged. The partitions are not tested against a live
+  account.
 - **Key allowlists of untyped inputs live in one place and are checked against the stage types
   (IAC-4).** The `type = any` inputs keep a misspelled key visible, and a validation rejects keys
   outside an allowlist. Each allowlist now lives in the owner's `allowed_keys.tf` (gcp-workload,
@@ -759,7 +831,7 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   per service with an alias record, output `shared_dns_zone_arns`). aws-network admits `top_cidr`
   and adds the zones to the Route 53 Profile. Spoke traffic to the endpoints stays inspected
   (`docs/known-gaps.md`). See `UPGRADING.md`.
-- **Spoke VPCs associate the org Route 53 Profile (ARC-6).** `aws-workload-<env>` now creates an
+- **Spoke VPCs associate the org Route 53 Profile (ARC-6, behaviour change).** `aws-workload-<env>` now creates an
   `aws_route53profiles_association` for its spoke VPC in the workload account, from the network
   contract `resolver_profile_id` (remote state, `network_contract` or
   `aws.contracts.network.resolver_profile_id`). The spoke inherits the DNS Firewall, the resolver
