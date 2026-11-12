@@ -198,6 +198,8 @@ Each epic needs its own brainstorm and plan before any code. Scope only:
 - [ ] **Step 3:** Write `docs/audit/<date>-due-diligence-reaudit.md` with the scorecard and the delta against this plan's forecast.
 - [ ] **Step 4:** If a lens lands more than 0.5 below the forecast, add the gap as tasks to the relevant workstream before the next phase.
 
+**Status after Phase 2 (2026-11-12):** the re-audit scored 6.0 overall against the 7.2 forecast; seven lenses landed more than 0.5 below. The gap tasks are listed in [the re-audit report](../../../audit/2026-11-12-due-diligence-reaudit.md#gap-tasks-before-phase-3) as Phase 2b.
+
 ## Findings no sub-plan owns (run in Phase 2)
 
 The self-review found four findings that no sub-plan fixes. Their evidence was read on 2026-11-11.
