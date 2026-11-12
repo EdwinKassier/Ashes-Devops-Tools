@@ -391,6 +391,10 @@ make plan-gcp-organization
 make plan-gcp-workload APP_ENV=dev
 ```
 
+### Any other root
+
+Any root: `make plan-gcp-<root>` or `make plan-aws-<root>` (a read-only plan in HCP Terraform). The AWS workload roots take `make plan-aws-workload APP_ENV=<env>`. Local `make apply-*` targets refuse for every root: applies run in HCP Terraform.
+
 ---
 
 ## Verification Checklist

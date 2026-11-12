@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci ci-quick yamllint markdownlint-check commit-check module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci ci-quick yamllint markdownlint-check commit-check module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload plan-aws-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -41,7 +41,7 @@ TERRAFORM_ROOTS := $(shell $(ROOT_DISCOVERY) all)
 
 help: ## Show available commands
 	@echo '$(BLUE)Ashes DevOps Tools$(NC)'
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n"} /^[a-zA-Z0-9_.-]+:.*?##/ { printf "  $(BLUE)%-22s$(NC) %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n"} /^[a-zA-Z0-9_.%-]+:.*?##/ { printf "  $(BLUE)%-22s$(NC) %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 install: ## Install required local tooling
 	@bash scripts/setup.sh
@@ -272,6 +272,24 @@ plan-gcp-organization: ## Plan the gcp-organization root
 plan-gcp-workload: ## Plan gcp-workload-<APP_ENV> in HCP Terraform (read-only); APP_VARS=<file> adds a tuning -var-file
 	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp/workload plan $(if $(APP_VARS),-var-file=$(abspath $(APP_VARS)))
 
+# Every other root: make plan-gcp-<root> / make plan-aws-<root>. Each root's
+# backend.tf names its HCP Terraform workspace, so no TF_WORKSPACE is needed
+# (the workload roots select theirs from APP_ENV). Explicit rules above win over
+# these pattern rules.
+GCP_PLAN_ROOTS := bootstrap organization guardrails projects network-hub
+AWS_PLAN_ROOTS := organization security network identity shared-services backup
+
+plan-aws-workload: ## Plan aws-workload-<APP_ENV> in HCP Terraform (read-only): make plan-aws-workload APP_ENV=dev
+	@TF_WORKSPACE=aws-workload-$(APP_ENV) $(TERRAFORM) -chdir=envs/aws/workload plan
+
+plan-gcp-%: ## Plan a GCP root in HCP Terraform (read-only): make plan-gcp-projects
+	@case " $(GCP_PLAN_ROOTS) " in *" $* "*) ;; *) echo "Unknown GCP root '$*': one of $(GCP_PLAN_ROOTS), or plan-gcp-workload"; exit 1 ;; esac
+	@$(TERRAFORM) -chdir=envs/gcp/$* plan
+
+plan-aws-%: ## Plan an AWS layer root in HCP Terraform (read-only): make plan-aws-network
+	@case " $(AWS_PLAN_ROOTS) " in *" $* "*) ;; *) echo "Unknown AWS root '$*': one of $(AWS_PLAN_ROOTS), or plan-aws-workload"; exit 1 ;; esac
+	@$(TERRAFORM) -chdir=envs/aws/$* plan
+
 apply-gcp-organization: ## Refuses: applies run in Terraform Cloud only (CLAUDE.md "State & Apply Rules")
 	@echo "Local apply is not supported. gcp-organization is applied by Terraform Cloud:"
 	@echo "merge to main (VCS-driven run) or queue a run on the gcp-organization workspace in TFC."
@@ -282,6 +300,12 @@ apply-gcp-workload: ## Refuses: applies run in Terraform Cloud only (CLAUDE.md "
 	@echo "Local apply is not supported. $(APP_WORKSPACE) is applied by Terraform Cloud:"
 	@echo "merge to main (VCS-driven run) or queue a run on the $(APP_WORKSPACE) workspace in TFC."
 	@echo "Preview locally with: make plan-gcp-workload APP_ENV=$(APP_ENV). Promotion: docs/runbooks/promotion.md"
+	@exit 1
+
+apply-gcp-% apply-aws-%: ## Refuses: applies run in Terraform Cloud only, for every root (CLAUDE.md "State & Apply Rules")
+	@echo "Local apply is not supported. $(patsubst apply-%,%,$@) is applied by Terraform Cloud:"
+	@echo "merge to main (VCS-driven run) or queue a run on its workspace in TFC."
+	@echo "Preview locally with: make plan-$(patsubst apply-%,%,$@). Failed applies: docs/runbooks/apply-recovery.md"
 	@exit 1
 
 validate-requirements: ## Print local tool versions

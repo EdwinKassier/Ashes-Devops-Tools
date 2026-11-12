@@ -314,6 +314,9 @@ make docs                  # Regenerate the READMEs of all modules and the 15 ro
 make docs-check            # Verify no README is stale
 make plan-gcp-organization     # Plan control-plane changes
 make plan-gcp-workload APP_ENV=dev
+make plan-gcp-<root>       # Any other GCP root: bootstrap, guardrails, projects, network-hub (read-only plan in HCP Terraform)
+make plan-aws-<root>       # Any AWS layer: organization, security, network, identity, shared-services, backup
+make plan-aws-workload APP_ENV=dev
 ```
 
 ---
