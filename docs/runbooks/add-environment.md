@@ -14,7 +14,7 @@
 A **greenfield** estate still needs the phase-0 pass in [bootstrap.md](bootstrap.md) first. Until
 `gcp-bootstrap` has outputs, tfc-admin cannot derive the new environment's service-account emails.
 
-> **Five-root flow.** A new environment touches every GCP root, because each one derives
+> **Multi-root flow.** A new environment touches every GCP root, because each one derives
 > something from the shared `environments` map (`gcp.environments` in the committed
 > `config/landing-zone.yaml`, the single source every GCP root and tfc-admin reads): `gcp-bootstrap` grants WIF trust to the
 > `gcp-workload-<env>` workspace, `gcp-organization` creates the environment folder,

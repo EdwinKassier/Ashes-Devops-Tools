@@ -55,7 +55,7 @@ The workspace naming contract is:
 - `gcp-workload-prod`
 - `gcp-workload-<env>` for any new environment
 
-> Full folder/project model, two-root layer map, Shared VPC hub-spoke topology, security services, and the foundation conformance checklist: **[GCP Landing Zone →](gcp-landing-zone.md)**. Stand-up procedure: **[Add Environment runbook →](../runbooks/add-environment.md)**.
+> Full folder/project model, layer map, Shared VPC hub-spoke topology, security services, and the foundation conformance checklist: **[GCP Landing Zone →](gcp-landing-zone.md)**. Stand-up procedure: **[Add Environment runbook →](../runbooks/add-environment.md)**.
 
 ## Environment Model
 

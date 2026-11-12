@@ -11,7 +11,7 @@
 
 ## Core Concepts
 
-- GCP is five layered roots, applied in order: `envs/gcp/bootstrap` (`gcp-bootstrap`, phase-0) →
+- GCP is five layered roots plus the security-team `gcp-guardrails`, applied in order: `envs/gcp/bootstrap` (`gcp-bootstrap`, phase-0) →
   `envs/gcp/organization` (`gcp-organization`) → `envs/gcp/projects` (`gcp-projects`) →
   `envs/gcp/network-hub` (`gcp-network-hub`) → `envs/gcp/workload` (`gcp-workload-<env>`).
 - `envs/tfc-admin` codifies the Terraform Cloud workspace layer itself.
@@ -87,7 +87,7 @@ make plan-gcp-workload APP_ENV=dev
 
 ## GCP Landing Zone
 
-- [GCP Landing Zone](architecture/gcp-landing-zone.md): enterprise-foundations architecture — folder/project model, five-root layer map, Shared VPC hub-spoke topology, security services, foundation conformance checklist
+- [GCP Landing Zone](architecture/gcp-landing-zone.md): enterprise-foundations architecture — folder/project model, layer map, Shared VPC hub-spoke topology, security services, foundation conformance checklist
 - [Adding a Cloud](architecture/adding-a-cloud.md): the per-cloud-root contract (naming, one provider per root, credential-free remote state)
 - [Provider Selection](architecture/provider-selection.md): any-combination cloud matrix, per-cloud-root model
 - [Bootstrap](runbooks/bootstrap.md): phase-0 stand-up from zero state to a runnable `gcp-organization` workspace
@@ -149,8 +149,8 @@ Point-in-time reviews; later audits supersede earlier "resolved" claims. Only th
 
 - [Network Topology](architecture/network-topology.md): hub-spoke VPC layout, VPC-SC perimeter, WIF OIDC flow
 - [Architecture Overview](architecture/ARCHITECTURE.md): control plane, app root, and CI/CD flow
-- [GCP Landing Zone](architecture/gcp-landing-zone.md): folder/project model, five-root layer map, and Shared VPC hub-spoke topology
-- [GCP State Decomposition](architecture/gcp-state-decomposition.md): why and how the GCP control plane is split into five roots/states
+- [GCP Landing Zone](architecture/gcp-landing-zone.md): folder/project model, layer map, and Shared VPC hub-spoke topology
+- [GCP State Decomposition](architecture/gcp-state-decomposition.md): why and how the GCP control plane is split into separate roots and states
 - [CIDR Plan](architecture/cidr-plan.md): global IP allocation plan across both clouds
 - [AWS Landing Zone](architecture/aws-landing-zone.md): multi-account SRA model, layer map, and network/security topology
 - [Cross-Cloud Comparison](architecture/cross-cloud-comparison.md): where each capability lives per provider, side by side

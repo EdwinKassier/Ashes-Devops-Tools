@@ -85,8 +85,8 @@ for control-for-control comparison.
   (`vpc_id`, `subnet_ids_by_tier`). Each mirrors its ecosystem — consumers wiring
   multi-cloud roots should expect per-cloud output vocabularies.
 - **Env roots:** AWS has seven deployable roots (SRA mandates more accounts:
-  security, network, identity, shared-services, backup). GCP uses five roots
-  (bootstrap, organization, projects, network-hub, workload): it folds security
+  security, network, identity, shared-services, backup). GCP uses six roots
+  (bootstrap, organization, guardrails, projects, network-hub, workload): it folds security
   and governance into the organization root, but keeps bootstrap, projects, and
   networking as their own roots and states (audit H3). See
   [`envs/README.md`](../../envs/README.md).

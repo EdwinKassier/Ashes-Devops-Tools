@@ -48,5 +48,26 @@ printf '1 modules, 1 deployable roots\n' >"${t}/CLAUDE.md"
 if run "${t}"; then bad "CLAUDE.md without ci-quick fails"; else ok "CLAUDE.md without ci-quick fails"; fi
 grep -q 'ci-quick' "${workdir}/out" && ok "missing ci-quick is named" || bad "missing ci-quick is named"
 
+t="$(new_tree stalegcp '**Reference landing zone**')"
+sed -i.bak 's|envs/gcp/\*<br/>1 roots|envs/gcp/*<br/>5 roots|' "${t}/README.md"
+if run "${t}"; then bad "wrong GCP root count fails"; else ok "wrong GCP root count fails"; fi
+
+t="$(new_tree wrongaws '**Reference landing zone**')"
+sed -i.bak 's|envs/aws/\*<br/>0 layered roots|envs/aws/*<br/>7 layered roots|' "${t}/README.md"
+if run "${t}"; then bad "wrong AWS root count fails"; else ok "wrong AWS root count fails"; fi
+
+t="$(new_tree fiveroot '**Reference landing zone**')"
+printf 'the five-root layer map\n' >"${t}/docs/x.md"
+if run "${t}"; then bad "spelled-out stale count fails"; else ok "spelled-out stale count fails"; fi
+grep -q 'docs/x.md' "${workdir}/out" && ok "stale file is named" || bad "stale file is named"
+
+t="$(new_tree fiveroot_cap '**Reference landing zone**')"
+printf '> **Five GCP roots** apply in order.\n' >"${t}/docs/x.md"
+if run "${t}"; then bad "capitalised stale count fails"; else ok "capitalised stale count fails"; fi
+
+t="$(new_tree nostale '**Reference landing zone**')"
+printf 'six roots, five layered roots plus gcp-guardrails\n' >"${t}/docs/x.md"
+if run "${t}"; then ok "accurate spelled-out text passes"; else bad "accurate spelled-out text passes"; cat "${workdir}/out" >&2; fi
+
 printf 'test-check-docs-counts: %s failed\n' "${failures}"
 [[ "${failures}" -eq 0 ]]

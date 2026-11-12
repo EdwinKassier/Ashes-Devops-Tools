@@ -4,7 +4,7 @@ This document is the authoritative description of the GCP landing zone deployed 
 
 This is the GCP counterpart to [`aws-landing-zone.md`](aws-landing-zone.md); the two are written to the same section structure so you can compare the clouds control-for-control. For a capability-by-capability module map see the [Cross-Cloud Comparison](cross-cloud-comparison.md) and the [Module Library](../../README.md#module-library). For how to *stand this up* see [`docs/runbooks/add-environment.md`](../runbooks/add-environment.md); for the cross-root wiring contract see [`docs/architecture/adding-a-cloud.md`](adding-a-cloud.md).
 
-> **Structural note.** Where the AWS SRA mandates seven layered roots (organization, security, network, identity, shared-services, backup, workload), GCP uses **five roots**, applied in order: `gcp-bootstrap` (admin project, Terraform admin SA, WIF pools), `gcp-organization` (folders, org policy, KMS, audit, billing), `gcp-projects` (host/spoke projects + `environment_config`), `gcp-network-hub` (hub VPC, DNS anchor, hub VPC-SC), and `gcp-workload-<env>` (host + budget, per environment). Each reads its upstreams via remote state. The control plane was split into separate states to shrink the blast radius (audit H3); see [gcp-state-decomposition.md](gcp-state-decomposition.md). A Shared VPC and org policies still do centrally what AWS distributes across dedicated accounts.
+> **Structural note.** Where the AWS SRA mandates seven layered roots (organization, security, network, identity, shared-services, backup, workload), GCP uses five layered roots plus the security-team `gcp-guardrails`, applied in order: `gcp-bootstrap` (admin project, Terraform admin SA, WIF pools), `gcp-organization` (folders, org policy, KMS, audit, billing), `gcp-projects` (host/spoke projects + `environment_config`), `gcp-network-hub` (hub VPC, DNS anchor, hub VPC-SC), and `gcp-workload-<env>` (host + budget, per environment). Each reads its upstreams via remote state. The control plane was split into separate states to shrink the blast radius (audit H3); see [gcp-state-decomposition.md](gcp-state-decomposition.md). A Shared VPC and org policies still do centrally what AWS distributes across dedicated accounts.
 
 ---
 
@@ -57,18 +57,19 @@ The environment folder/project keys are the exact keys of the `environment_confi
 
 ## Layer map — which root deploys what
 
-Five GCP roots, each one Terraform Cloud workspace (see [provider-selection](provider-selection.md)), applied in order. Ordering **between** roots is by apply order + remote-state reads, not cross-root `depends_on`. The control plane was split into separate states (audit H3) to shrink the blast radius; see [gcp-state-decomposition.md](gcp-state-decomposition.md).
+The GCP roots (six in all: five layered roots plus the security-team `gcp-guardrails`) are each one Terraform Cloud workspace (see [provider-selection](provider-selection.md)), applied in order. Ordering **between** roots is by apply order + remote-state reads, not cross-root `depends_on`. The control plane was split into separate states (audit H3) to shrink the blast radius; see [gcp-state-decomposition.md](gcp-state-decomposition.md).
 
 | Order | Root | Workspace | Deploys | Stage modules | Reads |
 |---|---|---|---|---|---|
 | 1 | `envs/gcp/bootstrap` | `gcp-bootstrap` | Admin project, Terraform admin SA, GitHub/TFC WIF pools. Publishes `admin_project_id`, `admin_project_number`, `terraform_admin_email`, `suffix`, OIDC pool/provider IDs. | `bootstrap` | — |
 | 2 | `envs/gcp/organization` | `gcp-organization` | Folders, org policy, tags, audit logs, SCC notifications, org CMEK, budgets, essential contacts. Publishes `org_id`, `folders`, `tag_values`/`tag_keys`, `cmek_key_names`, `billing_account`. | `organization` | gcp-bootstrap |
+| 2a | `envs/gcp/guardrails` | `gcp-guardrails` | Organization IAM deny policies (admin containment), applied by the security team only. Looks up the org and the `containment/protected` tag that `gcp-organization` creates. | `guardrails` | — (reads no state) |
 | 3 | `envs/gcp/projects` | `gcp-projects` | Shared (hub/dns) + per-env host projects. Publishes `project_ids`, `project_numbers`, and the `environment_config` contract. | `projects` | gcp-organization, gcp-bootstrap |
 | 4 | `envs/gcp/network-hub` | `gcp-network-hub` | Hub VPC, DNS hub, hub VPC-SC perimeter. Publishes `hub_network`. | `network-hub` | gcp-projects, gcp-organization |
-| 5 | `envs/gcp/workload` | `gcp-workload-<env>` | Per-environment Shared VPC host network (three-tier subnets, NAT, firewall, hub peering, DNS peering, flow-logs export, optional Cloud Armor, per-env VPC-SC perimeter) + budget. One workspace per env via the `gcp-workload-` prefix. | `host`, `governance/billing` | gcp-projects, gcp-network-hub, gcp-organization |
+| 5 | `envs/gcp/workload` | `gcp-workload-<env>` | Per-environment Shared VPC host network (three-tier subnets, NAT, firewall, hub peering, DNS peering, flow-logs export, optional Cloud Armor, per-env VPC-SC perimeter) + budget. One workspace per env via the `gcp-workload-` prefix. | `environment` (composes `workload`, `net-spoke`, `app-services`) | gcp-projects, gcp-network-hub, gcp-organization |
 | — | `envs/saas` | `saas-<name>` | Supabase and/or Vercel only. **No GCP provider** — reads GCP/AWS remote state for values but configures no GCP credentials. | `modules/saas/stages/saas-workload` | (optional) |
 
-Apply the four control-plane roots in order (`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub`) once; `gcp-workload-<env>` is additive, once per environment. The `saas` root is deliberately outside the GCP chain: it is selected purely by whether you apply its workspace, and it needs no GCP credentials.
+Apply the four control-plane roots in order (`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub`) once, and `gcp-guardrails` after `gcp-organization` when the security team applies it; `gcp-workload-<env>` is additive, once per environment. The `saas` root is deliberately outside the GCP chain: it is selected purely by whether you apply its workspace, and it needs no GCP credentials.
 
 **Cross-root outputs** consumed by `gcp-workload` via `terraform_remote_state`, by publishing root:
 

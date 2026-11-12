@@ -92,12 +92,12 @@ flowchart TB
     CI["<b>GitHub Actions</b> — PR gates<br/>fmt · validate · lint · trivy · checkov · docs · test"]
     TFC["<b>Terraform Cloud</b> — remote state · plan · apply<br/>one root = one workspace, per cloud"]
     CI -->|"merge to main"| TFC
-    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>5 roots"]
+    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>6 roots"]
     TFC --> AWS["<b>AWS</b><br/>envs/aws/*<br/>7 layered roots"]
     TFC --> SAAS["<b>SaaS</b><br/>envs/saas<br/>no cloud provider"]
 ```
 
-Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP uses **five** roots where the AWS SRA spreads across **seven**. This table aligns them layer-for-layer:
+Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP uses **6** roots (five layered roots plus the security-team `gcp-guardrails`) where the AWS SRA spreads across **7**. This table aligns them layer-for-layer:
 
 | Responsibility band | GCP root | AWS root |
 |:--------------------|:---------|:---------|
@@ -365,7 +365,7 @@ git push origin gcp-organization/v1.2.0
 | [Documentation Index](docs/INDEX.md) | Complete navigation hub |
 | [Quick Start](docs/guides/QUICK_START.md) | Bootstrap, creds, first apply |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | Roots, modules, execution model |
-| [GCP Landing Zone](docs/architecture/gcp-landing-zone.md) | Folder/project model, five-root layer map, Shared VPC hub-spoke, foundation conformance checklist |
+| [GCP Landing Zone](docs/architecture/gcp-landing-zone.md) | Folder/project model, layer map, Shared VPC hub-spoke, foundation conformance checklist |
 | [AWS Landing Zone](docs/architecture/aws-landing-zone.md) | Multi-account SRA model, layer map, SRA conformance checklist |
 | [Cross-Cloud Comparison](docs/architecture/cross-cloud-comparison.md) | Where each capability lives per provider, side by side |
 | [Landing-Zone Conformance](docs/architecture/landing-zone-conformance.md) | 2026 best-practice adherence review + gap register, both clouds |
