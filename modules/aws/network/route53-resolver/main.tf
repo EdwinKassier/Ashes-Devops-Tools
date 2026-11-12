@@ -22,6 +22,7 @@ locals {
 }
 
 resource "aws_security_group" "resolver" {
+  # checkov:skip=CKV2_AWS_5:The group is attached to the inbound and outbound resolver endpoints through local.resolver_security_group_ids (a conditional local); Checkov's graph does not follow it.
   count = var.enable_resolver_endpoints && length(var.security_group_ids) == 0 ? 1 : 0
 
   name_prefix = "${var.name_prefix}-resolver-"

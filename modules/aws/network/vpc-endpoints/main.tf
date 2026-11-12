@@ -116,6 +116,7 @@ resource "aws_route53_zone" "endpoint" {
 }
 
 resource "aws_route53_record" "endpoint" {
+  # checkov:skip=CKV2_AWS_23:The alias target is the interface endpoint's own dns_entry, read through try(); Checkov's graph does not follow that attribute path.
   for_each = local.shared_dns_services
 
   zone_id = aws_route53_zone.endpoint[each.key].zone_id
