@@ -352,6 +352,18 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   This is inherent to StackSets. The control is who can apply
   `aws-organization` (phase-0 role, policy sets, workspace access), not an SCP.
 
+- **The phase-0 apply role is still an administrator (SEC-4).**
+  `tfc-mgmt-apply` keeps `AdministratorAccess` in the management account, where
+  no SCP applies. Its inline `deny-self-tampering` policy stops it from
+  rewriting the trust, policies or boundary of `tfc-mgmt-plan`,
+  `tfc-mgmt-apply` and `OrganizationBreakGlass`, and from assuming
+  `OrganizationAccountAccessRole`. It can still create a new role, give that
+  role administrator rights and assume it, or run a CloudFormation stack with
+  a service role. The deny raises the cost of self-promotion; it does not make
+  the role least-privilege. The control is who can apply `aws-organization`.
+  The deny is checked against `tfc-management-roles` by
+  `scripts/tests/test-phase0-template.sh`, not on a real stack.
+
 - **Resources-under-management count unknown.** HCP Terraform bills paid
   tiers per resource under management. Measure the count on the first sandbox
   apply and publish per-root counts in

@@ -90,6 +90,16 @@ Resources:
       # paths). scripts/tests/test-phase0-template.sh fails when the two differ.
       # No management-account root manages a resource whose refresh needs a
       # denied read, so there is no exempt-ARN list here.
+      # deny-self-tampering (SEC-4): the same statements as
+      # DenyManagementRoleTampering and DenyMemberAccountPivot in
+      # modules/aws/iam/tfc-management-roles (scripts/tests/test-phase0-template.sh
+      # fails when the actions differ). Neither phase-0 role may rewrite the
+      # trust, policies or boundary of tfc-mgmt-plan, tfc-mgmt-apply or
+      # OrganizationBreakGlass, or assume OrganizationAccountAccessRole in a
+      # member account. The roles are named exactly, not tfc-mgmt-*: the
+      # aws-organization apply creates and edits the dedicated
+      # tfc-mgmt-<workspace>-plan/apply roles. Change these three roles with a
+      # stack update as a human administrator.
       Policies:
         - PolicyName: data-read-deny
           PolicyDocument:
@@ -162,6 +172,36 @@ Resources:
                   - Fn::Sub: "arn:${AWS::Partition}:apigateway:*::/apikeys/*"
                   - Fn::Sub: "arn:${AWS::Partition}:apigateway:*::/usageplans/*/keys"
                   - Fn::Sub: "arn:${AWS::Partition}:apigateway:*::/usageplans/*/keys/*"
+        - PolicyName: deny-self-tampering
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DenyManagementRoleTampering
+                Effect: Deny
+                Action:
+                  - "iam:AttachRolePolicy"
+                  - "iam:DeleteRole"
+                  - "iam:DeleteRolePermissionsBoundary"
+                  - "iam:DeleteRolePolicy"
+                  - "iam:DetachRolePolicy"
+                  - "iam:PutRolePermissionsBoundary"
+                  - "iam:PutRolePolicy"
+                  - "iam:UpdateAssumeRolePolicy"
+                  - "iam:UpdateRole"
+                  - "iam:TagRole"
+                  - "iam:UntagRole"
+                Resource:
+                  - Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/tfc-mgmt-plan"
+                  - Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/tfc-mgmt-apply"
+                  - Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/OrganizationBreakGlass"
+              - Sid: DenyMemberAccountPivot
+                Effect: Deny
+                Action:
+                  - "sts:AssumeRole"
+                  - "sts:TagSession"
+                  - "sts:SetSourceIdentity"
+                Resource:
+                  - Fn::Sub: "arn:${AWS::Partition}:iam::*:role/OrganizationAccountAccessRole"
       AssumeRolePolicyDocument:
         Fn::Sub: |-
           {
@@ -189,6 +229,50 @@ Resources:
       MaxSessionDuration: 3600
       ManagedPolicyArns:
         - Fn::Sub: "arn:${AWS::Partition}:iam::aws:policy/AdministratorAccess"
+      # deny-self-tampering (SEC-4), as on tfc-mgmt-plan: the same statements as
+      # DenyManagementRoleTampering and DenyMemberAccountPivot in
+      # modules/aws/iam/tfc-management-roles (scripts/tests/test-phase0-template.sh
+      # fails when the actions differ). Neither phase-0 role may rewrite the
+      # trust, policies or boundary of tfc-mgmt-plan, tfc-mgmt-apply or
+      # OrganizationBreakGlass, or assume OrganizationAccountAccessRole in a
+      # member account. The roles are named exactly, not tfc-mgmt-*: the
+      # aws-organization apply creates and edits the dedicated
+      # tfc-mgmt-<workspace>-plan/apply roles. Change these three roles with a
+      # stack update as a human administrator.
+      # AdministratorAccess stays: aws-organization manages the organization
+      # itself. This deny stops the role from making its own trust or the
+      # break-glass role wider; it does not make the role least-privilege.
+      Policies:
+        - PolicyName: deny-self-tampering
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: DenyManagementRoleTampering
+                Effect: Deny
+                Action:
+                  - "iam:AttachRolePolicy"
+                  - "iam:DeleteRole"
+                  - "iam:DeleteRolePermissionsBoundary"
+                  - "iam:DeleteRolePolicy"
+                  - "iam:DetachRolePolicy"
+                  - "iam:PutRolePermissionsBoundary"
+                  - "iam:PutRolePolicy"
+                  - "iam:UpdateAssumeRolePolicy"
+                  - "iam:UpdateRole"
+                  - "iam:TagRole"
+                  - "iam:UntagRole"
+                Resource:
+                  - Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/tfc-mgmt-plan"
+                  - Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/tfc-mgmt-apply"
+                  - Fn::Sub: "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/OrganizationBreakGlass"
+              - Sid: DenyMemberAccountPivot
+                Effect: Deny
+                Action:
+                  - "sts:AssumeRole"
+                  - "sts:TagSession"
+                  - "sts:SetSourceIdentity"
+                Resource:
+                  - Fn::Sub: "arn:${AWS::Partition}:iam::*:role/OrganizationAccountAccessRole"
       AssumeRolePolicyDocument:
         Fn::If:
           - TrustSecurityAndBackupApply

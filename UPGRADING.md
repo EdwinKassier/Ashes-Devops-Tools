@@ -553,6 +553,21 @@ What to do:
 
 The deny is added with any update of the stack, whatever the parameter values.
 
+#### The phase-0 roles cannot edit themselves or reach member accounts (breaking)
+
+**Breaking for the legacy fallback that assumes `OrganizationAccountAccessRole` from `tfc-mgmt-apply`.** `templates/aws/bootstrap/phase0-management.yaml` gives `tfc-mgmt-plan` and `tfc-mgmt-apply` a new inline policy `deny-self-tampering`:
+
+- `DenyManagementRoleTampering` denies attach, detach, put and delete of role policies, boundary changes, trust updates, `UpdateRole`, `DeleteRole`, `TagRole` and `UntagRole` on `tfc-mgmt-plan`, `tfc-mgmt-apply` and `OrganizationBreakGlass`.
+- `DenyMemberAccountPivot` denies `sts:AssumeRole`, `sts:TagSession` and `sts:SetSourceIdentity` on `arn:<partition>:iam::*:role/OrganizationAccountAccessRole`.
+
+These are the same actions that the dedicated `tfc-mgmt-<workspace>-*` roles are denied (`modules/aws/iam/tfc-management-roles`). No Terraform root needs them: `aws-organization` has no `assume_role` and manages only the dedicated `tfc-mgmt-<workspace>-*` roles, which are not covered.
+
+What to do:
+
+1. If a run of `aws-security`, `aws-backup` or `aws-identity` starts from `tfc-mgmt-apply` and assumes `OrganizationAccountAccessRole` (no TFC dynamic credentials for the member account, or `assume_role_arn` set), move it to TFC dynamic credentials first (`docs/runbooks/aws-bootstrap.md`). The legacy fallback still works from break-glass or a human administrator.
+2. Update the stack with the new template (`aws cloudformation deploy` keeps your parameter values). The policy takes effect only after this update.
+3. To change the three phase-0 roles later, update the stack as a human administrator, not as `tfc-mgmt-apply`.
+
 #### Log-archive retention and lock mode from config (aws-security)
 
 The log-archive bucket retention is now set from `compliance.audit_log_retention_days` in `config/landing-zone.yaml`, the same key as the GCP audit bucket. `aws_overrides.log_archive_retention_days` wins over it. With neither set it stays 365 days, and the plan does not change. `aws_overrides.log_archive_object_lock_mode` sets the Object Lock mode for new objects (default `COMPLIANCE`).

@@ -72,10 +72,10 @@ aws cloudformation deploy --stack-name ashes-phase0 \
 aws cloudformation describe-stacks --stack-name ashes-phase0 --query 'Stacks[0].Outputs'
 ```
 
-The stack starts with `TrustSecurityAndBackup=false`: the admin role `tfc-mgmt-apply` trusts only `aws-organization`. Apply `aws-organization` and bind the dedicated `tfc-mgmt-aws-security-*` and `tfc-mgmt-aws-backup-*` roles in tfc-admin before the first `aws-security` or `aws-backup` run. Pass `TrustSecurityAndBackup=true` only when those roles cannot exist (`enable_tfc_management_roles = false`) or for a recovery run, and set it back afterwards. The plan role `tfc-mgmt-plan` has `ReadOnlyAccess` plus an inline `data-read-deny` policy. It denies the same data-plane and secret-bearing reads (object contents, secret values, parameters, decrypt, table items, log events, API key values and more) as the member-account `tfc-plan` role, so a speculative plan cannot read data. Keep `aws_overrides.create_break_glass` unset (false) in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
+The stack starts with `TrustSecurityAndBackup=false`: the admin role `tfc-mgmt-apply` trusts only `aws-organization`. Apply `aws-organization` and bind the dedicated `tfc-mgmt-aws-security-*` and `tfc-mgmt-aws-backup-*` roles in tfc-admin before the first `aws-security` or `aws-backup` run. Pass `TrustSecurityAndBackup=true` only when those roles cannot exist (`enable_tfc_management_roles = false`) or for a recovery run, and set it back afterwards. The plan role `tfc-mgmt-plan` has `ReadOnlyAccess` plus an inline `data-read-deny` policy. It denies the same data-plane and secret-bearing reads (object contents, secret values, parameters, decrypt, table items, log events, API key values and more) as the member-account `tfc-plan` role, so a speculative plan cannot read data. Both roles also carry an inline `deny-self-tampering` policy. It denies editing the trust, policies, boundary or tags of `tfc-mgmt-plan`, `tfc-mgmt-apply` and `OrganizationBreakGlass`, and assuming `OrganizationAccountAccessRole` in a member account. These are the same actions that the dedicated `tfc-mgmt-<workspace>-*` roles are denied. Change the three phase-0 roles only with a stack update as a human administrator. Keep `aws_overrides.create_break_glass` unset (false) in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
 
 1. An IAM OIDC identity provider for `https://app.terraform.io` with audience `aws.workload.identity`.
-2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess` and the `data-read-deny` inline policy from the template, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Each trusts only the management-account workspaces, for its own run phase:
+2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess` and the `data-read-deny` inline policy from the template, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Give both the template's `deny-self-tampering` inline policy. Each trusts only the management-account workspaces, for its own run phase:
 
 ```json
 {
@@ -257,7 +257,7 @@ TFC_AWS_APPLY_ROLE_ARN_<alias> = tfc_apply_role_arns["<alias>"]
 > - **Single-account roots:** set the Terraform variable `assume_role_arn = account_role_arns["<key>"]` (OrganizationAccountAccessRole).
 > - **`aws-security` / `aws-backup`:** leave `tfc_aws_dynamic_credentials` unset; their aliases then assume `account_role_arns[...]`.
 >
-> This brings back management-rooted credentials for member-account work. Use it only for break-glass or local debugging.
+> This brings back management-rooted credentials for member-account work. Use it only for break-glass or local debugging. Start from break-glass or a human administrator: the phase-0 roles `tfc-mgmt-plan` and `tfc-mgmt-apply` are denied `sts:AssumeRole` on `OrganizationAccountAccessRole`.
 
 ## Full first-time stand-up order
 

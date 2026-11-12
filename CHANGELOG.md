@@ -602,6 +602,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   deny-tamper SCP grows from 4,412 to 4,933 characters with the defaults (7,087 with the longest
   test inputs; quota 10,240). The boundary grows from 5,367 to 5,655 characters (6,059 with long
   names; quota 6,144). See `UPGRADING.md`.
+- **The phase-0 management roles cannot edit themselves or pivot into member accounts (SEC-4,
+  breaking).** `templates/aws/bootstrap/phase0-management.yaml` gives `tfc-mgmt-plan` and
+  `tfc-mgmt-apply` an inline `deny-self-tampering` policy. It denies changes to the trust,
+  policies, boundary and tags of `tfc-mgmt-plan`, `tfc-mgmt-apply` and `OrganizationBreakGlass`,
+  and assuming `OrganizationAccountAccessRole`, with the same actions as the dedicated
+  `tfc-management-roles`. `tfc-mgmt-apply` keeps `AdministratorAccess` (`docs/known-gaps.md`).
+  Operators must update the stack. See `UPGRADING.md`.
 
 ### Changed
 
