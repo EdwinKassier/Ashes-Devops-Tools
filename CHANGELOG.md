@@ -596,7 +596,8 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   change sets, stack refactors, stack policies, termination protection and rollback control on
   `arn:<partition>:cloudformation:*:*:stack/StackSet-*` to every member principal except
   break-glass, `stackset_execution_role_names` and the new `stackset_stack_writer_role_names`
-  (AWS Control Tower estates set `AWSControlTowerExecution`). The `tfc-apply` boundary denies the
+  (config `aws.stackset_stack_writer_role_names`; AWS Control Tower estates set
+  `AWSControlTowerExecution`). The `tfc-apply` boundary denies the
   same writes, inline on the apply role when an external boundary is used, and a precondition
   fails the plan when the boundary is over its quota after `Fn::Sub` substitution.
   CloudFormation does not report a direct update of a StackSet stack as drift, so `tfc-apply`

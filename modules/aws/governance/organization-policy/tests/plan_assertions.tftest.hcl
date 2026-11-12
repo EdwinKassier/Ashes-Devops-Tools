@@ -1162,3 +1162,38 @@ run "stackset_stack_writer_role_names_reject_wildcard_only" {
 
   expect_failures = [var.stackset_stack_writer_role_names]
 }
+
+# A writer pattern needs at least 3 literal characters before the first "*",
+# so "AW*" or "*Execution" cannot exempt a broad set of roles.
+run "stackset_stack_writer_role_names_reject_short_prefix" {
+  command = plan
+
+  variables {
+    stackset_stack_writer_role_names = ["AW*"]
+  }
+
+  expect_failures = [var.stackset_stack_writer_role_names]
+}
+
+run "stackset_stack_writer_role_names_reject_leading_wildcard" {
+  command = plan
+
+  variables {
+    stackset_stack_writer_role_names = ["*Execution"]
+  }
+
+  expect_failures = [var.stackset_stack_writer_role_names]
+}
+
+run "stackset_stack_writer_role_names_accept_three_letter_prefix" {
+  command = plan
+
+  variables {
+    stackset_stack_writer_role_names = ["AWS*", "AWSControlTowerExecution"]
+  }
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Condition.ArnNotLike["aws:PrincipalArn"], "arn:aws:iam::*:role/AWS*")
+    error_message = "a pattern with 3 literal characters before the first * must be accepted"
+  }
+}

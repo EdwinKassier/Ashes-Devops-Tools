@@ -446,10 +446,9 @@ variable "member_break_glass_require_mfa" {
 }
 
 variable "stackset_stack_writer_role_names" {
-  description = "Member-account role names that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own, exempt from the deny-tamper SCP statement DenyStackSetStackTampering only. An AWS Control Tower estate sets [\"AWSControlTowerExecution\"]; a self-managed StackSet or AWS Quick Setup adds its execution role. Default empty. See docs/runbooks/aws-brownfield-adoption.md."
+  description = "Member-account role names that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own, exempt from the deny-tamper SCP statement DenyStackSetStackTampering only. An AWS Control Tower estate sets [\"AWSControlTowerExecution\"]; a self-managed StackSet or AWS Quick Setup adds its execution role. Null = aws.stackset_stack_writer_role_names from config/landing-zone.yaml, else empty. See docs/runbooks/aws-brownfield-adoption.md."
   type        = list(string)
-  default     = []
-  nullable    = false
+  default     = null
 }
 
 variable "allow_vpc_bpa_exclusions" {

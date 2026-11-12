@@ -74,7 +74,7 @@ module "aws_organization" {
 
   # StackSet stack writers outside this repo (AWS Control Tower estates:
   # AWSControlTowerExecution). Exempt from DenyStackSetStackTampering only.
-  stackset_stack_writer_role_names = var.stackset_stack_writer_role_names
+  stackset_stack_writer_role_names = local.stackset_stack_writer_role_names
 
   ec2_allowed_images = var.ec2_allowed_images
 

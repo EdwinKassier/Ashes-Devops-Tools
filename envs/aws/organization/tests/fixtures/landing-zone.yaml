@@ -16,6 +16,7 @@ aws:
   guard_alert_emails: [secops@cfg.test]
   enable_org_config_recorders: true
   enable_config_recorder_scp: true
+  stackset_stack_writer_role_names: [AWSControlTowerExecution]
   terraform_run_role_arn: arn:aws:iam::012345678901:role/tfc-mgmt-apply
   break_glass_role_arn: arn:aws:iam::012345678901:role/break-glass
   log_archive_bucket_name: cfgco-org-log-archive

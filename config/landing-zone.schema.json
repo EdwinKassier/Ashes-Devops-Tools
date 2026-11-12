@@ -1334,6 +1334,14 @@
           "type": "boolean",
           "description": "aws-organization: deny-tamper DenyConfigRecorderChanges. Turn on only after the org-wide recorders replaced every legacy recorder (migration runbook, last step)."
         },
+        "stackset_stack_writer_role_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+=,.@_/-]{3}[A-Za-z0-9+=,.@_/*-]{0,509}$"
+          },
+          "description": "aws-organization: member-account roles that write StackSet-* stacks for StackSets this repo does not own, exempt from the deny-tamper statement DenyStackSetStackTampering only. AWS Control Tower estates set [AWSControlTowerExecution]."
+        },
         "enable_cloudtrail_delegated_admin": {
           "type": "boolean",
           "description": "aws-organization + aws-security: the organization trail is created and managed from security tooling, the CloudTrail delegated administrator, so the deny-tamper SCP applies to it. Default false. Existing estates: docs/runbooks/aws-cloudtrail-delegated-admin-migration.md."

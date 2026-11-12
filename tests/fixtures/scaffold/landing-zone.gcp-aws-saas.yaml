@@ -370,6 +370,11 @@ aws:
   # docs/runbooks/aws-config-recorder-migration.md.
   enable_org_config_recorders: false
   enable_config_recorder_scp: false
+  # Roles that write StackSet-* stacks for StackSets this repo does not own.
+  # The deny-tamper SCP denies every other member principal those writes. An
+  # AWS Control Tower estate must set AWSControlTowerExecution before the
+  # first aws-organization apply (docs/runbooks/aws-brownfield-adoption.md).
+  # stackset_stack_writer_role_names: [AWSControlTowerExecution]
   # GitHub users/orgs whose Actions OIDC tokens may assume roles in any account
   # (RCP pin: sub must be repo:<owner>/*). List every owner whose repos deploy
   # here through app-services. Empty or absent leaves GitHub federation unpinned.

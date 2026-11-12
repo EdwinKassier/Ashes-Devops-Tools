@@ -527,3 +527,39 @@ run "absent_layers_keep_every_binding" {
     error_message = "Without aws.layers every foundational binding and both management role pairs must stay."
   }
 }
+
+# StackSet stack writers (AWS Control Tower): variable > aws.stackset_stack_writer_role_names > [].
+run "stackset_stack_writers_come_from_config_file" {
+  command = plan
+
+  assert {
+    condition     = local.stackset_stack_writer_role_names == tolist(["AWSControlTowerExecution"])
+    error_message = "stackset_stack_writer_role_names must fall back to aws.stackset_stack_writer_role_names."
+  }
+}
+
+run "stackset_stack_writers_variable_wins" {
+  command = plan
+
+  variables {
+    stackset_stack_writer_role_names = []
+  }
+
+  assert {
+    condition     = length(local.stackset_stack_writer_role_names) == 0
+    error_message = "an explicit stackset_stack_writer_role_names (even empty) must win over the config file."
+  }
+}
+
+run "stackset_stack_writers_absent_are_empty" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-split.yaml"
+  }
+
+  assert {
+    condition     = length(local.stackset_stack_writer_role_names) == 0
+    error_message = "with the key absent there must be no stack writer roles."
+  }
+}

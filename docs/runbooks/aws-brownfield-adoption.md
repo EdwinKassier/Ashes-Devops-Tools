@@ -84,9 +84,9 @@ If the organization is governed by **AWS Control Tower**:
   `StackSet-*` stack in member accounts (`DenyStackSetStackTampering`). Control Tower's own
   stacks have this name (for example `StackSet-AWSControlTowerBP-BASELINE-ROLES`) and are managed
   through `AWSControlTowerExecution`. Before the first `aws-organization` apply that attaches the
-  SCP, set the Terraform variable `stackset_stack_writer_role_names =
-  ["AWSControlTowerExecution"]` on the `aws-organization` workspace. It exempts that role from
-  this one statement only. Without it, Control Tower updates, repairs and OU registrations fail
+  SCP, set `aws.stackset_stack_writer_role_names: [AWSControlTowerExecution]` in
+  `config/landing-zone.yaml` (an `aws-organization` variable of the same name wins over it). It
+  exempts that role from this one statement only. Without it, Control Tower updates, repairs and OU registrations fail
   with AccessDenied.
 
 ## Rollback

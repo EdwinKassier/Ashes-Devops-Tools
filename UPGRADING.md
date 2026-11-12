@@ -746,9 +746,11 @@ What to do before the apply:
 2. **AWS Control Tower estates must act before the apply.** Control Tower deploys its own stacks
    into enrolled accounts, named `StackSet-AWSControlTower*` (for example
    `StackSet-AWSControlTowerBP-BASELINE-ROLES`), and manages accounts through the
-   `AWSControlTowerExecution` role. Set `stackset_stack_writer_role_names =
-   ["AWSControlTowerExecution"]` on `aws-organization` (a Terraform variable on the workspace),
-   or Control Tower updates, repairs and enrollments fail on those stacks. The same applies to a
+   `AWSControlTowerExecution` role. Set `aws.stackset_stack_writer_role_names:
+   [AWSControlTowerExecution]` in `config/landing-zone.yaml` (or the `aws-organization` variable
+   `stackset_stack_writer_role_names`, which wins), or Control Tower updates, repairs and
+   enrollments fail on those stacks. Each entry needs at least 3 literal characters before the
+   first `*`. The same applies to a
    self-managed StackSet (add its execution role, for example
    `AWSCloudFormationStackSetExecutionRole`) and to AWS Systems Manager Quick Setup (add its local
    execution role). A writer role is exempt from `DenyStackSetStackTampering` only. It is not

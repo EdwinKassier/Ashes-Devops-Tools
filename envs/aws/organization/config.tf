@@ -47,6 +47,9 @@ locals {
     # Config recorder migration flags (docs/runbooks/aws-config-recorder-migration.md).
     enable_org_config_recorders = try(tobool(local.lz.aws.enable_org_config_recorders), null)
     enable_config_recorder_scp  = try(tobool(local.lz.aws.enable_config_recorder_scp), null)
+    # Roles that write StackSet-* stacks for StackSets this repo does not own
+    # (AWS Control Tower: AWSControlTowerExecution).
+    stackset_stack_writer_role_names = try([for n in local.lz.aws.stackset_stack_writer_role_names : tostring(n)], null)
     # Org trail managed by the CloudTrail delegated admin (docs/runbooks/aws-cloudtrail-delegated-admin-migration.md).
     enable_cloudtrail_delegated_admin = try(tobool(local.lz.aws.enable_cloudtrail_delegated_admin), null)
     # compliance.backup (CMP-1): the CMK member vault and the DR-region vault.
@@ -130,6 +133,8 @@ locals {
   aws_region               = coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
   tfc_organization         = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   github_federation_owners = coalesce(var.github_federation_owners, local.cfg.github_federation_owners, [])
+  # Variable (even an empty list) > config > [].
+  stackset_stack_writer_role_names = var.stackset_stack_writer_role_names != null ? var.stackset_stack_writer_role_names : coalesce(local.cfg.stackset_stack_writer_role_names, [])
   adopt_existing = (
     var.adopt_existing != null ? var.adopt_existing :
     local.cfg.adopt != null ? local.cfg.adopt :

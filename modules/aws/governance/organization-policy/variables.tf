@@ -128,8 +128,8 @@ variable "stackset_stack_writer_role_names" {
   nullable    = false
 
   validation {
-    condition     = alltrue([for n in var.stackset_stack_writer_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
-    error_message = "stackset_stack_writer_role_names entries must be IAM role names or name patterns; a bare \"*\" is not allowed."
+    condition     = alltrue([for n in var.stackset_stack_writer_role_names : can(regex("^[A-Za-z0-9+=,.@_/-]{3}[A-Za-z0-9+=,.@_/*-]{0,509}$", n))])
+    error_message = "stackset_stack_writer_role_names entries must be IAM role names or name patterns with at least 3 literal characters before the first \"*\" (AWSControlTowerExecution, or a pattern such as AWS-QuickSetup-*). \"*\", \"AW*\" and \"*Execution\" are rejected."
   }
 }
 
