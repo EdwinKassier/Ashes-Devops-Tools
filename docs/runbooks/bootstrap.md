@@ -224,7 +224,7 @@ The same flow applies to AWS (`aws.enabled: true`): see the [AWS bootstrap runbo
 |------|------|-------|
 | `TFC_ORGANIZATION` | Variable | Your TFC org name |
 | `TFC_TOKEN` | Secret | Read-only TFC team token (release run-status checks) |
-| `TFC_TOKEN_DRIFT` | Secret | Queue-plans TFC team token for drift detection (no fallback to `TFC_TOKEN`) |
+| `TFC_TOKEN_DRIFT` | Secret | Token of the team set as tfc-admin `drift_team_id` (codified grants; token made by hand with `expired_at` 90 days out). Never a token with rights on a secret-bearing project. No fallback to `TFC_TOKEN`. |
 
 See [CI_SECRETS.md](../guides/CI_SECRETS.md).
 

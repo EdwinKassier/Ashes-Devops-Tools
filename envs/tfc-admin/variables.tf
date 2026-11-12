@@ -506,6 +506,17 @@ variable "state_backup_team_id" {
   }
 }
 
+variable "drift_team_id" {
+  description = "TFC team ID (team-...) whose team token is TFC_TOKEN_DRIFT (.github/workflows/drift-detection.yml): custom access with runs = plan, state_versions = read and variables = none on every project except the security-only guardrails project and the secret-bearing projects (tfc-admin, saas, and any project that holds a workspace with a static secret). A plan there could read the static tokens; HCP health assessments (enable_health_assessments, on tiers that offer them) are their only drift check. The output drift_workspaces lists the workspaces the team can plan. An organization owner creates the team and its token by hand, with an expiry, so the token never enters state. Null = no grant."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.drift_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.drift_team_id))
+    error_message = "drift_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "enable_saas_state_backup" {
   description = "Grant state_backup_team_id state read on the saas project too. Default false: saas-* state holds the Supabase database password and service-role key (a provider limitation), and a backup copy outside HCP Terraform would hold them as well. HCP Terraform keeps every state version, so a restore stays possible without the backup."
   type        = bool

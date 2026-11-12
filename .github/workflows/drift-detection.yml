@@ -6,13 +6,23 @@ name: Drift Detection
 # workflow then duplicates that signal and may be opted out of (below).
 #
 # Required repository configuration (see docs/guides/CI_SECRETS.md):
-#   - secrets.TFC_TOKEN_DRIFT  Terraform Cloud team token with QUEUE PLANS (runs =
-#                              plan) and READ STATE VERSIONS on the target
-#                              workspaces. Drift detection reads the current state
-#                              version to find the last applied run and its
-#                              configuration version, then creates a speculative
-#                              refresh-only run pinned to it (POST /runs), which
-#                              READ access alone cannot do.
+#   - secrets.TFC_TOKEN_DRIFT  Token of the team set as tfc-admin drift_team_id
+#                              (runs = plan, state versions read, variables none).
+#                              Drift detection reads the current state version to
+#                              find the last applied run and its configuration
+#                              version, then creates a speculative refresh-only run
+#                              pinned to it (POST /runs), which READ access alone
+#                              cannot do. A refresh-only plan still runs with the
+#                              workspace's variables, so the team has NO grant on
+#                              secret-bearing projects: tfc-admin, saas-*, and any
+#                              project that holds a workspace with a static secret
+#                              (a sensitive or secret-named variable, or the SaaS
+#                              bridge). Leave those workspaces out of
+#                              TFC_DRIFT_WORKSPACES. There HCP health
+#                              assessments are the only drift check (on tiers
+#                              that offer them). The
+#                              tfc-admin output drift_workspaces lists the
+#                              workspaces this token can check.
 #                              Keep this separate from the read-only TFC_TOKEN used
 #                              by the release workflow. There is NO fallback to
 #                              TFC_TOKEN: the read-only release token must never
@@ -22,8 +32,8 @@ name: Drift Detection
 #   - vars.TFC_DRIFT_WORKSPACES  (optional) JSON array of workspace names to check.
 #                              Defaults to the GCP control plane, gcp-workload-dev
 #                              and the AWS guardrail workspaces (aws-organization,
-#                              aws-security, aws-network). Set it to the workspaces
-#                              this estate actually has.
+#                              aws-security, aws-network). Set it to the tfc-admin
+#                              output drift_workspaces, or a subset of it.
 # What counts as drift: a plan-only, refresh-only run against the configuration
 # version of the run that wrote the current state (the last apply). Real
 # infrastructure that differs from that state is drift. A merged but not yet
@@ -141,9 +151,12 @@ jobs:
         #     "aws-identity",           # IAM Identity Center
         #     "aws-shared-services",    # Log archive, KMS, private CA, SSM
         #     "aws-backup",             # Org-wide AWS Backup
-        #     "aws-workload-dev",       # AWS per-env workloads (aws-workload-<env>)
-        #     "saas-web"                # SaaS workspaces (saas-<name>)
+        #     "aws-workload-dev"        # AWS per-env workloads (aws-workload-<env>)
         #   ]
+        # Never list saas-<name>, tfc-admin or a workspace with a static secret:
+        # drift_team_id has no grant there (a plan could read the secret), so the
+        # leg fails as "does not exist". The tfc-admin output drift_workspaces is
+        # the exact list this token can check.
         # The inline default covers the full GCP control plane (all four roots of
         # the H3 split; gcp-network-hub holds the hub VPC) plus the dev workload AND
         # the AWS guardrail workspaces (aws-organization, aws-security, aws-network),
@@ -151,7 +164,10 @@ jobs:
         # attacker would tamper with. A workspace that does not exist (e.g. AWS on
         # a GCP-only estate) FAILS its leg unless REAL_CLOUD_CHECKS_OPT_OUT=true, so
         # a single-cloud estate sets TFC_DRIFT_WORKSPACES to its own workspaces
-        # (and adds per-env workload or saas workspaces there).
+        # (and adds per-env workload workspaces there). When a GCP workload in
+        # the shared gcp project holds a static secret, that whole project is
+        # secret-bearing and leaves the default list unreachable: set
+        # split_workload_projects = true, or set TFC_DRIFT_WORKSPACES.
         # yamllint disable-line rule:line-length
         workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]') }}
     steps:
@@ -209,9 +225,10 @@ jobs:
               exit 0
             fi
             echo "::error::Workspace '${WORKSPACE}' does not exist in TFC org" \
-              "'${TFC_ORGANIZATION}', so its drift check cannot run. Set the" \
-              "TFC_DRIFT_WORKSPACES repository variable to this estate's workspaces," \
-              "or set REAL_CLOUD_CHECKS_OPT_OUT=true to acknowledge the gap." >&2
+              "'${TFC_ORGANIZATION}', or TFC_TOKEN_DRIFT has no access to it (a" \
+              "secret-bearing workspace), so its drift check cannot run. Set the" \
+              "TFC_DRIFT_WORKSPACES repository variable to the tfc-admin output" \
+              "drift_workspaces, or set REAL_CLOUD_CHECKS_OPT_OUT=true to acknowledge the gap." >&2
             exit 1
           fi
           if [ "$http_code" != "200" ]; then

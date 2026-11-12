@@ -1542,6 +1542,81 @@ run "state_backup_team_must_be_dedicated" {
   expect_failures = [terraform_data.input_contract, check.secret_bearing_projects_have_approvers]
 }
 
+# The drift team (TFC_TOKEN_DRIFT) queues refresh-only plans. A plan can read
+# the workspace's variables, so it never gets a secret-bearing project: saas
+# (always), the tfc-admin project, and here gcp-workloads (TFE_TOKEN on
+# gcp-workload-prod).
+run "drift_team_plans_only_outside_secret_bearing_projects" {
+  command = plan
+
+  variables {
+    split_workload_projects = true
+    platform_team_id        = "team-platform1"
+    drift_team_id           = "team-drift1"
+    workspace_variables = {
+      "gcp-workload-prod" = {
+        TFE_TOKEN = { value = "not-a-real-token", category = "env", sensitive = true }
+      }
+    }
+  }
+
+  # No approvers team: only organization owners can confirm runs on the
+  # secret-bearing projects, so a check warns.
+  expect_failures = [check.secret_bearing_projects_have_approvers]
+
+  assert {
+    condition = (
+      toset([for k, g in tfe_team_project_access.this : split("/", k)[0] if g.team_id == "team-drift1"]) == toset(["gcp", "aws", "aws-workloads"]) &&
+      alltrue([for k, g in tfe_team_project_access.this : (
+        g.access == "custom" &&
+        g.workspace_access[0].runs == "plan" && g.workspace_access[0].variables == "none" &&
+        g.workspace_access[0].state_versions == "read" && g.workspace_access[0].locking == false &&
+        g.project_access[0].teams == "none"
+      ) if g.team_id == "team-drift1"])
+    )
+    error_message = "the drift team gets runs = plan, state read, no variables, and never a secret-bearing project (saas, gcp-workloads with the token)."
+  }
+
+  assert {
+    condition = (
+      contains(output.drift_workspaces, "gcp-organization") &&
+      contains(output.drift_workspaces, "aws-workload-prod") &&
+      !contains(output.drift_workspaces, "gcp-workload-prod") &&
+      !contains(output.drift_workspaces, "gcp-workload-dev") &&
+      !contains(output.drift_workspaces, "saas-web") &&
+      !contains(output.drift_workspaces, "gcp-guardrails")
+    )
+    error_message = "drift_workspaces must list exactly the workspaces in the projects the drift team may plan."
+  }
+}
+
+# Without the variable there is no grant and nothing to list.
+run "drift_team_unset_grants_nothing" {
+  command = plan
+
+  variables {
+    platform_team_id = "team-platform1"
+  }
+
+  expect_failures = [check.secret_bearing_projects_have_approvers]
+
+  assert {
+    condition     = length([for k in keys(tfe_team_project_access.this) : k if endswith(k, "/drift")]) == 0 && length(output.drift_workspaces) == 0
+    error_message = "drift_team_id = null must create no drift grant."
+  }
+}
+
+run "drift_team_must_be_dedicated" {
+  command = plan
+
+  variables {
+    platform_team_id = "team-same1"
+    drift_team_id    = "team-same1"
+  }
+
+  expect_failures = [terraform_data.input_contract, check.secret_bearing_projects_have_approvers]
+}
+
 # TFC applies with the exact version CI tests.
 run "terraform_version_is_exact" {
   command = plan

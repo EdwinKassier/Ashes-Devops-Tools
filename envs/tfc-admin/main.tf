@@ -776,6 +776,15 @@ locals {
     sentinel_mocks = "none"
     locking        = false
   }
+  # Drift team (drift-detection.yml): reads the current state version to find
+  # the last applied run, then queues a plan-only, refresh-only run on it.
+  drift_custom_access = {
+    runs           = "plan"
+    variables      = "none"
+    state_versions = "read"
+    sentinel_mocks = "none"
+    locking        = false
+  }
 
   # ── Guardrails (security team only) ──────────────────────────
   # gcp-guardrails applies the org IAM deny policies that contain the platform's
@@ -955,7 +964,24 @@ locals {
         custom  = local.state_backup_custom_access
       } if var.enable_saas_state_backup || !contains(local.saas_projects, p)
     },
+    {
+      for p in local.drift_projects : "${p}/drift" => {
+        project = p
+        team_id = var.drift_team_id
+        access  = "custom"
+        custom  = local.drift_custom_access
+      }
+    },
   )
+
+  # A refresh-only plan is still a plan: it runs with the workspace's
+  # variables. The drift team gets no secret-bearing project (tfc-admin, saas,
+  # a project with a static secret) and no guardrails project. There HCP
+  # health assessments (enable_health_assessments) are the only drift check.
+  drift_projects = var.drift_team_id == null ? toset([]) : setsubtract(local.shared_access_projects, local.secret_bearing_projects)
+  drift_workspaces = sort([
+    for ws, p in local.workspace_project_key : ws if contains(local.drift_projects, p)
+  ])
 
   # Non-production gcp/aws workload workspaces that share a project with the
   # control plane, with a production workload or with a secret-bearing
@@ -1068,6 +1094,13 @@ resource "terraform_data" "input_contract" {
         coalesce(var.saas_approvers_team_id, "-"),
       )
       error_message = "saas_approvers_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, state_backup_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its members can read the account-wide SaaS tokens through a plan."
+    }
+    precondition {
+      condition = var.drift_team_id == null || !contains(
+        concat(compact([var.platform_team_id, var.control_plane_approvers_team_id, var.security_team_id, var.tfc_admin_team_id, var.state_backup_team_id, var.saas_approvers_team_id]), var.viewer_team_ids, values(var.saas_outputs_reader_team_ids)),
+        coalesce(var.drift_team_id, "-"),
+      )
+      error_message = "drift_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, state_backup_team_id, saas_approvers_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its token sits in GitHub (environment tfc-drift) and may queue plans, so it must carry nothing else."
     }
     precondition {
       condition     = length(distinct(values(var.saas_outputs_reader_team_ids))) == length(var.saas_outputs_reader_team_ids)

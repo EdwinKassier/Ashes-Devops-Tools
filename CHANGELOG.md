@@ -474,6 +474,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   policies outside `/tfc-managed/`, IAM group and user policies, group membership and console
   password changes. The boundary and the deny-tamper SCP deny `kms:UpdateAlias` and
   `kms:DeleteAlias` on keys tagged `protected = true`, except for break-glass. See `UPGRADING.md`.
+- **The drift token's team is codified (SEC-11).** The new tfc-admin input `drift_team_id` grants
+  the `TFC_TOKEN_DRIFT` team `runs = plan`, state read and no variable access on every project
+  except guardrails and the secret-bearing projects (tfc-admin, `saas-*`, a project with a static
+  secret). A refresh-only plan still runs with the workspace's variables, so those workspaces rely
+  on HCP health assessments alone (on tiers that offer them). The new output `drift_workspaces` lists what the token can check. The
+  token is still made by hand with an expiry, so it never enters state.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

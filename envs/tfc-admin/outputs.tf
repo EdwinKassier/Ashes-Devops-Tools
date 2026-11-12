@@ -84,3 +84,8 @@ output "workspace_catalog" {
     }
   }
 }
+
+output "drift_workspaces" {
+  description = "Workspaces the drift_team_id team can plan (runs = plan): every workspace outside the guardrails project and the secret-bearing projects. Set TFC_DRIFT_WORKSPACES (drift-detection.yml) to this list or a subset. Empty when drift_team_id is null or enable_projects is false."
+  value       = local.drift_workspaces
+}
