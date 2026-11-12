@@ -153,7 +153,7 @@ export VERCEL_API_TOKEN="your_vercel_token_here"
 
 Generate a token at [https://vercel.com/account/tokens](https://vercel.com/account/tokens). Prefer a **team token** scoped to the target Vercel team over a personal token for org-wide deployments.
 
-> **Note on `modules/saas/stages/saas-workload`:** The stage module declares `supabase`, `vercel`, and `null` providers in its `required_providers` block. Terraform evaluates `required_providers` at init time regardless of feature flag values, so **all three providers must be configured** in the calling root even when `enable_vercel = false`. If you want to use Supabase without any Vercel dependency, call `modules/supabase/environment` directly — it has no Vercel provider declaration.
+> **Note on `modules/saas/stages/saas-workload`:** the stage declares the `supabase` and `vercel` providers in `required_providers`. Terraform resolves `required_providers` at init regardless of feature flags, so the calling root must configure **both** even when `enable_vercel = false` ([single-provider mode](../architecture/provider-selection.md#single-provider-mode-in-the-saas-root)). To use Supabase with no Vercel provider at all, call `modules/supabase/environment` directly.
 
 **Node.js requirement for vault-secrets:**
 
@@ -416,7 +416,7 @@ make plan-gcp-workload APP_ENV=dev
 | `make test` | Run all .tftest.hcl suites |
 | `make plan-gcp-organization` | Plan control-plane changes |
 | `make plan-gcp-workload APP_ENV=dev` | Plan an app environment (add `APP_VARS=examples/dev.tfvars.example` for local tuning knobs) |
-| `make ci` | Full local pipeline (fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security) |
+| `make ci` | Every workstation-runnable CI gate: fmt-check, consistency, yamllint, markdownlint-check, commit-check, codeowners-check, scaffold-fixtures-check, config-check, count-check, links, examples-refs, required-checks, backend-check, shellcheck, test-scripts, docs-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, check-jsonschema, opa 1.22.2 and a fetched origin/main) |
 
 ---
 
