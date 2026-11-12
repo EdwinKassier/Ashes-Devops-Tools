@@ -32,8 +32,9 @@ run "contracts_replace_remote_state" {
 
   variables {
     network_contract = {
-      tgw_id        = "tgw-00000000contract"
-      ipam_pool_ids = { "eu-west-2" = "ipam-pool-contract" }
+      tgw_id              = "tgw-00000000contract"
+      ipam_pool_ids       = { "eu-west-2" = "ipam-pool-contract" }
+      resolver_profile_id = "rp-0000000contract"
     }
   }
 
@@ -50,6 +51,7 @@ run "contracts_replace_remote_state" {
     condition = (
       local.workload_account_id == "222222222222" &&
       local.ipam_pool_id == "ipam-pool-contract" &&
+      local.resolver_profile_id == "rp-0000000contract" &&
       local.log_archive_bucket_name == "acme-org-log-archive" &&
       module.aws_workload.tgw_routes["private"][0].transit_gateway_id == "tgw-00000000contract"
     )
@@ -67,8 +69,8 @@ run "standalone_without_network_hub" {
   }
 
   assert {
-    condition     = length(data.terraform_remote_state.aws_network) == 0 && local.tgw_id == null && local.ipam_pool_id == ""
-    error_message = "enable_network_hub = false must not read aws-network and must pass no TGW / IPAM pool"
+    condition     = length(data.terraform_remote_state.aws_network) == 0 && local.tgw_id == null && local.ipam_pool_id == "" && local.resolver_profile_id == null
+    error_message = "enable_network_hub = false must not read aws-network and must pass no TGW / IPAM pool / DNS profile"
   }
 
   assert {
@@ -87,7 +89,7 @@ run "remote_state_read_without_contract" {
 
   override_data {
     target = data.terraform_remote_state.aws_network
-    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }, resolver_profile_id = "rp-00000000remote" } } }
   }
   override_data {
     target = data.terraform_remote_state.aws_security
@@ -97,6 +99,34 @@ run "remote_state_read_without_contract" {
   assert {
     condition     = length(data.terraform_remote_state.aws_security) == 1 && local.log_archive_bucket_name == "remote-org-log-archive"
     error_message = "with no security contract the bucket name must come from the aws-security remote state"
+  }
+
+  assert {
+    condition     = local.resolver_profile_id == "rp-00000000remote"
+    error_message = "with no network contract the DNS profile ID must come from the aws-network remote state"
+  }
+}
+
+# A network state without resolver_profile_id associates nothing (try()).
+run "remote_state_without_profile_associates_nothing" {
+  command = plan
+
+  variables {
+    security_contract = null
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { contract = { log_archive_bucket_name = "remote-org-log-archive" } } }
+  }
+
+  assert {
+    condition     = local.resolver_profile_id == null
+    error_message = "a network state without resolver_profile_id must pass no DNS profile"
   }
 }
 
@@ -121,10 +151,21 @@ run "contracts_from_config_file" {
       local.workload_account_id == "222222222222" &&
       local.tgw_id == "tgw-0000000000000cfg" &&
       local.ipam_pool_id == "ipam-pool-cfg" &&
+      local.resolver_profile_id == "rp-0000000000000cfg" &&
       local.log_archive_bucket_name == "cfgco-org-log-archive"
     )
     error_message = "aws.contracts.<layer> in the config file must replace the remote-state reads"
   }
+}
+
+run "rejects_malformed_resolver_profile_id" {
+  command = plan
+
+  variables {
+    network_contract = { tgw_id = "tgw-00000000contract", resolver_profile_id = "vpc-0123456789abcdef0" }
+  }
+
+  expect_failures = [var.network_contract]
 }
 
 run "rejects_malformed_network_contract" {

@@ -49,8 +49,9 @@ locals {
       account_role_arns     = { for k, v in try(local.lz.aws.contracts.organization.account_role_arns, {}) : k => tostring(v) }
     }
     network_contract = try(local.lz.aws.contracts.network, null) == null ? null : {
-      tgw_id        = try(tostring(local.lz.aws.contracts.network.tgw_id), null)
-      ipam_pool_ids = { for k, v in try(local.lz.aws.contracts.network.ipam_pool_ids, {}) : k => tostring(v) }
+      tgw_id              = try(tostring(local.lz.aws.contracts.network.tgw_id), null)
+      ipam_pool_ids       = { for k, v in try(local.lz.aws.contracts.network.ipam_pool_ids, {}) : k => tostring(v) }
+      resolver_profile_id = try(tostring(local.lz.aws.contracts.network.resolver_profile_id), null)
     }
     # aws.workload: app golden-path settings shared by every aws-workload-<env>.
     app_ingress_mode    = try(tostring(local.lz.aws.workload.app_ingress_mode), null)

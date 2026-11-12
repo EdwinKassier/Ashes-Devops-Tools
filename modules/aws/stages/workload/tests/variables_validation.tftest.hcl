@@ -31,3 +31,13 @@ run "invalid_vpc_cidr_rejected" {
 
   expect_failures = [var.vpc_cidr]
 }
+
+run "resolver_profile_id_must_be_a_profile_id" {
+  command = plan
+
+  variables {
+    resolver_profile_id = "vpc-0123456789abcdef0"
+  }
+
+  expect_failures = [var.resolver_profile_id]
+}

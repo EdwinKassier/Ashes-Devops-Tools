@@ -643,6 +643,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   per service with an alias record, output `shared_dns_zone_arns`). aws-network admits `top_cidr`
   and adds the zones to the Route 53 Profile. Spoke traffic to the endpoints stays inspected
   (`docs/known-gaps.md`). See `UPGRADING.md`.
+- **Spoke VPCs associate the org Route 53 Profile (ARC-6).** `aws-workload-<env>` now creates an
+  `aws_route53profiles_association` for its spoke VPC in the workload account, from the network
+  contract `resolver_profile_id` (remote state, `network_contract` or
+  `aws.contracts.network.resolver_profile_id`). The spoke inherits the DNS Firewall, the resolver
+  forward rules and the central interface endpoint zones. Standalone spokes and a network state
+  without the key associate nothing.
 - **AZs from another region fail at plan (ARC-3).** `modules/aws/network/vpc` now fails the plan
   when an availability zone name does not start with `region`. Before, the default
   `eu-west-2a`/`eu-west-2b` zones reached every subnet in another region and the apply failed with

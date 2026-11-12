@@ -32,6 +32,13 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   IPs, and `aws ssm describe-instance-information` and `aws sts
   get-caller-identity` succeed through them. The alias target is the first
   `dns_entry` of each endpoint (the regional name).
+- **The spoke Route 53 Profile association is mock-tested only (ARC-6).**
+  Confirm in the sandbox that `aws-workload-<env>` (its `tfc-apply` role in the
+  workload account) creates the association against the RAM-shared profile,
+  that the association reaches `COMPLETE`, and that a blocked domain answers
+  `NXDOMAIN` from the spoke. A spoke VPC can hold two profile associations; the
+  provider (v6.72.0) has no `priority` argument, so this one takes the default
+  priority 100.
 - **On-premises DNS through the AWS Resolver endpoints has no return route.**
   The egress VPC `private` route tables send only `top_cidr` to the transit
   gateway, and the egress attachment's `shared` route table has no on-premises

@@ -20,6 +20,8 @@
 #                            private) route var.tgw_destination_cidrs (default
 #                            0.0.0.0/0 -> centralized egress/inspection) to the
 #                            shared TGW via the vpc module's `routes` input.
+#   - DNS profile          — associates the spoke VPC with the org Route 53
+#                            Profile (resolver_profile_id, shared over RAM).
 #   - spoke TGW attachment — attaches the spoke VPC to the SHARED transit gateway
 #                            (tgw_id, shared with this account via RAM by the
 #                            network account). Route-table association/propagation
@@ -154,6 +156,26 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "spoke" {
 moved {
   from = aws_ec2_transit_gateway_vpc_attachment.spoke
   to   = aws_ec2_transit_gateway_vpc_attachment.spoke[0]
+}
+
+# ---------------------------------------------------------------------------
+# Org Route 53 Profile association
+#
+# aws-network shares the org Route 53 Profile over RAM (to the organization).
+# The association is created HERE, in the workload account that owns the VPC:
+# the spoke then inherits the profile's DNS Firewall rule group, resolver
+# forward rules and the central interface endpoint zones. A VPC can hold up to
+# two profile associations; this is the first, so it takes priority 100.
+# ---------------------------------------------------------------------------
+
+resource "aws_route53profiles_association" "spoke" {
+  count = var.resolver_profile_id == null ? 0 : 1
+
+  name        = "${local.name}-dns-profile"
+  profile_id  = var.resolver_profile_id
+  resource_id = module.vpc.vpc_id
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------

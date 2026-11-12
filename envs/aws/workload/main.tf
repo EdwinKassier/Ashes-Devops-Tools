@@ -82,6 +82,12 @@ locals {
     !var.enable_network_hub ? "" :
     local.read_network ? local.network_remote.ipam_pool_ids[local.aws_region] : lookup(local.network_contract.ipam_pool_ids, local.aws_region, "")
   )
+  # The org Route 53 Profile the spoke associates. try(): a network state from
+  # before the profile output existed associates nothing until it re-applies.
+  resolver_profile_id = (
+    !var.enable_network_hub ? null :
+    local.read_network ? try(local.network_remote.resolver_profile_id, null) : local.network_contract.resolver_profile_id
+  )
 
   # The central log-archive bucket name comes from aws-security (its owner) unless
   # a contract supplies it, so a rename there cannot silently leave this
@@ -116,6 +122,10 @@ module "aws_workload" {
   # tgw_id = null -> no attachment/routes; ipam_pool_id = "" -> literal vpc_cidr.
   tgw_id       = local.tgw_id
   ipam_pool_id = local.ipam_pool_id
+
+  # The spoke VPC associates the org Route 53 Profile (DNS Firewall, forward
+  # rules, central interface endpoint zones). Null = no association.
+  resolver_profile_id = local.resolver_profile_id
 
   ipam_explicit_cidr = var.ipam_explicit_cidr
 

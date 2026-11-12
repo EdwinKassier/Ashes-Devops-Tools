@@ -122,3 +122,30 @@ run "ipam_legacy_netmask_is_opt_out" {
     error_message = "ipam_explicit_cidr = false must keep the legacy netmask shape."
   }
 }
+
+run "spoke_associates_the_dns_profile" {
+  command = plan
+
+  variables {
+    environment         = "dev"
+    resolver_profile_id = "rp-0123456789abcdef"
+  }
+
+  assert {
+    condition     = length(aws_route53profiles_association.spoke) == 1 && aws_route53profiles_association.spoke[0].profile_id == "rp-0123456789abcdef" && aws_route53profiles_association.spoke[0].name == "workload-dev-dns-profile"
+    error_message = "A hub-attached spoke must associate the org Route 53 Profile, so it gets DNS Firewall, forward rules and the endpoint zones."
+  }
+}
+
+run "no_profile_no_association" {
+  command = plan
+
+  variables {
+    environment = "dev"
+  }
+
+  assert {
+    condition     = length(aws_route53profiles_association.spoke) == 0
+    error_message = "Without a profile ID (standalone or an older network contract) nothing is associated."
+  }
+}

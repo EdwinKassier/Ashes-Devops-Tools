@@ -113,6 +113,7 @@ aws:
     network:
       tgw_id: tgw-0123456789abcdef0
       ipam_pool_ids: {eu-west-2: ipam-pool-0123456789abcdef0}
+      resolver_profile_id: rp-0123456789abcdef  # optional: the spoke associates the org DNS profile
     security:
       log_archive_bucket_name: my-org-org-log-archive
 gcp:

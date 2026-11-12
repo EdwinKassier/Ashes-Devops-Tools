@@ -15,5 +15,6 @@ aws:
     network:
       tgw_id: tgw-0000000000000cfg
       ipam_pool_ids: {eu-west-2: ipam-pool-cfg}
+      resolver_profile_id: rp-0000000000000cfg
     security:
       log_archive_bucket_name: cfgco-org-log-archive

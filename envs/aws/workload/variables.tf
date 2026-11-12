@@ -51,16 +51,22 @@ variable "organization_contract" {
 }
 
 variable "network_contract" {
-  description = "aws-network stage contract: tgw_id (shared transit gateway, null = no attachment) and ipam_pool_ids (region => IPAM pool ID; a missing region uses the literal vpc_cidr). Null = aws.contracts.network from config/landing-zone.yaml, else read from the aws-network workspace's remote state. Ignored when enable_network_hub = false."
+  description = "aws-network stage contract: tgw_id (shared transit gateway, null = no attachment), ipam_pool_ids (region => IPAM pool ID; a missing region uses the literal vpc_cidr) and resolver_profile_id (the org Route 53 Profile the spoke VPC associates, null = no association). Null = aws.contracts.network from config/landing-zone.yaml, else read from the aws-network workspace's remote state. Ignored when enable_network_hub = false."
   type = object({
-    tgw_id        = optional(string)
-    ipam_pool_ids = optional(map(string), {})
+    tgw_id              = optional(string)
+    ipam_pool_ids       = optional(map(string), {})
+    resolver_profile_id = optional(string)
   })
   default = null
 
   validation {
     condition     = try(var.network_contract.tgw_id, null) == null || can(regex("^tgw-", try(var.network_contract.tgw_id, "")))
     error_message = "network_contract.tgw_id must be null or a transit gateway id (tgw-xxxxxxxx)."
+  }
+
+  validation {
+    condition     = try(var.network_contract.resolver_profile_id, null) == null || can(regex("^rp-[0-9a-z]+$", try(var.network_contract.resolver_profile_id, "")))
+    error_message = "network_contract.resolver_profile_id must be null or a Route 53 Profile ID (rp-xxxxxxxx)."
   }
 }
 

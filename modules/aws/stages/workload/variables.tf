@@ -153,6 +153,17 @@ variable "tgw_id" {
   }
 }
 
+variable "resolver_profile_id" {
+  description = "ID of the org Route 53 Profile shared by aws-network over RAM (network contract resolver_profile_id). The spoke VPC associates it and inherits DNS Firewall, the resolver forward rules and the central interface endpoint zones. Null (default) = no association."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.resolver_profile_id == null || can(regex("^rp-[0-9a-z]+$", coalesce(var.resolver_profile_id, "x")))
+    error_message = "resolver_profile_id must be null or a Route 53 Profile ID (rp-xxxxxxxx)."
+  }
+}
+
 variable "flow_log_destination_arn" {
   description = "ARN of the central log-archive S3 bucket that receives the spoke VPC's flow logs."
   type        = string

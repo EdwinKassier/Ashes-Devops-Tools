@@ -1704,6 +1704,11 @@
                 },
                 "ipam_pool_ids": {
                   "type": "object"
+                },
+                "resolver_profile_id": {
+                  "type": "string",
+                  "pattern": "^rp-[0-9a-z]+$",
+                  "description": "ID of the org Route 53 Profile (aws-network output contract.resolver_profile_id). Each aws-workload-<env> spoke VPC associates it. Unset = no association."
                 }
               },
               "additionalProperties": false

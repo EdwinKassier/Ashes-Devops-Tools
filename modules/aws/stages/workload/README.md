@@ -85,11 +85,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L194)
-- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L139)
-- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L269)
-- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L48)
-- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L52)
+- resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L216)
+- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L141)
+- resource.aws_route53profiles_association.spoke (modules/aws/stages/workload/main.tf#L171)
+- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L291)
+- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L50)
+- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L54)
 
 
 ## Inputs
@@ -117,6 +118,7 @@ The following resources are created:
 | <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID to allocate the spoke VPC CIDR from (the network account's regional pool, shared over RAM). Empty string uses the literal vpc\_cidr instead. | `string` | `""` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the CMK used as the account default EBS encryption key and (when enable\_ssm is true) to encrypt Session Manager sessions/logs. Empty string leaves default EBS encryption on the AWS-managed key; must be a non-empty key when enable\_ssm is true. | `string` | `""` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of the spoke VPC (and prefix for its subnets, route tables and TGW attachment). null derives workload-<environment> (or "workload" when environment is null). | `string` | `null` | no |
+| <a name="input_resolver_profile_id"></a> [resolver\_profile\_id](#input\_resolver\_profile\_id) | ID of the org Route 53 Profile shared by aws-network over RAM (network contract resolver\_profile\_id). The spoke VPC associates it and inherits DNS Firewall, the resolver forward rules and the central interface endpoint zones. Null (default) = no association. | `string` | `null` | no |
 | <a name="input_subnets"></a> [subnets](#input\_subnets) | Spoke subnet tiers, keyed by tier name. newbits/number\_offset drive cidrsubnet(vpc\_cidr, newbits, number\_offset + az\_index); the tgw tier holds the transit-gateway attachment ENIs. Offsets are multiples of 8 (> az\_count) so per-AZ subnets never collide. | <pre>map(object({<br/>    newbits       = number<br/>    number_offset = number<br/>    public        = optional(bool, false)<br/>  }))</pre> | <pre>{<br/>  "isolated": {<br/>    "newbits": 8,<br/>    "number_offset": 8<br/>  },<br/>  "private": {<br/>    "newbits": 8,<br/>    "number_offset": 0<br/>  },<br/>  "tgw": {<br/>    "newbits": 8,<br/>    "number_offset": 16<br/>  }<br/>}</pre> | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (spoke VPC and its children, TGW attachment) and passed to the IAM role, Config recorder, Systems Manager and edge-security child modules. Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
 | <a name="input_tfc_apply_boundary_policy_name"></a> [tfc\_apply\_boundary\_policy\_name](#input\_tfc\_apply\_boundary\_policy\_name) | Name of the tfc-apply permissions-boundary managed policy (tfc-oidc-baseline apply\_boundary\_policy\_name). Every IAM role this stage creates in the workload account (workload\_roles without their own permissions\_boundary) gets permissions\_boundary = arn:PARTITION:iam::ACCOUNT\_ID:policy/NAME, derived from that account's provider, which the member-account tfc-apply role requires when boundary propagation is on. Null = create roles without a boundary. | `string` | `"tfc-apply-boundary"` | no |
