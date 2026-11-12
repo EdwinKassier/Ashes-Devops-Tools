@@ -614,6 +614,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   (CI, app deploy SAs, cross-project readers) still need rules of their own
   (`examples/vpc-sc`).
 - **GKE Autopilot still runs in the Shared VPC host project** in production.
+- **An autoscaled ECS service that Terraform deploys itself resets its task count.**
+  A service without a GitHub deploy role has `enable_external_deployments` false, so
+  its `desired_count` is not ignored and every apply sets it back to `desired_count`.
+  Production services autoscale by default (ARC-16). Services with a deploy role
+  ignore `desired_count`.
 - **The Secure Web Proxy has no TLS inspection.** Rules match on host name only.
 - **AWS data-plane alarms are not implemented:** TGW `PacketDropCountBlackhole` /
   `NoRoute`, Network Firewall `DroppedPackets`, Site-to-Site VPN `TunnelState`.

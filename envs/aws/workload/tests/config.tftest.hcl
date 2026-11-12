@@ -201,3 +201,45 @@ run "scaffold_gcp_aws_saas_plans" {
     }
   }
 }
+
+# ARC-16: production comes from is_production, never from the environment name.
+run "is_production_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+    environment              = "prod"
+  }
+
+  assert {
+    condition     = local.is_production == true
+    error_message = "aws.workload_environments.prod.is_production: true must make the root production."
+  }
+}
+
+run "dev_config_is_not_production" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+  }
+
+  assert {
+    condition     = local.is_production == false
+    error_message = "aws.workload_environments.dev.is_production: false must leave the root non-production."
+  }
+}
+
+run "is_production_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+    is_production            = true
+  }
+
+  assert {
+    condition     = local.is_production == true
+    error_message = "An explicit is_production variable must win over the config file."
+  }
+}

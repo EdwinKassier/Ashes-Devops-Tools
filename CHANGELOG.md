@@ -532,6 +532,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   defaults it to `/` (empty string = keep the TCP probe) and keeps one instance warm for every
   production service whose `min_instances` is unset. The key is accepted in every `services` key list
   and in `config/landing-zone.schema.json`. See `UPGRADING.md`.
+- **ECS services autoscale in production by default (breaking, ARC-16).** `enable_autoscaling` is
+  now unset by default and resolves to `true` when `is_production` is true (new input of the AWS
+  app-services stage and of `envs/aws/workload`, read from the config file, never from the
+  environment name). See `UPGRADING.md`.
 - **One production rule: `is_production` (breaking).** Every `gcp.environments` and
   `aws.workload_environments` entry, and every entry of tfc-admin's `environments` variable, must
   set `is_production`; `config/landing-zone.schema.json` and the roots that read the flag fail

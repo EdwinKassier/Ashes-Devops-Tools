@@ -379,7 +379,9 @@ mirror in reach of a spoke without internet egress. With a different
 `container_port`, set `container_image`, or the targets stay unhealthy until
 the first deploy (the plan warns). Once a service has a deploy role, the ECS service
 **ignores** `task_definition` and `desired_count` drift, so Terraform never
-reverts what CI deployed.
+reverts what CI deployed. In a production environment (`is_production: true`)
+a service scales on CPU between `autoscaling_min_capacity` and
+`autoscaling_max_capacity` unless it sets `enable_autoscaling: false`.
 
 ### Step 3: the delivery pipeline (GitHub Actions)
 

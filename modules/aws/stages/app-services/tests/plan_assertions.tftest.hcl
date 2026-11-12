@@ -750,3 +750,46 @@ run "database_org_backup_tag_default_and_opt_out" {
     error_message = "database.enable_org_backup = false must leave the backup tag off."
   }
 }
+
+# ── ARC-16: production services autoscale by default ─────────────────────────
+
+run "production_services_autoscale_by_default" {
+  command = plan
+
+  variables {
+    is_production = true
+    services      = { api = {} }
+  }
+
+  assert {
+    condition     = length(module.service["api"].autoscaling_target_ids) == 1
+    error_message = "A production ECS service without enable_autoscaling must scale on CPU (ARC-16)."
+  }
+}
+
+run "production_service_can_opt_out_of_autoscaling" {
+  command = plan
+
+  variables {
+    is_production = true
+    services      = { api = { enable_autoscaling = false } }
+  }
+
+  assert {
+    condition     = length(module.service["api"].autoscaling_target_ids) == 0
+    error_message = "An explicit enable_autoscaling = false must keep a fixed task count in production."
+  }
+}
+
+run "non_production_autoscaling_stays_opt_in" {
+  command = plan
+
+  variables {
+    services = { api = {} }
+  }
+
+  assert {
+    condition     = length(module.service["api"].autoscaling_target_ids) == 0
+    error_message = "Non-production services keep a fixed task count unless enable_autoscaling is set."
+  }
+}

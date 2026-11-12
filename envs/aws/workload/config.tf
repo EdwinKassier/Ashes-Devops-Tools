@@ -28,6 +28,9 @@ locals {
     # aws.workload_environments: env => {account_key, vpc_cidr}.
     workload_account_keys = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.account_key) if try(e.account_key, null) != null }
     vpc_cidrs             = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.vpc_cidr) if try(e.vpc_cidr, null) != null }
+    # Production flags (is_production is required on every entry). The
+    # environment name is never read.
+    workload_is_production = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tobool(e.is_production) if try(tobool(e.is_production), null) != null }
     # Availability zone IDs (azs.tf): per environment, else the hub's
     # (aws.network.availability_zone_ids).
     workload_availability_zone_ids = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => [for id in e.availability_zone_ids : tostring(id)] if try(e.availability_zone_ids, null) != null }
@@ -75,6 +78,10 @@ locals {
   vpc_cidr             = coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.72.0.0/16")
   app_bootstrap_image  = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine")
   saas_bridge_version  = coalesce(var.saas_bridge_version, local.cfg.saas_bridge_rotation, 1)
+
+  # Production: explicit variable > aws.workload_environments.<env>.is_production
+  # > false. Production turns ECS autoscaling on by default.
+  is_production = coalesce(var.is_production, try(local.cfg.workload_is_production[local.environment], null), false)
 
   # Services: explicit variable > aws.workload_environments.<env>.services >
   # none. For-expressions (not a conditional) so the differently-typed sources

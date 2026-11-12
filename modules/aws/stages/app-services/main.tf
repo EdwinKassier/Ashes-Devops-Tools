@@ -748,7 +748,7 @@ module "service" {
   enable_external_deployments = contains(keys(local.deploy_services), each.key)
   enable_execute_command      = each.value.enable_execute_command
 
-  enable_autoscaling       = each.value.enable_autoscaling
+  enable_autoscaling       = coalesce(each.value.enable_autoscaling, var.is_production)
   autoscaling_min_capacity = each.value.autoscaling_min_capacity
   autoscaling_max_capacity = each.value.autoscaling_max_capacity
 

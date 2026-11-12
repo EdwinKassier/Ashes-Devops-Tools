@@ -199,7 +199,8 @@ module "app_services" {
   kms_key_arn         = local.kms_key_arn
   bootstrap_image     = local.app_bootstrap_image
 
-  services = local.services
+  services      = local.services
+  is_production = local.is_production
 
   enable_github_oidc          = var.enable_github_oidc
   create_github_oidc_provider = var.create_github_oidc_provider

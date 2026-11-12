@@ -428,6 +428,12 @@ variable "assume_role_arn" {
 # docs/guides/deploying-a-service.md (AWS section).
 # -----------------------------------------------------------------------------
 
+variable "is_production" {
+  description = "Production environment: ECS services whose enable_autoscaling is unset scale on CPU. Null = aws.workload_environments.<environment>.is_production from config/landing-zone.yaml, else false. The environment name is not read."
+  type        = bool
+  default     = null
+}
+
 variable "services" {
   description = "Services to run in this environment, keyed by service name. Full field reference: modules/aws/stages/app-services (variable services). Null (default) = aws.workload_environments.<environment>.services from config/landing-zone.yaml, else nothing; an explicit value replaces the config."
   type = map(object({
@@ -455,7 +461,7 @@ variable "services" {
     task_role_managed_policy_arns = optional(list(string), [])
 
     enable_execute_command   = optional(bool, false)
-    enable_autoscaling       = optional(bool, false)
+    enable_autoscaling       = optional(bool) # null = on in production (var.is_production), off elsewhere
     autoscaling_min_capacity = optional(number, 2)
     autoscaling_max_capacity = optional(number, 10)
 

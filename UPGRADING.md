@@ -450,6 +450,12 @@ unknown at plan time, is reported by the advisory
 
 ### AWS
 
+#### ECS services autoscale in production by default (aws-workload, breaking)
+
+A production ECS service that leaves `enable_autoscaling` unset now gets a CPU target-tracking policy: 2 to 10 tasks (`autoscaling_min_capacity`, `autoscaling_max_capacity`), 70 percent CPU. Before, the default was a fixed `desired_count`. More tasks cost more. Set `enable_autoscaling: false` on a service to keep a fixed count. Production means `aws.workload_environments.<env>.is_production: true` in `config/landing-zone.yaml`, or the `is_production` variable of `envs/aws/workload`. The environment name is not read. Non-production services stay fixed unless you set `enable_autoscaling: true`.
+
+A service that has no GitHub deploy role is deployed by Terraform and has its `desired_count` reset on every apply. See `docs/known-gaps.md`.
+
 #### The phase-0 management stack: plan-role read deny, admin role trusts only aws-organization (breaking)
 
 **Breaking for a stack update that takes the template default.** `templates/aws/bootstrap/phase0-management.yaml` changes in two ways:

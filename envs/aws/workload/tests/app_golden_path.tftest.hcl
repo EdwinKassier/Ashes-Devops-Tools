@@ -282,3 +282,31 @@ run "public_mode_without_services_builds_no_public_tier" {
     error_message = "No public tier, IGW or WAF until a service exists."
   }
 }
+
+# ARC-16: production ECS services autoscale by default. The flag comes from
+# is_production, never from the environment name.
+run "production_flag_turns_autoscaling_on" {
+  command = plan
+
+  variables {
+    is_production = true
+  }
+
+  assert {
+    condition     = output.app_services["orders"].autoscaling_enabled == true
+    error_message = "is_production = true must autoscale a service that leaves enable_autoscaling unset."
+  }
+}
+
+run "environment_named_prod_without_flag_is_not_production" {
+  command = plan
+
+  variables {
+    environment = "prod"
+  }
+
+  assert {
+    condition     = output.app_services["orders"].autoscaling_enabled == false
+    error_message = "An environment named prod without is_production must keep a fixed task count."
+  }
+}

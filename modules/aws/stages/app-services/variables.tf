@@ -87,6 +87,13 @@ variable "kms_key_arn" {
 # Services — the golden path. One map entry = one deployable service.
 # -----------------------------------------------------------------------------
 
+variable "is_production" {
+  description = "Production environment: every service whose enable_autoscaling is unset scales on CPU between autoscaling_min_capacity and autoscaling_max_capacity. An explicit enable_autoscaling = false keeps a fixed task count."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "services" {
   description = <<-EOT
     Services to run, keyed by service name (lowercase, starts with a letter,
@@ -138,7 +145,7 @@ variable "services" {
     task_role_managed_policy_arns = optional(list(string), [])
 
     enable_execute_command   = optional(bool, false)
-    enable_autoscaling       = optional(bool, false)
+    enable_autoscaling       = optional(bool) # null = on in production (var.is_production), off elsewhere
     autoscaling_min_capacity = optional(number, 2)
     autoscaling_max_capacity = optional(number, 10)
 
