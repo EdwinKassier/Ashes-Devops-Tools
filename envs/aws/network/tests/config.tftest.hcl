@@ -5,7 +5,15 @@
 # Each run also asserts that config-file values (which differ from the built-in
 # defaults) resolve into the root's locals and its remote-state read.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 
 override_data {
   target = data.terraform_remote_state.aws_organization

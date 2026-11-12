@@ -119,6 +119,10 @@ module "aws_workload" {
 
   ipam_explicit_cidr = var.ipam_explicit_cidr
 
+  # azs.tf: names, else AZ IDs (per environment, else the hub's), else the region.
+  availability_zones = local.availability_zones
+  az_count           = var.az_count
+
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
   flow_log_destination_arn = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"

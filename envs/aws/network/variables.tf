@@ -118,13 +118,24 @@ variable "egress_cidr" {
 }
 
 variable "availability_zones" {
-  description = "Availability zones to spread each subnet tier across. Only the first az_count entries are used."
+  description = "Availability zone NAMES for the hub VPCs, valid in this account only (a name can map to a different physical zone in another account). Null (default) resolves them from availability_zone_ids, else aws.network.availability_zone_ids from config/landing-zone.yaml, else the region's first three available zones. Only the first az_count entries are used."
   type        = list(string)
-  default     = ["eu-west-2a", "eu-west-2b"]
+  default     = null
 
   validation {
-    condition     = length(var.availability_zones) > 0
+    condition     = var.availability_zones == null ? true : length(var.availability_zones) > 0
     error_message = "availability_zones must contain at least one zone."
+  }
+}
+
+variable "availability_zone_ids" {
+  description = "Availability zone IDs (for example euw2-az2), the same physical zones in every account. Ignored when availability_zones is set. Null = aws.network.availability_zone_ids from config/landing-zone.yaml, else the region's first three available zones. Changing the resolved zone names of an existing estate replaces its subnets: see UPGRADING.md."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.availability_zone_ids == null ? true : length(var.availability_zone_ids) > 0 && alltrue([for id in var.availability_zone_ids : can(regex("^[a-z]+[0-9]+-az[0-9]+$", id))])
+    error_message = "availability_zone_ids must be a non-empty list of AZ IDs such as euw2-az2 or use1-az4."
   }
 }
 
@@ -138,8 +149,10 @@ variable "az_count" {
     error_message = "az_count must be between 2 and 3 (the Route 53 Resolver endpoints need subnets in at least two AZs)."
   }
 
+  # Resolved zones (IDs or the region) are checked by the
+  # aws_availability_zones postcondition in azs.tf.
   validation {
-    condition     = var.az_count <= length(var.availability_zones)
+    condition     = var.availability_zones == null ? true : var.az_count <= length(var.availability_zones)
     error_message = "az_count must not exceed the number of availability_zones provided."
   }
 }

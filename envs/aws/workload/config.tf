@@ -28,6 +28,10 @@ locals {
     # aws.workload_environments: env => {account_key, vpc_cidr}.
     workload_account_keys = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.account_key) if try(e.account_key, null) != null }
     vpc_cidrs             = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.vpc_cidr) if try(e.vpc_cidr, null) != null }
+    # Availability zone IDs (azs.tf): per environment, else the hub's
+    # (aws.network.availability_zone_ids).
+    workload_availability_zone_ids = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => [for id in e.availability_zone_ids : tostring(id)] if try(e.availability_zone_ids, null) != null }
+    network_availability_zone_ids  = try([for id in local.lz.aws.network.availability_zone_ids : tostring(id)], null)
     # aws.workload_environments.<env>.services: same shape as var.services (the
     # app-services stage validates and types them).
     services = {

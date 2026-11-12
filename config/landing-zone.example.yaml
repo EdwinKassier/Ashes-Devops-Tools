@@ -318,6 +318,9 @@ aws:
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
       is_production: false
+      # AZ IDs for this spoke only. Unset = aws.network.availability_zone_ids,
+      # else the region's first three available zones.
+      # availability_zone_ids: [euw2-az2, euw2-az3]
       # Services deployed to this environment (ECS Fargate behind the shared
       # ALB, optional Aurora and GitHub deploy role). Fields:
       # envs/aws/workload (variable services).
@@ -360,6 +363,12 @@ aws:
     # regional_cidrs: {eu-west-2: 10.64.0.0/12}
     # inspection_cidr: 10.64.0.0/16
     # egress_cidr: 10.65.0.0/16
+    # Availability zones (aws-network and every aws-workload-<env>). AZ IDs
+    # name the same physical zone in every account; zone names (eu-west-2a)
+    # do not. Unset = the region's first three available zones (in eu-west-2:
+    # eu-west-2a/b/c, of which az_count = 2 uses a and b). Before you set IDs
+    # on an existing estate, read UPGRADING.md: a changed zone replaces subnets.
+    # availability_zone_ids: [euw2-az2, euw2-az3]
     egress_domain_allowlist:
       - .amazonaws.com
       - .github.com

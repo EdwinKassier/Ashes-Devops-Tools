@@ -71,6 +71,47 @@ variable "ipam_explicit_cidr" {
   nullable    = false
 }
 
+variable "availability_zones" {
+  description = "Availability zone NAMES for the spoke VPC, valid in this account only (a name can map to a different physical zone in another account). Null (default) resolves them from availability_zone_ids, else aws.workload_environments.<env>.availability_zone_ids, else aws.network.availability_zone_ids from config/landing-zone.yaml, else the region's first three available zones. Only the first az_count entries are used."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.availability_zones == null ? true : length(var.availability_zones) > 0
+    error_message = "availability_zones must contain at least one zone."
+  }
+}
+
+variable "availability_zone_ids" {
+  description = "Availability zone IDs (for example euw2-az2) for the spoke VPC, the same physical zones in every account. Ignored when availability_zones is set. Null = aws.workload_environments.<env>.availability_zone_ids, else aws.network.availability_zone_ids from config/landing-zone.yaml, else the region's first three available zones. Changing the resolved zone names of an existing workload replaces its subnets: see UPGRADING.md."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.availability_zone_ids == null ? true : length(var.availability_zone_ids) > 0 && alltrue([for id in var.availability_zone_ids : can(regex("^[a-z]+[0-9]+-az[0-9]+$", id))])
+    error_message = "availability_zone_ids must be a non-empty list of AZ IDs such as euw2-az2 or use1-az4."
+  }
+}
+
+variable "az_count" {
+  description = "Number of availability zones the spoke spreads each subnet tier across (1-3)."
+  type        = number
+  default     = 2
+  nullable    = false
+
+  validation {
+    condition     = var.az_count >= 1 && var.az_count <= 3
+    error_message = "az_count must be between 1 and 3."
+  }
+
+  # Resolved zones (IDs or the region) are checked by the
+  # aws_availability_zones postcondition in azs.tf.
+  validation {
+    condition     = var.availability_zones == null ? true : var.az_count <= length(var.availability_zones)
+    error_message = "az_count must not exceed the number of availability_zones provided."
+  }
+}
+
 variable "enable_network_hub" {
   description = "Attach the spoke to the aws-network hub (shared TGW + IPAM pool, from network_contract or the aws-network remote state). False = standalone mode: no aws-network read, no TGW attachment or routes, the literal vpc_cidr, and NAT-less private tiers (no egress off the VPC)."
   type        = bool

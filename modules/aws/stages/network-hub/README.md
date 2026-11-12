@@ -155,6 +155,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_availability_zones"></a> [availability\_zones](#output\_availability\_zones) | Availability zone names the inspection and egress VPC subnets are placed in (the first az\_count entries of availability\_zones). |
 | <a name="output_egress_route_table_ids_by_tier"></a> [egress\_route\_table\_ids\_by\_tier](#output\_egress\_route\_table\_ids\_by\_tier) | Map of egress VPC subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_egress_vpc_id"></a> [egress\_vpc\_id](#output\_egress\_vpc\_id) | The ID of the centralized egress VPC that hosts NAT, interface endpoints, and resolver endpoints. |
 | <a name="output_hub_static_ipam_allocations"></a> [hub\_static\_ipam\_allocations](#output\_hub\_static\_ipam\_allocations) | Map of static hub VPC name (inspection, egress) to the CIDR reserved for it in the home-region IPAM pool, so IPAM never allocates that range to a spoke. Empty for hub VPCs created from the pool and for hub VPCs outside the pool CIDR. |

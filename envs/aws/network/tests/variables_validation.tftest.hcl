@@ -3,7 +3,15 @@
 # organization_contract override keeps the aws-organization remote-state read
 # out of the plan (count = 0), so no override_data is needed.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 
 variables {
   # Isolate the suite from any committed config/landing-zone.yaml.

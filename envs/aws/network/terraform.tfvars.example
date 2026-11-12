@@ -37,9 +37,11 @@ regional_cidrs  = { eu-west-2 = "10.0.0.0/12" }
 inspection_cidr = "10.0.0.0/16"
 egress_cidr     = "10.1.0.0/16"
 
-# Optional — AZ spread for each subnet tier.
-availability_zones = ["eu-west-2a", "eu-west-2b"]
-az_count           = 2
+# Optional — AZ spread for each subnet tier. Default: aws.network.availability_zone_ids
+# from config/landing-zone.yaml, else the region's first three available zones.
+# availability_zone_ids = ["euw2-az2", "euw2-az3"]   # AZ IDs: same physical zones in every account
+# availability_zones    = ["eu-west-2a", "eu-west-2b"] # names: this account only; wins over IDs
+az_count = 2
 
 # Optional — shared Route 53 private hosted zone name. Empty skips the zone.
 private_hosted_zone_name = ""

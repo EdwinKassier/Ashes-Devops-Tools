@@ -505,6 +505,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   legacy org-level binding in gcp-bootstrap does the same. gcp-projects turns off google provider
   batching, which would merge the folder IAM changes on one folder into a single request that spans
   two conditions. See `UPGRADING.md`.
+- **AWS roots resolve availability zones from AZ IDs or the region (ARC-3, breaking).** aws-network
+  defaulted to `eu-west-2a`/`eu-west-2b`, and aws-workload had no zone input, so any other region
+  failed at apply. Both roots now take `availability_zones`, else `availability_zone_ids`, else
+  `aws.workload_environments.<env>.availability_zone_ids` (aws-workload), else
+  `aws.network.availability_zone_ids`, else the region's first three available zones. AZ IDs map to
+  zone names in each account, so spokes can land in the hub's physical zones. aws-workload gains
+  `az_count`. An eu-west-2 estate on the defaults plans no change. The roots now read
+  `data.aws_availability_zones` at plan. See `UPGRADING.md`.
 - **AZs from another region fail at plan (ARC-3).** `modules/aws/network/vpc` now fails the plan
   when an availability zone name does not start with `region`. Before, the default
   `eu-west-2a`/`eu-west-2b` zones reached every subnet in another region and the apply failed with

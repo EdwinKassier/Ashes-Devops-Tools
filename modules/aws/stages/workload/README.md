@@ -130,6 +130,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_availability_zones"></a> [availability\_zones](#output\_availability\_zones) | Availability zone names the spoke VPC subnets are placed in (the first az\_count entries of availability\_zones), index-aligned with subnet\_ids\_by\_tier. |
 | <a name="output_config_role_arn"></a> [config\_role\_arn](#output\_config\_role\_arn) | Deprecated, always null: the workload account's Config recorder is deployed by aws-organization's recorder StackSet (it uses the AWSServiceRoleForConfig service-linked role). Removed in v1.0. |
 | <a name="output_internet_gateway_id"></a> [internet\_gateway\_id](#output\_internet\_gateway\_id) | ID of the spoke's internet gateway, or null when neither enable\_public\_subnets nor create\_internet\_gateway is set. |
 | <a name="output_name"></a> [name](#output\_name) | The resolved spoke name (var.name, else workload-<environment>). |

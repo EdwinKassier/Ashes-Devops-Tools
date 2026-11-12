@@ -52,3 +52,8 @@ output "vpc_bpa_exclusion_enabled" {
   description = "Whether this spoke VPC has a VPC Block Public Access exclusion (true only for public ALB ingress)."
   value       = length(aws_vpc_block_public_access_exclusion.public_ingress) == 1
 }
+
+output "availability_zones" {
+  description = "Availability zone names the spoke VPC subnets are placed in (the first az_count entries of availability_zones), index-aligned with subnet_ids_by_tier."
+  value       = module.vpc.availability_zones
+}

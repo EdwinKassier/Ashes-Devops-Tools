@@ -59,7 +59,7 @@ module "aws_network_hub" {
   regional_cidrs     = local.regional_cidrs
   inspection_cidr    = local.inspection_cidr
   egress_cidr        = local.egress_cidr
-  availability_zones = var.availability_zones
+  availability_zones = local.availability_zones # azs.tf
   az_count           = var.az_count
 
   flow_log_destination_arn = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"

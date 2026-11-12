@@ -42,6 +42,17 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `hashicorp/aws` 6.72.0 data source lists pool allocations; that conflict
   fails the apply of the reservation (recovery in `UPGRADING.md`).
 
+- **AWS deployment outside eu-west-2 needs the sandbox proof (ARC-3).**
+  aws-network and aws-workload resolve availability zones from
+  `availability_zone_ids` (variable or config) or the region, and
+  `modules/aws/network/vpc` fails the plan on a zone from another region. Mock
+  tests prove the resolution order, the ID-to-name mapping and the plan
+  failures only. Still to confirm: with `org.regions.aws` set to a region other
+  than eu-west-2 (for example us-east-1) and no zone input, aws-network and one
+  aws-workload apply with every subnet in that region; and with
+  `aws.network.availability_zone_ids` set, the hub and spoke subnets report the
+  same `AvailabilityZoneId` in both accounts.
+
 - **Spoke resolution of the internal zone needs the sandbox proof (ARC-2).**
   `gcp-network-hub` binds the `internal-root` zone to the hub VPC as well as
   `dns-vpc-core`, and `gcp-projects` grants each workload apply SA

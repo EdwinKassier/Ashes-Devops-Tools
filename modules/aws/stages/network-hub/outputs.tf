@@ -67,3 +67,8 @@ output "hub_static_ipam_allocations" {
   description = "Map of static hub VPC name (inspection, egress) to the CIDR reserved for it in the home-region IPAM pool, so IPAM never allocates that range to a spoke. Empty for hub VPCs created from the pool and for hub VPCs outside the pool CIDR."
   value       = { for k, a in aws_vpc_ipam_pool_cidr_allocation.hub_static : k => a.cidr }
 }
+
+output "availability_zones" {
+  description = "Availability zone names the inspection and egress VPC subnets are placed in (the first az_count entries of availability_zones)."
+  value       = module.inspection_vpc.availability_zones
+}

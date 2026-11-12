@@ -625,6 +625,64 @@ reservations in a real regional pool, a spoke that then requests a hub range is
 rejected by IPAM, and the static hub VPCs keep working (see
 `docs/known-gaps.md`).
 
+#### AWS availability zones follow the region and AZ IDs (aws-network, aws-workload)
+
+**Breaking: both roots now read the account's availability zones at plan
+time.** Before, aws-network defaulted to `eu-west-2a` and `eu-west-2b`, and
+aws-workload had no zone input, so every spoke used the workload stage default
+(the same two zones). In any other region every subnet failed at apply.
+
+aws-network and aws-workload now resolve the zones in this order:
+
+1. `availability_zones` (zone names, explicit variable).
+2. `availability_zone_ids` (explicit variable).
+3. aws-workload only: `aws.workload_environments.<env>.availability_zone_ids`.
+4. `aws.network.availability_zone_ids` in `config/landing-zone.yaml` (both
+   roots read it, so the spokes land in the hub's physical zones).
+5. The region's first three available zones, sorted by name (Local Zones and
+   Wavelength Zones are left out).
+
+The subnets use the first `az_count` zones (aws-workload has a new `az_count`
+variable, default 2). An AZ ID (for example `euw2-az2`) names the same physical
+zone in every account; a zone name does not. Each root maps the IDs to zone
+names in its own account. The subnets still take the zone name
+(`availability_zone`), so a subnet whose zone name does not change is not
+replaced. A zone ID that the account does not have, or an `az_count` above the
+resolved zones, fails the plan.
+
+What changes for an existing estate:
+
+- **eu-west-2 on the old defaults:** no change. The region default resolves to
+  `eu-west-2a`, `eu-west-2b` and `eu-west-2c`, and `az_count = 2` uses the
+  first two, as before.
+- **You set `availability_zones`:** no change. Explicit names win and the
+  zone lookup is skipped.
+- **Plan permissions:** the plan calls `ec2:DescribeAvailabilityZones` in the
+  network account and in each workload account. The `tfc-plan` and `tfc-apply`
+  roles from `modules/aws/iam/tfc-oidc-baseline` (ReadOnlyAccess) allow it. A
+  custom plan role needs that action.
+- **Your own `terraform test` suites for these roots:** a bare
+  `mock_provider "aws" {}` returns no zones, so the plan fails. Add a
+  `mock_data "aws_availability_zones"` block with names and zone IDs for the
+  test region (see `envs/aws/network/tests/availability_zones.tftest.hcl`).
+
+**Before you set `aws.network.availability_zone_ids` on an estate that already
+has subnets,** know that IDs can change the zone NAMES the roots resolve. A
+changed name replaces every subnet in that zone, and everything in those
+subnets (NAT gateways, firewall endpoints, TGW attachment ENIs, tasks,
+databases). Setting IDs is opt-in; nothing sets them for you.
+
+1. In the network account, run `aws ec2 describe-availability-zones --region
+   <region>` and note the `ZoneId` of each zone the hub uses today. Set
+   `aws.network.availability_zone_ids` to those IDs, in the same order. Plan
+   aws-network: it must show no subnet change.
+2. For each `aws-workload-<env>`, plan it. The workload account maps the same
+   IDs to its own names, which can differ. If a subnet would be replaced, run
+   the same command in that workload account and set
+   `aws.workload_environments.<env>.availability_zone_ids` to the IDs of the
+   zones it uses today. Plan again: it must show no subnet change.
+3. New workloads with no per-environment IDs then land in the hub's zones.
+
 #### Access Analyzer in every enabled region (aws-security)
 
 The external analyzer now exists in every `aws.enabled_regions` entry (the home

@@ -37,6 +37,9 @@ locals {
     regional_cidrs  = try({ for r, c in local.lz.aws.network.regional_cidrs : r => tostring(c) }, null)
     inspection_cidr = try(tostring(local.lz.aws.network.inspection_cidr), null)
     egress_cidr     = try(tostring(local.lz.aws.network.egress_cidr), null)
+    # aws.network.availability_zone_ids: AZ IDs (azs.tf), also read by every
+    # aws-workload root so the spokes land in the hub's physical zones.
+    availability_zone_ids = try([for id in local.lz.aws.network.availability_zone_ids : tostring(id)], null)
     # aws.network.vpn: opt-in Site-to-Site VPN on the TGW (no secret: AWS
     # generates the tunnel keys). JSON text so the explicit-variable fallback
     # is a plain conditional; the stage's variable type validates the shape.

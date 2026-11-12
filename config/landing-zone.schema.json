@@ -1229,6 +1229,16 @@
               "vpc_cidr": {
                 "type": "string"
               },
+              "availability_zone_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z]+[0-9]+-az[0-9]+$"
+                },
+                "minItems": 1,
+                "maxItems": 3,
+                "description": "Availability zone IDs for this environment's spoke VPC, mapped to zone names in its workload account. Unset = aws.network.availability_zone_ids, else the region's first three available zones. Use it to pin a workload to the zones it already uses: see UPGRADING.md."
+              },
               "is_production": {
                 "type": "boolean"
               },
@@ -1441,6 +1451,16 @@
               "type": "string",
               "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
               "description": "Egress VPC CIDR (aws-network). Default 10.65.0.0/16."
+            },
+            "availability_zone_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]+[0-9]+-az[0-9]+$"
+              },
+              "minItems": 1,
+              "maxItems": 3,
+              "description": "Availability zone IDs (aws ec2 describe-availability-zones), the same physical zones in every account. aws-network maps them to zone names in the network account, and every aws-workload-<env> without its own availability_zone_ids maps them in its own account, so the spokes land in the hub's physical zones. Unset = the region's first three available zones. Setting them on an existing estate can replace subnets: see UPGRADING.md."
             },
             "egress_domain_allowlist": {
               "type": "array",
