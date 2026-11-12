@@ -162,6 +162,9 @@ locals {
   # Cost profile (variable > org.profile > production). The starter profile
   # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
   profile = coalesce(var.profile, local.cfg.profile, "production")
+  # gcp.restrictTLSVersion: gcp_overrides.restrict_tls_versions > on for the
+  # production profile.
+  restrict_tls_versions = coalesce(try(local.gcp.restrict_tls_versions, null), local.profile == "production")
   monthly_budget_amount = coalesce(
     var.monthly_budget_amount, local.profile == "starter" ? local.cfg.monthly_budget_usd : null, local.profile == "starter" ? 0 : 1000
   )

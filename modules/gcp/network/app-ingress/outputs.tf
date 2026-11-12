@@ -27,3 +27,8 @@ output "managed_domains" {
   description = "Domains the managed certificate covers."
   value       = var.domains
 }
+
+output "ssl_policy_id" {
+  description = "SSL policy on the HTTPS proxy: ssl_policy_id when set, else the TLS-floor policy this module creates."
+  value       = google_compute_target_https_proxy.this.ssl_policy
+}

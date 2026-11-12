@@ -532,6 +532,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   defaults it to `/` (empty string = keep the TCP probe) and keeps one instance warm for every
   production service whose `min_instances` is unset. The key is accepted in every `services` key list
   and in `config/landing-zone.schema.json`. See `UPGRADING.md`.
+- **TLS 1.2 minimum on GCP public ingress and Google APIs (breaking, CMP-5).** Each
+  `public_ingress` load balancer gets a `MODERN` SSL policy with a TLS 1.2 minimum
+  (`app-ingress` inputs `min_tls_version`, `ssl_policy_profile`; a passed `ssl_policy_id` wins), so
+  TLS 1.0/1.1-only clients can no longer connect. The production profile sets the org policy
+  `gcp.restrictTLSVersion` (denies `TLS_VERSION_1`, `TLS_VERSION_1_1`); opt out with
+  `gcp_overrides.restrict_tls_versions = false`. See `UPGRADING.md`.
 - **Hardened audit store for regulated GCP estates (CMP-4).** A `gcp.environments` entry with
   `compliance_class: regulated` fails the `gcp-organization` plan until `gcp.logging_project_id`,
   `gcp.logging_project_number` (not the admin project) and `gcp.enable_audit_bucket_lock: true` are

@@ -98,3 +98,43 @@ run "module_labels_applied" {
     error_message = "var.labels must land on the global address and forwarding rule."
   }
 }
+
+# CMP-5: a TLS 1.2 floor on the public front door when no policy is passed.
+run "tls_floor_by_default" {
+  command = plan
+
+  assert {
+    condition = (
+      google_compute_ssl_policy.this[0].min_tls_version == "TLS_1_2" &&
+      google_compute_ssl_policy.this[0].profile == "MODERN"
+    )
+    error_message = "public ingress must get a MODERN, TLS 1.2 minimum SSL policy when none is passed."
+  }
+}
+
+run "tls_1_3_needs_restricted_profile" {
+  command = plan
+
+  variables {
+    min_tls_version    = "TLS_1_3"
+    ssl_policy_profile = "RESTRICTED"
+  }
+
+  assert {
+    condition     = google_compute_ssl_policy.this[0].min_tls_version == "TLS_1_3" && google_compute_ssl_policy.this[0].profile == "RESTRICTED"
+    error_message = "min_tls_version and ssl_policy_profile must reach the created SSL policy."
+  }
+}
+
+run "external_ssl_policy_wins" {
+  command = plan
+
+  variables {
+    ssl_policy_id = "projects/p/global/sslPolicies/restricted-13"
+  }
+
+  assert {
+    condition     = length(google_compute_ssl_policy.this) == 0 && google_compute_target_https_proxy.this.ssl_policy == "projects/p/global/sslPolicies/restricted-13"
+    error_message = "a caller-supplied SSL policy must be used as is."
+  }
+}

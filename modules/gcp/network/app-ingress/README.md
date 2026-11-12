@@ -93,15 +93,16 @@ The following resources are created:
 
 - resource.google_compute_backend_service.this (modules/gcp/network/app-ingress/main.tf#L25)
 - resource.google_compute_global_address.this (modules/gcp/network/app-ingress/main.tf#L7)
-- resource.google_compute_global_forwarding_rule.http (modules/gcp/network/app-ingress/main.tf#L102)
-- resource.google_compute_global_forwarding_rule.https (modules/gcp/network/app-ingress/main.tf#L74)
+- resource.google_compute_global_forwarding_rule.http (modules/gcp/network/app-ingress/main.tf#L115)
+- resource.google_compute_global_forwarding_rule.https (modules/gcp/network/app-ingress/main.tf#L87)
 - resource.google_compute_managed_ssl_certificate.this (modules/gcp/network/app-ingress/main.tf#L55)
 - resource.google_compute_region_network_endpoint_group.this (modules/gcp/network/app-ingress/main.tf#L14)
-- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/app-ingress/main.tf#L96)
-- resource.google_compute_target_https_proxy.this (modules/gcp/network/app-ingress/main.tf#L64)
-- resource.google_compute_url_map.redirect (modules/gcp/network/app-ingress/main.tf#L85)
+- resource.google_compute_ssl_policy.this (modules/gcp/network/app-ingress/main.tf#L67)
+- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/app-ingress/main.tf#L109)
+- resource.google_compute_target_https_proxy.this (modules/gcp/network/app-ingress/main.tf#L77)
+- resource.google_compute_url_map.redirect (modules/gcp/network/app-ingress/main.tf#L98)
 - resource.google_compute_url_map.this (modules/gcp/network/app-ingress/main.tf#L49)
-- resource.google_dns_record_set.this (modules/gcp/network/app-ingress/main.tf#L113)
+- resource.google_dns_record_set.this (modules/gcp/network/app-ingress/main.tf#L126)
 
 
 ## Inputs
@@ -117,8 +118,10 @@ The following resources are created:
 | <a name="input_dns_ttl"></a> [dns\_ttl](#input\_dns\_ttl) | TTL in seconds for the DNS A records, used only when dns\_managed\_zone is set. | `number` | `300` | no |
 | <a name="input_enable_cdn"></a> [enable\_cdn](#input\_enable\_cdn) | Enable Cloud CDN on the backend service. Default false; turn on for cacheable public content. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
+| <a name="input_min_tls_version"></a> [min\_tls\_version](#input\_min\_tls\_version) | Minimum TLS version of the SSL policy this module creates when ssl\_policy\_id is null. | `string` | `"TLS_1_2"` | no |
 | <a name="input_security_policy_id"></a> [security\_policy\_id](#input\_security\_policy\_id) | Optional Cloud Armor security policy ID (self\_link) to attach to the backend service. Null leaves the backend without an edge WAF, so set this for any internet-facing service that needs rate limiting or OWASP rules. | `string` | `null` | no |
-| <a name="input_ssl_policy_id"></a> [ssl\_policy\_id](#input\_ssl\_policy\_id) | Optional SSL policy ID (self\_link) for the HTTPS proxy. Null uses Google's default negotiation; set a MODERN or RESTRICTED policy to pin a minimum TLS version. | `string` | `null` | no |
+| <a name="input_ssl_policy_id"></a> [ssl\_policy\_id](#input\_ssl\_policy\_id) | Optional SSL policy ID (self\_link) for the HTTPS proxy, used as is. Null creates a MODERN TLS 1.2 policy (min\_tls\_version, ssl\_policy\_profile). | `string` | `null` | no |
+| <a name="input_ssl_policy_profile"></a> [ssl\_policy\_profile](#input\_ssl\_policy\_profile) | Profile of the created SSL policy: MODERN (default) or RESTRICTED (required for TLS\_1\_3). | `string` | `"MODERN"` | no |
 
 ## Outputs
 
@@ -130,4 +133,5 @@ The following resources are created:
 | <a name="output_ip_address"></a> [ip\_address](#output\_ip\_address) | The reserved global anycast IP of the load balancer. Point DNS A records here if dns\_managed\_zone is not set. |
 | <a name="output_ip_name"></a> [ip\_name](#output\_ip\_name) | Name of the reserved global address resource. |
 | <a name="output_managed_domains"></a> [managed\_domains](#output\_managed\_domains) | Domains the managed certificate covers. |
+| <a name="output_ssl_policy_id"></a> [ssl\_policy\_id](#output\_ssl\_policy\_id) | SSL policy on the HTTPS proxy: ssl\_policy\_id when set, else the TLS-floor policy this module creates. |
 <!-- END_TF_DOCS -->

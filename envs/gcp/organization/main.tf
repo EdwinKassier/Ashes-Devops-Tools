@@ -61,6 +61,9 @@ module "organization" {
     # (legacy organization mode).
     guardrail_owner_mode              = local.guardrail_owner_mode
     allowed_workload_identity_issuers = coalesce(try(local.gcp.allowed_workload_identity_issuers, null), ["https://${var.tfc_hostname}", "https://token.actions.githubusercontent.com"])
+    # gcp.restrictTLSVersion (TLS 1.0/1.1 denied on Google APIs): on for the
+    # production profile unless gcp_overrides.restrict_tls_versions is set.
+    restrict_tls_versions = local.restrict_tls_versions
   })
 
   # Per-environment folder-scoped VPC-SC access policies; each environment's

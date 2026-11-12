@@ -511,6 +511,12 @@ run "public_ingress_backend_and_neg_exist" {
     error_message = "Public ingress must create the backend service and HTTPS forwarding rule."
   }
 
+  # CMP-5: the front door gets the module's TLS 1.2 SSL policy.
+  assert {
+    condition     = module.app_ingress["api"].ssl_policy_id != null
+    error_message = "Public ingress must attach an SSL policy (TLS 1.2 minimum) to the HTTPS proxy."
+  }
+
   assert {
     condition     = output.public_ingress["api"].ip_address != null
     error_message = "The load balancer IP must be exposed for DNS."

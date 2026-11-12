@@ -200,3 +200,46 @@ run "compliance_class_defaults_to_standard" {
     error_message = "an environment without compliance_class must be standard."
   }
 }
+
+# CMP-5: the production profile denies TLS 1.0/1.1 on Google APIs.
+run "restrict_tls_versions_on_in_production" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = local.profile == "production" && contains(module.organization.org_policy_constraints, "gcp.restrictTLSVersion")
+    error_message = "the production profile must set gcp.restrictTLSVersion denying TLS 1.0 and 1.1."
+  }
+}
+
+run "restrict_tls_versions_opt_out" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    gcp_overrides = {
+      restrict_tls_versions = false
+    }
+  }
+
+  assert {
+    condition     = !contains(module.organization.org_policy_constraints, "gcp.restrictTLSVersion")
+    error_message = "gcp_overrides.restrict_tls_versions = false must drop the policy."
+  }
+}
+
+run "restrict_tls_versions_off_in_starter" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter.yaml"
+  }
+
+  assert {
+    condition     = local.profile == "starter" && !contains(module.organization.org_policy_constraints, "gcp.restrictTLSVersion")
+    error_message = "the starter profile must not set gcp.restrictTLSVersion."
+  }
+}

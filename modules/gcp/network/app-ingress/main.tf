@@ -61,14 +61,27 @@ resource "google_compute_managed_ssl_certificate" "this" {
   }
 }
 
+# TLS floor for the front door when the caller passes no SSL policy. Without
+# one, the proxy uses Google's default COMPATIBLE profile, which accepts TLS 1.0
+# and 1.1 and older cipher suites.
+resource "google_compute_ssl_policy" "this" {
+  count = var.ssl_policy_id == null ? 1 : 0
+
+  project         = var.project_id
+  name            = "${var.name}-tls"
+  description     = "TLS ${replace(trimprefix(var.min_tls_version, "TLS_"), "_", ".")} minimum for ${var.name} public ingress (app-ingress)."
+  profile         = var.ssl_policy_profile
+  min_tls_version = var.min_tls_version
+}
+
 resource "google_compute_target_https_proxy" "this" {
   project          = var.project_id
   name             = "${var.name}-https-proxy"
   url_map          = google_compute_url_map.this.id
   ssl_certificates = [google_compute_managed_ssl_certificate.this.id]
 
-  # Modern TLS only.
-  ssl_policy = var.ssl_policy_id
+  # A caller-supplied policy wins; else the TLS-floor policy above.
+  ssl_policy = var.ssl_policy_id != null ? var.ssl_policy_id : google_compute_ssl_policy.this[0].id
 }
 
 resource "google_compute_global_forwarding_rule" "https" {

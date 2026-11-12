@@ -1422,3 +1422,40 @@ run "org_admins_missing_from_bootstrap_fail_the_plan" {
 
   expect_failures = [terraform_data.organization_admins_granted_by_bootstrap]
 }
+
+# CMP-5: gcp.restrictTLSVersion denies TLS 1.0 and 1.1 to Google APIs.
+run "restrict_tls_versions_policy" {
+  command = plan
+
+  variables {
+    # The file-level gcp object plus the key under test.
+    gcp = {
+      admin_email                           = "admin@acme.io"
+      break_glass_user                      = "break-glass@acme.io"
+      organization_admin_groups             = ["org-admins@acme.io"]
+      billing_admin_groups                  = ["billing-admins@acme.io"]
+      allowed_regions                       = ["europe-west1"]
+      strict_folder_policy_environment_keys = ["prod"]
+      budget_currency                       = "USD"
+      alert_notification_emails             = ["secops@acme.io"]
+      restrict_tls_versions                 = true
+    }
+  }
+
+  assert {
+    condition = anytrue([
+      for p in local.effective_list_policies :
+      p.constraint == "gcp.restrictTLSVersion" && toset(p.denied_values) == toset(["TLS_VERSION_1", "TLS_VERSION_1_1"])
+    ])
+    error_message = "restrict_tls_versions must deny TLS 1.0 and 1.1 to Google APIs org-wide."
+  }
+}
+
+run "restrict_tls_versions_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = !contains([for p in local.effective_list_policies : p.constraint], "gcp.restrictTLSVersion")
+    error_message = "the stage default must not set gcp.restrictTLSVersion."
+  }
+}

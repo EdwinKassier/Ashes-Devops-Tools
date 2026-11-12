@@ -1450,6 +1450,17 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### TLS 1.2 minimum on public ingress and Google APIs (gcp-workload, gcp-organization, breaking, CMP-5)
+
+**Breaking for old clients.** Each `public_ingress` load balancer (`modules/gcp/network/app-ingress`) now gets a new SSL policy, `<env>-<service>-tls`: profile `MODERN`, minimum TLS 1.2. Before, the HTTPS proxy had no SSL policy, so Google used `COMPATIBLE` with a TLS 1.0 minimum ([SSL policies overview](https://docs.cloud.google.com/load-balancing/docs/ssl-policies-concepts)). The first `gcp-workload-<env>` apply creates the policy and updates the proxy in place. After it:
+
+- clients that only speak TLS 1.0 or 1.1 can no longer connect (for example Internet Explorer 10 and older with default settings, Android 4.4 and older apps that do not turn TLS 1.2 on, Java 6, Java 7 clients on the TLS 1.0 default, and old embedded devices);
+- TLS 1.2 clients that offer only non-ECDHE RSA key exchange or 3DES cipher suites fail the handshake, because `MODERN` drops the cipher suites only `COMPATIBLE` allows.
+
+Check your load balancer logs or client inventory before you apply. A caller that passes `ssl_policy_id` keeps its own policy. `min_tls_version = "TLS_1_3"` with `ssl_policy_profile = "RESTRICTED"` raises the floor further.
+
+The production profile (`org.profile: production`, the default) also sets the org policy `gcp.restrictTLSVersion` with denied values `TLS_VERSION_1` and `TLS_VERSION_1_1` ([Restrict TLS versions](https://docs.cloud.google.com/assured-workloads/docs/restrict-tls-versions)). The first `gcp-organization` apply creates it. Google Cloud resource APIs served through the Google Front End then refuse TLS 1.0 and 1.1; current Google client libraries, the Cloud SDK and Terraform providers use TLS 1.2 or later. It does not cover Cloud Run, App Engine, Cloud Run functions, Apigee, Private Service Connect or custom domains. Opt out with `gcp_overrides.restrict_tls_versions = false`. The starter profile does not set it unless `gcp_overrides.restrict_tls_versions = true`.
+
 #### Regulated environments require a hardened audit store (gcp-organization, CMP-4)
 
 Nothing changes for an estate without `compliance_class: regulated`. Setting `compliance_class: regulated` on a `gcp.environments` entry fails the `gcp-organization` plan until `gcp.logging_project_id`, `gcp.logging_project_number` and `gcp.enable_audit_bucket_lock: true` are set, or `gcp.audit_store_waived: true`. The logging project must not be the admin project. The lock is irreversible. The three keys are new in `config/landing-zone.yaml`; `gcp_overrides.logging_project_id`, `gcp_overrides.logging_project_number` and `gcp_overrides.enable_audit_bucket_lock` still win over them.

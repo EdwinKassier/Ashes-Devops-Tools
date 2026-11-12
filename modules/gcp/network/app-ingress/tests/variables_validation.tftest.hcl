@@ -71,3 +71,24 @@ run "rejects_out_of_range_ttl" {
 
   expect_failures = [var.dns_ttl]
 }
+
+run "rejects_tls_1_0" {
+  command = plan
+
+  variables {
+    min_tls_version = "TLS_1_0"
+  }
+
+  expect_failures = [var.min_tls_version]
+}
+
+run "rejects_tls_1_3_with_modern_profile" {
+  command = plan
+
+  variables {
+    min_tls_version    = "TLS_1_3"
+    ssl_policy_profile = "MODERN"
+  }
+
+  expect_failures = [var.ssl_policy_profile]
+}

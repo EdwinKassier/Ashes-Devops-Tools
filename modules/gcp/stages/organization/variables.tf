@@ -270,6 +270,12 @@ variable "gcp" {
     # Balancing traffic (never ingress "all"). Public apps are served through the external ALB + Cloud
     # Armor. Default true.
     restrict_cloud_run_ingress = optional(bool, true)
+    # Set gcp.restrictTLSVersion org-wide, denying TLS 1.0 and 1.1 (TLS_VERSION_1, TLS_VERSION_1_1)
+    # on Google Cloud resource APIs served through the Google Front End. It does not cover Cloud Run,
+    # App Engine, Cloud Run functions, Apigee, Private Service Connect or custom domains (load
+    # balancers use SSL policies). Default false; envs/gcp/organization turns it on for the
+    # production profile.
+    restrict_tls_versions = optional(bool, false)
     # OIDC issuer URIs a workload identity pool provider may be created for (org policy
     # iam.workloadIdentityPoolProviders). Default: HCP Terraform dynamic credentials and GitHub
     # Actions (app-services deploy identities). Add https://gitlab.com (or your TFE / GitLab host)

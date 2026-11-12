@@ -441,6 +441,16 @@ locals {
       denied_values  = null
       allow_all      = null
       deny_all       = null
+    }] : [],
+    # TLS 1.2 minimum on Google Cloud resource APIs (Google Front End). Clients
+    # that only speak TLS 1.0 or 1.1 are refused. Reference:
+    # https://docs.cloud.google.com/assured-workloads/docs/restrict-tls-versions
+    var.gcp.restrict_tls_versions ? [{
+      constraint     = "gcp.restrictTLSVersion"
+      allowed_values = null
+      denied_values  = ["TLS_VERSION_1", "TLS_VERSION_1_1"]
+      allow_all      = null
+      deny_all       = null
   }] : [])
 
   default_boolean_policies = concat([

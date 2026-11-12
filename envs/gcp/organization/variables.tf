@@ -200,6 +200,7 @@ variable "gcp_overrides" {
     enable_principal_access_boundary            = optional(bool)
     principal_access_boundary_allowed_resources = optional(list(string))
     restrict_cloud_run_ingress                  = optional(bool)
+    restrict_tls_versions                       = optional(bool)
     allowed_workload_identity_issuers           = optional(list(string))
     allowed_workload_identity_aws_accounts      = optional(list(string))
     org_policy_overrides = optional(map(object({
