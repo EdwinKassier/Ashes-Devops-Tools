@@ -22,7 +22,7 @@ variables {
     log_archive_bucket_name = "acme-org-log-archive"
     enable_security_lake    = false
     # CMP-6: a production plan needs a real security contact.
-    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
   }
 }
 
@@ -202,7 +202,7 @@ run "emails_feed_security_topic" {
     condition = (
       length(local.notification_subscribers) == 2 &&
       alltrue([for s in values(local.notification_subscribers) : s.protocol == "email"]) &&
-      toset([for s in values(local.notification_subscribers) : s.endpoint]) == toset(["alerts@cfg.test", "oncall@cfg.test"])
+      toset([for s in values(local.notification_subscribers) : s.endpoint]) == toset(["alerts@cfg-corp.io", "oncall@cfg-corp.io"])
     )
     error_message = "notifications.emails must become email subscribers of the security-notifications topic."
   }
@@ -219,7 +219,7 @@ run "explicit_subscribers_beat_notifications_emails" {
     aws_overrides = merge(var.aws_overrides, {
       log_archive_bucket_name  = null
       enable_security_lake     = null
-      notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.acme.test/hook" } }
+      notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.acme-corp.io/hook" } }
     })
   }
 
@@ -265,7 +265,7 @@ run "override_wins_over_config" {
       aws_enabled_regions       = ["us-east-1"]
       enabled_security_services = ["macie"]
       enable_incident_response  = false
-      notification_subscribers  = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
+      notification_subscribers  = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
     }
   }
 
@@ -291,7 +291,7 @@ run "unset_override_keeps_config_value" {
     aws_overrides = {
       log_archive_bucket_name  = null
       aws_enabled_regions      = null
-      notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
+      notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
     }
   }
 
@@ -315,7 +315,7 @@ run "unset_everywhere_takes_stage_default" {
     landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
+    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
   }
 
   assert {
@@ -333,7 +333,7 @@ run "cloudtrail_delegated_admin_comes_from_config_file" {
     landing_zone_config_path = "tests/fixtures/landing-zone-cloudtrail-da.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
+    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
   }
 
   assert {
@@ -349,7 +349,7 @@ run "cloudtrail_delegated_admin_absent_is_off" {
     landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
     landing_zone_name        = null
     management_account_id    = null
-    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
+    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
   }
 
   assert {

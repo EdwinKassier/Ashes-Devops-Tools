@@ -9,7 +9,7 @@ mock_provider "aws" {}
 # commented out in the scaffold); it is operator-supplied, so it is passed here.
 variables {
   aws_overrides = {
-    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
   }
 }
 
@@ -93,7 +93,7 @@ run "override_retention_beats_config" {
 
   variables {
     landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
-    aws_overrides            = { log_archive_retention_days = 2555, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
+    aws_overrides            = { log_archive_retention_days = 2555, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
   }
 
   assert {

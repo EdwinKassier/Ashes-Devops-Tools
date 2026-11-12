@@ -123,8 +123,11 @@ module "aws_security" {
     aggregator_role_arn         = "arn:aws:iam::222222222222:role/aws-config-aggregator"
     meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
 
+    # Fake address for illustration: replace it with a real, staffed
+    # mailbox. The aws-security root rejects reserved placeholder domains
+    # (example.com, .test, .invalid, ...) in production.
     notification_subscribers = {
-      secops = { protocol = "email", endpoint = "secops@example.com" }
+      secops = { protocol = "email", endpoint = "secops@acme-corp.io" }
     }
   }
 }

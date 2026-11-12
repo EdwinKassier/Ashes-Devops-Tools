@@ -25,7 +25,7 @@ variables {
     log_archive_bucket_name = "acme-org-log-archive"
     enable_security_lake    = false
     # CMP-6: a production plan needs a real security contact.
-    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
   }
 }
 
@@ -56,7 +56,7 @@ run "accepts_valid_values" {
       config_role_arn           = "arn:aws:iam::222222222222:role/aws-config-recorder"
       aggregator_role_arn       = "arn:aws:iam::222222222222:role/aws-config-aggregator"
       break_glass_role_arn      = "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
-      notification_subscribers  = { soc = { protocol = "https", endpoint = "https://soc.acme.test/hook" } }
+      notification_subscribers  = { soc = { protocol = "https", endpoint = "https://soc.acme-corp.io/hook" } }
       enabled_security_services = ["macie", "inspector", "detective", "resource-explorer"]
       cloudtrail_s3_data_events = "all"
     })
@@ -256,7 +256,7 @@ run "log_archive_retention_below_floor_fails" {
     landing_zone_name        = null
     management_account_id    = null
     organization_contract    = null
-    aws_overrides            = { log_archive_retention_days = 365, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
+    aws_overrides            = { log_archive_retention_days = 365, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
   }
 
   expect_failures = [var.aws_overrides]
@@ -270,7 +270,7 @@ run "log_archive_governance_with_frameworks_fails" {
     landing_zone_name        = null
     management_account_id    = null
     organization_contract    = null
-    aws_overrides            = { log_archive_object_lock_mode = "GOVERNANCE", notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } } }
+    aws_overrides            = { log_archive_object_lock_mode = "GOVERNANCE", notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
   }
 
   expect_failures = [var.aws_overrides]
@@ -334,8 +334,21 @@ run "placeholder_domain_rejected_in_production" {
     aws_overrides = merge(var.aws_overrides, {
       notification_subscribers = {
         secops = { protocol = "email", endpoint = "secops@example.com" }
-        oncall = { protocol = "email", endpoint = "oncall@acme.test" }
+        oncall = { protocol = "email", endpoint = "oncall@acme-corp.io" }
       }
+    })
+  }
+
+  expect_failures = [terraform_data.security_contact_guard, check.security_contact_set]
+}
+
+run "test_domain_rejected_in_production" {
+  # RFC 2606 reserves .test: mail to it is never delivered.
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, {
+      notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
     })
   }
 

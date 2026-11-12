@@ -111,10 +111,11 @@ locals {
     ))
   }
   # Subscribers on a reserved, never-delivered domain (RFC 2606 / RFC 6761):
-  # example.com/.net/.org and their subdomains, *.example, *.invalid, *.localhost.
+  # example.com/.net/.org and their subdomains, *.example, *.invalid,
+  # *.localhost, *.test.
   placeholder_subscribers = sort([
     for k, h in local.subscriber_hosts : k
-    if can(regex("(^|\\.)(example\\.(com|net|org)|example|invalid|localhost)$", h))
+    if can(regex("(^|\\.)(example\\.(com|net|org)|example|invalid|localhost|test)$", h))
   ])
   # Production: org.profile = production, or any aws.workload_environments entry
   # with is_production: true.
@@ -127,7 +128,7 @@ resource "terraform_data" "security_contact_guard" {
   lifecycle {
     precondition {
       condition     = !local.security_contact_required || (length(local.notification_subscribers) > 0 && length(local.placeholder_subscribers) == 0)
-      error_message = "Production security notifications have no real subscriber${length(local.placeholder_subscribers) > 0 ? " (placeholder domain: ${join(", ", local.placeholder_subscribers)})" : ""}. Set notifications.emails in config/landing-zone.yaml, or aws_overrides.notification_subscribers. Example, .invalid and .localhost domains are rejected. Production means org.profile = production or an aws.workload_environments entry with is_production: true."
+      error_message = "Production security notifications have no real subscriber${length(local.placeholder_subscribers) > 0 ? " (placeholder domain: ${join(", ", local.placeholder_subscribers)})" : ""}. Set notifications.emails in config/landing-zone.yaml, or aws_overrides.notification_subscribers. Example, .invalid, .localhost and .test domains are rejected. Production means org.profile = production or an aws.workload_environments entry with is_production: true."
     }
   }
 }

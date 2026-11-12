@@ -535,7 +535,7 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 - **No placeholder SecOps subscriber (breaking, CMP-6).** `aws-security` no longer subscribes
   `secops@example.com`. A production plan (`org.profile = production` or a production AWS workload
   environment) fails until `notifications.emails` or `aws_overrides.notification_subscribers` names
-  a real address; example, `.invalid` and `.localhost` domains are rejected. Non-production warns.
+  a real address; example, `.invalid`, `.localhost` and `.test` domains are rejected. Non-production warns.
   See `UPGRADING.md`.
 - **Patch Manager installs patches (breaking, CMP-3).** `modules/aws/ops/systems-manager` adds a
   daily `AWS-RunPatchBaseline` Scan association and a weekly Install association (`RebootIfNeeded`,
