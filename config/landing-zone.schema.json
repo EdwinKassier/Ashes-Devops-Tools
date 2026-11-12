@@ -862,6 +862,22 @@
               "egress_proxy": {
                 "type": "boolean",
                 "description": "Send the environment's private-tier egress through the hub Secure Web Proxy (preview). Needs gcp-network-hub secure_web_proxy."
+              },
+              "compliance_class": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "regulated"
+                ]
+              },
+              "data_classification": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ]
               }
             },
             "additionalProperties": false
@@ -1421,6 +1437,22 @@
                   },
                   "additionalProperties": false
                 }
+              },
+              "compliance_class": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "regulated"
+                ]
+              },
+              "data_classification": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ]
               }
             },
             "additionalProperties": false
@@ -1812,6 +1844,59 @@
           }
         },
         "hcp_email_user_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "compliance": {
+      "type": "object",
+      "description": "Estate-wide compliance settings. Absent = today's behaviour.",
+      "properties": {
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "soc2",
+              "iso27001",
+              "nist_800_53",
+              "pci_dss",
+              "hipaa",
+              "dora",
+              "nis2",
+              "gdpr",
+              "fedramp_moderate"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "audit_log_retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 36500
+        },
+        "backup": {
+          "type": "object",
+          "properties": {
+            "copy_to_central_vault": {
+              "type": "boolean"
+            },
+            "copy_retention_days": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "dr_region": {
+              "type": "string",
+              "pattern": "^([a-z]{2}|eusc)(-[a-z]+){1,2}-[1-9][0-9]?$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "breach_notification_contacts": {
           "type": "array",
           "items": {
             "type": "string"

@@ -462,6 +462,16 @@ saas:
 #   hcp_email_user_ids:
 #     - user-REPLACE_WITH_HCP_USER_ID
 
+# compliance: estate-wide compliance knobs. Absent = today's behaviour.
+# compliance:
+#   frameworks: [soc2, pci_dss]            # raises the audit-retention floor
+#   audit_log_retention_days: 400          # GCP audit bucket and AWS log archive
+#   backup:
+#     copy_to_central_vault: true          # IRREVERSIBLE lock on the copy vault (UPGRADING.md)
+#     copy_retention_days: 365
+#     dr_region: eu-west-1                 # must be in aws.allowed_regions
+#   breach_notification_contacts: [dpo@my-org.example.com]
+
 # Presets: named overlays from examples/presets/<name>.yaml, applied by the
 # root the preset targets (precedence: explicit variable > preset > this file).
 # Honoured today by envs/gcp/workload (prod-gcp-workload). A preset listed here

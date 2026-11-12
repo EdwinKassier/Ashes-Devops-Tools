@@ -1,0 +1,4 @@
+# Expected to FAIL schema validation: "sox" is not a compliance.frameworks value.
+version: 1
+compliance:
+  frameworks: [sox]
