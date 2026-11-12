@@ -74,6 +74,14 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 #### Fixed
 
+- **The quick start works as written (ADO-01, ADO-03, ADO-07, ADO-10, ADO-12, ADO-13).** The
+  config commit in README.md, QUICK_START.md and the scaffolder is now `chore(config): landing
+  zone`, which the commitizen hook accepts. `config/landing-zone.example.yaml` and the scaffold
+  fixtures name the phase-0 stack's `OrganizationBreakGlass` role in `aws.break_glass_role_arn`.
+  The scaffolder lists both phase-0 role ARNs as values to check against the stack outputs, and
+  names the SaaS bootstrap runbook when SaaS is enabled. The GCP bootstrap verification reads the
+  `contract` outputs and checks the GitHub pool only with `enable_github_wif`. The README module
+  counts per domain now add up to 66 GCP and 53 AWS, and its CI table lists every workflow.
 - **Every root's backend now initialises (C1).** All 14 `envs/**/backend.tf`, plus both clone-me
   templates, declared `backend "cloud" {}`. That is not a valid backend type: Terraform rejects
   it, so `terraform init` failed on every root. They are now top-level `cloud {}` blocks.

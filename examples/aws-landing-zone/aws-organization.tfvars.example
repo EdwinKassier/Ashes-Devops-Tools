@@ -17,7 +17,7 @@
 # Phase-0 management-account roles (aws-bootstrap runbook Step 2). Both are
 # carved out of every guardrail deny statement.
 # terraform_run_role_arn = "arn:aws:iam::111111111111:role/tfc-mgmt-apply" # aws.terraform_run_role_arn
-# break_glass_role_arn   = "arn:aws:iam::111111111111:role/break-glass"    # aws.break_glass_role_arn
+# break_glass_role_arn   = "arn:aws:iam::111111111111:role/OrganizationBreakGlass" # aws.break_glass_role_arn
 
 # Central log-archive bucket protected by the deny-tamper SCP. aws-security
 # creates it, and aws-network reads the same aws.log_archive_bucket_name.

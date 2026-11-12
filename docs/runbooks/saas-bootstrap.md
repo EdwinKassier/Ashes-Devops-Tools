@@ -7,8 +7,11 @@ stack (`saas-<name>`), and no cloud account at all. Either provider can be used 
 
 ## Prerequisites
 
-- A Terraform Cloud organization, with the `tfc-admin` workspace created
-  ([bootstrap runbook](bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass)).
+- A Terraform Cloud organization, with the `tfc-admin` workspace created and applied once.
+  This runbook assumes tfc-admin exists and does not create it. Create it by hand once
+  (working directory `envs/tfc-admin`, a `TFE_TOKEN` sensitive env var) as in
+  [pass 1 of the bootstrap runbook](bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass).
+  A SaaS-only estate needs only that step of the bootstrap runbook, not the GCP or AWS phases.
 - **Supabase:** an organization, and its ID from the dashboard URL
   `supabase.com/dashboard/org/<id>`. Also a personal access token with **Manage organization**
   scope.

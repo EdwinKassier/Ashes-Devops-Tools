@@ -135,7 +135,7 @@ The Shared VPC networks are built by `modules/gcp/stages/net-hub` (via `network-
   - `project` — creates a `supabase_project`; lifecycle guard ignores `database_password` after initial creation (Management API limitation)
   - `settings` — manages auth and API settings on an existing project via `supabase_settings`; destroying this resource is a no-op by provider design (settings revert to Supabase defaults)
   - `environment` — composite module: project + settings + `data.supabase_apikeys`; primary building block for per-environment deployments
-  - `vault-secrets` — bootstraps the Supabase Vault with `SECURITY DEFINER` helper functions and reconciles a desired-state `map(string)` of secrets; requires Node.js >= 18 + `pg ^8.20.0`; IaC namespace is scoped to `UPPER_SNAKE_CASE` keys only; a safety guard blocks wiping a non-empty vault when the desired set is empty
+  - `vault-secrets` — bootstraps the Supabase Vault with `SECURITY DEFINER` helper functions and reconciles a desired-state `map(string)` of secrets; requires Node.js >= 18 + `pg` 8.20.0 (exact pin); IaC namespace is scoped to `UPPER_SNAKE_CASE` keys only; a safety guard blocks wiping a non-empty vault when the desired set is empty
 - `modules/vercel/*` contains Vercel primitives:
   - `project` — creates a Vercel project with three environments (QA/preview, UAT/custom, production); sensitive environment variables are managed via `terraform_data` SHA256 drift-resistance triggers; `ignore_command` uses POSIX sh (`if/then/else/fi`, exit 1 = build, exit 0 = skip)
 
@@ -188,7 +188,7 @@ The **minimum governed footprint** is `aws-organization` + `aws-security`. `aws-
 
 ### Two-phase bootstrap
 
-AWS stand-up begins with a phase-0 bootstrap (out-of-band org creation and a runnable `aws-organization` workspace) before the layered roots can be applied. IAM Identity Center is enabled/delegated between the organization and security/identity layers.
+AWS stand-up begins with a phase-0 bootstrap (the management account, the phase-0 roles and a runnable `aws-organization` workspace) before the layered roots can be applied. `aws-organization` creates the organization (or imports an existing one through `aws.adopt`) and registers the IAM Identity Center delegated administrator. IAM Identity Center itself is enabled in the console between the `aws-organization` and `aws-identity` applies.
 
 > Full account/OU diagrams, network and security topology, and the SRA conformance checklist: **[AWS Landing Zone →](aws-landing-zone.md)**. Stand-up procedure: **[AWS Bootstrap runbook →](../runbooks/aws-bootstrap.md)**.
 

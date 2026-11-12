@@ -55,7 +55,7 @@ aws_overrides = {
 
   # Optional — break-glass role ARN the security-notifications control watches for
   # assumption. Leave empty to disable the watch.
-  # break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
+  # break_glass_role_arn = "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
 
   # Optional — SNS subscribers for security notifications. Override the placeholder
   # SecOps email with a real endpoint.

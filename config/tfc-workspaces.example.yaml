@@ -36,7 +36,7 @@ workspaces:
   aws-organization:
     management_account_id: "111111111111"
     terraform_run_role_arn: arn:aws:iam::111111111111:role/tfc-mgmt-apply
-    break_glass_role_arn: arn:aws:iam::111111111111:role/break-glass
+    break_glass_role_arn: arn:aws:iam::111111111111:role/OrganizationBreakGlass
     log_archive_bucket_name: acme-org-log-archive
     allowed_regions: [eu-west-2]
     tfc_organization: acme

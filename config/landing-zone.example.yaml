@@ -374,9 +374,11 @@ aws:
   # here through app-services. Empty or absent leaves GitHub federation unpinned.
   # github_federation_owners:
   #   - my-github-org
-  # Phase-0 management-account roles (aws-bootstrap runbook Step 2).
+  # Phase-0 management-account roles (aws-bootstrap runbook Step 2). Replace
+  # each with the phase-0 stack output: TerraformRunRoleArn and
+  # BreakGlassRoleArn (templates/aws/bootstrap/phase0-management.yaml).
   terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
-  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass
+  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/OrganizationBreakGlass
   # Central log-archive bucket (aws-organization, aws-security, aws-network).
   log_archive_bucket_name: my-org-org-log-archive
   # Foundational SRA accounts: key => {email, ou}. Root emails must be real,

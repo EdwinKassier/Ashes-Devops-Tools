@@ -267,29 +267,32 @@ See [add-environment.md](add-environment.md) for the exact steps, expected plan 
 
 After the first `gcp-organization` apply:
 
+Read the `contract` output of each root. The individual outputs are deprecated aliases, removed in v1.0.
+
 ```bash
 # Automation foundation exists
-terraform -chdir=envs/gcp/organization output -raw terraform_service_account_email
-terraform -chdir=envs/gcp/organization output -json | jq '{
-  github_oidc_pool_id: .github_oidc_pool_id.value,
-  tfc_oidc_pool_id:    .tfc_oidc_pool_id.value
+terraform -chdir=envs/gcp/organization output -json contract | jq '{
+  terraform_service_account_email,
+  tfc_oidc_pool_id,
+  github_oidc_pool_id
 }'
 
 # Admin project is present
-gcloud projects describe "$(terraform -chdir=envs/gcp/organization output -raw admin_project)"
+gcloud projects describe "$(terraform -chdir=envs/gcp/organization output -json contract | jq -r '.admin_project.project_id')"
 
 # Folders + org policies landed
-gcloud resource-manager folders list --organization="$(terraform -chdir=envs/gcp/organization output -raw org_id)"
+gcloud resource-manager folders list --organization="$(terraform -chdir=envs/gcp/organization output -json contract | jq -r '.org_id')"
 
 # Cross-root contract is published (workload roots depend on this)
-terraform -chdir=envs/gcp/projects output -json environment_config | jq 'keys'
-terraform -chdir=envs/gcp/network-hub output -json hub_network
+terraform -chdir=envs/gcp/projects output -json contract | jq '.environment_config | keys'
+terraform -chdir=envs/gcp/network-hub output -json contract | jq '.hub_network'
 ```
 
 Checklist:
 
 - [ ] `terraform_service_account_email` resolves to `terraform-admin@<admin-project>.iam.gserviceaccount.com`.
-- [ ] `github_oidc_pool_id` and `tfc_oidc_pool_id` are non-empty.
+- [ ] `tfc_oidc_pool_id` is non-empty (with the default `enable_tfc_oidc = true`).
+- [ ] Only when `enable_github_wif = true`: `github_oidc_pool_id` is non-empty. With the default (`false`) it is `null`, and that is correct.
 - [ ] The admin project exists and has `deletion_policy = PREVENT`.
 - [ ] One folder exists per `environments` key plus `Shared Services`.
 - [ ] `environment_config` keys match your `environments` keys.

@@ -534,7 +534,10 @@ remaining="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_clo
   }' "${OUTPUT}")"
 # Values the scaffolder derived from --domain / --prefix (group emails, the
 # platform team's subnet). They look real but nothing checked that they exist.
-derived="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v admin="${GCP_ADMIN_EMAIL}" '
+# The AWS phase-0 role ARNs are built from --aws-management-account and the
+# phase-0 stack's default role names; they must match that stack's outputs.
+derived="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_cloud aws && echo 1 || echo 0)" \
+  -v admin="${GCP_ADMIN_EMAIL}" '
   /^[a-z_]+:/ { section = $1; sub(":", "", section) }
   /^[[:space:]]*#/ { next }
   section == "gcp" && gcp && /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/ && !/@example\.com/ {
@@ -542,6 +545,7 @@ derived="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v admin="${GCP_ADM
     print NR ":" $0
   }
   section == "gcp" && gcp && /subnet_name:/ { print NR ":" $0 }
+  section == "aws" && aws && /^  (terraform_run_role_arn|break_glass_role_arn):/ && !/REPLACE_WITH_/ { print NR ":" $0 }
 ' "${OUTPUT}")"
 cat <<EOF
 
@@ -554,15 +558,22 @@ if [[ -n "${remaining}" ]]; then
   printf '%s\n' "${remaining}" | sed 's/^/       line /'
 fi
 if [[ -n "${derived}" ]]; then
-  printf '     Derived, not verified (each group must exist in Cloud Identity and each\n'
-  printf '     subnet in the environment before the first apply):\n'
+  printf '     Derived, not verified (before the first apply each group must exist in\n'
+  printf '     Cloud Identity, each subnet in the environment, and each AWS role ARN\n'
+  printf '     must equal the phase-0 stack outputs TerraformRunRoleArn / BreakGlassRoleArn):\n'
   printf '%s\n' "${derived}" | sed 's/^/       line /'
 fi
 cat <<EOF
-  2. Commit it: git add ${OUTPUT#"${REPO_ROOT}/"} && git commit -m "config: landing zone"
+  2. Commit it: git add ${OUTPUT#"${REPO_ROOT}/"} && git commit -m "chore(config): landing zone"
      (no secrets belong in it; tokens go in TFC sensitive variables).
   3. Create the tfc-admin workspace by hand once, then apply envs/tfc-admin
      (it derives every workspace from this file).
   4. Bootstrap in order: docs/guides/QUICK_START.md
      (GCP: docs/runbooks/bootstrap.md, AWS: docs/runbooks/aws-bootstrap.md).
 EOF
+if has_cloud saas; then
+  cat <<EOF
+  5. SaaS (Supabase / Vercel): docs/runbooks/saas-bootstrap.md
+     (it assumes the tfc-admin workspace from step 3 exists).
+EOF
+fi

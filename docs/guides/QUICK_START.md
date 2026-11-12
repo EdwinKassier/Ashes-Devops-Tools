@@ -9,7 +9,7 @@ This guide covers everything needed to deploy the **GCP** landing zone from scra
 1. **Configure once:** run `scripts/init-landing-zone.sh` (or `make init ARGS="..."`), or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml) to `config/landing-zone.yaml` and edit it. This one file holds the org name and prefix, domain, Terraform Cloud organization and projects, regions, the GCP environments, the AWS accounts and workload environments, and which clouds are enabled ([section 2a](#2a-configure-the-landing-zone-one-file)).
 2. **Commit it.** It holds no secrets. Every root reads it, so VCS-driven Terraform Cloud runs (which never see a local tfvars file) get their values from the repo.
 3. **Apply `envs/tfc-admin`.** It creates every workspace from the same file: the enabled clouds, one `gcp-workload-<env>` / `aws-workload-<env>` per environment, and the TFC projects.
-4. **Bootstrap in order:** GCP `gcp-bootstrap` → `gcp-organization` → `gcp-guardrails` (security team) → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (below). AWS: the [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md).
+4. **Bootstrap in order:** GCP `gcp-bootstrap` → `gcp-organization` → `gcp-guardrails` (security team) → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (below). AWS: the [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md). Supabase and/or Vercel: the [SaaS bootstrap runbook](../runbooks/saas-bootstrap.md), which assumes the `tfc-admin` workspace from step 3 exists.
 
 **How long it takes.** The applies themselves take minutes to an hour. The elapsed
 time is set by the steps around them: organization and billing access, quota and
@@ -105,7 +105,7 @@ scripts/init-landing-zone.sh --org-name acme --tfc-org acme --clouds gcp,aws \
 # SaaS: add --clouds saas --supabase-org <id> --vercel-team <id> --github-repo acme/web
 # or interactively: scripts/init-landing-zone.sh
 # or by hand:       cp config/landing-zone.example.yaml config/landing-zone.yaml
-git add config/landing-zone.yaml && git commit -m "config: landing zone"
+git add config/landing-zone.yaml && git commit -m "chore(config): landing zone"
 ```
 
 The script validates the inputs the same way the Terraform variables do. It writes `config/landing-zone.yaml` and lists the placeholders still left for the clouds you enabled, such as admin groups. `--rebrand` also renames the README title. Review the environments, CIDRs and groups before you commit.
@@ -159,7 +159,7 @@ Generate a token at [https://vercel.com/account/tokens](https://vercel.com/accou
 
 `enable_vault_secrets = true` executes a Node.js script to bootstrap and reconcile the Supabase Vault. Dependencies install **automatically** at apply time — the bootstrap and reconcile scripts each run `npm ci` in `modules/supabase/vault-secrets/scripts` in the same command, before `node`. No manual step is required; the apply runner only needs **Node.js 18+ and npm** on PATH (GitHub ubuntu-latest runners have them; on HCP Terraform use an agent pool whose image includes Node.js, since the hosted worker image is not guaranteed to).
 
-The `pg ^8.20.0` package connects to the Supabase session-mode pooler to execute the bootstrap SQL. `scripts/node_modules/` is gitignored and rebuilt by the automated `npm ci`. To prime it locally: `npm ci --prefix modules/supabase/vault-secrets/scripts`.
+The `pg` package (pinned to exactly 8.20.0 in `modules/supabase/vault-secrets/scripts/package.json`) connects to the Supabase session-mode pooler to execute the bootstrap SQL. `scripts/node_modules/` is gitignored and rebuilt by the automated `npm ci`. To prime it locally: `npm ci --ignore-scripts --prefix modules/supabase/vault-secrets/scripts`.
 
 ---
 
@@ -181,7 +181,7 @@ A `cloud` block accepts no `-backend-config` and no `backend.hcl`; Terraform rej
 **Step 2 — Initialize the roots, in apply order:**
 
 ```bash
-for r in bootstrap organization projects network-hub; do
+for r in bootstrap organization guardrails projects network-hub; do
   terraform -chdir=envs/gcp/$r init
 done
 TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload init
@@ -289,7 +289,7 @@ gcloud auth application-default revoke
 
 ## 4a. AWS Bootstrap (separate stand-up flow)
 
-The AWS landing zone does **not** share the GCP bootstrap above. It has its own phase-0 stand-up: creating the AWS organization out-of-band, then bringing a runnable `aws-organization` workspace online, then applying the layered roots in order (`aws-organization` → `aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). IAM Identity Center is enabled/delegated between the organization and security/identity layers.
+The AWS landing zone does **not** share the GCP bootstrap above. It has its own phase-0 stand-up. You create only the management account and the phase-0 roles by hand. Then you bring a runnable `aws-organization` workspace online and apply the layered roots in order (`aws-organization` → `aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). Do not create the AWS organization by hand: `aws-organization` creates it. If you already have an organization, import it with `aws.adopt` (`envs/aws/organization/adopt.tf`; [AWS brownfield adoption](../runbooks/aws-brownfield-adoption.md)). The `aws-organization` apply also registers the IAM Identity Center delegated administrator. Enable IAM Identity Center in the console after that apply and before `aws-identity`.
 
 **AWS credentials:** the AWS roots authenticate via Terraform Cloud dynamic (OIDC) credentials (`TFC_AWS_PROVIDER_AUTH`, `TFC_AWS_PLAN_ROLE_ARN`, `TFC_AWS_APPLY_ROLE_ARN`, plus a `TFC_AWS_*_<alias>` set per member account on `aws-security` / `aws-backup`) or, for local runs, `AWS_PROFILE`. `envs/tfc-admin` (`aws.enabled: true` in `config/landing-zone.yaml`) creates the AWS workspaces and writes those env vars: the hand-created management roles via `aws_management_plan_role_arn` / `aws_management_apply_role_arn`, and the member-account roles from the `aws-organization` outputs. Every AWS root requires `landing_zone_name` (no built-in default; set `org.name` in `config/landing-zone.yaml`). Only the roots you apply pull in credentials; an unapplied workspace needs none (see the env-var table in [CLAUDE.md](../../CLAUDE.md#required-environment-variables)).
 
@@ -421,7 +421,7 @@ Any root: `make plan-gcp-<root>` or `make plan-aws-<root>` (a read-only plan in 
 | `make plan-gcp-organization` | Plan control-plane changes |
 | `make plan-gcp-workload APP_ENV=dev` | Plan an app environment (add `APP_VARS=examples/dev.tfvars.example` for local tuning knobs) |
 | `make ci-quick` | The fast offline subset of `make ci`, no `terraform init`: fmt-check, consistency, config-check, scaffold-fixtures-check, count-check, links, examples-refs, required-checks, shellcheck, test-scripts, docs-check (needs check-jsonschema) |
-| `make ci` | Every workstation-runnable CI gate: `ci-quick`, then yamllint, markdownlint-check, zizmor, commit-check, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, uv for zizmor, check-jsonschema, opa 1.22.2 and a fetched origin/main) |
+| `make ci` | Every workstation-runnable CI gate: `ci-quick`, then yamllint, markdownlint-check, zizmor, commit-check, module-api, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (needs pre-commit, cz, uv for zizmor, check-jsonschema, opa 1.22.2 and a fetched origin/main) |
 
 ---
 
@@ -430,6 +430,7 @@ Any root: `make plan-gcp-<root>` or `make plan-aws-<root>` (a read-only plan in 
 - Read the [Architecture Overview](../architecture/ARCHITECTURE.md)
 - Read the [Network Topology](../architecture/network-topology.md)
 - Standing up AWS? Read the [AWS Landing Zone](../architecture/aws-landing-zone.md) and the [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md)
+- Standing up Supabase or Vercel? Read the [SaaS bootstrap runbook](../runbooks/saas-bootstrap.md)
 - Read the [Contributing Guide](../../CONTRIBUTING.md)
 - **Configure [Branch Protection](BRANCH_PROTECTION.md)** — apply GitHub branch protection rules before granting team access
 - Browse the [Runbooks](../runbooks/) for Day 2 operations

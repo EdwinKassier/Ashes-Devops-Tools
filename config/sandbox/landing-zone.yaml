@@ -83,7 +83,7 @@ aws:
   enabled_regions:
     - eu-west-2
   terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
-  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass
+  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/OrganizationBreakGlass
   log_archive_bucket_name: my-sandbox-org-log-archive
   accounts:
     log_archive: {email: aws+sbx-log-archive@example.com, ou: Security}

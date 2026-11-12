@@ -110,7 +110,7 @@ make count          # print live module/root/test-suite counts (make count-check
 make links          # fail on broken repo-relative Markdown links
 make shellcheck     # shellcheck scripts/*.sh
 make ci-quick       # fast offline gates (no terraform init): fmt, consistency, config, fixtures, counts, links, refs, required checks, shellcheck, script tests, docs
-make ci             # ci-quick + yamllint, markdownlint-check, zizmor, commit-check, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (every workstation-runnable CI gate; needs pre-commit, cz, uv (zizmor), check-jsonschema, opa 1.22.2, a fetched origin/main)
+make ci             # ci-quick + yamllint, markdownlint-check, zizmor, commit-check, module-api, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (every workstation-runnable CI gate; needs pre-commit, cz, uv (zizmor), check-jsonschema, opa 1.22.2, a fetched origin/main)
 ```
 
 ---
@@ -291,7 +291,7 @@ terraform plan   # read-only local check — apply only via TFC
 
 ### Standing up the AWS landing zone
 
-Follow [`docs/runbooks/aws-bootstrap.md`](docs/runbooks/aws-bootstrap.md): run phase-0 (out-of-band org creation → a runnable `aws-organization` workspace), apply `aws-organization`, enable/delegate IAM Identity Center, then apply the remaining layers in order (`aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). Ordering is enforced by apply order + remote-state reads, not cross-root `depends_on`.
+Follow [`docs/runbooks/aws-bootstrap.md`](docs/runbooks/aws-bootstrap.md): run phase-0 (the operator creates only the management account and the phase-0 roles → a runnable `aws-organization` workspace), apply `aws-organization` (it creates the organization, or imports an existing one through `aws.adopt`: `envs/aws/organization/adopt.tf`, [`aws-brownfield-adoption.md`](docs/runbooks/aws-brownfield-adoption.md); it also registers the IAM Identity Center delegated administrator), enable IAM Identity Center in the console, then apply the remaining layers in order (`aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). Ordering is enforced by apply order + remote-state reads, not cross-root `depends_on`.
 
 ### Adding an AWS account / workload
 

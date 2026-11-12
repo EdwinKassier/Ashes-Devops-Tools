@@ -62,7 +62,7 @@ make install && make pre-commit-install
 # 2. Configure the whole landing zone in ONE committed file, config/landing-zone.yaml
 #    (org name/prefix, domain, TFC org, regions, environments, AWS accounts, clouds).
 scripts/init-landing-zone.sh            # interactive; or pass --org-name ... --clouds gcp,aws
-git add config/landing-zone.yaml && git commit -m "config: landing zone"
+git add config/landing-zone.yaml && git commit -m "chore(config): landing zone"
 
 # 3. Authenticate (only the clouds whose workspaces you apply)
 gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-guardrails, gcp-projects, gcp-network-hub, gcp-workload-<env>)
@@ -82,6 +82,7 @@ make ci
 Every root reads `config/landing-zone.yaml`. An explicit variable (tfvars or a TFC variable) wins over it, and an unset or placeholder value fails the plan. The schema is [`config/landing-zone.example.yaml`](config/landing-zone.example.yaml).
 
 > Full bootstrap sequence, backend config, and first apply: **[Quick Start Guide →](docs/guides/QUICK_START.md)**
+> Supabase and/or Vercel: **[SaaS bootstrap runbook →](docs/runbooks/saas-bootstrap.md)**. It assumes the `tfc-admin` workspace exists.
 
 ---
 
@@ -143,7 +144,7 @@ Both clouds are organized into the **same conceptual domains** so you can map a 
 ### Cloud modules by domain
 
 <details>
-<summary><strong>Networking</strong> — GCP 24 · AWS 12</summary>
+<summary><strong>Networking</strong> — GCP 24 · AWS 11</summary>
 
 Both clouds build a hub-and-spoke private network from the same primitives; the names differ, the roles line up.
 
@@ -159,7 +160,7 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 | Egress FQDN control | [`network/secure-web-proxy`](modules/gcp/network/secure-web-proxy/) (opt-in preview, hub + PSC) | [`network/network-firewall`](modules/aws/network/network-firewall/) (egress domain allowlist) |
 | Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) *(library-only)* | [`network/load-balancer`](modules/aws/network/load-balancer/) (ALB/NLB) |
 | Application ingress | [`network/app-ingress`](modules/gcp/network/app-ingress/) (Cloud Run front door) | [`network/load-balancer`](modules/aws/network/load-balancer/) |
-| Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) *(library-only)* | [`security/edge-security`](modules/aws/security/edge-security/) (CloudFront + WAF/Shield) |
+| Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) *(library-only)* | *(Security → `edge-security`: CloudFront + WAF/Shield)* |
 | API gateway / edge | [`network/api-gateway`](modules/gcp/network/api-gateway/) *(library-only)* | [`network/api-gateway`](modules/aws/network/api-gateway/) *(library-only)* |
 | Stateful firewall | [`network/network-firewall`](modules/gcp/network/network-firewall/), [`network/hierarchical-firewall`](modules/gcp/network/hierarchical-firewall/) | [`network/network-firewall`](modules/aws/network/network-firewall/) |
 | Web app firewall / DDoS | [`network/cloud-armor`](modules/gcp/network/cloud-armor/) | *(Security → `edge-security`, `firewall-manager-org`)* |
@@ -339,6 +340,10 @@ make plan-aws-workload APP_ENV=dev
 | [`documentation.yml`](.github/workflows/documentation.yml) | Module `*.tf` changes | Auto-generate docs → open PR |
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |
 | [`dependency-heartbeat.yml`](.github/workflows/dependency-heartbeat.yml) | Weekly | Fail when Renovate has not updated an issue or PR for 8 days (forks: warning unless `RENOVATE_HEARTBEAT_REQUIRED=true`) |
+| [`reusable-security.yml`](.github/workflows/reusable-security.yml) | Called by `terraform-plan.yml` and `security-scan.yml` | Shared Trivy and Checkov scan job |
+| [`sandbox-e2e.yml`](.github/workflows/sandbox-e2e.yml) | Nightly, manual, or a PR with the `e2e` label | Real apply and destroy of `tests/e2e/{gcp,aws}` in a sandbox ([sandbox E2E](docs/guides/sandbox-e2e.md)) |
+| [`state-backup.yml`](.github/workflows/state-backup.yml) | Daily + manual | Export every HCP Terraform workspace state to write-once buckets ([state backup](docs/runbooks/state-backup.md)) |
+| [`tfc-audit-trail.yml`](.github/workflows/tfc-audit-trail.yml) | Daily + manual | Export the HCP Terraform organization audit trail to the same buckets |
 
 **CI status.** The two workflow badges at the top are live and show the state of `main`.
 A red badge means a gate is failing on `main` now. Open the latest run to see which one.

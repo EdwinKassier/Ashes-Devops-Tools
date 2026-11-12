@@ -365,6 +365,38 @@ else
   fail "gcp-only run exits 0"; cat "${log}" >&2
 fi
 
+echo "==> AWS phase-0 role ARNs are reported until checked against the stack outputs"
+out4="${workdir}/aws-roles.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out4}" --org-name acme --tfc-org acme-tfc --clouds aws \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_line "${out4}" '^  break_glass_role_arn: arn:aws:iam::123456789012:role/OrganizationBreakGlass$' \
+    "break-glass ARN names the phase-0 stack role"
+  assert_line "${log}" 'line [0-9]+:  break_glass_role_arn: arn:aws:iam::123456789012:role/OrganizationBreakGlass' \
+    "derived break-glass ARN is listed"
+  assert_line "${log}" 'line [0-9]+:  terraform_run_role_arn: arn:aws:iam::123456789012:role/tfc-mgmt-apply' \
+    "derived run role ARN is listed"
+  assert_line "${log}" 'phase-0 stack outputs' "the report says to compare with the phase-0 stack outputs"
+  assert_line "${log}" 'git commit -m "chore\(config\): landing zone"' "next steps use a Conventional Commits message"
+  assert_no_line "${log}" 'saas-bootstrap\.md' "saas runbook not listed when saas is off"
+else
+  fail "aws run with a management account exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --force --output "${out4}" --org-name acme --tfc-org acme-tfc --clouds aws \
+  </dev/null >"${log}" 2>&1; then
+  assert_line "${log}" 'line [0-9]+:  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/OrganizationBreakGlass' \
+    "break-glass ARN without an account ID is a placeholder"
+else
+  fail "aws run without a management account exits 0"; cat "${log}" >&2
+fi
+
+echo "==> next steps name the SaaS runbook when saas is enabled"
+if bash "${SCRIPT}" --non-interactive --output "${workdir}/saas-next.yaml" --org-name acme --tfc-org acme-tfc --clouds saas \
+  --supabase-org abcdefgh1234 --vercel-team team_x --github-repo acme/web </dev/null >"${log}" 2>&1; then
+  assert_line "${log}" 'docs/runbooks/saas-bootstrap\.md' "saas run lists the SaaS bootstrap runbook"
+else
+  fail "saas run with IDs exits 0"; cat "${log}" >&2
+fi
+
 echo
 echo "test-init-landing-zone: ${passes} passed, ${failures} failed"
 [[ "${failures}" -eq 0 ]]
