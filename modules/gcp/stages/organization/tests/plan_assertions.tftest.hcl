@@ -450,6 +450,209 @@ run "projects_delegation_is_bound_per_folder" {
   }
 }
 
+# IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list, and
+# Google advises against joining hasOnly() calls with && or ||. The lists below
+# are the gcp-bootstrap defaults (delegated_workload_folder_roles: 36 roles,
+# delegated_network_folder_roles: 13 roles; the bootstrap suite pins those
+# counts). Each folder must get one conditional binding per 10 roles.
+run "delegated_grants_split_into_ten_role_conditions" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        description             = "Shared"
+        iam_group_role_bindings = {}
+      }
+      dev = {
+        display_name            = "Development"
+        description             = "Development environment"
+        iam_group_role_bindings = {}
+      }
+    }
+    projects_apply_service_account = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+    delegated_workload_folder_roles = [
+      "organizations/123456789/roles/landingZonePlanViewer",
+      "roles/artifactregistry.admin",
+      "roles/bigquery.admin",
+      "roles/bigquery.metadataViewer",
+      "roles/cloudkms.admin",
+      "roles/cloudkms.viewer",
+      "roles/cloudsql.admin",
+      "roles/cloudsql.viewer",
+      "roles/compute.admin",
+      "roles/compute.viewer",
+      "roles/compute.xpnAdmin",
+      "roles/container.admin",
+      "roles/container.clusterViewer",
+      "roles/dns.admin",
+      "roles/dns.reader",
+      "roles/iam.securityReviewer",
+      "roles/iam.serviceAccountUser",
+      "roles/iam.serviceAccountViewer",
+      "roles/iam.workloadIdentityPoolViewer",
+      "roles/logging.admin",
+      "roles/monitoring.admin",
+      "roles/monitoring.viewer",
+      "roles/osconfig.patchDeploymentAdmin",
+      "roles/osconfig.patchDeploymentViewer",
+      "roles/pubsub.admin",
+      "roles/pubsub.viewer",
+      "roles/resourcemanager.folderViewer",
+      "roles/resourcemanager.projectCreator",
+      "roles/run.admin",
+      "roles/run.viewer",
+      "roles/secretmanager.admin",
+      "roles/secretmanager.viewer",
+      "roles/servicenetworking.networksAdmin",
+      "roles/serviceusage.serviceUsageAdmin",
+      "roles/serviceusage.serviceUsageViewer",
+      "roles/storage.admin",
+    ]
+    delegated_network_folder_roles = [
+      "organizations/123456789/roles/landingZonePlanViewer",
+      "roles/compute.networkAdmin",
+      "roles/compute.orgFirewallPolicyAdmin",
+      "roles/compute.orgSecurityResourceAdmin",
+      "roles/compute.securityAdmin",
+      "roles/compute.viewer",
+      "roles/compute.xpnAdmin",
+      "roles/dns.admin",
+      "roles/dns.peer",
+      "roles/dns.reader",
+      "roles/servicenetworking.networksAdmin",
+      "roles/serviceusage.serviceUsageAdmin",
+      "roles/serviceusage.serviceUsageViewer",
+    ]
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }, shared = { id = "222222222", name = "folders/222222222", display_name = "Shared" } } }
+  }
+
+  # Chunk 0 keeps the folder key as its address; later chunks are <folder>|<i>.
+  assert {
+    condition     = sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) == sort(["dev", "dev|1", "dev|2", "dev|3", "shared", "shared|1"])
+    error_message = "each folder needs one delegated binding per 10 roles: 4 for the 36 workload roles, 2 for the 13 network roles."
+  }
+
+  assert {
+    condition = (
+      length([for k, m in google_folder_iam_member.projects_delegated_folder_iam : k if split("|", k)[0] == "dev"]) == ceil(length(var.delegated_workload_folder_roles) / 10) &&
+      length([for k, m in google_folder_iam_member.projects_delegated_folder_iam : k if split("|", k)[0] == "shared"]) == ceil(length(var.delegated_network_folder_roles) / 10)
+    )
+    error_message = "the number of bindings per folder must be ceil(roles / 10)."
+  }
+
+  assert {
+    condition = alltrue([
+      for m in google_folder_iam_member.projects_delegated_folder_iam :
+      length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0])) >= 1 && length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0])) <= 10
+    ])
+    error_message = "every delegated condition must list 1 to 10 roles (the IAM hasOnly() limit)."
+  }
+
+  assert {
+    condition = alltrue([
+      for m in google_folder_iam_member.projects_delegated_folder_iam :
+      !strcontains(m.condition[0].expression, "&&") && !strcontains(m.condition[0].expression, "||") && length(regexall("hasOnly\\(", m.condition[0].expression)) == 1 && startswith(m.condition[0].expression, "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([") && endswith(m.condition[0].expression, "])")
+    ])
+    error_message = "every delegated condition must be exactly one modifiedGrantsByRole hasOnly() call, never joined with && or ||."
+  }
+
+  assert {
+    condition = (
+      tolist(flatten([for k in sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) : [for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_folder_iam_member.projects_delegated_folder_iam[k].condition[0].expression)[0]) : r[0]] if split("|", k)[0] == "dev"])) == tolist(var.delegated_workload_folder_roles) &&
+      tolist(flatten([for k in sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) : [for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_folder_iam_member.projects_delegated_folder_iam[k].condition[0].expression)[0]) : r[0]] if split("|", k)[0] == "shared"])) == tolist(var.delegated_network_folder_roles)
+    )
+    error_message = "the chunks of each folder must together list exactly that folder's allow-list, each role once."
+  }
+
+  assert {
+    condition = alltrue([
+      for k, m in google_folder_iam_member.projects_delegated_folder_iam :
+      m.role == "roles/resourcemanager.folderIamAdmin" && m.member == "serviceAccount:acme-projects-apply@acme-admin-project.iam.gserviceaccount.com" && m.folder == (split("|", k)[0] == "dev" ? "folders/111111111" : "folders/222222222")
+    ])
+    error_message = "every chunk must be the same projects-apply folderIamAdmin grant on its own folder."
+  }
+
+  assert {
+    condition = (
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].title == "delegated_folder_role_grants" &&
+      google_folder_iam_member.projects_delegated_folder_iam["dev|3"].condition[0].title == "delegated_folder_role_grants_3" &&
+      strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev|3"].condition[0].description, "part 4 of 4") &&
+      strcontains(google_folder_iam_member.projects_delegated_folder_iam["shared|1"].condition[0].description, "part 2 of 2")
+    )
+    error_message = "each chunk needs its own condition title and a description that names the chunk."
+  }
+}
+
+# A list of 10 roles or fewer must keep exactly the binding the module created
+# before the split (same address, title, description and expression), so an
+# existing estate sees no change.
+run "short_delegated_list_keeps_one_unchanged_condition" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        description             = "Shared"
+        iam_group_role_bindings = {}
+      }
+      dev = {
+        display_name            = "Development"
+        description             = "Development environment"
+        iam_group_role_bindings = {}
+      }
+    }
+    projects_apply_service_account  = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+    delegated_workload_folder_roles = ["roles/run.admin", "roles/compute.admin"]
+    delegated_network_folder_roles = [
+      "roles/compute.networkAdmin",
+      "roles/compute.orgFirewallPolicyAdmin",
+      "roles/compute.orgSecurityResourceAdmin",
+      "roles/compute.securityAdmin",
+      "roles/compute.viewer",
+      "roles/compute.xpnAdmin",
+      "roles/dns.admin",
+      "roles/dns.peer",
+      "roles/dns.reader",
+      "roles/servicenetworking.networksAdmin",
+    ]
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }, shared = { id = "222222222", name = "folders/222222222", display_name = "Shared" } } }
+  }
+
+  assert {
+    condition     = sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) == sort(["dev", "shared"])
+    error_message = "a folder with 10 roles or fewer must keep one binding at its old address."
+  }
+
+  assert {
+    condition = (
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.admin', 'roles/run.admin'])" &&
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].title == "delegated_folder_role_grants" &&
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].description == "projects-apply may only grant the workload folder roles on this folder"
+    )
+    error_message = "a short workload list must keep the old condition exactly (any change replaces the binding)."
+  }
+
+  assert {
+    condition = (
+      google_folder_iam_member.projects_delegated_folder_iam["shared"].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.networkAdmin', 'roles/compute.orgFirewallPolicyAdmin', 'roles/compute.orgSecurityResourceAdmin', 'roles/compute.securityAdmin', 'roles/compute.viewer', 'roles/compute.xpnAdmin', 'roles/dns.admin', 'roles/dns.peer', 'roles/dns.reader', 'roles/servicenetworking.networksAdmin'])" &&
+      google_folder_iam_member.projects_delegated_folder_iam["shared"].condition[0].title == "delegated_folder_role_grants" &&
+      google_folder_iam_member.projects_delegated_folder_iam["shared"].condition[0].description == "projects-apply may only grant the network folder roles on this folder"
+    )
+    error_message = "a list of exactly 10 roles must stay one condition, unchanged."
+  }
+}
+
 # An IAM condition can limit the roles a delegate grants, not the members. The
 # IAM-controlling roles are therefore dropped from projects-apply's allow-list
 # (even when the contract still lists them) and granted by this stage instead.

@@ -176,8 +176,72 @@ run "legacy_org_level_folder_delegation_is_opt_in" {
   }
 
   assert {
-    condition     = strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "modifiedGrantsByRole") && !strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "roles/owner") && strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "'roles/compute.admin'")
+    condition = (
+      alltrue([for m in google_organization_iam_member.projects_delegated_folder_iam : strcontains(m.condition[0].expression, "modifiedGrantsByRole") && !strcontains(m.condition[0].expression, "roles/owner")]) &&
+      anytrue([for m in google_organization_iam_member.projects_delegated_folder_iam : strcontains(m.condition[0].expression, "'roles/compute.admin'")])
+    )
     error_message = "the legacy org-level delegation must still be a conditional grant limited to the folder role lists (never roles/owner)."
+  }
+
+  # IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list.
+  # The default lists are 36 workload roles and 13 network roles (41 distinct),
+  # so the legacy binding must split into ceil(41 / 10) = 5 conditions.
+  assert {
+    condition     = length(output.delegated_workload_folder_roles) == 36 && length(output.delegated_network_folder_roles) == 13
+    error_message = "the default delegated role lists changed size; update this suite and the organization stage suite delegated_grants_split_into_ten_role_conditions."
+  }
+
+  assert {
+    condition     = length(google_organization_iam_member.projects_delegated_folder_iam) == ceil(length(distinct(concat(output.delegated_workload_folder_roles, output.delegated_network_folder_roles))) / 10)
+    error_message = "the legacy org-level delegation needs one binding per 10 roles."
+  }
+
+  assert {
+    condition = alltrue([
+      for m in google_organization_iam_member.projects_delegated_folder_iam :
+      length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0])) >= 1 && length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0])) <= 10 &&
+      !strcontains(m.condition[0].expression, "&&") && !strcontains(m.condition[0].expression, "||") && length(regexall("hasOnly\\(", m.condition[0].expression)) == 1
+    ])
+    error_message = "every legacy delegated condition must be one hasOnly() call with 1 to 10 roles, never joined with && or ||."
+  }
+
+  assert {
+    condition     = tolist(flatten([for m in google_organization_iam_member.projects_delegated_folder_iam : [for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0]) : r[0]]])) == sort(distinct(concat(output.delegated_workload_folder_roles, output.delegated_network_folder_roles)))
+    error_message = "the legacy chunks must together list every delegated role exactly once."
+  }
+
+  assert {
+    condition     = google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].title == "delegated_folder_role_grants" && google_organization_iam_member.projects_delegated_folder_iam[4].condition[0].title == "delegated_folder_role_grants_4" && strcontains(google_organization_iam_member.projects_delegated_folder_iam[4].condition[0].description, "part 5 of 5")
+    error_message = "each legacy chunk needs its own condition title and a description that names the chunk."
+  }
+}
+
+# A legacy list of 10 roles or fewer keeps the binding exactly as it was before
+# the split: same address [0], title, description and expression.
+run "legacy_short_delegated_list_keeps_one_unchanged_condition" {
+  command = plan
+
+  variables {
+    enable_org_level_folder_iam_delegation = true
+    enable_plan_viewer_role                = false
+    workload_folder_roles = {
+      plan  = ["roles/compute.viewer"]
+      apply = ["roles/run.admin", "roles/compute.admin"]
+    }
+    network_folder_roles = {
+      plan  = ["roles/dns.reader"]
+      apply = ["roles/compute.networkAdmin"]
+    }
+  }
+
+  assert {
+    condition = (
+      length(google_organization_iam_member.projects_delegated_folder_iam) == 1 &&
+      google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.admin', 'roles/compute.networkAdmin', 'roles/compute.viewer', 'roles/dns.peer', 'roles/dns.reader', 'roles/run.admin'])" &&
+      google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].title == "delegated_folder_role_grants" &&
+      google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].description == "projects-apply may only grant the workload/network folder roles"
+    )
+    error_message = "a legacy list of 10 roles or fewer must keep the old single condition exactly (any change replaces the binding)."
   }
 }
 

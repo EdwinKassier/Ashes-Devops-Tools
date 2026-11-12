@@ -906,6 +906,18 @@ Apply order for this release: `gcp-bootstrap`, `gcp-organization`, `gcp-projects
 
 If you supply the bootstrap contract in `config/landing-zone.yaml` (`gcp.contracts.bootstrap`), add `roles/dns.peer` to its `delegated_network_folder_roles` list. If you supply a `network_hub` contract for a hub that gcp-network-hub does not manage, bind the internal zone to that hub VPC and grant `roles/dns.peer` on its project yourself.
 
+#### The delegated folder IAM grant is split into conditions of 10 roles (gcp-bootstrap, gcp-organization, gcp-projects)
+
+IAM accepts at most 10 roles in one `modifiedGrantsByRole` `hasOnly()` list. The projects-apply delegated `folderIamAdmin` had one condition per folder with the whole allow-list (36 roles on each environment folder and 13 on the shared folder by default), so IAM rejected it. Each folder now gets one binding per 10 roles of its sorted list. Chunk 0 keeps the old address (`google_folder_iam_member.projects_delegated_folder_iam["<folder>"]`), condition title and description. Later chunks are `["<folder>|<i>"]` with the title `delegated_folder_role_grants_<i>`.
+
+What the plans show:
+
+- gcp-organization: a folder with 10 roles or fewer plans no change. A folder with more than 10 roles plans new bindings for each chunk. If its old single binding is in state, chunk 0 is replaced, because the provider replaces an IAM member when its condition changes.
+- gcp-bootstrap, only with `enable_org_level_folder_iam_delegation = true`: the legacy org-level binding is split the same way (`[0]`, `[1]`, and so on). With the default (off), there is no change.
+- gcp-projects: no resource change. The google provider now runs with batching off, so each folder IAM change is its own request and the apply takes longer.
+
+No action is needed beyond the usual apply order: `gcp-bootstrap`, then `gcp-organization`, then `gcp-projects`.
+
 #### No US defaults in the network stages (net-hub, net-spoke, dns-anchor)
 
 `modules/gcp/stages/net-hub`, `net-spoke` and `dns-anchor` now require `region`. Before, it defaulted to `us-central1`. In `net-spoke`, `flow_logs_export.bigquery_location` and `storage_location` now default to the spoke's region, not `US`. The roots and the `environment` and `network-hub` stages already pass these values, so only direct callers of the three stages change. An existing flow-log dataset created in `US` would be replaced if its location changes: set `bigquery_location = "US"` to keep it.

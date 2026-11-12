@@ -259,8 +259,15 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   that the metadata-only plan role set (predefined viewers + the
   `landingZonePlanViewer` custom role) is enough for every stage's plan, and that
   bootstrap-apply's org `iam.securityAdmin` covers billing-account IAM);
-  (3) the projects-apply `modifiedGrantsByRole` delegated-grant condition is
-  accepted for the full role list on each folder binding; (4) brownfield
+  (3) the projects-apply `modifiedGrantsByRole` delegated grant works on a
+  real folder. IAM accepts at most 10 roles in one `hasOnly()` list, so
+  gcp-organization (and the legacy org-level binding in gcp-bootstrap) binds
+  one condition per 10 roles: the default lists give 4 bindings on each
+  environment folder (36 roles) and 2 on the shared folder (13 roles).
+  gcp-projects turns off google provider batching so that each folder IAM
+  change is its own `setIamPolicy` call and matches one chunk. Still open:
+  a real gcp-organization apply that IAM accepts, and a real gcp-projects
+  apply that grants roles from every chunk; (4) brownfield
   projects created by `terraform-admin` may need a one-off owner grant to
   projects-apply. Residual: bootstrap-apply and organization-apply still hold org
   `iam.securityAdmin` (inherent to managing org IAM); network-hub-apply's org

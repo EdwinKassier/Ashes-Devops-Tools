@@ -259,6 +259,9 @@ locals {
   # can target the hub VPC. It holds only dns.networks.targetWithPeeringZone.
   delegated_network_folder_roles = sort(setsubtract(toset(concat(local.effective_network_folder_roles.plan, local.effective_network_folder_roles.apply, ["roles/dns.peer"])), toset(local.non_delegable_folder_roles)))
   delegated_folder_roles         = sort(distinct(concat(local.delegated_workload_folder_roles, local.delegated_network_folder_roles)))
+  # IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list, so
+  # the legacy org-level delegation binds one condition per chunk of 10 roles.
+  delegated_folder_role_chunks = chunklist(local.delegated_folder_roles, 10)
 }
 
 resource "google_service_account" "stage" {
@@ -298,17 +301,32 @@ resource "google_organization_iam_member" "stage_org_security_admin" {
 # grant but not WHERE: any folder in the org. The default model binds it on each
 # target folder instead (gcp-organization, from the delegated_*_folder_roles
 # outputs). Kept only to bridge a migration; off by default.
+#
+# IAM accepts at most 10 roles in one hasOnly() list and Google advises against
+# joining hasOnly() calls with && or ||, so there is one binding (same member
+# and role, its own condition) per chunk of 10 roles. IAM evaluates each binding
+# on its own: a request that changes the grants of one role matches the chunk
+# that lists it; a request that changes roles from two chunks at once is denied.
+# Index [0] keeps the address, title and description of the single binding, so
+# a list of 10 roles or fewer plans no change.
 resource "google_organization_iam_member" "projects_delegated_folder_iam" {
-  count = var.enable_org_level_folder_iam_delegation ? 1 : 0
+  count = var.enable_org_level_folder_iam_delegation ? length(local.delegated_folder_role_chunks) : 0
 
   org_id = var.org_id
   role   = "roles/resourcemanager.folderIamAdmin"
   member = "serviceAccount:${local.stage_sa_email["projects-apply"]}"
 
   condition {
-    title       = "delegated_folder_role_grants"
-    description = "projects-apply may only grant the workload/network folder roles"
-    expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in local.delegated_folder_roles : "'${r}'"])}])"
+    title       = count.index == 0 ? "delegated_folder_role_grants" : "delegated_folder_role_grants_${count.index}"
+    description = "projects-apply may only grant the workload/network folder roles${length(local.delegated_folder_role_chunks) > 1 ? " (part ${count.index + 1} of ${length(local.delegated_folder_role_chunks)})" : ""}"
+    expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in local.delegated_folder_role_chunks[count.index] : "'${r}'"])}])"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(local.delegated_folder_role_chunks[count.index]) >= 1 && length(local.delegated_folder_role_chunks[count.index]) <= 10
+      error_message = "A delegated folder-IAM condition must list 1 to 10 roles: IAM rejects a modifiedGrantsByRole hasOnly() list of more than 10 values."
+    }
   }
 }
 

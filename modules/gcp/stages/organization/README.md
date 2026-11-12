@@ -116,15 +116,15 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_access_context_manager_access_policy.environment (modules/gcp/stages/organization/automation_delegation.tf#L71)
-- resource.google_access_context_manager_access_policy_iam_member.environment (modules/gcp/stages/organization/automation_delegation.tf#L79)
+- resource.google_access_context_manager_access_policy.environment (modules/gcp/stages/organization/automation_delegation.tf#L96)
+- resource.google_access_context_manager_access_policy_iam_member.environment (modules/gcp/stages/organization/automation_delegation.tf#L104)
 - resource.google_bigquery_dataset.billing_export (modules/gcp/stages/organization/main.tf#L729)
 - resource.google_bigquery_dataset_iam_member.billing_export_writer (modules/gcp/stages/organization/main.tf#L760)
 - resource.google_essential_contacts_contact.billing (modules/gcp/stages/organization/main.tf#L699)
 - resource.google_essential_contacts_contact.security (modules/gcp/stages/organization/main.tf#L690)
-- resource.google_folder_iam_member.projects_delegated_folder_iam (modules/gcp/stages/organization/automation_delegation.tf#L87)
+- resource.google_folder_iam_member.projects_delegated_folder_iam (modules/gcp/stages/organization/automation_delegation.tf#L112)
 - resource.google_folder_iam_member.terraform_admin_folder_roles (modules/gcp/stages/organization/main.tf#L45)
-- resource.google_folder_iam_member.workload_non_delegable_folder_roles (modules/gcp/stages/organization/automation_delegation.tf#L103)
+- resource.google_folder_iam_member.workload_non_delegable_folder_roles (modules/gcp/stages/organization/automation_delegation.tf#L137)
 - resource.google_logging_organization_settings.this (modules/gcp/stages/organization/main.tf#L667)
 - resource.google_privileged_access_manager_entitlement.org_admin (modules/gcp/stages/organization/pam.tf#L10)
 - resource.google_tags_location_tag_binding.containment_audit_keyring (modules/gcp/stages/organization/containment.tf#L37)
@@ -184,7 +184,7 @@ The following resources are created:
 | <a name="output_control_plane_cis_log_metric_names"></a> [control\_plane\_cis\_log\_metric\_names](#output\_control\_plane\_cis\_log\_metric\_names) | Map of CIS GCP 2.4-2.11 log-metric key to log-based metric name in the alerting project (empty when disabled) |
 | <a name="output_control_plane_org_log_route_sink_name"></a> [control\_plane\_org\_log\_route\_sink\_name](#output\_control\_plane\_org\_log\_route\_sink\_name) | Aggregated org sink routing Admin Activity logs to the alerting project (null when alerting is off) |
 | <a name="output_control_plane_watched_names"></a> [control\_plane\_watched\_names](#output\_control\_plane\_watched\_names) | Names of the active control-plane alert watches |
-| <a name="output_delegated_folder_iam_targets"></a> [delegated\_folder\_iam\_targets](#output\_delegated\_folder\_iam\_targets) | Folders on which projects-apply holds the conditional folderIamAdmin, keyed by folder key, with the role allow-list of each. |
+| <a name="output_delegated_folder_iam_targets"></a> [delegated\_folder\_iam\_targets](#output\_delegated\_folder\_iam\_targets) | Folders on which projects-apply holds the conditional folderIamAdmin, keyed by folder key, with the role allow-list of each. Each folder gets one conditional binding per 10 roles of its list (IAM allows at most 10 roles in one modifiedGrantsByRole hasOnly() list). |
 | <a name="output_folders"></a> [folders](#output\_folders) | Map of created folders |
 | <a name="output_guardrail_deny_policy_specs"></a> [guardrail\_deny\_policy\_specs](#output\_guardrail\_deny\_policy\_specs) | DEPRECATED (removed in v1.0). Map of deny-policy ID => gcloud policy-file JSON for the deny policies this stage applies in the legacy organization mode. Always empty in separate mode: the gcp-guardrails root owns the policies and exposes the break-glass specs as its deny\_policy\_specs output. |
 | <a name="output_guardrail_owner_mode"></a> [guardrail\_owner\_mode](#output\_guardrail\_owner\_mode) | Deny-policy ownership mode: "separate" (deny policies authored and applied by the gcp-guardrails root) or "organization" (legacy: applied by this stage). |

@@ -140,6 +140,18 @@ for pf in envs/gcp/*/providers.tf; do
   fi
 done
 
+echo "==> gcp-projects turns off google provider batching on every google/google-beta provider"
+# projects-apply's delegated folderIamAdmin carries one modifiedGrantsByRole
+# hasOnly() condition per 10 roles (gcp-organization). Provider IAM batching
+# merges the folder IAM changes on one folder into one setIamPolicy call, which
+# can span two conditions and is then denied on a real apply (mocks never show it).
+pf=envs/gcp/projects/providers.tf
+nprov=$(grep -cE '^provider "google(-beta)?"' "$pf" || true)
+nbatch=$(grep -cE '^[[:space:]]*enable_batching[[:space:]]*=[[:space:]]*false' "$pf" || true)
+if [ "$nprov" -eq 0 ] || [ "$nbatch" -lt "$nprov" ]; then
+  note "$pf: $nprov google provider block(s) but $nbatch 'enable_batching = false' setting(s)"
+fi
+
 echo "==> GitHub WIF tenant condition is the one canonical string wherever it is rendered or checked"
 # Canonical: assertion.repository_owner_id == "<id>" (double quotes, nothing
 # appended). custom.wifProviderTenantPinned (stages/organization) compares a

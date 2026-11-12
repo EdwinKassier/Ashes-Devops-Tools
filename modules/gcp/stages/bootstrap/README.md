@@ -103,23 +103,23 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L336)
-- resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L326)
+- resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L354)
+- resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L344)
 - resource.google_organization_iam_custom_role.plan_viewer (modules/gcp/stages/bootstrap/plan_viewer.tf#L14)
-- resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L426)
-- resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L452)
-- resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L301)
-- resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L275)
-- resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L287)
-- resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L315)
-- resource.google_service_account.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L416)
-- resource.google_service_account.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L443)
-- resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L264)
-- resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L434)
+- resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L444)
+- resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L470)
+- resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L312)
+- resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L278)
+- resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L290)
+- resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L333)
+- resource.google_service_account.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L434)
+- resource.google_service_account.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L461)
+- resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L267)
+- resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L452)
 - resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L6)
-- resource.terraform_data.guardrails_workspace_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L465)
+- resource.terraform_data.guardrails_workspace_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L483)
 - resource.terraform_data.phase0_impersonation_is_time_boxed (modules/gcp/stages/bootstrap/main.tf#L77)
-- resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L359)
+- resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L377)
 
 
 ## Inputs

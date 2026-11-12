@@ -119,7 +119,7 @@ output "scoped_access_policy_grants" {
 }
 
 output "delegated_folder_iam_targets" {
-  description = "Folders on which projects-apply holds the conditional folderIamAdmin, keyed by folder key, with the role allow-list of each."
+  description = "Folders on which projects-apply holds the conditional folderIamAdmin, keyed by folder key, with the role allow-list of each. Each folder gets one conditional binding per 10 roles of its list (IAM allows at most 10 roles in one modifiedGrantsByRole hasOnly() list)."
   value       = local.delegated_folder_iam_targets
 }
 

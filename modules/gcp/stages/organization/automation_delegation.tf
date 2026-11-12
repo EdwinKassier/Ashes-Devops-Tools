@@ -11,6 +11,16 @@
 #    instead of the org node: environment folders admit only the workload role
 #    list, the shared folder only the network role list. It cannot grant on any
 #    other folder, on the admin project (directly under the org) or on the org.
+#    IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list,
+#    and Google advises against joining hasOnly() calls with && or ||. So each
+#    folder's sorted list is split into chunks of 10 or fewer, with one
+#    conditional binding (same member and role, its own condition) per chunk.
+#    IAM evaluates each binding on its own: a request that changes the grants
+#    of one role matches the chunk that lists that role. A request that changes
+#    roles from two chunks at once matches no single binding and is denied.
+#    gcp-projects therefore turns off the google provider's IAM batching
+#    (envs/gcp/projects/providers.tf), which would otherwise merge the
+#    google_folder_iam_member changes on one folder into one setIamPolicy call.
 #
 # 3. The workload roles that control IAM or identities on an environment folder
 #    (non_delegable_workload_folder_roles). An IAM condition on a delegated
@@ -52,6 +62,21 @@ locals {
     if length(k == var.shared_folder_key ? local.effective_delegated_network_folder_roles : local.effective_delegated_workload_folder_roles) > 0
   }
 
+  # One delegated binding per chunk of 10 roles or fewer (see 2. above):
+  # { "<folder>" (chunk 0) or "<folder>|<i>" (chunk i >= 1) => chunk }. Chunk 0
+  # keeps the folder key, title and description that the single binding had, so
+  # a folder with 10 roles or fewer plans no change.
+  delegated_folder_iam_chunks = merge([
+    for k, roles in local.delegated_folder_iam_targets : {
+      for i, chunk in chunklist(sort(roles), 10) : (i == 0 ? k : "${k}|${i}") => {
+        folder = k
+        index  = i
+        count  = ceil(length(roles) / 10)
+        roles  = chunk
+      }
+    }
+  ]...)
+
   # Non-delegable workload roles, granted here: { "<env>|<phase>|<role>" => ... }
   # on each environment's own folder, for the roles workload_folder_roles lists.
   non_delegable_workload_grants = merge([
@@ -85,16 +110,25 @@ resource "google_access_context_manager_access_policy_iam_member" "environment" 
 }
 
 resource "google_folder_iam_member" "projects_delegated_folder_iam" {
-  for_each = local.delegated_folder_iam_targets
+  for_each = local.delegated_folder_iam_chunks
 
-  folder = module.organization.folders[each.key].name
+  folder = module.organization.folders[each.value.folder].name
   role   = "roles/resourcemanager.folderIamAdmin"
   member = "serviceAccount:${var.projects_apply_service_account}"
 
+  # The provider replaces the binding when any condition field changes, so a
+  # single-chunk folder keeps the title and description it had before the split.
   condition {
-    title       = "delegated_folder_role_grants"
-    description = "projects-apply may only grant the ${each.key == var.shared_folder_key ? "network" : "workload"} folder roles on this folder"
-    expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in sort(each.value) : "'${r}'"])}])"
+    title       = each.value.index == 0 ? "delegated_folder_role_grants" : "delegated_folder_role_grants_${each.value.index}"
+    description = "projects-apply may only grant the ${each.value.folder == var.shared_folder_key ? "network" : "workload"} folder roles on this folder${each.value.count > 1 ? " (part ${each.value.index + 1} of ${each.value.count})" : ""}"
+    expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in each.value.roles : "'${r}'"])}])"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(each.value.roles) >= 1 && length(each.value.roles) <= 10
+      error_message = "A delegated folder-IAM condition must list 1 to 10 roles: IAM rejects a modifiedGrantsByRole hasOnly() list of more than 10 values."
+    }
   }
 }
 

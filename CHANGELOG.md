@@ -497,6 +497,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   apply SA `roles/dns.peer` on the shared folder, which creating a peering zone that targets the
   hub VPC needs, and gcp-bootstrap adds `roles/dns.peer` to `delegated_network_folder_roles`. Apply
   in order; see `UPGRADING.md`.
+- **The projects-apply delegated folder IAM grant fits the IAM 10-role limit.** IAM accepts at most
+  10 roles in one `modifiedGrantsByRole` `hasOnly()` list, but each folder got one condition with
+  its whole allow-list (36 workload roles, 13 network roles by default), so the gcp-organization
+  apply failed. gcp-organization now binds one condition per 10 roles on each folder (chunk 0 keeps
+  the old address, title and description, so a list of 10 roles or fewer plans no change), and the
+  legacy org-level binding in gcp-bootstrap does the same. gcp-projects turns off google provider
+  batching, which would merge the folder IAM changes on one folder into a single request that spans
+  two conditions. See `UPGRADING.md`.
 - `docs/guides/BRANCH_PROTECTION.md` listed `Terraform Tests` (a sharded matrix that only reports
   `Terraform Tests (shard N)`) as a required context, which would block every PR. `Validation Summary` is
   now the only required context.

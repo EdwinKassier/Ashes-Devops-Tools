@@ -85,8 +85,9 @@ deletes the peering before it creates the spoke.
    apply:
    1. **gcp-bootstrap:** adds the NCC roles to `network_folder_roles` / `workload_folder_roles`
       and to the delegation allow-lists. This is additions only.
-   2. **gcp-organization:** widens the per-folder delegated folderIamAdmin condition to the new
-      roles. This is an in-place update.
+   2. **gcp-organization:** adds the new roles to the per-folder delegated folderIamAdmin
+      conditions (one condition per 10 roles of the sorted list). The provider replaces each
+      binding whose condition changes, and adds a binding when a folder needs one more chunk.
    3. **gcp-projects:** enables `networkconnectivity.googleapis.com` on `shared-hub` and every
       `<env>-host` project, and grants the NCC folder roles. This is additions only.
 3. Plan gcp-network-hub. Expect additions only:
