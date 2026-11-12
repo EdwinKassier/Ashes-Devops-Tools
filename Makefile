@@ -363,7 +363,7 @@ e2e-aws: ## REAL apply: run tests/e2e/aws in the ambient (sandbox!) AWS account,
 # ---------------------------------------------------------------------------
 # Single-source configuration (config/landing-zone.yaml)
 # ---------------------------------------------------------------------------
-.PHONY: init bootstrap-ids config-check scaffold-fixtures scaffold-fixtures-check
+.PHONY: init bootstrap-ids aws-preflight config-check scaffold-fixtures scaffold-fixtures-check
 
 init: ## Scaffold config/landing-zone.yaml: make init ARGS="--org-name acme --clouds gcp,aws ..."
 	@./scripts/init-landing-zone.sh $(ARGS)
@@ -379,3 +379,6 @@ scaffold-fixtures-check: ## Fail if tests/fixtures/scaffold/ differs from fresh 
 
 config-check: ## Validate config/landing-zone.yaml (when present), the examples, config/sandbox/ and every test fixture and tests/fixtures/scaffold against config/landing-zone.schema.json (needs check-jsonschema)
 	@./scripts/check-config.sh
+
+aws-preflight: ## Check the AWS Organizations account quota fits config/landing-zone.yaml (needs the aws CLI and management-account credentials)
+	@./scripts/aws-preflight.sh

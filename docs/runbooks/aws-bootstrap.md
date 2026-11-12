@@ -31,6 +31,15 @@ These three things must exist before you touch Terraform. None of them can be cr
 - [ ] **A human/SSO administrator** with full access to that management account (root user for the very first steps, then an IAM admin or IAM Identity Center admin). AWS requires a human to accept the organization creation and to enable Identity Center — these are console actions, not API-only.
 - [ ] **Terraform Cloud organization access** — an account in a TFC organization with permission to create workspaces and set workspace variables. You will need the TFC org name (it is supplied to every root as `var.tfc_organization` / the `cloud` backend `organization`).
 
+One more check applies once the management account exists:
+
+- [ ] **Account quota.** `aws-organization` creates every account in `aws.accounts` and
+  `aws.workload_accounts` in one apply, and a new organization's default account quota is
+  10, including the management account. After Step 1, run `make aws-preflight` with
+  management-account credentials; request an increase (it can take days) if it fails or
+  warns. For the smallest estate see
+  [minimum AWS footprint](../architecture/provider-selection.md#minimum-aws-footprint).
+
 ---
 
 ## Phase-0: from zero state to a runnable `aws-organization` workspace

@@ -14,6 +14,8 @@
 
 ## Step 1 — Add the account to the org map
 
+Run `make aws-preflight` first (management-account credentials): one more account needs one more slot in the AWS Organizations account quota, and the default quota is 10.
+
 Edit the committed `config/landing-zone.yaml`. For a **workload** account, add a row to `aws.workload_accounts` **and** an `aws.workload_environments` entry naming it. For a foundational account, add to `aws.accounts`.
 
 ```yaml
