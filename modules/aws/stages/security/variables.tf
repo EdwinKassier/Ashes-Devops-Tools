@@ -175,6 +175,13 @@ variable "aws" {
     # Create the ORGANIZATION_INTERNAL_ACCESS analyzer (alongside the external one) in the home region
     # and every enabled region. External analyzers are always created in every enabled region.
     enable_internal_access_analyzer = optional(bool, true)
+    # Weekly Patch Manager install (AWS-RunPatchBaseline, RebootIfNeeded, Sunday 03:00 UTC, 10%
+    # concurrency) on every SSM-managed instance in the security-tooling account (home region).
+    # False keeps the daily patch scan only. Default true.
+    enable_patch_install = optional(bool, true)
+    # Operating systems that get a custom patch baseline (set as the account default for that OS) in
+    # the security-tooling account. Default Amazon Linux 2023.
+    patch_operating_systems = optional(set(string), ["AMAZON_LINUX_2023"])
     # Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At
     # least one is required (findings would otherwise fire into a void). Defaults to a placeholder
     # SecOps email the root is expected to override.

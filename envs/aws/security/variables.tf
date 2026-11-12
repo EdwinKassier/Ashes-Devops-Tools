@@ -92,6 +92,8 @@ variable "aws_overrides" {
     enable_incident_response                = optional(bool)
     enable_service_quotas                   = optional(bool)
     enable_internal_access_analyzer         = optional(bool)
+    enable_patch_install                    = optional(bool)
+    patch_operating_systems                 = optional(set(string))
     notification_subscribers = optional(map(object({
       protocol = string # one of: email, https, sms, sqs, lambda, etc.
       endpoint = string # e.g. an email address or HTTPS URL

@@ -532,6 +532,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   defaults it to `/` (empty string = keep the TCP probe) and keeps one instance warm for every
   production service whose `min_instances` is unset. The key is accepted in every `services` key list
   and in `config/landing-zone.schema.json`. See `UPGRADING.md`.
+- **Patch Manager installs patches (breaking, CMP-3).** `modules/aws/ops/systems-manager` adds a
+  daily `AWS-RunPatchBaseline` Scan association and a weekly Install association (`RebootIfNeeded`,
+  Sunday 03:00 UTC, 10% concurrency, never at apply time) on every SSM-managed instance, and one
+  baseline per OS in `patch_operating_systems` (default Amazon Linux 2023; `patch_operating_system`
+  is deprecated). Opt out with `enable_patch_install = false` (aws-workload) or
+  `aws_overrides.enable_patch_install = false` (aws-security). See `UPGRADING.md`.
 - **ECS services autoscale in production by default (breaking, ARC-16).** `enable_autoscaling` is
   now unset by default and resolves to `true` when `is_production` is true (new input of the AWS
   app-services stage and of `envs/aws/workload`, read from the config file, never from the

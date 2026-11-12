@@ -34,8 +34,9 @@ Composed children:
   packs are skipped (they belong to the home account), so `aggregator_role_arn`
   is unused and left empty.
 - **systems_manager** (`systems-manager`, optional, `enable_ssm` default `true`)
-  — Session Manager preferences, patch baseline, software inventory. Requires a
-  non-empty `kms_key_arn`.
+  — Session Manager preferences, per-OS patch baselines, a daily patch scan, a
+  weekly patch install (`enable_patch_install`, default `true`), software
+  inventory. Requires a non-empty `kms_key_arn`.
 - **edge_security** (`edge-security`, optional, `enable_edge` default `false`) —
   per-workload CloudFront + WAF edge. Its CloudFront/WAF/ACM resources use the
   `aws.us_east_1` alias.
@@ -85,12 +86,12 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L216)
-- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L141)
-- resource.aws_route53profiles_association.spoke (modules/aws/stages/workload/main.tf#L171)
-- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L291)
-- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L50)
-- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L54)
+- resource.aws_ebs_default_kms_key.home (modules/aws/stages/workload/main.tf#L218)
+- resource.aws_ec2_transit_gateway_vpc_attachment.spoke (modules/aws/stages/workload/main.tf#L143)
+- resource.aws_route53profiles_association.spoke (modules/aws/stages/workload/main.tf#L173)
+- resource.aws_vpc_block_public_access_exclusion.public_ingress (modules/aws/stages/workload/main.tf#L297)
+- data source.aws_caller_identity.current (modules/aws/stages/workload/main.tf#L52)
+- data source.aws_partition.current (modules/aws/stages/workload/main.tf#L56)
 
 
 ## Inputs
@@ -110,14 +111,16 @@ The following resources are created:
 | <a name="input_edge_origin_domain_name"></a> [edge\_origin\_domain\_name](#input\_edge\_origin\_domain\_name) | DNS name of the origin the edge CloudFront distribution fetches from. Ignored when enable\_edge is false. | `string` | `"origin.example.com"` | no |
 | <a name="input_enable_ebs_default_kms_key"></a> [enable\_ebs\_default\_kms\_key](#input\_enable\_ebs\_default\_kms\_key) | Set kms\_key\_arn as the account default EBS key in the HOME region (aws\_region) with a plan-safe count. Use true when kms\_key\_arn is created in the same plan (its ARN is unknown until apply). Null (default) keeps the legacy behaviour: the account baseline sets it in every aws\_enabled\_regions entry when kms\_key\_arn is non-empty. False sets no default key. | `bool` | `null` | no |
 | <a name="input_enable_edge"></a> [enable\_edge](#input\_enable\_edge) | Deploy the per-workload edge-security stack (CloudFront + WAF, in us-east-1). Off by default; a workload opts in when it fronts an internet-facing app. | `bool` | `false` | no |
+| <a name="input_enable_patch_install"></a> [enable\_patch\_install](#input\_enable\_patch\_install) | With enable\_ssm: install approved patches weekly (AWS-RunPatchBaseline Operation=Install, RebootIfNeeded, Sunday 03:00 UTC, 10% concurrency) on every SSM-managed instance in this account and region. Instances reboot when a patch needs it. False keeps the daily patch scan only. | `bool` | `true` | no |
 | <a name="input_enable_public_subnets"></a> [enable\_public\_subnets](#input\_enable\_public\_subnets) | Add a public subnet tier ("public": newbits 8, number\_offset 24, one subnet per AZ) whose route tables default-route to an internet gateway this stage creates. Only for an internet-facing app ALB (aws-workload app\_ingress\_mode = "public\_alb"); tasks and databases stay in the private/isolated tiers. Default false: no public subnets, no IGW. | `bool` | `false` | no |
-| <a name="input_enable_ssm"></a> [enable\_ssm](#input\_enable\_ssm) | Deploy the Systems Manager baseline (Session Manager preferences, patch baseline, inventory). On by default. Requires a non-empty kms\_key\_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank). | `bool` | `true` | no |
+| <a name="input_enable_ssm"></a> [enable\_ssm](#input\_enable\_ssm) | Deploy the Systems Manager baseline (Session Manager preferences, patch baselines, a daily patch scan, a weekly patch install unless enable\_patch\_install is false, inventory). On by default. Requires a non-empty kms\_key\_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank). | `bool` | `true` | no |
 | <a name="input_enable_vpc_bpa_exclusion"></a> [enable\_vpc\_bpa\_exclusion](#input\_enable\_vpc\_bpa\_exclusion) | Create a VPC Block Public Access exclusion (allow-bidirectional) for this spoke VPC so an internet-facing ALB in its public tier can receive traffic. The org declarative EC2 policy blocks internet-gateway ingress for every VPC; an exclusion is only accepted when aws-organization sets allow\_vpc\_bpa\_exclusions = true. Scoped to this one VPC. Default false. | `bool` | `false` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | Environment this workload account serves (e.g. dev, staging, prod). Used to derive the default resource name workload-<environment>. null keeps the legacy name "workload". | `string` | `null` | no |
 | <a name="input_ipam_explicit_cidr"></a> [ipam\_explicit\_cidr](#input\_ipam\_explicit\_cidr) | When ipam\_pool\_id is set, request vpc\_cidr explicitly from the pool (default true). false keeps the legacy pool + netmask\_length shape. An existing netmask VPC plans no change when vpc\_cidr equals its allocated block (see UPGRADING.md). | `bool` | `true` | no |
 | <a name="input_ipam_pool_id"></a> [ipam\_pool\_id](#input\_ipam\_pool\_id) | IPAM pool ID to allocate the spoke VPC CIDR from (the network account's regional pool, shared over RAM). Empty string uses the literal vpc\_cidr instead. | `string` | `""` | no |
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the CMK used as the account default EBS encryption key and (when enable\_ssm is true) to encrypt Session Manager sessions/logs. Empty string leaves default EBS encryption on the AWS-managed key; must be a non-empty key when enable\_ssm is true. | `string` | `""` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of the spoke VPC (and prefix for its subnets, route tables and TGW attachment). null derives workload-<environment> (or "workload" when environment is null). | `string` | `null` | no |
+| <a name="input_patch_operating_systems"></a> [patch\_operating\_systems](#input\_patch\_operating\_systems) | With enable\_ssm: operating systems that get a custom patch baseline, each set as the account default for that OS. Default Amazon Linux 2023 (Amazon Linux 2 reached end of support on 2026-06-30). | `set(string)` | <pre>[<br/>  "AMAZON_LINUX_2023"<br/>]</pre> | no |
 | <a name="input_resolver_profile_id"></a> [resolver\_profile\_id](#input\_resolver\_profile\_id) | ID of the org Route 53 Profile shared by aws-network over RAM (network contract resolver\_profile\_id). The spoke VPC associates it and inherits DNS Firewall, the resolver forward rules and the central interface endpoint zones. Null (default) = no association. | `string` | `null` | no |
 | <a name="input_subnets"></a> [subnets](#input\_subnets) | Spoke subnet tiers, keyed by tier name. newbits/number\_offset drive cidrsubnet(vpc\_cidr, newbits, number\_offset + az\_index); the tgw tier holds the transit-gateway attachment ENIs. Offsets are multiples of 8 (> az\_count) so per-AZ subnets never collide. | <pre>map(object({<br/>    newbits       = number<br/>    number_offset = number<br/>    public        = optional(bool, false)<br/>  }))</pre> | <pre>{<br/>  "isolated": {<br/>    "newbits": 8,<br/>    "number_offset": 8<br/>  },<br/>  "private": {<br/>    "newbits": 8,<br/>    "number_offset": 0<br/>  },<br/>  "tgw": {<br/>    "newbits": 8,<br/>    "number_offset": 16<br/>  }<br/>}</pre> | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (spoke VPC and its children, TGW attachment) and passed to the IAM role, Config recorder, Systems Manager and edge-security child modules. Org-wide tags (CostCenter, Environment, Owner, ...) normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |

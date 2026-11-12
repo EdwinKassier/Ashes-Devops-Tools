@@ -37,7 +37,9 @@
 #                            former module.config_recorder leaves state through
 #                            the removed block below (destroy = false).
 #   - systems_manager      — optional (enable_ssm, default true): Session Manager
-#                            preferences, patch baseline, inventory.
+#                            preferences, patch baselines, a daily patch scan,
+#                            a weekly patch install (enable_patch_install),
+#                            inventory.
 #   - edge_security         — optional (enable_edge, default false): per-workload
 #                            CloudFront + WAF edge. Uses the us_east_1 alias.
 
@@ -238,7 +240,7 @@ removed {
 }
 
 # ---------------------------------------------------------------------------
-# Systems Manager — optional (Session Manager, patch baseline, inventory)
+# Systems Manager — optional (Session Manager, patch baselines, patch scan and install, inventory)
 # ---------------------------------------------------------------------------
 
 module "systems_manager" {
@@ -255,6 +257,10 @@ module "systems_manager" {
 
   log_bucket_name = var.log_archive_bucket_name
   kms_key_id      = var.kms_key_arn
+
+  # CMP-3: weekly patch install on the account's SSM-managed instances.
+  enable_patch_install    = var.enable_patch_install
+  patch_operating_systems = var.patch_operating_systems
 
   tags = var.tags
 }

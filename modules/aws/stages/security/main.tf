@@ -441,6 +441,10 @@ module "systems_manager" {
   # SSM sessions run in the security-tooling account, so they must use a key that
   # account can access — the sectool CMK, not the cross-account log CMK.
   kms_key_id = module.sectool_cmk.key_arn
+
+  # CMP-3: weekly patch install on the account's SSM-managed instances.
+  enable_patch_install    = var.aws.enable_patch_install
+  patch_operating_systems = var.aws.patch_operating_systems
 }
 
 # ---------------------------------------------------------------------------

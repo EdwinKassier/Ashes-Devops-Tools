@@ -220,3 +220,30 @@ run "log_archive_retention_default_unchanged" {
     error_message = "without the new keys the log archive must stay 365 days in COMPLIANCE mode."
   }
 }
+
+# CMP-3: the security-tooling account gets the weekly patch install by default,
+# and aws.enable_patch_install / aws.patch_operating_systems reach the module.
+run "patch_install_wiring" {
+  command = plan
+
+  assert {
+    condition     = module.systems_manager.patch_install_schedule == "cron(0 3 ? * SUN *)" && module.systems_manager.patch_operating_systems == tolist(["AMAZON_LINUX_2023"])
+    error_message = "by default the security-tooling account must get the weekly install association and an Amazon Linux 2023 baseline."
+  }
+}
+
+run "patch_install_opt_out_wiring" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      enable_patch_install    = false
+      patch_operating_systems = ["AMAZON_LINUX_2", "AMAZON_LINUX_2023"]
+    })
+  }
+
+  assert {
+    condition     = module.systems_manager.patch_install_schedule == null && module.systems_manager.patch_operating_systems == tolist(["AMAZON_LINUX_2", "AMAZON_LINUX_2023"])
+    error_message = "aws.enable_patch_install = false must drop the install association and aws.patch_operating_systems must reach the module."
+  }
+}

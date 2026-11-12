@@ -149,3 +149,33 @@ run "no_profile_no_association" {
     error_message = "Without a profile ID (standalone or an older network contract) nothing is associated."
   }
 }
+
+# CMP-3: the systems_manager child is not overridden here either, so these runs
+# check that the stage passes the patch inputs through.
+run "patch_install_on_by_default" {
+  command = plan
+
+  variables {
+    environment = "dev"
+  }
+
+  assert {
+    condition     = module.systems_manager[0].patch_install_schedule == "cron(0 3 ? * SUN *)" && module.systems_manager[0].patch_operating_systems == tolist(["AMAZON_LINUX_2023"])
+    error_message = "the workload account must get the weekly install association and an Amazon Linux 2023 baseline by default."
+  }
+}
+
+run "patch_install_opt_out" {
+  command = plan
+
+  variables {
+    environment             = "dev"
+    enable_patch_install    = false
+    patch_operating_systems = ["AMAZON_LINUX_2", "AMAZON_LINUX_2023"]
+  }
+
+  assert {
+    condition     = module.systems_manager[0].patch_install_schedule == null && module.systems_manager[0].patch_operating_systems == tolist(["AMAZON_LINUX_2", "AMAZON_LINUX_2023"])
+    error_message = "enable_patch_install = false must drop the install association and patch_operating_systems must reach the module."
+  }
+}

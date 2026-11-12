@@ -450,6 +450,30 @@ unknown at plan time, is reported by the advisory
 
 ### AWS
 
+#### Patch Manager now installs patches (CMP-3, systems-manager, aws-security, aws-workload, breaking)
+
+`modules/aws/ops/systems-manager` adds two `AWS-RunPatchBaseline` State Manager associations in every account that runs it: the security-tooling account (aws-security) and each workload account (aws-workload, `enable_ssm` default `true`). Each association is regional: it covers the provider region of that root.
+
+- `<patch_baseline_name>-scan`: a daily `Scan`. It reports patch compliance and never reboots.
+- `<patch_baseline_name>-install`: a weekly `Install` with `RebootOption = RebootIfNeeded`, Sunday 03:00 UTC, 10% concurrency, 10% error threshold. **Instances reboot when a patch needs it.**
+
+Which instances: every SSM-managed instance in that account and region. That is an EC2 instance or hybrid node that runs the SSM Agent and is registered with Systems Manager (an instance profile with `AmazonSSMManagedInstanceCore`, Default Host Management Configuration, or a hybrid activation). The landing zone launches no EC2 instances itself. Its ECS Fargate services are not affected. The install association never runs at apply time (`apply_only_at_cron_interval = true`): the first install is the next Sunday 03:00 UTC.
+
+The default baseline OS is now Amazon Linux 2023 (input `patch_operating_systems`, default `["AMAZON_LINUX_2023"]`). Amazon Linux 2 reached end of support on 2026-06-30. `patch_operating_system` (single OS) is deprecated and now defaults to `null`.
+
+What you see on the next apply of aws-security and of each aws-workload:
+
+- two new `aws_ssm_association` resources;
+- a new `aws_ssm_patch_baseline` `org-patch-baseline-amazon-linux-2023` set as the default Amazon Linux 2023 baseline;
+- the existing `org-patch-baseline` (Amazon Linux 2) and its default binding move to the `["AMAZON_LINUX_2"]` key. With the new default they are then destroyed, and AWS's predefined `AWS-AmazonLinux2DefaultPatchBaseline` becomes the Amazon Linux 2 default again.
+
+What to do:
+
+1. Find the managed instances that will be patched: `aws ssm describe-instance-information` in each account and region. Check that their workloads tolerate a reboot on Sunday 03:00 UTC.
+2. To keep scan-only: aws-workload `enable_patch_install = false`; aws-security `aws_overrides.enable_patch_install = false`.
+3. An account that still runs Amazon Linux 2 keeps its custom baseline with `patch_operating_systems = ["AMAZON_LINUX_2", "AMAZON_LINUX_2023"]` (aws-workload variable, or `aws_overrides.patch_operating_systems` in aws-security). The AL2 baseline keeps its name, so it is not replaced.
+4. A direct caller of the module can limit the install to tagged instances with `patch_install_target_tag = { key = "PatchInstall", value = "true" }`. If you already patch with a Quick Setup patch policy or a maintenance window, set `enable_patch_install = false` so instances are not patched twice.
+
 #### ECS services autoscale in production by default (aws-workload, breaking)
 
 A production ECS service that leaves `enable_autoscaling` unset now gets a CPU target-tracking policy: 2 to 10 tasks (`autoscaling_min_capacity`, `autoscaling_max_capacity`), 70 percent CPU. Before, the default was a fixed `desired_count`. More tasks cost more. Set `enable_autoscaling: false` on a service to keep a fixed count. Production means `aws.workload_environments.<env>.is_production: true` in `config/landing-zone.yaml`, or the `is_production` variable of `envs/aws/workload`. The environment name is not read. Non-production services stay fixed unless you set `enable_autoscaling: true`.

@@ -269,7 +269,7 @@ variable "workload_roles" {
 # -----------------------------------------------------------------------------
 
 variable "enable_ssm" {
-  description = "Deploy the Systems Manager baseline (Session Manager preferences, patch baseline, inventory). On by default. Requires a non-empty kms_key_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank)."
+  description = "Deploy the Systems Manager baseline (Session Manager preferences, patch baselines, a daily patch scan, a weekly patch install unless enable_patch_install is false, inventory). On by default. Requires a non-empty kms_key_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank)."
   type        = bool
   default     = true
 
@@ -280,6 +280,20 @@ variable "enable_ssm" {
     condition     = !var.enable_ssm || length(trimspace(var.kms_key_arn)) > 0
     error_message = "kms_key_arn must be a non-empty CMK ARN when enable_ssm is true (Session Manager sessions must be KMS-encrypted)."
   }
+}
+
+variable "enable_patch_install" {
+  description = "With enable_ssm: install approved patches weekly (AWS-RunPatchBaseline Operation=Install, RebootIfNeeded, Sunday 03:00 UTC, 10% concurrency) on every SSM-managed instance in this account and region. Instances reboot when a patch needs it. False keeps the daily patch scan only."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "patch_operating_systems" {
+  description = "With enable_ssm: operating systems that get a custom patch baseline, each set as the account default for that OS. Default Amazon Linux 2023 (Amazon Linux 2 reached end of support on 2026-06-30)."
+  type        = set(string)
+  default     = ["AMAZON_LINUX_2023"]
+  nullable    = false
 }
 
 variable "enable_edge" {

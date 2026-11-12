@@ -238,6 +238,20 @@ variable "kms_key_arn" {
   }
 }
 
+variable "enable_patch_install" {
+  description = "Install approved patches weekly (Patch Manager AWS-RunPatchBaseline, RebootIfNeeded, Sunday 03:00 UTC, 10% concurrency) on every SSM-managed instance in this workload account and region. Instances reboot when a patch needs it. False keeps the daily patch scan only."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "patch_operating_systems" {
+  description = "Operating systems that get a custom patch baseline in this workload account, each set as the account default for that OS. Default Amazon Linux 2023. An account that still runs Amazon Linux 2 sets [\"AMAZON_LINUX_2\", \"AMAZON_LINUX_2023\"]."
+  type        = set(string)
+  default     = ["AMAZON_LINUX_2023"]
+  nullable    = false
+}
+
 variable "enable_edge" {
   description = "Deploy the per-workload edge-security stack (CloudFront + WAF, in us-east-1). Off by default; opt in when this environment fronts an internet-facing app."
   type        = bool
