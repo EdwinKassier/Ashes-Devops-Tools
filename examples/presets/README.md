@@ -1,8 +1,14 @@
 # Presets
 
-Ready-to-use `-var-file` overlays. Each preset sets only a handful of toggles.
-In Terraform Cloud, set the same values as workspace variables instead of a
-local `-var-file`. How a preset combines with your own tfvars depends on its root:
+Ready-to-use overlays. Each preset sets only a handful of toggles. A local plan
+takes them with `-var-file`. **VCS-driven HCP Terraform runs never see a
+`-var-file`**, so for those, copy the preset's variables into
+`config/tfc-workspaces.yaml` under the workspace name; tfc-admin writes them as
+workspace variables on its next apply (see
+[below](#the-same-presets-in-configtfc-workspacesyaml)). `prod-gcp-workload` also
+has a YAML twin that the config file can name directly (see
+[Presets from `config/landing-zone.yaml`](#presets-from-configlanding-zoneyaml-no--var-file)).
+How a preset combines with your own tfvars depends on its root:
 
 - **Most roots** take plain variables, so a preset is applied IN ADDITION to your
   own tfvars (a later `-var-file` wins per variable).
@@ -40,6 +46,38 @@ terraform -chdir=envs/gcp/network-hub plan \
 
 `scripts/check-consistency.sh` (run in CI) fails if a preset sets a variable its root
 does not declare, or if any doc references a preset that does not exist.
+
+### The same presets in `config/tfc-workspaces.yaml`
+
+```yaml
+workspaces:
+  gcp-network-hub:            # prod-gcp-network-hub.tfvars
+    vpc_sc_enable_dry_run: false
+  aws-network:                # nonprod-aws-network.tfvars (a non-production estate)
+    az_count: 2
+    enable_network_firewall: false
+  gcp-bootstrap:              # prod-gcp-bootstrap.tfvars: the local phase-0 apply reads tfvars,
+    enable_github_wif: false  # so this entry matters only once gcp-bootstrap runs remotely
+    enable_pam: true
+    enable_phase0_admin_impersonation: false
+    enable_scoped_access_policies: true
+    enable_legacy_org_access_policy_grants: false
+    enable_org_level_folder_iam_delegation: false
+    guardrail_owner_mode: separate
+    guardrail_owner_members: ["group:REPLACE-guardrail-owners@your-domain.invalid"]
+```
+
+tfc-admin writes a scalar as a plain string variable and a list or map as an HCL
+variable, so `guardrail_owner_members` reaches the root as a list. Leave out the
+preset's `tfc_workspace_ids`: tfc-admin sets it on `gcp-bootstrap` itself (an
+entry in this file replaces the derived value).
+
+`gcp_overrides` (gcp-organization) and `aws_overrides` (aws-security) are object variables:
+put **all** of your keys in one entry, because the workspace variable replaces the whole
+object. tfc-admin rejects entries for the security-only `gcp-guardrails` workspace.
+`scripts/check-consistency.sh` fails if an entry in this block, in
+`config/tfc-workspaces.example.yaml` or in a committed `tfc-workspaces.yaml` names a
+variable its workspace's root does not declare.
 
 ### Presets from `config/landing-zone.yaml` (no `-var-file`)
 

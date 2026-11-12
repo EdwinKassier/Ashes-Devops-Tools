@@ -131,6 +131,56 @@ for preset in examples/presets/*.tfvars; do
   done
 done
 
+echo "==> Every committed workspace-variable entry is a variable of its workspace's root"
+# tfc-admin writes each `workspaces.<ws>.<key>` of a tfc-workspaces YAML file as
+# a workspace variable; a Terraform-category key the root does not declare is
+# silently ignored by the run. Checked: config/tfc-workspaces.example.yaml, any
+# committed config/**/tfc-workspaces.yaml, and every fenced YAML block of
+# examples/presets/README.md that starts with `workspaces:`. Workspace => root:
+# <cloud>-workload-<env> => envs/<cloud>/workload, saas-<name> => envs/saas,
+# tfc-admin => envs/tfc-admin, <cloud>-<layer> => envs/<cloud>/<layer>.
+# Format: `workspaces:`, a workspace name at indent 2, a key at indent 4; a long
+# form with `category: env` (inline or at indent 6) is an env var and skipped.
+ws_root_dir() {
+  case "$1" in
+    gcp-workload-*) echo envs/gcp/workload ;;
+    aws-workload-*) echo envs/aws/workload ;;
+    saas-*) echo envs/saas ;;
+    tfc-admin) echo envs/tfc-admin ;;
+    gcp-* | aws-*) echo "envs/${1%%-*}/${1#*-}" ;;
+    *) echo "" ;;
+  esac
+}
+ws_entries() {
+  awk '
+    function flush() { if (key != "") print ws, key, cat; key = "" }
+    /^workspaces:/ { inw = 1; next }
+    inw && /^[^[:space:]#]/ { flush(); inw = 0 }
+    !inw { next }
+    /^  [a-z0-9][a-z0-9-]*:/ { flush(); ws = $1; sub(/:$/, "", ws); next }
+    /^    [A-Za-z_][A-Za-z0-9_]*:/ {
+      flush(); key = $1; sub(/:$/, "", key)
+      cat = ($0 ~ /category:[[:space:]]*"?env"?/) ? "env" : "terraform"; next
+    }
+    /^      category:[[:space:]]*"?env"?/ { cat = "env" }
+    END { flush() }'
+}
+ws_files=$(find config -name 'tfc-workspaces*.yaml' -not -path '*/tests/*' 2>/dev/null | sort)
+ws_blocks=$(awk '/^```yaml$/ { inb = 1; first = 1; next } /^```$/ { inb = 0 } inb && first { keep = ($0 ~ /^workspaces:/); first = 0 } inb && keep' examples/presets/README.md)
+[ -n "$ws_blocks" ] || note "examples/presets/README.md has no \`workspaces:\` YAML block (the VCS-driven preset example is missing)"
+while read -r src ws key cat; do
+  [ -n "$ws" ] && [ "$cat" = terraform ] || continue
+  dir=$(ws_root_dir "$ws")
+  if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+    note "$src: workspace '$ws' maps to no root under envs/"
+    continue
+  fi
+  grep -qs "variable \"$key\"" "$dir"/*.tf || note "$src: $ws sets '$key', which is not a variable of $dir"
+done < <(
+  for f in $ws_files; do ws_entries < "$f" | sed "s|^|$f |"; done
+  printf '%s\n' "$ws_blocks" | ws_entries | sed 's|^|examples/presets/README.md |'
+)
+
 echo "==> Every preset referenced in the docs exists"
 for ref in $(grep -rhoE 'presets/[a-z0-9-]+\.tfvars' --include='*.md' --include='*.tf' --exclude-dir='.terraform' --exclude-dir='audit' . 2>/dev/null | sort -u); do
   [ -f "examples/$ref" ] || note "docs reference missing preset examples/$ref"
