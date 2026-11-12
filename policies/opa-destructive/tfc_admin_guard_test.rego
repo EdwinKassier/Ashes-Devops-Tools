@@ -148,3 +148,165 @@ test_team_without_org_access_allowed if allowed(change("tfe_team", ["create"], n
 
 # ── Unrelated resources ─────────────────────────────────────────────────────
 test_other_types_ignored if allowed(change("tfe_variable", ["delete"], {"key": "x"}, null))
+
+# ── Execution mode and agent pools ──────────────────────────────────────────
+settings(mode, pool) := {"workspace_id": "ws-1", "execution_mode": mode, "agent_pool_id": pool, "global_remote_state": false}
+
+# Two messages: the agent mode and the pool.
+test_execution_mode_to_agent_denied if {
+	inp := change("tfe_workspace_settings", ["update"], settings("remote", null), settings("agent", "apool-1"))
+	count(p.deny) == 2 with input as inp
+}
+
+test_execution_mode_to_local_denied if denied(change("tfe_workspace_settings", ["update"], settings("remote", null), settings("local", null)))
+
+# gcp-bootstrap leaves local mode after pass 2 (bootstrap.md): toward remote passes.
+test_execution_mode_local_to_remote_allowed if allowed(change("tfe_workspace_settings", ["update"], settings("local", null), settings("remote", null)))
+
+# Two messages: the agent mode and the pool.
+test_new_settings_in_agent_mode_denied if {
+	inp := change("tfe_workspace_settings", ["create"], null, settings("agent", "apool-1"))
+	count(p.deny) == 2 with input as inp
+}
+
+test_new_settings_in_remote_mode_allowed if allowed(change("tfe_workspace_settings", ["create"], null, settings("remote", null)))
+
+test_agent_pool_repointed_denied if denied(change("tfe_workspace_settings", ["update"], settings("agent", "apool-1"), settings("agent", "apool-2")))
+
+test_remote_state_change_allowed if allowed(change("tfe_workspace_settings", ["update"], settings("remote", null), object.union(settings("remote", null), {"global_remote_state": true})))
+
+test_unknown_agent_pool_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace_settings.x",
+		"mode": "managed",
+		"type": "tfe_workspace_settings",
+		"change": {
+			"actions": ["update"],
+			"before": settings("agent", "apool-1"),
+			"after": object.remove(settings("agent", null), ["agent_pool_id"]),
+			"after_unknown": {"agent_pool_id": true},
+		},
+	}]}}
+	denied(inp)
+}
+
+test_new_agent_pool_denied if denied(change("tfe_agent_pool", ["create"], null, {"name": "pool", "organization": "acme"}))
+
+test_new_agent_token_denied if denied(change("tfe_agent_token", ["create"], null, {"agent_pool_id": "apool-1", "description": "t"}))
+
+test_agent_pool_allowed_workspaces_widened_denied if denied(change("tfe_agent_pool_allowed_workspaces", ["update"], {"agent_pool_id": "apool-1", "allowed_workspace_ids": ["ws-1"]}, {"agent_pool_id": "apool-1", "allowed_workspace_ids": ["ws-1", "ws-2"]}))
+
+# ── Protected workspace wiring: VCS, working directory, project ─────────────
+pws(tags) := {
+	"name": "gcp-organization", "tag_names": tags, "auto_apply": false, "auto_apply_run_trigger": false,
+	"working_directory": "envs/gcp/organization", "project_id": "prj-gcp",
+	"vcs_repo": [{"identifier": "acme/lz", "branch": "main", "oauth_token_id": null, "github_app_installation_id": "ghain-1"}],
+}
+
+test_protected_vcs_branch_changed_denied if denied(change("tfe_workspace", ["update"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"vcs_repo": [{"identifier": "acme/lz", "branch": "attacker", "oauth_token_id": null, "github_app_installation_id": "ghain-1"}]})))
+
+test_protected_vcs_identifier_changed_denied if denied(change("tfe_workspace", ["update"], pws(["tier:production"]), object.union(pws(["tier:production"]), {"vcs_repo": [{"identifier": "attacker/lz", "branch": "main", "oauth_token_id": null, "github_app_installation_id": "ghain-1"}]})))
+
+test_protected_vcs_connection_changed_denied if denied(change("tfe_workspace", ["update"], pws(["layer:bootstrap"]), object.union(pws(["layer:bootstrap"]), {"vcs_repo": [{"identifier": "acme/lz", "branch": "main", "oauth_token_id": "ot-attacker", "github_app_installation_id": null}]})))
+
+# Disconnecting VCS would let the CLI apply uploaded code.
+test_protected_vcs_removed_denied if denied(change("tfe_workspace", ["update"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"vcs_repo": []})))
+
+test_protected_working_directory_changed_denied if denied(change("tfe_workspace", ["update"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"working_directory": "envs/attacker"})))
+
+test_protected_project_moved_denied if denied(change("tfe_workspace", ["update"], pws(["tier:production"]), object.union(pws(["tier:production"]), {"project_id": "prj-other"})))
+
+test_protected_project_unknown_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace.x",
+		"mode": "managed",
+		"type": "tfe_workspace",
+		"change": {
+			"actions": ["update"],
+			"before": pws(["layer:control-plane"]),
+			"after": object.remove(pws(["layer:control-plane"]), ["project_id"]),
+			"after_unknown": {"project_id": true},
+		},
+	}]}}
+	denied(inp)
+}
+
+test_unprotected_vcs_branch_changed_allowed if allowed(change("tfe_workspace", ["update"], pws(["layer:workload"]), object.union(pws(["layer:workload"]), {"vcs_repo": [{"identifier": "acme/lz", "branch": "dev", "oauth_token_id": null, "github_app_installation_id": "ghain-1"}]})))
+
+test_unprotected_project_moved_allowed if allowed(change("tfe_workspace", ["update"], pws(["layer:workload"]), object.union(pws(["layer:workload"]), {"project_id": "prj-other"})))
+
+test_new_protected_workspace_allowed if allowed(change("tfe_workspace", ["create"], null, pws(["layer:control-plane"])))
+
+# A computed vcs_repo field that the guard does not compare does not count.
+test_protected_vcs_computed_field_unknown_allowed if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace.x",
+		"mode": "managed",
+		"type": "tfe_workspace",
+		"change": {
+			"actions": ["update"],
+			"before": pws(["layer:control-plane"]),
+			"after": object.union(pws(["layer:control-plane"]), {"description": "x"}),
+			"after_unknown": {"vcs_repo": [{"repository_http_url": true}]},
+		},
+	}]}}
+	allowed(inp)
+}
+
+test_protected_vcs_branch_unknown_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace.x",
+		"mode": "managed",
+		"type": "tfe_workspace",
+		"change": {
+			"actions": ["update"],
+			"before": pws(["layer:control-plane"]),
+			"after": pws(["layer:control-plane"]),
+			"after_unknown": {"vcs_repo": [{"branch": true}]},
+		},
+	}]}}
+	denied(inp)
+}
+
+# A new workspace's deprecated execution_mode / agent_pool_id are computed.
+test_new_workspace_with_unknown_execution_mode_allowed if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace.x",
+		"mode": "managed",
+		"type": "tfe_workspace",
+		"change": {
+			"actions": ["create"],
+			"before": null,
+			"after": pws(["layer:control-plane"]),
+			"after_unknown": {"execution_mode": true, "agent_pool_id": true, "id": true},
+		},
+	}]}}
+	allowed(inp)
+}
+
+test_protected_trigger_patterns_changed_allowed if allowed(change("tfe_workspace", ["update"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"trigger_patterns": ["envs/gcp/organization/**"]})))
+
+# ── Variables that steer credentials, the CLI or the runner ─────────────────
+var(key, category, value) := {"workspace_id": "ws-1", "key": key, "category": category, "value": value, "hcl": false, "sensitive": false, "value_wo_version": null}
+
+test_new_tfc_env_var_denied if denied(change("tfe_variable", ["create"], null, var("TFC_AWS_APPLY_ROLE_ARN", "env", "arn:aws:iam::999999999999:role/x")))
+
+test_tfc_env_var_value_changed_denied if denied(change("tfe_variable", ["update"], var("TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL", "env", "a@p.iam.gserviceaccount.com"), var("TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL", "env", "b@p.iam.gserviceaccount.com")))
+
+test_tf_cli_args_env_var_denied if denied(change("tfe_variable", ["create"], null, var("TF_CLI_ARGS_plan", "env", "-var-file=x.tfvars")))
+
+test_tfe_hostname_env_var_denied if denied(change("tfe_variable", ["create"], null, var("TFE_HOSTNAME", "env", "attacker.example")))
+
+test_code_exec_env_var_denied if denied(change("tfe_variable", ["create"], null, var("LD_PRELOAD", "env", "/tmp/x.so")))
+
+test_rotated_sensitive_tfc_var_denied if denied(change("tfe_variable", ["update"], object.union(var("TFC_X", "env", null), {"sensitive": true, "value_wo_version": 1}), object.union(var("TFC_X", "env", null), {"sensitive": true, "value_wo_version": 2})))
+
+test_tfc_var_description_change_allowed if allowed(change("tfe_variable", ["update"], var("TFC_AWS_PROVIDER_AUTH", "env", "true"), object.union(var("TFC_AWS_PROVIDER_AUTH", "env", "true"), {"description": "new"})))
+
+test_tfc_var_deleted_allowed if allowed(change("tfe_variable", ["delete"], var("TFC_AWS_PROVIDER_AUTH", "env", "true"), null))
+
+test_ordinary_env_var_allowed if allowed(change("tfe_variable", ["create"], null, var("APP_NAME", "env", "x")))
+
+test_terraform_input_named_tfc_allowed if allowed(change("tfe_variable", ["create"], null, var("TFC_note", "terraform", "x")))
+
+test_provider_token_env_var_allowed if allowed(change("tfe_variable", ["create"], null, object.union(var("SUPABASE_ACCESS_TOKEN", "env", null), {"sensitive": true, "value_wo_version": 1})))

@@ -578,6 +578,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `TF_CLI_CONFIG_FILE`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `GIT_*`, `BASH_ENV`, `ENV`,
   `PYTHON*` and `PATH`. Before, `workspace_variables` was not checked at all. The committed file
   also rejects `NODE_EXTRA_CA_CERTS`. See `UPGRADING.md`.
+- **`tfc_admin_guard` covers execution, workspace wiring and steering env vars (SEC-3, CICD-7,
+  breaking).** The overridable guard now also stops `execution_mode = local` or `agent`, a
+  repointed agent pool, any agent pool, agent token or agent pool grant; a changed VCS repository,
+  branch or connection (or a removed one), `working_directory` or `project_id` on a control-plane,
+  bootstrap or production workspace; and a new or changed env var named `TFC_*`, `TF_CLI_ARGS*`,
+  `TFE_*`, `TF_TOKEN_*` or one of the code-execution names. More tfc-admin runs need a
+  security-team override (dynamic-credential wiring, `TF_CLI_ARGS_plan`). See `UPGRADING.md`.
 
 ### Changed
 

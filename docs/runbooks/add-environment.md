@@ -165,7 +165,8 @@ git commit -m "feat: add staging environment tfvars"
 
 tfc-admin already sets the `environment` Terraform variable. If you created a tfvars file in step 6, set
 this **environment variable** through tfc-admin's `workspace_variables` input (`category = "env"`;
-the committed `config/tfc-workspaces.yaml` rejects `TF_CLI_ARGS*`):
+the committed `config/tfc-workspaces.yaml` rejects `TF_CLI_ARGS*`). The `tfc_admin_guard` policy stops that
+tfc-admin run until the security team overrides it, because `TF_CLI_ARGS*` changes how the CLI runs:
 
 | Key | Value |
 |-----|-------|

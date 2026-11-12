@@ -81,6 +81,12 @@ Trigger patterns now list each root's own module trees, not all of `modules/<clo
   - any wider team access or new token.
 
   Expect a security-team override when you add or remove an environment.
+- `tfc_admin_guard` also blocks (breaking: more tfc-admin runs need a security-team override):
+  - `execution_mode = local` or `agent`, a repointed agent pool, and any agent pool, agent token or agent pool grant;
+  - a changed VCS repository, branch or connection, `working_directory` or `project_id` on a control-plane, bootstrap or production workspace;
+  - a new or changed env var named `TFC_*`, `TF_CLI_ARGS*`, `TFE_*`, `TF_TOKEN_*` or one of the code-execution names (`LD_*`, `NODE_OPTIONS`, `GIT_*` and so on).
+
+  Expect an override when tfc-admin pass 2 wires dynamic credentials, when a role or service account behind a `TFC_*` variable changes, and when you set `TF_CLI_ARGS_plan` through `workspace_variables`. Moving `gcp-bootstrap` from `local` to `remote` needs none.
 - `no_plan_time_code_execution` (mandatory, not overridable) blocks provisioners outside the reviewed `supabase/vault-secrets` call chain, and the `external` and `http` data sources everywhere. Its later changes are described below.
 
 Both sets now also attach to the tfc-admin workspace itself.

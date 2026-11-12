@@ -10,7 +10,18 @@
 #     layer:bootstrap, tier:production), or strip one of those tags, so a
 #     change applies without a human confirmation;
 #   - widen team access: a new grant, team member, organization member or
-#     token, or a grant raised to a higher level.
+#     token, or a grant raised to a higher level;
+#   - move a run off HCP-managed runners: a workspace switched to local or
+#     agent execution, a repointed agent pool, or a new agent pool, agent
+#     token or agent pool grant (an agent sees every credential of the run,
+#     and a local run skips the policy sets);
+#   - rewire a control-plane, bootstrap or production workspace: a changed
+#     VCS repository, branch or connection (or a removed one, which lets the
+#     CLI apply uploaded code), working directory or project;
+#   - write an env var that steers credentials, the CLI or the runner
+#     (TFC_*, TF_CLI_ARGS*, TFE_*, TF_TOKEN_*, and the code-execution names
+#     tfc-admin refuses: TERRAFORM_CONFIG, TF_CLI_CONFIG_FILE, LD_*, DYLD_*,
+#     NODE_OPTIONS, NODE_PATH, GIT_*, BASH_ENV, ENV, PYTHON*, PATH).
 # Like destroy_guard, the set is overridable: the security team overrides an
 # intended change (a new environment's grant, say) on the run.
 package terraform.policies.tfc_admin_guard
@@ -275,4 +286,157 @@ deny contains msg if {
 	updates(rc)
 	widened(rc)
 	msg := sprintf("%s: plan raises a team's access level; the security team must override this run if it is intended", [rc.address])
+}
+
+# ── Execution mode and agent pools ──────────────────────────────────────────
+# Any unknown value inside the attribute (nested blocks included).
+attr_unknown(rc, attr) if {
+	u := object.get(rc.change.after_unknown, attr, false)
+	[_, v] := walk(u)
+	v == true
+}
+
+# Modes that leave HCP-managed runners: an agent sees every credential of the
+# run, and a local run is not judged by any policy set.
+off_platform_modes := {"local", "agent"}
+
+execution_types := {"tfe_workspace_settings", "tfe_workspace"}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in execution_types
+	lib.writes(rc)
+	mode := object.get(after_obj(rc), "execution_mode", null)
+	mode in off_platform_modes
+	object.get(before_obj(rc), "execution_mode", null) != mode
+	msg := sprintf("%s: plan sets execution_mode = %s, which moves runs off HCP-managed runners (an agent sees the run's credentials, a local run skips the policy sets); the security team must override this run if it is intended", [rc.address, mode])
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in execution_types
+	lib.writes(rc)
+	pool := object.get(after_obj(rc), "agent_pool_id", null)
+	pool != null
+	object.get(before_obj(rc), "agent_pool_id", null) != pool
+	msg := sprintf("%s: plan points the workspace at agent pool %s; the security team must override this run if it is intended", [rc.address, pool])
+}
+
+# Only on tfe_workspace_settings, where tfc-admin sets both from variables.
+# On tfe_workspace both are deprecated computed attributes, unknown on every
+# new workspace, so only their known values are judged there.
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_workspace_settings"
+	lib.writes(rc)
+	some attr in ["execution_mode", "agent_pool_id"]
+	attr_unknown(rc, attr)
+	msg := sprintf("%s: %s is unknown at plan time, so the execution guard cannot check it; the security team must override this run if it is intended", [rc.address, attr])
+}
+
+agent_types := {
+	"tfe_agent_pool",
+	"tfe_agent_token",
+	"tfe_agent_pool_allowed_workspaces",
+	"tfe_agent_pool_allowed_projects",
+	"tfe_agent_pool_excluded_workspaces",
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in agent_types
+	lib.writes(rc)
+	msg := sprintf("%s: plan creates or changes a %s, which lets runs execute on a self-hosted agent; the security team must override this run if it is intended", [rc.address, rc.type])
+}
+
+# ── Protected workspace wiring ──────────────────────────────────────────────
+# Where a control-plane, bootstrap or production workspace takes its code
+# from. Creation is not judged (the new workspace has no reviewed wiring yet).
+vcs_source(obj) := [{
+	"identifier": object.get(v, "identifier", null),
+	"branch": object.get(v, "branch", null),
+	"oauth_token_id": object.get(v, "oauth_token_id", null),
+	"github_app_installation_id": object.get(v, "github_app_installation_id", null),
+} |
+	some v in object.get(obj, "vcs_repo", [])
+]
+
+wiring_attrs := {"vcs_repo", "working_directory", "project_id"}
+
+wiring(obj, "vcs_repo") := vcs_source(obj)
+
+wiring(obj, attr) := object.get(obj, attr, null) if attr != "vcs_repo"
+
+vcs_fields := {"identifier", "branch", "oauth_token_id", "github_app_installation_id"}
+
+# Unknown only in the fields compared above (other vcs_repo fields, such as
+# the computed repository_http_url, do not count).
+wiring_unknown(rc, "vcs_repo") if {
+	some v in object.get(rc.change.after_unknown, "vcs_repo", [])
+	is_object(v)
+	some f in vcs_fields
+	object.get(v, f, false) == true
+}
+
+wiring_unknown(rc, "vcs_repo") if object.get(rc.change.after_unknown, "vcs_repo", false) == true
+
+wiring_unknown(rc, attr) if {
+	attr != "vcs_repo"
+	attr_unknown(rc, attr)
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_workspace"
+	updates(rc)
+	protected_workspace(rc)
+	some attr in wiring_attrs
+	not wiring_unknown(rc, attr)
+	wiring(before_obj(rc), attr) != wiring(after_obj(rc), attr)
+	msg := sprintf("%s: plan changes %s on a control-plane, bootstrap or production workspace, which changes the code or the access its runs get; the security team must override this run if it is intended", [rc.address, attr])
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_workspace"
+	updates(rc)
+	protected_workspace(rc)
+	some attr in wiring_attrs
+	wiring_unknown(rc, attr)
+	msg := sprintf("%s: %s is unknown at plan time on a control-plane, bootstrap or production workspace, so the wiring guard cannot check it; the security team must override this run if it is intended", [rc.address, attr])
+}
+
+# ── Env vars that steer credentials, the CLI or the runner ──────────────────
+# Prefixes: dynamic credentials (TFC_*), CLI arguments (TF_CLI_ARGS*), the
+# tfe provider and host tokens (TFE_*, TF_TOKEN_*). Exact names and patterns:
+# the code-execution set envs/tfc-admin refuses (code_exec_env_pattern). Keep
+# the two lists in step.
+steering_env_pattern := `^((TFC_|TF_CLI_ARGS|TFE_|TF_TOKEN_).*|TERRAFORM_CONFIG|TF_CLI_CONFIG_FILE|LD_[A-Z_]+|DYLD_[A-Z_]+|NODE_OPTIONS|NODE_PATH|GIT_[A-Z0-9_]+|BASH_ENV|ENV|PYTHON[A-Z_]+|PATH)$`
+
+steering_var(obj) if {
+	object.get(obj, "category", null) == "env"
+	regex.match(steering_env_pattern, object.get(obj, "key", ""))
+}
+
+var_payload(obj) := {f: object.get(obj, f, null) | some f in ["key", "category", "value", "value_wo_version"]}
+
+var_changed(rc) if lib.creates(rc)
+
+var_changed(rc) if {
+	updates(rc)
+	var_payload(before_obj(rc)) != var_payload(after_obj(rc))
+}
+
+var_changed(rc) if {
+	updates(rc)
+	some f in ["key", "category", "value", "value_wo_version"]
+	attr_unknown(rc, f)
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_variable"
+	var_changed(rc)
+	steering_var(after_obj(rc))
+	msg := sprintf("%s: plan writes the env var %s, which steers the run's credentials, the CLI or the runner; the security team must override this run if it is intended", [rc.address, after_obj(rc).key])
 }

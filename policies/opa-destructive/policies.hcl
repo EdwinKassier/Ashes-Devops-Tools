@@ -9,7 +9,9 @@
 #
 # mandatory: a stateful delete or replace, or a change that weakens the HCP
 # Terraform layer (detaching a policy set, auto-apply on a control-plane or
-# production workspace, widened team access), stops the run until a user with
+# production workspace, widened team access, local or agent execution, agent
+# pools, rewired protected workspaces, env vars that steer credentials, the
+# CLI or the runner), stops the run until a user with
 # Manage Policy Overrides (the hand-created security team, security_team_id)
 # overrides it. Full guide: docs/architecture/policy-as-code.md.
 

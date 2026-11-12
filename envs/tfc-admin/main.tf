@@ -1511,7 +1511,10 @@ import {
 #     mandatory destroy_guard, which stops any delete or replace of a stateful
 #     resource, and the mandatory tfc_admin_guard, which stops a plan that
 #     detaches a policy set, turns on auto-apply for a production or
-#     control-plane workspace, or widens team access. Always overridable: an
+#     control-plane workspace, widens team access, moves runs to local or
+#     agent execution, rewires a protected workspace (VCS, working directory,
+#     project) or writes a TFC_* / TF_CLI_ARGS* / code-execution env var.
+#     Always overridable: an
 #     intended change is overridden on the run by the security team. An owner creates that team by hand (its ID is
 #     security_team_id) and grants it Manage Policy Overrides in the HCP UI;
 #     this root creates no teams and sets no organization access, so it keeps
