@@ -87,7 +87,9 @@ module "host" {
   }
 
   private_service_connect = {
-    target = local.psc_target
+    target  = local.psc_target
+    name    = var.network.private_service_connect_name
+    address = var.network.private_service_connect_address
   }
 
   # Hub peering (or, with connectivity = ncc, an NCC spoke on the hub's NCC hub

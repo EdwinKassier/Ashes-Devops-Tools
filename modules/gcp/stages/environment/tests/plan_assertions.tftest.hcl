@@ -294,6 +294,33 @@ run "explicit_psc_target_wins" {
   }
 }
 
+# ARC-1: the spoke PSC endpoint gets a Google-compliant name and an explicit
+# IP by default; network.private_service_connect_name/address override both.
+run "psc_endpoint_defaults" {
+  command = plan
+
+  assert {
+    condition     = module.host.private_service_connect.name == "acmedevvpcpsc" && module.host.private_service_connect.address == "10.10.255.254"
+    error_message = "The spoke PSC endpoint must default to acmedevvpcpsc at 10.10.255.254."
+  }
+}
+
+run "psc_endpoint_overrides_pass_through" {
+  command = plan
+
+  variables {
+    network = {
+      private_service_connect_name    = "devapis"
+      private_service_connect_address = "10.10.200.10"
+    }
+  }
+
+  assert {
+    condition     = module.host.private_service_connect.name == "devapis" && module.host.private_service_connect.address == "10.10.200.10"
+    error_message = "network.private_service_connect_name and _address must reach net-spoke."
+  }
+}
+
 run "hub_ncc_connectivity_passes_through" {
   command = plan
 

@@ -44,6 +44,17 @@ output "additional_region_subnets" {
   }
 }
 
+output "subnet_ip_ranges" {
+  description = "Every primary and secondary IP range of the VPC's subnets (all tiers, the primary region and the additional regions), in CIDR notation. Known at plan time. Callers check a reserved address against it (for example the Private Service Connect endpoint IP)."
+  value = concat(
+    local.tier_public_cidrs,
+    local.tier_private_cidrs,
+    local.tier_database_cidrs,
+    [for sr in flatten(values(var.secondary_ranges)) : sr.ip_cidr_range],
+    [for sr in flatten([for r in values(var.additional_regions) : r.secondary_ranges]) : sr.ip_cidr_range],
+  )
+}
+
 output "network_tags" {
   description = "Network tags that select the security tiers in the baseline firewall rules."
   value       = local.network_tags

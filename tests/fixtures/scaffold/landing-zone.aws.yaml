@@ -219,6 +219,14 @@ gcp:
     #   europe-west4:
     #     subnet_cidrs: {public: 10.2.0.0/24, private: 10.2.16.0/24, database: 10.2.32.0/24}
     #     nat: true
+    # Private Service Connect endpoint for Google APIs on the hub VPC (on by
+    # default). name: 1-20 lower-case letters and numbers, starting with a
+    # letter (Google's rule; default hubvpccorepsc). address: an IPv4 address
+    # outside every hub subnet and every peered environment subnet (default:
+    # the second-to-last address of hub_cidr_block, 10.0.255.254).
+    # private_service_connect:
+    #   name: hubvpccorepsc
+    #   address: 10.0.255.254
   # Application environments, consumed by gcp-bootstrap, gcp-organization,
   # gcp-projects, gcp-network-hub, gcp-workload-<env> and tfc-admin (one
   # gcp-workload-<env> workspace per key). Keys: ^[a-z][a-z0-9-]{0,14}$, not
@@ -241,6 +249,15 @@ gcp:
       # additional_regions:
       #   europe-west4:
       #     subnet_cidrs: {public: 10.11.0.0/24, private: 10.11.16.0/24, database: 10.11.32.0/24}
+      # Private Service Connect endpoint for Google APIs on this spoke VPC
+      # (on by default). name: 1-20 lower-case letters and numbers, starting
+      # with a letter (default: the VPC name without hyphens, first 17
+      # characters, plus psc). address: an IPv4 address outside every subnet
+      # of this VPC and of the hub VPC (default: the second-to-last address of
+      # cidr_block, 10.10.255.254 here).
+      # private_service_connect:
+      #   name: devapis
+      #   address: 10.10.255.254
       # Application services (Cloud Run, optional Cloud SQL, GitHub deploy
       # identity). Same fields as the modules/gcp/stages/app-services `services`
       # variable; the key is the service name. A service runs in the host project

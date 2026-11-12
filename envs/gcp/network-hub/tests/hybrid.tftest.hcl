@@ -130,6 +130,44 @@ run "hub_additional_regions_from_config" {
   }
 }
 
+# ARC-1: gcp.network.private_service_connect reaches the stage; a variable wins.
+run "hub_psc_overrides_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+  }
+
+  assert {
+    condition     = local.hub_private_service_connect.name == "hubapis" && local.hub_private_service_connect.address == "10.0.200.10"
+    error_message = "gcp.network.private_service_connect must reach the stage from the config file."
+  }
+}
+
+run "hub_psc_variables_win" {
+  command = plan
+
+  variables {
+    landing_zone_config_path            = "tests/fixtures/landing-zone-regions.yaml"
+    hub_private_service_connect_name    = "hubpsc"
+    hub_private_service_connect_address = "10.0.201.10"
+  }
+
+  assert {
+    condition     = local.hub_private_service_connect.name == "hubpsc" && local.hub_private_service_connect.address == "10.0.201.10"
+    error_message = "Explicit hub_private_service_connect_* variables must win over the config file."
+  }
+}
+
+run "hub_psc_defaults_without_config" {
+  command = plan
+
+  assert {
+    condition     = local.hub_private_service_connect.name == null && local.hub_private_service_connect.address == null
+    error_message = "Without config or variables the hub PSC overrides must be null (the net-hub defaults apply)."
+  }
+}
+
 run "hub_additional_regions_variable_wins" {
   command = plan
 

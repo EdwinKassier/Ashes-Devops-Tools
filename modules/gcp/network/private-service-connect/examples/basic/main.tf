@@ -15,7 +15,9 @@ module "psc_google_apis" {
   source = "../../"
 
   project_id = local.project_id
-  name       = "google-apis-psc"
+  name       = "googleapispsc" # 1-20 lower-case letters and numbers, no hyphens
   network    = local.network
   target     = "all-apis" # Forwards to all Google APIs via PSC
+  # Required: a single IPv4 address outside every subnet range of the VPC.
+  address = "10.0.255.254"
 }

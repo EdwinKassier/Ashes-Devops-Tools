@@ -198,6 +198,18 @@ variable "interconnects" {
   }
 }
 
+variable "hub_private_service_connect_name" {
+  description = "Name of the hub VPC's Private Service Connect endpoint for Google APIs: 1-20 lower-case letters and numbers, starting with a letter (Google's rule). Null = gcp.network.private_service_connect.name from config/landing-zone.yaml, else hubvpccorepsc."
+  type        = string
+  default     = null
+}
+
+variable "hub_private_service_connect_address" {
+  description = "Internal IPv4 address of the hub VPC's Private Service Connect endpoint. It must be outside every hub subnet range and every subnet range of the peered environment VPCs. Null = gcp.network.private_service_connect.address from config/landing-zone.yaml, else the second-to-last address of the hub CIDR (10.0.255.254 for 10.0.0.0/16)."
+  type        = string
+  default     = null
+}
+
 variable "hub_additional_regions" {
   description = "Opt-in extra regions of the hub VPC, keyed by region name (same shape as the network-hub stage hub_additional_regions input): subnet_cidrs (public, private, database), optional secondary_ranges and nat (default true: a Cloud Router and Cloud NAT in the region). CIDRs must not overlap the primary hub subnets or each other. Null = gcp.network.additional_regions from config/landing-zone.yaml, else none (single-region hub)."
   # Untyped so this variable and the config-file value (JSON text) share one

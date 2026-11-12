@@ -220,9 +220,11 @@ module "environment" {
       aggregation_interval = var.log_config_aggregation_interval
       sampling             = local.flow_log_sampling
     }
-    flow_logs_retention_days       = local.flow_logs_retention_days
-    private_service_connect_target = var.private_service_connect_target
-    additional_regions             = local.additional_regions
+    flow_logs_retention_days        = local.flow_logs_retention_days
+    private_service_connect_target  = var.private_service_connect_target
+    private_service_connect_name    = local.private_service_connect_name
+    private_service_connect_address = local.private_service_connect_address
+    additional_regions              = local.additional_regions
   }
 
   hub = {

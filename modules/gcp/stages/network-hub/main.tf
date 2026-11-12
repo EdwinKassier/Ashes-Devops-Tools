@@ -111,6 +111,13 @@ module "hub" {
     vpn_site_to_site_data_transfer = var.vpn.site_to_site_data_transfer
   }
 
+  # Private Service Connect endpoint for Google APIs (on by default). Name and
+  # address default in net-hub; gcp.network.private_service_connect overrides.
+  private_service_connect = {
+    name    = var.hub_private_service_connect.name
+    address = var.hub_private_service_connect.address
+  }
+
   # Opt-in hybrid connectivity: HA VPN (write-only pre-shared key) and Cloud
   # Interconnect attachments. Both off by default.
   vpn                          = local.vpn_effective

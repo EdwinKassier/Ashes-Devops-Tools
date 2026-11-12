@@ -34,6 +34,21 @@ Defined by the `environments` map (`cidr_block` per env) and the hub CIDRs on th
 | Per-env host VPC (uat) | `10.11.0.0/16` | `environments["uat"].cidr_block` |
 | Per-env host VPC (prod) | `10.12.0.0/16` | `environments["prod"].cidr_block` |
 | New environments | `10.13.0.0/16` onward | `environments[<new>].cidr_block` |
+| PSC endpoint for Google APIs (hub) | `10.0.255.254` (second-to-last address of the hub CIDR) | `gcp.network.private_service_connect.address` (gcp-network-hub) |
+| PSC endpoint for Google APIs (each environment) | second-to-last address of the environment CIDR, for example `10.10.255.254` | `gcp.environments.<env>.private_service_connect.address` |
+
+Private Service Connect endpoints for Google APIs need one explicit internal IPv4
+address per VPC. Google's rules for that address (from
+[About accessing Google APIs through endpoints](https://docs.cloud.google.com/vpc/docs/about-accessing-google-apis-endpoints),
+checked 2026-11-12): it "can't be within a primary or secondary IP address range of
+any subnet in the VPC network" or of a network connected by VPC Network Peering,
+and it must be a single IPv4 address. Endpoints are not reachable from peered VPC
+networks, so each VPC gets its own endpoint. The default is the second-to-last
+address of the VPC's own block. The default subnet layout uses only the first 48
+`/24` blocks of a `/16`, so that address is free, and it is outside every other
+VPC's block. `net-hub` and `net-spoke` fail the plan when the address is inside a
+subnet range of their VPC. If you place a subnet or secondary range at the top of
+the block, set `private_service_connect.address` to a free address first.
 
 Rule: each GCP environment gets one `/16`, assigned sequentially from `10.10.0.0/16`.
 The hub and DNS VPCs must not overlap any env CIDR. tfc-admin enforces this: its

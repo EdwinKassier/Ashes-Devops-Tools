@@ -150,6 +150,15 @@ locals {
       for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.network_connectivity)
       if try(e.network_connectivity, null) != null
     }
+    # gcp.environments.<env>.private_service_connect: PSC endpoint overrides.
+    environment_psc_name = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.private_service_connect.name)
+      if try(e.private_service_connect.name, null) != null
+    }
+    environment_psc_address = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.private_service_connect.address)
+      if try(e.private_service_connect.address, null) != null
+    }
     # gcp.environments.<env>.additional_regions as JSON text (no type
     # unification across environments); the stage's variable type validates it.
     environment_additional_regions = {
@@ -169,6 +178,9 @@ locals {
   # This environment's region: gcp.environments[<env>].region, else
   # org.regions.gcp, else europe-west2 (the same default gcp-projects applies).
   region = coalesce(var.region, try(local.cfg.environments[var.environment].region, null), local.cfg.default_region, "europe-west2")
+  # PSC endpoint overrides (null = the net-spoke defaults).
+  private_service_connect_name    = var.private_service_connect_name != null ? var.private_service_connect_name : lookup(local.cfg.environment_psc_name, var.environment, null)
+  private_service_connect_address = var.private_service_connect_address != null ? var.private_service_connect_address : lookup(local.cfg.environment_psc_address, var.environment, null)
   # Opt-in extra spoke regions (default none: single-region spoke).
   additional_regions = jsondecode(var.additional_regions != null ? jsonencode(var.additional_regions) : lookup(local.cfg.environment_additional_regions, var.environment, "{}"))
 

@@ -794,6 +794,18 @@ variable "private_service_connect_target" {
   }
 }
 
+variable "private_service_connect_name" {
+  description = "Name of the spoke VPC's Private Service Connect endpoint for Google APIs: 1-20 lower-case letters and numbers, starting with a letter (Google's rule). Null = gcp.environments[<environment>].private_service_connect.name from config/landing-zone.yaml, else the spoke VPC name without non-alphanumerics (first 17 characters) plus psc."
+  type        = string
+  default     = null
+}
+
+variable "private_service_connect_address" {
+  description = "Internal IPv4 address of the spoke VPC's Private Service Connect endpoint. It must be outside every spoke subnet range and every subnet range of the hub VPC. Null = gcp.environments[<environment>].private_service_connect.address from config/landing-zone.yaml, else the second-to-last address of the environment CIDR (10.10.255.254 for 10.10.0.0/16)."
+  type        = string
+  default     = null
+}
+
 variable "enable_app_alerts" {
   description = "Per-service Cloud Monitoring alert policies (5xx ratio, p99 latency) for app_services. Per-service thresholds go in app_services[*].alerts."
   type        = bool

@@ -33,6 +33,17 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `tag:ListRequiredTags`. Confirm in the sandbox that the `tfc-plan` and
   `tfc-apply` roles may call it before a workspace sets the variable to
   `error`. The AWS tag policy itself never blocks an untagged resource.
+- **GCP Private Service Connect endpoint for Google APIs is mock-tested only
+  (ARC-1).** `net-hub` and `net-spoke` name the endpoint by Google's rule
+  (1-20 lower-case letters and numbers, starting with a letter) and reserve an
+  explicit IPv4 address (default: the second-to-last address of the VPC
+  block). Mock plans prove the name, the address and the subnet-range check.
+  No real apply has created the endpoint. Confirm in the sandbox that the hub
+  and one environment endpoint apply, and that a VM resolves
+  `storage.googleapis.com` to the endpoint address. The plan does not check
+  the address against subnets of peered VPC networks or against a Private
+  Service Access range that Google allocated automatically; the CIDR plan keeps
+  them apart only when every VPC uses its own block.
 - **GCP Cloud NAT egress route is mock-tested only.** `net-hub` / `net-spoke`
   now add a `0.0.0.0/0` route to the default internet gateway when NAT is on
   (`tiered-vpc` deletes the default route at creation). Confirm in the sandbox

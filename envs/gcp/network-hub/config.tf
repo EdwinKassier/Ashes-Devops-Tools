@@ -47,6 +47,9 @@ locals {
     interconnect = try(jsonencode(local.lz.gcp.network.interconnect), null)
     # Hybrid DNS on the hub VPC (JSON text, same reason as vpn above).
     hybrid_dns = try(jsonencode(local.lz.gcp.network.hybrid_dns), null)
+    # Hub PSC endpoint overrides (gcp.network.private_service_connect).
+    hub_psc_name    = try(tostring(local.lz.gcp.network.private_service_connect.name), null)
+    hub_psc_address = try(tostring(local.lz.gcp.network.private_service_connect.address), null)
     # Opt-in extra hub regions (JSON text, same reason as vpn above).
     additional_regions = try(jsonencode(local.lz.gcp.network.additional_regions), null)
     # Hub connectivity per environment: gcp.environments.<env>.network_connectivity,
@@ -135,6 +138,11 @@ locals {
     for k in sort(keys(local.environments)) : { range = local.environments[k].cidr_block, description = "environment ${k}" }
     if try(local.environments[k].cidr_block, "") != ""
   ]
+  # Hub PSC endpoint overrides (null = the net-hub defaults).
+  hub_private_service_connect = {
+    name    = var.hub_private_service_connect_name != null ? var.hub_private_service_connect_name : local.cfg.hub_psc_name
+    address = var.hub_private_service_connect_address != null ? var.hub_private_service_connect_address : local.cfg.hub_psc_address
+  }
   # Opt-in extra hub regions (default none: single-region hub).
   hub_additional_regions = jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}"))
 }

@@ -166,3 +166,27 @@ run "rejects_malformed_notification_channel" {
 
   expect_failures = [var.alerting]
 }
+
+run "rejects_hyphenated_psc_name" {
+  command = plan
+  variables {
+    private_service_connect = { name = "dev-psc" }
+  }
+  expect_failures = [var.private_service_connect]
+}
+
+run "rejects_twenty_one_char_psc_name" {
+  command = plan
+  variables {
+    private_service_connect = { name = "a12345678901234567890" }
+  }
+  expect_failures = [var.private_service_connect]
+}
+
+run "rejects_psc_ipv6_address" {
+  command = plan
+  variables {
+    private_service_connect = { address = "fd20::1" }
+  }
+  expect_failures = [var.private_service_connect]
+}

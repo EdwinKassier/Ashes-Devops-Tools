@@ -200,12 +200,27 @@ module "private_service_access" {
   prefix_length = var.private_service_access.prefix_length
 }
 
+# Google's endpoint name rule for Google APIs: 1-20 characters, lower-case
+# letters and numbers only, starting with a letter. Network names start with a
+# letter, so the derived name does too. The endpoint needs an explicit IP: the
+# default is the second-to-last address of the VPC block, outside the
+# tiered-vpc subnet layout (subnets at /24 offsets 0-47 of a /16). Google:
+# endpoints are not reachable from peered VPC networks, and the IP must be
+# outside every subnet range of this VPC and of the networks peered with it.
+# The output private_service_connect fails the plan when it is inside a subnet
+# of this VPC; peered networks use other blocks of the CIDR plan.
+locals {
+  psc_name    = coalesce(var.private_service_connect.name, "${substr(replace(lower(var.network.name), "/[^a-z0-9]/", ""), 0, 17)}psc")
+  psc_address = coalesce(var.private_service_connect.address, try(cidrhost(var.network.cidr_block, -2), cidrhost(var.network.cidr_block, 0)))
+}
+
 module "private_service_connect" {
   source = "../../network/private-service-connect"
   count  = var.private_service_connect.enabled ? 1 : 0
 
   project_id = var.project_id
-  name       = "${var.network.name}-psc"
+  name       = local.psc_name
+  address    = local.psc_address
   network    = module.network.network_id
   target     = var.private_service_connect.target
 }

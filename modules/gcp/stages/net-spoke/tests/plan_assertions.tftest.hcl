@@ -373,3 +373,67 @@ run "enable_deletion_protection_wins_over_the_deprecated_alias" {
     error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
   }
 }
+
+# ARC-1: Google's endpoint name rule (1-20 lower-case letters and numbers,
+# starting with a letter) and an explicit endpoint IP outside every subnet.
+run "psc_endpoint_name_and_address_default" {
+  command = plan
+
+  assert {
+    condition     = module.private_service_connect[0].forwarding_rule.name == "mockdevvpcpsc" && output.private_service_connect.name == "mockdevvpcpsc"
+    error_message = "The PSC endpoint name must be the network name without non-alphanumerics plus psc (mockdevvpcpsc)."
+  }
+
+  assert {
+    condition     = module.private_service_connect[0].address == "10.10.255.254" && output.private_service_connect.address == "10.10.255.254"
+    error_message = "The PSC endpoint address must default to the second-to-last address of the spoke CIDR (10.10.255.254)."
+  }
+}
+
+run "psc_endpoint_overrides" {
+  command = plan
+
+  variables {
+    private_service_connect = {
+      name    = "devapis"
+      address = "10.10.200.10"
+    }
+  }
+
+  assert {
+    condition     = module.private_service_connect[0].forwarding_rule.name == "devapis" && module.private_service_connect[0].address == "10.10.200.10"
+    error_message = "private_service_connect.name and address must override the derived values."
+  }
+}
+
+run "psc_endpoint_address_inside_subnet_fails" {
+  command = plan
+
+  variables {
+    private_service_connect = {
+      address = "10.10.33.4"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
+}
+
+run "psc_endpoint_address_inside_secondary_range_fails" {
+  command = plan
+
+  variables {
+    network = {
+      name           = "mock-dev-vpc"
+      cidr_block     = "10.10.0.0/16"
+      explicit_zones = ["europe-west1-b", "europe-west1-c"]
+      secondary_ranges = {
+        "europe-west1-b" = [{ range_name = "pods", ip_cidr_range = "100.64.0.0/14" }]
+      }
+    }
+    private_service_connect = {
+      address = "100.64.1.1"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
+}

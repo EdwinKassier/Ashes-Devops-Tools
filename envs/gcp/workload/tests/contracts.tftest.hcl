@@ -340,6 +340,24 @@ run "additional_regions_per_environment_from_config_file" {
   }
 }
 
+# ARC-1: gcp.environments.<env>.private_service_connect reaches the spoke.
+run "psc_overrides_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+    project_prefix           = null
+    tfc_organization         = null
+    organization_contract    = null
+    projects_contract        = null
+  }
+
+  assert {
+    condition     = local.private_service_connect_name == "devapis" && local.private_service_connect_address == "10.10.200.10"
+    error_message = "gcp.environments.dev.private_service_connect must reach the environment stage from the config file."
+  }
+}
+
 run "no_additional_regions_by_default" {
   command = plan
 

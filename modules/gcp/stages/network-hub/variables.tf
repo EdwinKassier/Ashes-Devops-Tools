@@ -322,6 +322,16 @@ variable "hub_additional_regions" {
   nullable = false
 }
 
+variable "hub_private_service_connect" {
+  description = "Overrides for the hub VPC's Private Service Connect endpoint for Google APIs (gcp.network.private_service_connect in config). name: 1-20 lower-case letters and numbers, starting with a letter (null = hubvpccorepsc). address: the endpoint's internal IPv4 address, outside every hub subnet range (null = the second-to-last address of the hub CIDR, for example 10.0.255.254)."
+  type = object({
+    name    = optional(string)
+    address = optional(string)
+  })
+  default  = {}
+  nullable = false
+}
+
 variable "spoke_peerings" {
   description = "Hub side of the environment VPC peerings (connectivity = peering), keyed by environment key: the spoke network self link and the route exchange from the hub's view. Each entry becomes the peering hub-to-<env> on the hub VPC. Pass only spokes whose network already exists (envs/gcp/network-hub discovers them); the gcp-workload-<env> root creates the spoke side. Empty (default) = no hub-side peerings."
   type = map(object({

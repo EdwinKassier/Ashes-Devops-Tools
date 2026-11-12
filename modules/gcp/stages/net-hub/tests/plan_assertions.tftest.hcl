@@ -391,3 +391,80 @@ run "enable_deletion_protection_wins_over_the_deprecated_alias" {
     error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
   }
 }
+
+# ARC-1: Google's endpoint name rule (1-20 lower-case letters and numbers,
+# starting with a letter) and an explicit endpoint IP outside every subnet.
+run "psc_endpoint_name_and_address_default" {
+  command = plan
+
+  assert {
+    condition     = module.private_service_connect[0].forwarding_rule.name == "hubvpccorepsc" && output.private_service_connect.name == "hubvpccorepsc"
+    error_message = "The PSC endpoint name must be the network name without non-alphanumerics plus psc (hubvpccorepsc)."
+  }
+
+  assert {
+    condition     = module.private_service_connect[0].address == "10.0.255.254" && output.private_service_connect.address == "10.0.255.254"
+    error_message = "The PSC endpoint address must default to the second-to-last address of the hub CIDR (10.0.255.254)."
+  }
+}
+
+run "psc_endpoint_name_truncates_long_network_names" {
+  command = plan
+
+  variables {
+    network = {
+      name       = "very-long-hub-network-name-01"
+      cidr_block = "10.0.0.0/16"
+    }
+  }
+
+  assert {
+    condition     = output.private_service_connect.name == "verylonghubnetworpsc" && length(output.private_service_connect.name) <= 20
+    error_message = "The derived PSC name must keep 17 characters of the network name plus psc (at most 20)."
+  }
+}
+
+run "psc_endpoint_overrides" {
+  command = plan
+
+  variables {
+    private_service_connect = {
+      name    = "hubapis"
+      address = "10.0.200.10"
+    }
+  }
+
+  assert {
+    condition     = module.private_service_connect[0].forwarding_rule.name == "hubapis" && module.private_service_connect[0].address == "10.0.200.10"
+    error_message = "private_service_connect.name and address must override the derived values."
+  }
+}
+
+run "psc_endpoint_address_inside_subnet_fails" {
+  command = plan
+
+  variables {
+    private_service_connect = {
+      address = "10.0.16.10"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
+}
+
+run "psc_endpoint_address_inside_additional_region_subnet_fails" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      us-east1 = {
+        subnet_cidrs = { public = "10.2.0.0/24", private = "10.2.16.0/24", database = "10.2.32.0/24" }
+      }
+    }
+    private_service_connect = {
+      address = "10.2.32.7"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
+}

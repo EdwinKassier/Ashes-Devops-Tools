@@ -165,10 +165,12 @@ variable "private_service_access" {
 }
 
 variable "private_service_connect" {
-  description = "Private Service Connect endpoint for Google APIs; target is 'all-apis' or 'vpc-sc'."
+  description = "Private Service Connect endpoint for Google APIs. target is 'all-apis' or 'vpc-sc'. name (null = the network name in lower case without non-alphanumerics, cut to 17 characters, plus psc) must follow Google's rule: 1-20 lower-case letters and numbers, starting with a letter. address (null = the second-to-last address of network.cidr_block, for example 10.0.255.254 for 10.0.0.0/16) is the endpoint's internal IPv4 address; the plan fails when it is inside a subnet range of this VPC."
   type = object({
     enabled = optional(bool, true)
     target  = optional(string, "all-apis")
+    name    = optional(string)
+    address = optional(string)
   })
   default  = {}
   nullable = false
@@ -176,6 +178,17 @@ variable "private_service_connect" {
   validation {
     condition     = contains(["all-apis", "vpc-sc"], var.private_service_connect.target)
     error_message = "private_service_connect.target must be 'all-apis' or 'vpc-sc'."
+  }
+
+  validation {
+    # Source: https://docs.cloud.google.com/vpc/docs/configure-private-service-connect-apis (checked 2026-11-12).
+    condition     = var.private_service_connect.name == null || can(regex("^[a-z][a-z0-9]{0,19}$", coalesce(var.private_service_connect.name, "x")))
+    error_message = "private_service_connect.name (config: gcp.network.private_service_connect.name) must be 1-20 characters, only lower-case letters and numbers, starting with a letter (Google's rule for a Private Service Connect endpoint for Google APIs). Hyphens are not allowed."
+  }
+
+  validation {
+    condition     = var.private_service_connect.address == null || (can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$", coalesce(var.private_service_connect.address, "x"))) && try(cidrhost("${var.private_service_connect.address}/32", 0) == var.private_service_connect.address, false))
+    error_message = "private_service_connect.address (config: gcp.network.private_service_connect.address) must be a single IPv4 address (for example 10.0.255.254), not a range or an IPv6 address."
   }
 }
 

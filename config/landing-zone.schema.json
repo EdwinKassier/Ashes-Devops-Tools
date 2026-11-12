@@ -263,6 +263,21 @@
                 "additionalProperties": false
               }
             },
+            "private_service_connect": {
+              "type": "object",
+              "description": "Private Service Connect endpoint for Google APIs on the hub VPC (gcp-network-hub). name: Google's rule, 1-20 lower-case letters and numbers, starting with a letter (default: the VPC name without non-alphanumerics, first 17 characters, plus psc). address: the endpoint's internal IPv4 address, outside every subnet range of this VPC and of the networks peered with it (default: the second-to-last address of the VPC CIDR).",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]{0,19}$"
+                },
+                "address": {
+                  "type": "string",
+                  "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$"
+                }
+              },
+              "additionalProperties": false
+            },
             "vpc_sc_access_policy": {
               "type": [
                 "string",
@@ -580,6 +595,21 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "private_service_connect": {
+                "type": "object",
+                "description": "Private Service Connect endpoint for Google APIs on this environment's spoke VPC (gcp-workload-<env>). name: Google's rule, 1-20 lower-case letters and numbers, starting with a letter (default: the VPC name without non-alphanumerics, first 17 characters, plus psc). address: the endpoint's internal IPv4 address, outside every subnet range of this VPC and of the networks peered with it (default: the second-to-last address of the VPC CIDR).",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]{0,19}$"
+                  },
+                  "address": {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$"
+                  }
+                },
+                "additionalProperties": false
               },
               "labels": {
                 "type": "object",

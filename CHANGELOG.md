@@ -738,6 +738,17 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `compliance.backup.dr_region`) must be in `aws.allowed_regions` (else `["eu-west-2"]`, as in
   aws-organization) and differ from the home region. Before, a region the region SCP denies passed
   the plan, and the cross-region copy failed at run time.
+- **The GCP Private Service Connect endpoint for Google APIs can now be created (ARC-1).**
+  `net-hub` and `net-spoke` named it `<network>-psc` (for example `hub-vpc-core-psc`). Google
+  allows only 1-20 lower-case letters and numbers, starting with a letter, so the first hub and
+  environment network apply failed. The name is now the network name without non-alphanumerics
+  (first 17 characters) plus `psc` (for example `hubvpccorepsc`). The global address also needs
+  an explicit IP: it defaults to the second-to-last address of the VPC block (for example
+  `10.0.255.254`), and the plan fails when it is inside a subnet range of the VPC. New config
+  keys `gcp.network.private_service_connect` and `gcp.environments.<env>.private_service_connect`
+  (`name`, `address`) override both. The `private-service-connect` module now requires `address`
+  and validates `name`. The old name and an address-less reservation could never be created by
+  the API, so no existing state holds them and no migration is needed.
 - **The AWS root template writes the required tags and accepts every partition's regions.**
   `templates/aws/root` sets provider `default_tags` (`ManagedBy`, `Environment`, `CostCenter`,
   `Owner` from `org.cost_center` and `org.owner`, `DataClassification`) and validates `aws_region`

@@ -61,6 +61,7 @@ module "network_hub" {
   hybrid_advertised_ranges     = local.hybrid_advertised_ranges
   hybrid_dns                   = local.hybrid_dns
   hub_additional_regions       = local.hub_additional_regions
+  hub_private_service_connect  = local.hub_private_service_connect
 
   vpc_sc_access_policy_name = local.vpc_sc_access_policy_name
   vpc_sc_enable_dry_run     = var.vpc_sc_enable_dry_run

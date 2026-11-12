@@ -6,8 +6,9 @@ mock_provider "google" {}
 
 variables {
   project_id = "mock-project"
-  name       = "psc-endpoint"
+  name       = "pscendpoint"
   network    = "projects/mock-project/global/networks/mock-vpc"
+  address    = "10.0.255.254"
 }
 
 run "psc_wired_to_network" {
@@ -26,5 +27,24 @@ run "psc_wired_to_network" {
   assert {
     condition     = google_compute_global_forwarding_rule.psc_forwarding_rule.name == var.name
     error_message = "PSC forwarding rule name must be the caller-supplied name."
+  }
+}
+
+run "psc_name_and_address_are_explicit" {
+  command = plan
+
+  assert {
+    condition     = google_compute_global_forwarding_rule.psc_forwarding_rule.name == "pscendpoint"
+    error_message = "The forwarding rule must carry the caller-supplied, Google-compliant name."
+  }
+
+  assert {
+    condition     = google_compute_global_address.psc_address.address == "10.0.255.254"
+    error_message = "The global address must reserve the caller-supplied IPv4 address (Google needs an explicit IP)."
+  }
+
+  assert {
+    condition     = google_compute_global_address.psc_address.name == "pscendpoint-ip"
+    error_message = "The address name must derive from the endpoint name."
   }
 }

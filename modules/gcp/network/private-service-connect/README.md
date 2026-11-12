@@ -57,6 +57,7 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
+	address =
 	name =
 	network =
 	project_id =
@@ -94,16 +95,17 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_name"></a> [name](#input\_name) | Name of the Private Service Connect endpoint | `string` | n/a | yes |
+| <a name="input_address"></a> [address](#input\_address) | The internal IPv4 address of the endpoint (required: Google reserves an endpoint address only with an explicit IP or an internal range). It must be a single IPv4 address outside every primary and secondary subnet range of the VPC network and of any network peered with it. | `string` | n/a | yes |
+| <a name="input_name"></a> [name](#input\_name) | Name of the Private Service Connect endpoint (the global forwarding rule). Google's rule for an endpoint for Google APIs: 1-20 characters, lower-case letters and numbers only, starting with a letter. | `string` | n/a | yes |
 | <a name="input_network"></a> [network](#input\_network) | The self-link of the VPC network for the PSC endpoint | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the PSC endpoint will be created | `string` | n/a | yes |
-| <a name="input_address"></a> [address](#input\_address) | Specific IP address to reserve (optional, auto-assigned if not specified) | `string` | `null` | no |
 | <a name="input_address_name"></a> [address\_name](#input\_address\_name) | Name of the internal IP address to reserve | `string` | `null` | no |
 | <a name="input_create_dns_zone"></a> [create\_dns\_zone](#input\_create\_dns\_zone) | Create a private DNS zone for the PSC endpoint | `bool` | `true` | no |
 | <a name="input_description"></a> [description](#input\_description) | Description of the PSC endpoint | `string` | `"Private Service Connect endpoint managed by Terraform"` | no |
 | <a name="input_dns_zone_name"></a> [dns\_zone\_name](#input\_dns\_zone\_name) | Name of the private DNS zone for PSC | `string` | `"psc-googleapis"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the PSC resources | `map(string)` | `{}` | no |
 | <a name="input_target"></a> [target](#input\_target) | The target service to connect to. Must be 'all-apis' or 'vpc-sc'. | `string` | `"all-apis"` | no |
+| <a name="input_vpc_subnet_ranges"></a> [vpc\_subnet\_ranges](#input\_vpc\_subnet\_ranges) | Primary and secondary subnet ranges of the VPC network (and of peered networks), in CIDR notation. The address must be outside all of them. Empty skips the check. | `list(string)` | `[]` | no |
 
 ## Outputs
 

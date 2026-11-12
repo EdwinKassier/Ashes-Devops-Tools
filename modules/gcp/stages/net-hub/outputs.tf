@@ -140,3 +140,20 @@ output "network_alert_policy_ids" {
   description = "Data-plane alert policy IDs keyed by alert (vpn_tunnel_down, bgp_session_down, nat_allocation_failed, nat_dropped_packets); empty when alerting is off or no watched feature exists."
   value       = try(module.network_alerts[0].all_alert_policy_ids, {})
 }
+
+output "private_service_connect" {
+  description = "The Private Service Connect endpoint for Google APIs: name, address and target; null when private_service_connect.enabled is false. The plan fails here when the address is inside a subnet range of this VPC."
+  value = var.private_service_connect.enabled ? {
+    name    = local.psc_name
+    address = local.psc_address
+    target  = var.private_service_connect.target
+  } : null
+
+  precondition {
+    condition = !var.private_service_connect.enabled || alltrue([
+      for r in module.network.subnet_ip_ranges :
+      try(cidrhost("${local.psc_address}/${split("/", r)[1]}", 0) != cidrhost(r, 0), true)
+    ])
+    error_message = "The Private Service Connect address ${local.psc_address} is inside a subnet range of ${var.network.name} (${join(", ", module.network.subnet_ip_ranges)}). Google requires the endpoint IP to be outside every primary and secondary subnet range. Set private_service_connect.address (config: gcp.network.private_service_connect.address) to a free address."
+  }
+}

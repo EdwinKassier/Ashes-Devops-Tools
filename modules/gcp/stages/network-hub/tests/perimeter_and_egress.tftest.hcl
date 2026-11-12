@@ -33,6 +33,7 @@ override_data {
 override_module {
   target = module.hub.module.network
   outputs = {
+    subnet_ip_ranges  = ["10.0.0.0/24", "10.0.16.0/24", "10.0.32.0/24"]
     network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
     network_id        = "projects/mock-hub-project/global/networks/hub-vpc-core"
     network_name      = "hub-vpc-core"

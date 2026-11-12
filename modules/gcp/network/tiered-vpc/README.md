@@ -170,6 +170,7 @@ The following resources are created:
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | The VPC network name. |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The VPC network self link. |
 | <a name="output_network_tags"></a> [network\_tags](#output\_network\_tags) | Network tags that select the security tiers in the baseline firewall rules. |
+| <a name="output_subnet_ip_ranges"></a> [subnet\_ip\_ranges](#output\_subnet\_ip\_ranges) | Every primary and secondary IP range of the VPC's subnets (all tiers, the primary region and the additional regions), in CIDR notation. Known at plan time. Callers check a reserved address against it (for example the Private Service Connect endpoint IP). |
 | <a name="output_subnets"></a> [subnets](#output\_subnets) | Subnet module outputs by tier (public, private, database), each keyed by zone. |
 | <a name="output_vpc"></a> [vpc](#output\_vpc) | The composed VPC module outputs. |
 <!-- END_TF_DOCS -->

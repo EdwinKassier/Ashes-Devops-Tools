@@ -30,6 +30,9 @@ gcp:
   environments:
     dev:
       is_production: false
+      private_service_connect:
+        name: devapis
+        address: 10.10.200.10
       additional_regions:
         europe-west4:
           subnet_cidrs:

@@ -31,6 +31,7 @@ override_data {
 override_module {
   target = module.hub.module.network
   outputs = {
+    subnet_ip_ranges  = ["10.0.0.0/24", "10.0.16.0/24", "10.0.32.0/24"]
     network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
     network_id        = "projects/mock-hub-project/global/networks/hub-vpc-core"
     network_name      = "hub-vpc-core"
@@ -134,6 +135,7 @@ run "hub_additional_region_router_nat" {
   override_module {
     target = module.hub.module.network
     outputs = {
+      subnet_ip_ranges  = ["10.0.0.0/24", "10.0.16.0/24", "10.0.32.0/24"]
       network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
       network_id        = "projects/mock-hub-project/global/networks/hub-vpc-core"
       network_name      = "hub-vpc-core"
@@ -345,4 +347,28 @@ run "rejects_forward_zone_without_trailing_dot" {
   }
 
   expect_failures = [var.hybrid_dns]
+}
+
+# ARC-1: the hub PSC endpoint defaults to a Google-compliant name and an
+# explicit IP; hub_private_service_connect overrides both.
+run "hub_psc_endpoint_defaults" {
+  command = plan
+
+  assert {
+    condition     = module.hub.private_service_connect.name == "hubvpccorepsc" && module.hub.private_service_connect.address == "10.0.255.254"
+    error_message = "The hub PSC endpoint must default to hubvpccorepsc at 10.0.255.254."
+  }
+}
+
+run "hub_psc_endpoint_overrides_reach_net_hub" {
+  command = plan
+
+  variables {
+    hub_private_service_connect = { name = "hubapis", address = "10.0.200.10" }
+  }
+
+  assert {
+    condition     = module.hub.private_service_connect.name == "hubapis" && module.hub.private_service_connect.address == "10.0.200.10"
+    error_message = "hub_private_service_connect must reach net-hub."
+  }
 }
