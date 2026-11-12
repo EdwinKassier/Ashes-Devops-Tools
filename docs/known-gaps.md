@@ -23,6 +23,15 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   updated Backup service-role StackSet creates `org-backup-vault` in a
   Workloads-OU account, and that the next daily BACKUP_POLICY job completes.
 
+- **The explicit-CIDR IPAM default for spoke VPCs needs the sandbox proof (ARC-1).**
+  `modules/aws/network/vpc` requests `cidr_block` from the IPAM pool by default.
+  Mock tests prove the planned shape only. A real `hashicorp/aws` 6.72.0 plan
+  with a hand-made state and no API calls showed no change for an existing
+  netmask-shape VPC (`ignore_changes = [ipv4_netmask_length]`). Still to
+  confirm: a plan of `aws-workload-dev` against its real state after the
+  upgrade shows no VPC change, and an e2e apply allocates the requested block
+  from a real IPAM pool and creates a subnet inside it.
+
 - **Vercel `resource_config` first apply is unproven.** `modules/vercel/project` now sets
   `resource_config.function_default_regions` instead of the deprecated
   `serverless_function_region`. Confirm in the sandbox that the update is in place and that the
@@ -763,7 +772,7 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   over the temporary VPN's dynamic routes).
 - **Smaller opt-ins from the 2026-11 remediation, mock-tested only.**
   SCC v2 notification/mute configs (`gcp_overrides.scc_api_version = "v2"`);
-  `gcp_overrides.disable_default_sink`; IPAM explicit-CIDR allocation
+  `gcp_overrides.disable_default_sink`; hub IPAM explicit-CIDR allocation
   (`ipam_mode_for_new_vpcs_only`, `ipam_new_vpcs`); the declarative EC2 Allowed
   AMIs policy (`ec2_allowed_images`, `audit_mode` by default, so it only logs);
   the Suspended deny-all and Sandbox guard SCPs (on by default where those OUs

@@ -86,7 +86,7 @@ run "unknown_route_tier_rejected" {
   expect_failures = [var.tgw_route_tiers]
 }
 
-run "ipam_default_plans_legacy_netmask_shape" {
+run "ipam_default_is_explicit_cidr" {
   command = plan
 
   variables {
@@ -94,21 +94,31 @@ run "ipam_default_plans_legacy_netmask_shape" {
   }
 
   assert {
-    condition     = local.ipam_allocation == "netmask"
-    error_message = "the default must keep the legacy pool + netmask_length shape (explicit CIDR would replace existing VPCs)"
+    condition     = local.ipam_allocation == "explicit_cidr"
+    error_message = "The spoke must request vpc_cidr explicitly from the pool by default (ARC-1)."
   }
 }
 
-run "ipam_explicit_cidr_is_opt_in" {
+run "ipam_legacy_netmask_is_opt_out" {
   command = plan
+
+  # In netmask mode IPAM fills cidr_block, so it is unknown at plan. Pin the
+  # allocation to vpc_cidr, so the vpc module's subnet-math check passes.
+  override_resource {
+    target          = module.vpc.aws_vpc.this
+    override_during = plan
+    values = {
+      cidr_block = "10.72.0.0/16"
+    }
+  }
 
   variables {
     ipam_pool_id       = "ipam-pool-0123456789abcdef0"
-    ipam_explicit_cidr = true
+    ipam_explicit_cidr = false
   }
 
   assert {
-    condition     = local.ipam_allocation == "explicit_cidr"
-    error_message = "ipam_explicit_cidr must select the explicit-CIDR allocation"
+    condition     = local.ipam_allocation == "netmask"
+    error_message = "ipam_explicit_cidr = false must keep the legacy netmask shape."
   }
 }

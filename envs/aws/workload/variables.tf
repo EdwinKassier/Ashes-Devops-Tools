@@ -65,9 +65,9 @@ variable "network_contract" {
 }
 
 variable "ipam_explicit_cidr" {
-  description = "Opt a NEW spoke VPC into requesting vpc_cidr explicitly from the IPAM pool (pool + cidr_block). Default false keeps the legacy pool + netmask_length shape; enabling it on an existing VPC replaces it."
+  description = "When ipam_pool_id is set, request vpc_cidr explicitly from the pool (default true). false keeps the legacy pool + netmask_length shape. An existing netmask VPC plans no change when vpc_cidr equals its allocated block (see UPGRADING.md)."
   type        = bool
-  default     = false
+  default     = true
   nullable    = false
 }
 

@@ -472,6 +472,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Fixed
 
+- **Spoke VPCs get the CIDR their subnets use (ARC-1, breaking).** An IPAM-backed VPC now
+  requests `cidr_block` explicitly from the pool by default (`ipam_allocation = "explicit_cidr"`
+  in `modules/aws/network/vpc`, `ipam_explicit_cidr = true` in aws-workload). Before, it asked
+  for any `/16` while its subnets were cut from `vpc_cidr`, so subnet creation could fail with
+  `InvalidSubnet.Range`. `ignore_changes = [ipv4_netmask_length]` keeps existing VPCs in place,
+  and a `check` warns when the allocated block differs from `cidr_block`. See `UPGRADING.md`.
 - `docs/guides/BRANCH_PROTECTION.md` listed `Terraform Tests` (a sharded matrix that only reports
   `Terraform Tests (shard N)`) as a required context, which would block every PR. `Validation Summary` is
   now the only required context.

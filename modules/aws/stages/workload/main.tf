@@ -99,8 +99,7 @@ locals {
 }
 
 locals {
-  # Legacy shape (pool + netmask_length) unless the caller opts a NEW workload
-  # into the explicit-CIDR allocation; switching an existing VPC replaces it.
+  # explicit_cidr unless the caller opts back into the legacy netmask shape.
   ipam_allocation = var.ipam_explicit_cidr ? "explicit_cidr" : "netmask"
 }
 

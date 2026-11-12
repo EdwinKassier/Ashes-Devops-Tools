@@ -29,9 +29,9 @@ variable "ipam_pool_id" {
 }
 
 variable "ipam_allocation" {
-  description = "How an IPAM VPC obtains its CIDR: netmask (default, legacy: pool + netmask_length, no cidr_block) or explicit_cidr (pool + cidr_block). Switching an existing VPC between the two forces replacement; use explicit_cidr for new VPCs only. Ignored when ipam_pool_id is empty."
+  description = "How an IPAM VPC obtains its CIDR: explicit_cidr (default: pool + cidr_block, so the pool allocates exactly the block the subnets are cut from) or netmask (legacy: pool + netmask_length). Switching an existing netmask VPC to explicit_cidr is a no-op when cidr_block equals the block IPAM allocated (ipv4_netmask_length is ignored after create); otherwise set cidr_block to the allocated block first. Ignored when ipam_pool_id is empty."
   type        = string
-  default     = "netmask"
+  default     = "explicit_cidr"
   nullable    = false
 
   validation {
@@ -41,7 +41,7 @@ variable "ipam_allocation" {
 }
 
 variable "netmask_length" {
-  description = "Netmask length requested from the IPAM pool when ipam_pool_id is set and ipam_allocation = netmask. Ignored for static and explicit_cidr VPCs. Changing it on an existing VPC forces replacement."
+  description = "Netmask length requested from the IPAM pool when ipam_pool_id is set and ipam_allocation = netmask. Ignored for static and explicit_cidr VPCs. Used only at create: a later change is ignored and does not replace the VPC."
   type        = number
   default     = 16
 

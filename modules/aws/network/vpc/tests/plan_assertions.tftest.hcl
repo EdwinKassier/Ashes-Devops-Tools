@@ -181,17 +181,71 @@ run "static_mode_unchanged" {
   }
 }
 
-run "existing_ipam_vpc_keeps_netmask_shape" {
+run "ipam_default_is_explicit_cidr" {
   command = plan
 
   variables {
     flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
     ipam_pool_id             = "ipam-pool-0123456789abcdef0"
+    cidr_block               = "10.72.0.0/16"
+  }
+
+  assert {
+    condition     = aws_vpc.this.ipv4_ipam_pool_id == "ipam-pool-0123456789abcdef0" && aws_vpc.this.cidr_block == "10.72.0.0/16" && aws_vpc.this.ipv4_netmask_length == null
+    error_message = "An IPAM VPC must request exactly cidr_block from the pool by default, so the subnets cut from cidr_block fit the VPC."
+  }
+
+  assert {
+    condition     = aws_subnet.this["private-eu-west-2a"].cidr_block == "10.72.8.0/24"
+    error_message = "Subnets must be cut from the same block the pool allocates."
+  }
+}
+
+run "legacy_netmask_still_selectable" {
+  command = plan
+
+  # In netmask mode IPAM fills cidr_block, so it is unknown at plan. Pin the
+  # allocation to the block the subnets use, so the subnet-math check passes.
+  override_resource {
+    target          = aws_vpc.this
+    override_during = plan
+    values = {
+      cidr_block = "10.20.0.0/16"
+    }
+  }
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    ipam_pool_id             = "ipam-pool-0123456789abcdef0"
+    ipam_allocation          = "netmask"
     cidr_block               = "10.20.0.0/16"
   }
 
   assert {
     condition     = aws_vpc.this.ipv4_ipam_pool_id == "ipam-pool-0123456789abcdef0" && aws_vpc.this.ipv4_netmask_length == 16
-    error_message = "default IPAM allocation must keep the legacy pool + netmask_length shape (cidr_block stays unset; verified against the real provider)"
+    error_message = "ipam_allocation = netmask must keep the legacy pool + netmask_length shape."
   }
+}
+
+run "allocation_outside_subnet_math_is_reported" {
+  command = plan
+
+  # IPAM handed out a different /16 than the block the subnets are cut from
+  # (ARC-1). The check must name the mismatch.
+  override_resource {
+    target          = aws_vpc.this
+    override_during = plan
+    values = {
+      cidr_block = "10.99.0.0/16"
+    }
+  }
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    ipam_pool_id             = "ipam-pool-0123456789abcdef0"
+    ipam_allocation          = "netmask"
+    cidr_block               = "10.20.0.0/16"
+  }
+
+  expect_failures = [check.ipam_allocation_matches_subnet_math]
 }

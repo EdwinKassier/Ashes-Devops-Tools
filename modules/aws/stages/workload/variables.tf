@@ -74,9 +74,9 @@ variable "ipam_pool_id" {
 }
 
 variable "ipam_explicit_cidr" {
-  description = "When true and ipam_pool_id is set, the spoke VPC requests vpc_cidr explicitly from the pool (pool + cidr_block). Default false keeps the legacy pool + netmask_length shape; switching an existing VPC replaces it, so enable for NEW workloads only."
+  description = "When ipam_pool_id is set, request vpc_cidr explicitly from the pool (default true). false keeps the legacy pool + netmask_length shape. An existing netmask VPC plans no change when vpc_cidr equals its allocated block (see UPGRADING.md)."
   type        = bool
-  default     = false
+  default     = true
   nullable    = false
 }
 

@@ -16,7 +16,7 @@ Unlike a self-service literal-CIDR world, spoke VPC CIDRs in this landing zone a
 - One **regional pool per enabled Region** (`var.regional_cidrs`, e.g. `eu-west-2 = "10.0.0.0/12"`) is sourced from the top pool and carries the Region locale.
 - The regional pools are **RAM-shared organization-wide** to the org ARN (`aws_ram_resource_share` + `aws_ram_principal_association`), so every member account can allocate VPC CIDRs from centrally governed space.
 
-A workload spoke pulls its pool id from the network cross-root contract — `envs/aws/workload/main.tf` reads `data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[var.aws_region]` and passes it to the VPC module as `ipam_pool_id`. The VPC module then allocates its CIDR from that pool (`ipv4_ipam_pool_id` + `ipv4_netmask_length` on `aws_vpc.this`, in `modules/aws/network/vpc/main.tf`).
+A workload spoke pulls its pool id from the network cross-root contract — `envs/aws/workload/main.tf` reads `data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[var.aws_region]` and passes it to the VPC module as `ipam_pool_id`. The VPC module then allocates its CIDR from that pool (`ipv4_ipam_pool_id` + `cidr_block`, the explicit-CIDR default, on `aws_vpc.this`, in `modules/aws/network/vpc/main.tf`), so the pool allocates exactly the block the subnets are cut from.
 
 **AWS does not let you resize a VPC's primary CIDR in place, and IPAM does not let you grow an existing allocation.** So expansion is always additive. There are two shapes:
 

@@ -507,15 +507,50 @@ permission_sets = {
 }
 ```
 
-#### IPAM explicit-CIDR allocation is opt-in (aws-network, aws-workload)
+#### Spoke VPCs request their CIDR explicitly from IPAM (aws-workload)
 
-The vpc module keeps the legacy IPAM shape (`ipv4_ipam_pool_id` +
-`ipv4_netmask_length`) by default, so existing VPCs plan no change. New
-`ipam_allocation = "explicit_cidr"` requests the exact CIDR from the pool;
-switching an existing VPC replaces it. Hub: `ipam_new_vpcs` (default `[]`) lists
-VPCs to create from the pool and `ipam_mode_for_new_vpcs_only` (default `true`)
-guards the rest. Workload: `ipam_explicit_cidr` (default `false`), for NEW
-workloads only. No manual step on upgrade.
+**Breaking: the default changes.** An IPAM-backed VPC from
+`modules/aws/network/vpc` now requests `cidr_block` explicitly from the pool
+(`ipam_allocation` defaults to `explicit_cidr`; aws-workload's
+`ipam_explicit_cidr` defaults to `true`). The legacy shape asked IPAM for any
+block of `netmask_length` (`/16`), but the subnets are always cut from
+`cidr_block` (`vpc_cidr`, default `10.72.0.0/16`). When IPAM returned another
+block, subnet creation failed with `InvalidSubnet.Range`.
+
+The VPC now has `lifecycle { ignore_changes = [ipv4_netmask_length] }`. An
+existing netmask-shape VPC keeps its id: its state already holds the allocated
+`cidr_block`, and the provider clears a `cidr_block` diff while
+`ipv4_netmask_length` is set. A new `check` block
+(`ipam_allocation_matches_subnet_math`) warns when the allocated block differs
+from `cidr_block`. A side effect: a later `netmask_length` change on a legacy
+VPC no longer replaces it.
+
+For each existing `aws-workload-<env>` that allocates from IPAM:
+
+1. Read the VPC's real block. Run
+   `terraform state show 'module.aws_workload.module.vpc.aws_vpc.this'` in a
+   speculative plan, or open the TFC state viewer, and read `cidr_block`.
+2. If it differs from `vpc_cidr`, set
+   `aws.workload_environments.<env>.vpc_cidr` to that block before you apply.
+   The subnets could not be created in that VPC, so this only fixes the subnet
+   math. The upgrade plan also prints the check warning for this VPC.
+3. If you must keep the old shape, set `ipam_explicit_cidr = false`
+   (aws-workload) or `ipam_allocation = "netmask"` (direct module callers).
+
+What is proven: mock tests prove the planned shape (pool + `cidr_block`, no
+netmask). A real `hashicorp/aws` 6.72.0 plan with a hand-made state
+(`-refresh=false`, no AWS API calls) showed no change for a netmask-shape VPC,
+and a replacement for the same move without `ignore_changes`. What still needs
+the sandbox: a plan of `aws-workload-dev` against its real state after the
+upgrade shows no VPC change, and a real explicit-CIDR allocation from an IPAM
+pool (see `docs/known-gaps.md`).
+
+#### IPAM explicit-CIDR allocation for hub VPCs is opt-in (aws-network)
+
+Hub VPCs that allocate from IPAM pass `ipam_allocation = "explicit_cidr"`.
+`ipam_new_vpcs` (default `[]`) lists hub VPCs to create from the pool, and
+`ipam_mode_for_new_vpcs_only` (default `true`) guards the rest. Adding a pool
+to an existing static VPC replaces it. No manual step on upgrade.
 
 #### Access Analyzer in every enabled region (aws-security)
 
