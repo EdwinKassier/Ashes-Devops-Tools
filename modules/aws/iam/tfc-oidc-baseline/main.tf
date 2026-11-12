@@ -18,9 +18,12 @@
 #       break-glass / OrganizationAccountAccessRole / stacksets-exec-* roles,
 #       destroy or re-policy protected KMS keys, delete the locked backup
 #       copy vault's lock, access policy or vault, touch dp:* perimeter tags,
-#       mint long-lived IAM user credentials, or create/grant to a role that
-#       does not carry the same boundary (boundary propagation); every other
-#       action stays allowed.
+#       mint long-lived IAM user credentials, grant through IAM groups or
+#       users, re-version customer-managed policies outside /tfc-managed/,
+#       retarget the aliases of protected KMS keys, update any role trust
+#       (trust-update lock), or create/grant to a role that does not carry
+#       the same boundary (boundary propagation); every other action stays
+#       allowed.
 #
 # Optionally (enable_member_break_glass_role) a sibling StackSet deploys the
 # member-account break-glass role (see the end of this file).
@@ -144,6 +147,21 @@ locals {
     },
   ] : s if var.enable_apply_boundary_propagation]
 
+  # Trust-update lock: IAM does not evaluate iam:PermissionsBoundary for
+  # UpdateAssumeRolePolicy, so boundary propagation cannot stop the apply
+  # identity from re-trusting a pre-existing UNBOUNDED role to itself and
+  # assuming it. A condition-based deny would match every role anyway, so the
+  # lock denies the action on every role. CreateRole sets the trust of a new
+  # role, so new roles are unaffected. A trust change on an existing role
+  # needs break-glass or a replacement of the role (destroy, then create).
+  # The break-glass and StackSet execution roles do not carry this boundary.
+  apply_trust_update_lock_statements = [for s in [{
+    Sid      = "DenyTrustPolicyUpdates"
+    Effect   = "Deny"
+    Action   = ["iam:UpdateAssumeRolePolicy"]
+    Resource = "*"
+  }] : s if var.enable_apply_trust_update_lock]
+
   # The locked backup copy vault (protected_backup_vault_names): during the
   # Vault Lock's changeable_for_days window the apply identity must not delete
   # the lock, the vault access policy or the vault. Only Delete* is denied:
@@ -228,6 +246,12 @@ locals {
         # no destruction and no key-policy rewrite (which would let the
         # pipeline grant itself kms:Decrypt). Mirrors the SCP; CreateKey with a
         # policy is unaffected (no resource tag exists yet).
+        # UpdateAlias / DeleteAlias: KMS authorizes an alias change on the
+        # alias AND on the current and the target key, so the tag condition
+        # matches when either key is protected. Retargeting alias/log-archive
+        # to a key the pipeline controls would move new log encryption off the
+        # protected key. CreateAlias stays allowed (the kms-key module creates
+        # the alias together with the key).
         Sid    = "DenyProtectedKeyTampering"
         Effect = "Deny"
         Action = [
@@ -236,6 +260,8 @@ locals {
           "kms:DisableKeyRotation",
           "kms:DeleteImportedKeyMaterial",
           "kms:PutKeyPolicy",
+          "kms:UpdateAlias",
+          "kms:DeleteAlias",
         ]
         Resource  = "*"
         Condition = { StringEquals = { "aws:ResourceTag/${var.kms_protection_tag_key}" = "true" } }
@@ -314,9 +340,40 @@ locals {
         Action   = ["iam:CreateUser", "iam:CreateAccessKey", "iam:CreateLoginProfile"]
         Resource = "*"
       },
+      {
+        # Escalation through a pre-existing IAM group or user: boundary
+        # propagation covers roles only, so a policy on a group or user (or a
+        # console password reset) would grant an unbounded identity. No module
+        # in this repo manages IAM groups or users.
+        Sid    = "DenyGroupUserAndLoginProfileEscalation"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateGroup",
+          "iam:PutGroupPolicy",
+          "iam:AttachGroupPolicy",
+          "iam:AddUserToGroup",
+          "iam:AttachUserPolicy",
+          "iam:PutUserPolicy",
+          "iam:UpdateLoginProfile",
+        ]
+        Resource = "*"
+      },
+      {
+        # A new default version of a customer-managed policy that is attached
+        # to an unbounded (pre-existing) role, group or user would grant that
+        # identity anything. The pipeline may re-version only the
+        # customer-managed policies under the /tfc-managed/ path. No module in
+        # this repo creates an aws_iam_policy. The StackSet execution role
+        # (not capped by this boundary) owns the StackSet policies.
+        Sid         = "DenyForeignPolicyVersioning"
+        Effect      = "Deny"
+        Action      = ["iam:CreatePolicyVersion", "iam:SetDefaultPolicyVersion"]
+        NotResource = [{ "Fn::Sub" = "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/tfc-managed/*" }]
+      },
       ],
       local.protected_backup_vault_statements,
       local.apply_boundary_propagation_statements,
+      local.apply_trust_update_lock_statements,
     )
   }
 

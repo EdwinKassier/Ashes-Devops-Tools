@@ -169,6 +169,7 @@ module "tfc_oidc_baseline" {
   enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
   apply_permissions_boundary_arn    = var.tfc_apply_permissions_boundary_arn
   enable_apply_boundary_propagation = var.tfc_enable_apply_boundary_propagation
+  enable_apply_trust_update_lock    = var.tfc_enable_apply_trust_update_lock
   call_as                           = var.tfc_oidc_call_as
 
   # Plan-role data-plane read deny (ReadOnlyAccess minus GetObject/GetSecretValue/...).

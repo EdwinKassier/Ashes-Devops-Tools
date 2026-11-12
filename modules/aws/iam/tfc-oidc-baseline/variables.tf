@@ -139,7 +139,7 @@ variable "apply_role_policy_arns" {
 }
 
 variable "enable_apply_permissions_boundary" {
-  description = "Cap the apply role with a permissions boundary (default true). With apply_permissions_boundary_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; disabling Security Hub, Macie, Inspector or Access Analyzer; modifying the plan/apply roles, the OIDC provider or the boundary itself; creating/modifying/passing the break-glass, OrganizationAccountAccessRole or StackSet execution roles; destroying or re-policying protected KMS keys; deleting the Vault Lock, access policy or vault of protected_backup_vault_names; dp:* tag changes; and iam:CreateUser/CreateAccessKey/CreateLoginProfile."
+  description = "Cap the apply role with a permissions boundary (default true). With apply_permissions_boundary_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; disabling Security Hub, Macie, Inspector or Access Analyzer; modifying the plan/apply roles, the OIDC provider or the boundary itself; creating/modifying/passing the break-glass, OrganizationAccountAccessRole or StackSet execution roles; destroying, re-policying or alias-retargeting protected KMS keys; deleting the Vault Lock, access policy or vault of protected_backup_vault_names; dp:* tag changes; iam:CreateUser/CreateAccessKey/CreateLoginProfile; IAM group and user policies, group membership and console password changes; new versions of customer-managed policies outside the /tfc-managed/ path; and (enable_apply_trust_update_lock) trust-policy updates on any role."
   type        = bool
   default     = true
 }
@@ -252,6 +252,12 @@ variable "tags" {
 # Escape-hatch hardening
 # -----------------------------------------------------------------------------
 
+variable "enable_apply_trust_update_lock" {
+  description = "Deny iam:UpdateAssumeRolePolicy to the tfc-apply identity on every role, in the embedded boundary (default true). IAM does not evaluate the iam:PermissionsBoundary condition key for that action, so without the lock a pre-existing unbounded role could be re-trusted to the pipeline and assumed. New roles are unaffected (CreateRole sets the trust). A trust change on an existing role needs break-glass or a replacement of the role. Applies to the embedded boundary only (apply_permissions_boundary_arn = null)."
+  type        = bool
+  default     = true
+}
+
 variable "enable_apply_boundary_propagation" {
   description = "Make the embedded tfc-apply boundary self-propagating (default true): tfc-apply may only CreateRole / PutRolePermissionsBoundary / AttachRolePolicy / PutRolePolicy when the target role carries this same boundary (iam:PermissionsBoundary), and may never delete a permissions boundary. Without it the apply identity can create an unbounded role, attach AdministratorAccess and assume it. Every aws_iam_role created by tfc-apply in a member account must then set permissions_boundary to arn:<partition>:iam::<account>:policy/<apply_boundary_policy_name>. Applies to the embedded boundary only (apply_permissions_boundary_arn = null)."
   type        = bool
@@ -302,7 +308,7 @@ variable "protected_role_names" {
 }
 
 variable "kms_protection_tag_key" {
-  description = "Resource-tag key marking protected KMS keys (value \"true\"). The tfc-apply boundary denies ScheduleKeyDeletion / DisableKey / DisableKeyRotation / DeleteImportedKeyMaterial / PutKeyPolicy on such keys and removing or rewriting the tag. Must match the organization-policy kms_protection_tag_key and the kms-key protection_tag_key."
+  description = "Resource-tag key marking protected KMS keys (value \"true\"). The tfc-apply boundary denies ScheduleKeyDeletion / DisableKey / DisableKeyRotation / DeleteImportedKeyMaterial / PutKeyPolicy / UpdateAlias / DeleteAlias on such keys and removing or rewriting the tag. Must match the organization-policy kms_protection_tag_key and the kms-key protection_tag_key."
   type        = string
   default     = "protected"
 

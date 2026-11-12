@@ -465,12 +465,23 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   on roles carrying `tfc-apply-boundary`, and can never delete a boundary. Every
   `aws_iam_role` created by `tfc-apply` in a member account must therefore set
   `permissions_boundary = arn:aws:iam::<account>:policy/tfc-apply-boundary`.
-  `modules/aws/iam/iam-role` supports this; `modules/aws/security/cloudtrail-org`,
-  `modules/aws/security/incident-response` and `modules/aws/stages/app-services`
-  do **not yet** expose a `permissions_boundary` input, so their role creation in
-  member accounts fails until they do (or disable propagation). Residual:
-  `iam:UpdateAssumeRolePolicy` on pre-existing unbounded roles that the
-  deny-tamper SCP does not protect. (2) **Plan-role data-plane deny**
+  The security, backup, workload and app-services stages derive that ARN from
+  `tfc_apply_boundary_policy_name` (default `tfc-apply-boundary`) and set it on
+  the roles they create. Pre-existing unbounded roles, groups and users are
+  closed in the boundary too: `DenyTrustPolicyUpdates`
+  (`enable_apply_trust_update_lock`, default on) denies
+  `iam:UpdateAssumeRolePolicy` on every role, because IAM does not evaluate
+  `iam:PermissionsBoundary` for that action. `DenyForeignPolicyVersioning`
+  denies new versions of customer-managed policies outside the `/tfc-managed/`
+  path. `DenyGroupUserAndLoginProfileEscalation` denies group and user
+  policies, group membership and console password changes. Consequence: a
+  trust change on an existing role (for example a new GitHub ref or
+  environment on an app-services deploy role, a new `trust_policy` in
+  `modules/aws/iam/iam-role`, or a new forensics account on the
+  incident-response snapshot role) fails as `tfc-apply`. Apply it as
+  break-glass, or replace the role (`-replace=<address>`; CreateRole sets the
+  new trust). **Validate** these statements in a sandbox account. (2)
+  **Plan-role data-plane deny**
   (`enable_plan_role_data_read_deny`, default on): plans that refresh data-reading
   resources fail as `tfc-plan`. In-repo this is `envs/aws/workload`'s
   `aws_secretsmanager_secret_version.saas_bridge` (opt-in,
@@ -481,7 +492,12 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   destroying it), but any later key-policy change on a key tagged
   `protected = true` must be applied by break-glass. With `key_policy_admin_arns`
   set, the CreateKey lockout safety check is bypassed, and every listed role
-  must already exist in that account. (4) **`dp:*` tags are break-glass only**
+  must already exist in that account. Retargeting or deleting the alias of a
+  protected key is break-glass only as well (`kms:UpdateAlias`/`kms:DeleteAlias`
+  in the boundary and the deny-tamper SCP). KMS authorizes an alias change on
+  the alias and on the current and the target key, so the tag condition matches
+  through the key. **Validate** that in a sandbox account. (4) **`dp:*` tags
+  are break-glass only**
   (baseline SCP): opting a resource out of the RCP data perimeter, and
   re-applying a full S3 tag set on a bucket that carries a `dp:*` tag, need
   break-glass. **Validate** that `aws:TagKeys` is populated on

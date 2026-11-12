@@ -83,7 +83,7 @@ variable "key_user_arns" {
 }
 
 variable "enable_protection_tag" {
-  description = "Tag the key <protection_tag_key> = \"true\" so the organization deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey/DisableKeyRotation and protection-tag removal except via break-glass. Default false; the security stage enables it for the log-archive, forensics and security-tooling keys."
+  description = "Tag the key <protection_tag_key> = \"true\" so the organization deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey/DisableKeyRotation, alias retargeting or deletion (UpdateAlias/DeleteAlias) and protection-tag removal except via break-glass. Default false; the security stage enables it for the log-archive, forensics and security-tooling keys."
   type        = bool
   default     = false
 }

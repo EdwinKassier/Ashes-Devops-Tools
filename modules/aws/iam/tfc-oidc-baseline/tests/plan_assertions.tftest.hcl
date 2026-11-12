@@ -816,7 +816,8 @@ run "boundary_denies_copy_vault_unlock" {
 
 run "boundary_fits_quota_with_long_names" {
   # Long role, tag and vault names must keep the embedded boundary under the
-  # 6,144-character managed-policy quota (measured 5,171 on 2026-11-12).
+  # 6,144-character managed-policy quota (measured 5,771 on 2026-11-12, with
+  # the brownfield escalation denies and the trust-update lock).
   command = plan
 
   variables {
@@ -847,5 +848,82 @@ run "copy_vault_unlock_deny_omitted_without_protected_vaults" {
   assert {
     condition     = length([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]) == 0
     error_message = "an empty protected_backup_vault_names must omit the statement (an empty Resource list is invalid policy)."
+  }
+}
+
+run "boundary_blocks_brownfield_escalation_paths" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && s.Resource == "*" && alltrue([for a in ["iam:PutGroupPolicy", "iam:AttachGroupPolicy", "iam:AddUserToGroup", "iam:UpdateLoginProfile", "iam:AttachUserPolicy", "iam:PutUserPolicy"] : contains(flatten([s.Action]), a)])
+    ])
+    error_message = "the boundary must deny group policies, group membership, user policies and console password changes."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && contains(flatten([s.Action]), "iam:CreatePolicyVersion") && contains(flatten([s.Action]), "iam:SetDefaultPolicyVersion") &&
+      try(s.NotResource[0]["Fn::Sub"], "") == "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/tfc-managed/*"
+    ])
+    error_message = "the boundary must deny re-versioning any customer-managed policy outside /tfc-managed/."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && s.Action == ["iam:UpdateAssumeRolePolicy"] && s.Resource == "*"
+    ])
+    error_message = "with enable_apply_trust_update_lock (default true) the boundary must deny every trust-policy update."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyProtectedKeyTampering" && contains(flatten([s.Action]), "kms:UpdateAlias") && contains(flatten([s.Action]), "kms:DeleteAlias") &&
+      try(s.Condition.StringEquals["aws:ResourceTag/protected"], "") == "true"
+    ])
+    error_message = "retargeting or deleting the alias of a protected key must be denied (and only for protected keys)."
+  }
+
+  # Self-lockout guard: the pipeline still creates roles (CreateRole sets the
+  # trust), customer-managed policies, and aliases on new keys.
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && s.Resource == "*" && !can(s.Condition) && anytrue([for a in ["iam:CreateRole", "iam:CreatePolicy", "iam:DeletePolicyVersion", "kms:CreateAlias", "kms:CreateKey"] : contains(flatten([s.Action]), a)])
+    ])
+    error_message = "no unconditional deny may block CreateRole, CreatePolicy, DeletePolicyVersion, CreateAlias or CreateKey."
+  }
+
+  assert {
+    condition     = length(jsonencode(jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument)) < 6144
+    error_message = "the boundary must stay under the 6,144-character managed policy limit."
+  }
+}
+
+run "trust_update_lock_opt_out" {
+  command = plan
+
+  variables {
+    enable_apply_trust_update_lock = false
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && s.Action == ["iam:UpdateAssumeRolePolicy"] && s.Resource == "*"
+    ])
+    error_message = "enable_apply_trust_update_lock = false removes the trust-update deny."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyTamperingWithTfcBaseline" && contains(flatten([s.Action]), "iam:UpdateAssumeRolePolicy")
+    ])
+    error_message = "the opt-out must keep the trust deny on the TFC baseline roles."
   }
 }

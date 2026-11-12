@@ -837,3 +837,60 @@ run "member_backup_dr_vault" {
     error_message = "the DR-region StackSet must create only the key and vault (IAM roles are global and already exist)."
   }
 }
+
+run "tfc_apply_trust_update_lock_reaches_the_boundary" {
+  command = plan
+
+  variables {
+    tfc_enable_apply_trust_update_lock = false
+  }
+
+  # The StackSet template keys its Conditions on member account IDs, which
+  # are computed at plan; pin them so the boundary document is plan-known.
+  override_module {
+    target = module.organization
+    outputs = {
+      organization_id       = "o-abc1234567"
+      organization_arn      = "arn:aws:organizations::111111111111:organization/o-abc1234567"
+      roots_id              = "r-abcd"
+      management_account_id = "111111111111"
+      ou_ids = {
+        "Security"          = "ou-abcd-security0"
+        "Infrastructure"    = "ou-abcd-infra0000"
+        "Workloads"         = "ou-abcd-workload0"
+        "Sandbox"           = "ou-abcd-sandbox00"
+        "Suspended"         = "ou-abcd-suspend00"
+        "PolicyStaging"     = "ou-abcd-policyst0"
+        "Exceptions"        = "ou-abcd-except000"
+        "Transitional"      = "ou-abcd-transit00"
+        "Workloads/Prod"    = "ou-abcd-prod0000"
+        "Workloads/NonProd" = "ou-abcd-nonprod0"
+      }
+    }
+  }
+
+  override_module {
+    target = module.account
+    outputs = {
+      account_id             = "222222222222"
+      account_arn            = "arn:aws:organizations::111111111111:account/o-abc1234567/222222222222"
+      cross_account_role_arn = "arn:aws:iam::222222222222:role/OrganizationAccountAccessRole"
+    }
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(module.tfc_oidc_baseline[0].template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyTrustPolicyUpdates"
+    ])
+    error_message = "tfc_enable_apply_trust_update_lock = false must remove the trust-update deny from the tfc-apply boundary."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(module.tfc_oidc_baseline[0].template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyForeignPolicyVersioning"
+    ])
+    error_message = "the opt-out must keep the other brownfield escalation denies in the boundary."
+  }
+}

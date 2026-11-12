@@ -29,7 +29,8 @@ locals {
   #   * break_glass_arns — break-glass only. Destructive actions (leave org,
   #     stop/delete CloudTrail, delete GuardDuty detector/members, disable
   #     Security Hub / Macie / Inspector, delete Access Analyzer, destroy or
-  #     untag protected KMS keys, change a protected key's policy). A pipeline
+  #     untag protected KMS keys, change a protected key's policy, retarget or
+  #     delete a protected key's alias). A pipeline
   #     compromise cannot perform these — in particular it cannot rewrite a
   #     protected key policy to grant itself kms:Decrypt. Consequence: Terraform
   #     key-policy changes to protected keys require a break-glass apply (the

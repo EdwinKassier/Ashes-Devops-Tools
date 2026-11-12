@@ -295,7 +295,7 @@ variable "tfc_apply_role_policy_arns" {
 }
 
 variable "tfc_enable_apply_permissions_boundary" {
-  description = "Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc_apply_permissions_boundary_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, creating IAM users/access keys, and (tfc_enable_apply_boundary_propagation) creating or granting to roles without the same boundary."
+  description = "Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc_apply_permissions_boundary_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, creating IAM users/access keys, IAM group and user policies, foreign policy versions, protected-key alias changes, (tfc_enable_apply_trust_update_lock) role trust updates, and (tfc_enable_apply_boundary_propagation) creating or granting to roles without the same boundary."
   type        = bool
   default     = true
 }
@@ -308,6 +308,12 @@ variable "tfc_apply_permissions_boundary_arn" {
 
 variable "tfc_enable_apply_boundary_propagation" {
   description = "Make the embedded tfc-apply boundary self-propagating (default true): tfc-apply can only create / grant to roles carrying the same boundary and can never remove a boundary, closing the create-unbounded-role escape. Every aws_iam_role created by tfc-apply in a member account must then set permissions_boundary to the tfc-apply-boundary ARN."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_enable_apply_trust_update_lock" {
+  description = "Deny iam:UpdateAssumeRolePolicy to every member-account tfc-apply role on every role, in the embedded tfc-apply-boundary (default true). Without it the pipeline could re-trust a pre-existing unbounded role to itself and assume it. New roles are unaffected; a trust change on an existing role needs break-glass or a replacement of the role."
   type        = bool
   default     = true
 }

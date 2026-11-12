@@ -466,6 +466,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `scripts/tests/test-phase0-template.sh` keeps the two lists equal. `TrustSecurityAndBackup`
   defaults to `"false"`, so a new stack lets only `aws-organization` apply as management admin.
   See `UPGRADING.md`.
+- **tfc-apply boundary closes brownfield escalation (SEC-9) and protected-key alias retargeting
+  (SEC-12, breaking).** Boundary propagation covered new roles only. A pre-existing unbounded role,
+  group or user stayed reachable. The embedded `tfc-apply-boundary` now denies
+  `iam:UpdateAssumeRolePolicy` on every role (`enable_apply_trust_update_lock`, default on; IAM does
+  not evaluate `iam:PermissionsBoundary` for that action), new versions of customer-managed
+  policies outside `/tfc-managed/`, IAM group and user policies, group membership and console
+  password changes. The boundary and the deny-tamper SCP deny `kms:UpdateAlias` and
+  `kms:DeleteAlias` on keys tagged `protected = true`, except for break-glass. See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

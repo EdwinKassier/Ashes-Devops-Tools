@@ -133,7 +133,7 @@ variable "break_glass_role_names" {
 }
 
 variable "kms_protection_tag_key" {
-  description = "Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = \"true\" cannot be scheduled for deletion, disabled, have rotation disabled or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection_tag_key)."
+  description = "Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = \"true\" cannot be scheduled for deletion, disabled, have rotation disabled, have an alias retargeted or deleted, or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection_tag_key)."
   type        = string
   default     = "protected"
 

@@ -511,6 +511,21 @@ The embedded `tfc-apply-boundary` (tfc-oidc-baseline) has a new statement, `Deny
 
 What changes for you: with central copy on, a Terraform change that deletes or replaces the copy vault's lock or access policy, or the vault itself, fails as the pipeline. Apply it as break-glass, within `changeable_for_days` for the lock. The tfc-oidc-baseline input `protected_backup_vault_names` lists the vaults; the organization stage keeps its default. `PutBackupVaultLockConfiguration` and `PutBackupVaultAccessPolicy` are not denied (docs/known-gaps.md).
 
+#### The tfc-apply boundary locks role trusts and foreign policy versions (aws-organization, breaking)
+
+**Breaking for trust changes on existing roles.** The embedded `tfc-apply-boundary` (tfc-oidc-baseline) has four changes. The next aws-organization apply updates the StackSet in every member account.
+
+- `DenyTrustPolicyUpdates` denies `iam:UpdateAssumeRolePolicy` on every role. A new role is unaffected, because `CreateRole` sets its trust.
+- `DenyForeignPolicyVersioning` denies `iam:CreatePolicyVersion` and `iam:SetDefaultPolicyVersion` outside `arn:<partition>:iam::<account>:policy/tfc-managed/*`.
+- `DenyGroupUserAndLoginProfileEscalation` denies `iam:CreateGroup`, group and user policies, `iam:AddUserToGroup` and `iam:UpdateLoginProfile`.
+- `DenyProtectedKeyTampering` also denies `kms:UpdateAlias` and `kms:DeleteAlias` when the current or the target key is tagged `protected = true`. The deny-tamper SCP (`DenyProtectedKeyDestruction`) denies the same two actions to every member principal except break-glass.
+
+What changes for you:
+
+- A Terraform change to the trust policy of an existing role in a member account fails as `tfc-apply`. Examples: a new GitHub `ref` or `environment` on an app-services deploy role, a changed `trust_policy` in `modules/aws/iam/iam-role`, or a new forensics account on the incident-response snapshot role. Apply the change as break-glass, or replace the role in the run (`-replace=<address>`). To turn the lock off, set `tfc_enable_apply_trust_update_lock = false` on the organization stage (`enable_apply_trust_update_lock` on tfc-oidc-baseline).
+- A customer-managed policy that `tfc-apply` creates and later changes must use `path = "/tfc-managed/"`. No module in this repo creates one.
+- Renaming the alias of a protected key, or pointing it at another key, needs break-glass. Creating the key and its alias together is unaffected.
+
 #### The deny-tamper SCP protects StackSet-owned policies (aws-organization)
 
 The new statement `DenyStackSetPolicyTampering` limits who can create, version, delete or tag `tfc-apply-boundary` and `tfc-plan-data-read-deny`. Only break-glass and the StackSet execution role can. Configure the names with `stackset_managed_policy_names`. An external boundary set through `apply_permissions_boundary_arn` is not covered.

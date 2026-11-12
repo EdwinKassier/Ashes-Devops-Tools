@@ -1016,3 +1016,25 @@ run "oversized_scp_override_fails_at_plan" {
 
   expect_failures = [aws_organizations_policy.policy]
 }
+
+run "protected_key_alias_retarget_is_break_glass_only" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement :
+      s.Sid == "DenyProtectedKeyDestruction" && contains(flatten([s.Action]), "kms:UpdateAlias") && contains(flatten([s.Action]), "kms:DeleteAlias") &&
+      try(s.Condition.StringEquals["aws:ResourceTag/protected"], "") == "true" &&
+      try(s.Condition.ArnNotLike["aws:PrincipalArn"], []) == ["arn:aws:iam::*:role/break-glass"]
+    ])
+    error_message = "retargeting or deleting the alias of a protected key must be denied to every member principal except break-glass."
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement :
+      contains(flatten([s.Action]), "kms:CreateAlias") || contains(flatten([s.Action]), "kms:CreateKey") if s.Effect == "Deny" && startswith(s.Sid, "DenyProtectedKey")
+    ])
+    error_message = "the protected-key statements must not deny CreateAlias or CreateKey (the kms-key module creates the key and its alias together)."
+  }
+}
