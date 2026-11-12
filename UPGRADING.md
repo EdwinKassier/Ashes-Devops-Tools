@@ -84,7 +84,8 @@ Trigger patterns now list each root's own module trees, not all of `modules/<clo
 - `tfc_admin_guard` also blocks (breaking: more tfc-admin runs need a security-team override):
   - `execution_mode = local` or `agent`, a repointed agent pool, and any agent pool, agent token or agent pool grant;
   - a changed VCS repository, branch or connection, `working_directory` or `project_id` on a control-plane, bootstrap or production workspace;
-  - a new or changed env var named `TFC_*`, `TF_CLI_ARGS*`, `TFE_*`, `TF_TOKEN_*` or one of the code-execution names (`LD_*`, `NODE_OPTIONS`, `GIT_*` and so on).
+  - a new or changed env var named `TFC_*`, `TF_CLI_ARGS*`, `TFE_*`, `TF_TOKEN_*` or one of the code-execution names (`LD_*`, `NODE_OPTIONS`, `GIT_*` and so on), or one with an unknown key or category;
+  - attaching a variable set that tfc-admin does not manage to a workspace or project, and making a variable set global.
 
   Expect an override when tfc-admin pass 2 wires dynamic credentials, when a role or service account behind a `TFC_*` variable changes, and when you set `TF_CLI_ARGS_plan` through `workspace_variables`. Moving `gcp-bootstrap` from `local` to `remote` needs none.
 - `tfc_vcs_run_only` (mandatory, overridable by the security team, PREVIEW) blocks a run that can apply on a VCS-connected workspace tagged `layer:control-plane`, `layer:bootstrap` or `tier:production` when the run has no commit SHA. Anyone who applies an API-uploaded configuration version on such a workspace now needs a security-team override. Speculative plans, CLI-driven workspaces and non-production workloads are not affected. Before you rely on it, confirm on a sandbox run that a VCS run carries a non-empty `run.commit_sha` (`docs/known-gaps.md`).
@@ -328,7 +329,9 @@ the tfc-admin owners review.
 the keys, when an env-category variable in `workspace_variables` or in
 `workspace_variables_file` is one of: `TERRAFORM_CONFIG`,
 `TF_CLI_CONFIG_FILE`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `GIT_*`,
-`BASH_ENV`, `ENV`, `PYTHON*` or `PATH`. Each one makes the run load or start
+`BASH_ENV`, `BASH_FUNC_*`, `ENV`, `SHELLOPTS`, `PS4`, `PYTHON*`, `PERL5OPT`,
+`PERL5LIB`, `RUBYOPT`, `RUBYLIB`, `JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`,
+`GCONV_PATH`, `SSH_ASKPASS*` or `PATH`. Each one makes the run load or start
 code that is not in the reviewed configuration. Before, `workspace_variables`
 accepted all of them, and the committed file accepted all but
 `TF_CLI_CONFIG_FILE`. The committed file now also rejects

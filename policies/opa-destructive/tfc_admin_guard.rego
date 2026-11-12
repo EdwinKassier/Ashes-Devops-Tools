@@ -322,15 +322,37 @@ deny contains msg if {
 	msg := sprintf("%s: plan points the workspace at agent pool %s; the security team must override this run if it is intended", [rc.address, pool])
 }
 
-# Only on tfe_workspace_settings, where tfc-admin sets both from variables.
-# On tfe_workspace both are deprecated computed attributes, unknown on every
-# new workspace, so only their known values are judged there.
+# Unknown values. On tfe_workspace both attributes are deprecated and
+# computed, so a create (or the create half of a replace) plans them unknown;
+# only an update is judged there. agent_pool_id is Optional+Computed on
+# tfe_workspace_settings too (tfe 0.83.0) and plans unknown on every create
+# with agent_pool_id = null, so it is judged only when the mode is agent or
+# itself unknown.
+unknown_judged(rc) if rc.type == "tfe_workspace_settings"
+
+unknown_judged(rc) if {
+	rc.type == "tfe_workspace"
+	not lib.creates(rc)
+}
+
+agent_or_unknown_mode(rc) if object.get(after_obj(rc), "execution_mode", null) == "agent"
+
+agent_or_unknown_mode(rc) if attr_unknown(rc, "execution_mode")
+
+unknown_execution_attr(rc, "execution_mode") if attr_unknown(rc, "execution_mode")
+
+unknown_execution_attr(rc, "agent_pool_id") if {
+	attr_unknown(rc, "agent_pool_id")
+	agent_or_unknown_mode(rc)
+}
+
 deny contains msg if {
 	some rc in lib.managed
-	rc.type == "tfe_workspace_settings"
+	rc.type in execution_types
 	lib.writes(rc)
+	unknown_judged(rc)
 	some attr in ["execution_mode", "agent_pool_id"]
-	attr_unknown(rc, attr)
+	unknown_execution_attr(rc, attr)
 	msg := sprintf("%s: %s is unknown at plan time, so the execution guard cannot check it; the security team must override this run if it is intended", [rc.address, attr])
 }
 
@@ -351,7 +373,8 @@ deny contains msg if {
 
 # ── Protected workspace wiring ──────────────────────────────────────────────
 # Where a control-plane, bootstrap or production workspace takes its code
-# from. Creation is not judged (the new workspace has no reviewed wiring yet).
+# from. A plain create is not judged (the new workspace has no reviewed wiring
+# yet); an update or a replace (a write with a prior object) is.
 vcs_source(obj) := [{
 	"identifier": object.get(v, "identifier", null),
 	"branch": object.get(v, "branch", null),
@@ -362,6 +385,11 @@ vcs_source(obj) := [{
 ]
 
 wiring_attrs := {"vcs_repo", "working_directory", "project_id"}
+
+rewrites(rc) if {
+	lib.writes(rc)
+	is_object(rc.change.before)
+}
 
 wiring(obj, "vcs_repo") := vcs_source(obj)
 
@@ -388,7 +416,7 @@ wiring_unknown(rc, attr) if {
 deny contains msg if {
 	some rc in lib.managed
 	rc.type == "tfe_workspace"
-	updates(rc)
+	rewrites(rc)
 	protected_workspace(rc)
 	some attr in wiring_attrs
 	not wiring_unknown(rc, attr)
@@ -399,7 +427,7 @@ deny contains msg if {
 deny contains msg if {
 	some rc in lib.managed
 	rc.type == "tfe_workspace"
-	updates(rc)
+	rewrites(rc)
 	protected_workspace(rc)
 	some attr in wiring_attrs
 	wiring_unknown(rc, attr)
@@ -411,7 +439,9 @@ deny contains msg if {
 # tfe provider and host tokens (TFE_*, TF_TOKEN_*). Exact names and patterns:
 # the code-execution set envs/tfc-admin refuses (code_exec_env_pattern). Keep
 # the two lists in step.
-steering_env_pattern := `^((TFC_|TF_CLI_ARGS|TFE_|TF_TOKEN_).*|TERRAFORM_CONFIG|TF_CLI_CONFIG_FILE|LD_[A-Z_]+|DYLD_[A-Z_]+|NODE_OPTIONS|NODE_PATH|GIT_[A-Z0-9_]+|BASH_ENV|ENV|PYTHON[A-Z_]+|PATH)$`
+# scripts/check-env-pattern-sync.sh fails when the part after
+# "TF_TOKEN_).*|" differs from code_exec_env_pattern in envs/tfc-admin.
+steering_env_pattern := `^((TFC_|TF_CLI_ARGS|TFE_|TF_TOKEN_).*|TERRAFORM_CONFIG|TF_CLI_CONFIG_FILE|LD_[A-Z_]+|DYLD_[A-Z_]+|NODE_OPTIONS|NODE_PATH|GIT_[A-Z0-9_]+|BASH_ENV|BASH_FUNC_.+|ENV|SHELLOPTS|PS4|PYTHON[A-Z_]+|PERL5OPT|PERL5LIB|RUBYOPT|RUBYLIB|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|GCONV_PATH|SSH_ASKPASS[A-Z_]*|PATH)$`
 
 steering_var(obj) if {
 	object.get(obj, "category", null) == "env"
@@ -433,10 +463,70 @@ var_changed(rc) if {
 	attr_unknown(rc, f)
 }
 
+# A written variable whose key or category is unknown cannot be checked.
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_variable"
+	lib.writes(rc)
+	some f in ["key", "category"]
+	attr_unknown(rc, f)
+	msg := sprintf("%s: the variable's %s is unknown at plan time, so the env var guard cannot check it; the security team must override this run if it is intended", [rc.address, f])
+}
+
 deny contains msg if {
 	some rc in lib.managed
 	rc.type == "tfe_variable"
 	var_changed(rc)
 	steering_var(after_obj(rc))
 	msg := sprintf("%s: plan writes the env var %s, which steers the run's credentials, the CLI or the runner; the security team must override this run if it is intended", [rc.address, after_obj(rc).key])
+}
+
+# ── Variable sets ───────────────────────────────────────────────────────────
+# The tfe_variable rule above judges every variable this configuration writes
+# into a set. A set managed elsewhere (made by hand in the UI) can hold any
+# key, so attaching it to a workspace or project is denied; so is a global
+# set, which reaches every workspace.
+managed_set_ids contains id if {
+	some rc in lib.managed
+	rc.type == "tfe_variable_set"
+	some obj in [before_obj(rc), after_obj(rc)]
+	id := object.get(obj, "id", null)
+	is_string(id)
+}
+
+creates_variable_set if {
+	some rc in lib.managed
+	rc.type == "tfe_variable_set"
+	lib.creates(rc)
+}
+
+variable_set_attachment_types := {"tfe_workspace_variable_set", "tfe_project_variable_set"}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in variable_set_attachment_types
+	lib.writes(rc)
+	set_id := object.get(after_obj(rc), "variable_set_id", null)
+	is_string(set_id)
+	not set_id in managed_set_ids
+	msg := sprintf("%s: plan attaches variable set %s, which this configuration does not manage, so its env vars are not judged; the security team must override this run if it is intended", [rc.address, set_id])
+}
+
+# An ID still unknown must belong to a set this plan creates.
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in variable_set_attachment_types
+	lib.writes(rc)
+	attr_unknown(rc, "variable_set_id")
+	not creates_variable_set
+	msg := sprintf("%s: the attached variable set is unknown at plan time and no variable set is created in this plan; the security team must override this run if it is intended", [rc.address])
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_variable_set"
+	lib.writes(rc)
+	object.get(after_obj(rc), "global", false) == true
+	object.get(before_obj(rc), "global", false) != true
+	msg := sprintf("%s: plan makes a variable set global, so its variables reach every workspace; the security team must override this run if it is intended", [rc.address])
 }

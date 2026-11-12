@@ -367,6 +367,9 @@ echo "==> Compliance matrices cite existing paths and unique IDs (scripts/check-
 echo "==> Production is decided by is_production only (scripts/check-production-rule.sh)"
 ./scripts/check-production-rule.sh >/dev/null || note "a root decides production from an environment name"
 
+echo "==> tfc-admin and tfc_admin_guard refuse the same code-execution env vars (scripts/check-env-pattern-sync.sh)"
+./scripts/check-env-pattern-sync.sh >/dev/null || note "code_exec_env_pattern (envs/tfc-admin/main.tf) and steering_env_pattern (policies/opa-destructive/tfc_admin_guard.rego) list different env vars"
+
 echo "==> check-jsonschema pin agrees across CI, setup.sh and pre-commit"
 cj_ci="$(grep -oE 'check-jsonschema==[0-9.]+' .github/workflows/terraform-plan.yml | head -1 | cut -d= -f3)"
 cj_pc="$(awk '/check-jsonschema$/{f=1} f && /rev:/{print $2; exit}' .pre-commit-config.yaml)"

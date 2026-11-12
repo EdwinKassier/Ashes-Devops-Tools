@@ -829,6 +829,8 @@ run "code_exec_env_pattern_covers_loader_and_interpreter_vars" {
       "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "NODE_OPTIONS", "NODE_PATH",
       "GIT_CONFIG_GLOBAL", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_SSH_COMMAND", "GIT_SSH", "GIT_ASKPASS",
       "BASH_ENV", "ENV", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME", "PATH",
+      "SHELLOPTS", "PS4", "BASH_FUNC_foo%%", "GCONV_PATH", "SSH_ASKPASS", "SSH_ASKPASS_REQUIRE",
+      "PERL5OPT", "PERL5LIB", "RUBYOPT", "RUBYLIB", "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS",
     ] : can(regex(local.code_exec_env_pattern, k)) && can(regex(local.reserved_env_pattern, k))])
     error_message = "an env var that runs other code is not reserved in both patterns."
   }
@@ -847,6 +849,7 @@ run "code_exec_env_pattern_covers_loader_and_interpreter_vars" {
       "TFE_TOKEN", "SUPABASE_ACCESS_TOKEN", "VERCEL_API_TOKEN", "TF_CLI_ARGS_plan", "TFC_AWS_APPLY_ROLE_ARN",
       "HTTPS_PROXY", "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS",
       "NODE_OPTIONS_X", "ENVIRONMENT", "APP_ENV", "PATHS", "MY_PATH", "LD", "GITHUB_REPO",
+      "HOME", "XDG_CONFIG_HOME", "PS1", "JAVA_HOME",
     ] : can(regex(local.code_exec_env_pattern, k))])
     error_message = "a documented workspace_variables env var or an ordinary name is refused."
   }

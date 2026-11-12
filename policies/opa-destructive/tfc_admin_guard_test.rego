@@ -310,3 +310,112 @@ test_ordinary_env_var_allowed if allowed(change("tfe_variable", ["create"], null
 test_terraform_input_named_tfc_allowed if allowed(change("tfe_variable", ["create"], null, var("TFC_note", "terraform", "x")))
 
 test_provider_token_env_var_allowed if allowed(change("tfe_variable", ["create"], null, object.union(var("SUPABASE_ACCESS_TOKEN", "env", null), {"sensitive": true, "value_wo_version": 1})))
+
+# ── Review fixes: unknown execution values, replaces, variable sets ─────────
+settings_unknown(actions, before, after, unknown) := {"plan": {"resource_changes": [{
+	"address": "tfe_workspace_settings.x",
+	"mode": "managed",
+	"type": "tfe_workspace_settings",
+	"change": {"actions": actions, "before": before, "after": after, "after_unknown": unknown},
+}]}}
+
+# tfe 0.83.0: agent_pool_id is Optional+Computed, unknown on every create.
+test_new_remote_settings_unknown_pool_allowed if allowed(settings_unknown(["create"], null, object.remove(settings("remote", null), ["agent_pool_id"]), {"agent_pool_id": true, "id": true}))
+
+test_new_agent_settings_unknown_pool_denied if {
+	inp := settings_unknown(["create"], null, object.remove(settings("agent", null), ["agent_pool_id"]), {"agent_pool_id": true})
+	count(p.deny) == 2 with input as inp
+}
+
+test_unknown_execution_mode_denied if denied(settings_unknown(["update"], settings("remote", null), object.remove(settings("remote", null), ["execution_mode"]), {"execution_mode": true}))
+
+test_unknown_mode_and_pool_denied if {
+	inp := settings_unknown(["update"], settings("remote", null), object.remove(settings("remote", null), ["execution_mode", "agent_pool_id"]), {"execution_mode": true, "agent_pool_id": true})
+	count(p.deny) == 2 with input as inp
+}
+
+ws_unknown(actions, before, unknown) := {"plan": {"resource_changes": [{
+	"address": "tfe_workspace.x",
+	"mode": "managed",
+	"type": "tfe_workspace",
+	"change": {"actions": actions, "before": before, "after": pws(["layer:workload"]), "after_unknown": unknown},
+}]}}
+
+test_workspace_update_unknown_execution_mode_denied if denied(ws_unknown(["update"], pws(["layer:workload"]), {"execution_mode": true}))
+
+# A replace re-plans the deprecated computed attributes, like a create.
+test_workspace_replace_unknown_execution_mode_allowed if allowed(ws_unknown(["delete", "create"], pws(["layer:workload"]), {"execution_mode": true, "agent_pool_id": true}))
+
+# M-2: a replace of a protected workspace is judged like an update.
+test_protected_replace_rewired_denied if denied(change("tfe_workspace", ["delete", "create"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"working_directory": "envs/attacker"})))
+
+test_protected_replace_same_wiring_allowed if allowed(change("tfe_workspace", ["delete", "create"], pws(["layer:control-plane"]), pws(["layer:control-plane"])))
+
+# M-1: an unknown key or category cannot be checked.
+var_unknown(unknown) := {"plan": {"resource_changes": [{
+	"address": "tfe_variable.x",
+	"mode": "managed",
+	"type": "tfe_variable",
+	"change": {"actions": ["create"], "before": null, "after": object.remove(var("APP", "env", "x"), object.keys(unknown)), "after_unknown": unknown},
+}]}}
+
+test_unknown_variable_key_denied if denied(var_unknown({"key": true}))
+
+test_unknown_variable_category_denied if denied(var_unknown({"category": true}))
+
+test_unknown_variable_value_ordinary_key_allowed if allowed(var_unknown({"value": true}))
+
+# M-4: residual interpreter and shell names.
+test_residual_exec_names_denied if {
+	every k in ["SHELLOPTS", "PS4", "BASH_FUNC_foo%%", "GCONV_PATH", "SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", "PERL5OPT", "PERL5LIB", "RUBYOPT", "RUBYLIB", "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS"] {
+		denied(change("tfe_variable", ["create"], null, var(k, "env", "x")))
+	}
+}
+
+test_home_not_denied if allowed(change("tfe_variable", ["create"], null, var("HOME", "env", "/home/x")))
+
+# M-3: variable sets.
+vs_attach(type, set_id) := {"plan": {"resource_changes": [
+	{
+		"address": "tfe_variable_set.common",
+		"mode": "managed",
+		"type": "tfe_variable_set",
+		"change": {"actions": ["no-op"], "before": {"id": "varset-common", "global": false}, "after": {"id": "varset-common", "global": false}, "after_unknown": {}},
+	},
+	{
+		"address": sprintf("%s.x", [type]),
+		"mode": "managed",
+		"type": type,
+		"change": {"actions": ["create"], "before": null, "after": {"variable_set_id": set_id, "workspace_id": "ws-1", "project_id": "prj-1"}, "after_unknown": {}},
+	},
+]}}
+
+test_attach_managed_set_allowed if allowed(vs_attach("tfe_workspace_variable_set", "varset-common"))
+
+test_attach_foreign_set_to_workspace_denied if denied(vs_attach("tfe_workspace_variable_set", "varset-handmade"))
+
+test_attach_foreign_set_to_project_denied if denied(vs_attach("tfe_project_variable_set", "varset-handmade"))
+
+test_attach_new_managed_set_allowed if {
+	inp := {"plan": {"resource_changes": [
+		{
+			"address": "tfe_variable_set.common",
+			"mode": "managed",
+			"type": "tfe_variable_set",
+			"change": {"actions": ["create"], "before": null, "after": {"global": false}, "after_unknown": {"id": true}},
+		},
+		{
+			"address": "tfe_workspace_variable_set.x",
+			"mode": "managed",
+			"type": "tfe_workspace_variable_set",
+			"change": {"actions": ["create"], "before": null, "after": {"workspace_id": "ws-1"}, "after_unknown": {"variable_set_id": true}},
+		},
+	]}}
+	allowed(inp)
+}
+
+test_variable_set_made_global_denied if denied(change("tfe_variable_set", ["update"], {"id": "varset-1", "global": false}, {"id": "varset-1", "global": true}))
+
+test_new_global_variable_set_denied if denied(change("tfe_variable_set", ["create"], null, {"name": "x", "global": true}))
+
+test_steering_var_in_variable_set_denied if denied(change("tfe_variable", ["create"], null, object.union(object.remove(var("TFC_AWS_PROVIDER_AUTH", "env", "true"), ["workspace_id"]), {"variable_set_id": "varset-1"})))

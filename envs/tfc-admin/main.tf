@@ -675,8 +675,10 @@ locals {
   # configuration: the CLI config file under either name (provider
   # installation, credentials helpers), the dynamic loader (LD_*, DYLD_*), the
   # interpreters the run starts (NODE_OPTIONS / NODE_PATH for the vault-secrets
-  # provisioner, PYTHON*), shell start-up files (BASH_ENV, ENV), git hooks and
-  # transports for module downloads (GIT_*) and PATH. Refused from both the
+  # provisioner, PYTHON*, PERL5*, RUBY*, JAVA options), shell start-up and
+  # tracing (BASH_ENV, BASH_FUNC_*, ENV, SHELLOPTS, PS4), glibc modules
+  # (GCONV_PATH), askpass helpers (SSH_ASKPASS*), git hooks and transports for
+  # module downloads (GIT_*) and PATH. Refused from both the
   # committed file and workspace_variables. A denylist, not an allowlist:
   # workspace_variables is documented to carry provider tokens (TFE_TOKEN,
   # SUPABASE_ACCESS_TOKEN, VERCEL_API_TOKEN), TF_CLI_ARGS_plan
@@ -684,7 +686,9 @@ locals {
   # (UPGRADING.md), and the committed file takes free-form env vars, so no
   # fixed list of names fits. tfc_admin_guard (overridable) flags TFC_* and
   # TF_CLI_ARGS* writes for the security team.
-  code_exec_env_pattern = "^(TERRAFORM_CONFIG|TF_CLI_CONFIG_FILE|LD_[A-Z_]+|DYLD_[A-Z_]+|NODE_OPTIONS|NODE_PATH|GIT_[A-Z0-9_]+|BASH_ENV|ENV|PYTHON[A-Z_]+|PATH)$"
+  # scripts/check-env-pattern-sync.sh keeps this list equal to the tail of
+  # steering_env_pattern in policies/opa-destructive/tfc_admin_guard.rego.
+  code_exec_env_pattern = "^(TERRAFORM_CONFIG|TF_CLI_CONFIG_FILE|LD_[A-Z_]+|DYLD_[A-Z_]+|NODE_OPTIONS|NODE_PATH|GIT_[A-Z0-9_]+|BASH_ENV|BASH_FUNC_.+|ENV|SHELLOPTS|PS4|PYTHON[A-Z_]+|PERL5OPT|PERL5LIB|RUBYOPT|RUBYLIB|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|GCONV_PATH|SSH_ASKPASS[A-Z_]*|PATH)$"
   # The committed file must not steer credentials, the CLI or HTTPS either:
   # dynamic-credential env vars (TFC_*), CLI argument injection
   # (TF_CLI_ARGS*), host tokens (TF_TOKEN_*), the tfe provider's host and
@@ -1118,11 +1122,11 @@ resource "terraform_data" "input_contract" {
     }
     precondition {
       condition     = length(local.file_reserved_entries) == 0
-      error_message = "workspace_variables_file sets reserved environment variables: ${join(", ", local.file_reserved_entries)}. Dynamic-credential (TFC_*), CLI (TF_CLI_ARGS*, TF_CLI_CONFIG_FILE, TERRAFORM_CONFIG, TF_TOKEN_*, TF_*), TFE_*, provider-auth, loader and interpreter (LD_*, DYLD_*, NODE_*, PYTHON*, GIT_*, BASH_ENV, ENV, PATH), proxy and CA (SSL_CERT_*, NODE_EXTRA_CA_CERTS) env vars never come from the committed file: tfc-admin derives the credential ones, and workspace_variables may set the credential, CLI-argument, proxy and CA ones (not the loader or interpreter ones)."
+      error_message = "workspace_variables_file sets reserved environment variables: ${join(", ", local.file_reserved_entries)}. Dynamic-credential (TFC_*), CLI (TF_CLI_ARGS*, TF_CLI_CONFIG_FILE, TERRAFORM_CONFIG, TF_TOKEN_*, TF_*), TFE_*, provider-auth, loader, shell and interpreter (LD_*, DYLD_*, NODE_*, PYTHON*, PERL5*, RUBY*, JAVA options, GIT_*, BASH_ENV, BASH_FUNC_*, ENV, SHELLOPTS, PS4, GCONV_PATH, SSH_ASKPASS*, PATH), proxy and CA (SSL_CERT_*, NODE_EXTRA_CA_CERTS) env vars never come from the committed file: tfc-admin derives the credential ones, and workspace_variables may set the credential, CLI-argument, proxy and CA ones (not the loader or interpreter ones)."
     }
     precondition {
       condition     = length(local.workspace_variables_exec_entries) == 0
-      error_message = "workspace_variables sets environment variables that make the run execute other code: ${join(", ", local.workspace_variables_exec_entries)}. TERRAFORM_CONFIG, TF_CLI_CONFIG_FILE, LD_*, DYLD_*, NODE_OPTIONS, NODE_PATH, GIT_*, BASH_ENV, ENV, PYTHON* and PATH are refused on every workspace."
+      error_message = "workspace_variables sets environment variables that make the run execute other code: ${join(", ", local.workspace_variables_exec_entries)}. TERRAFORM_CONFIG, TF_CLI_CONFIG_FILE, LD_*, DYLD_*, NODE_OPTIONS, NODE_PATH, GIT_*, BASH_ENV, BASH_FUNC_*, ENV, SHELLOPTS, PS4, PYTHON*, PERL5OPT, PERL5LIB, RUBYOPT, RUBYLIB, JAVA_TOOL_OPTIONS, _JAVA_OPTIONS, GCONV_PATH, SSH_ASKPASS* and PATH are refused on every workspace."
     }
     precondition {
       condition     = length(local.file_sensitive_entries) == 0
