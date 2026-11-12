@@ -532,6 +532,17 @@ remaining="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_clo
     if (section == "saas" && !saas) next
     print NR ":" $0
   }' "${OUTPUT}")"
+# Values the scaffolder derived from --domain / --prefix (group emails, the
+# platform team's subnet). They look real but nothing checked that they exist.
+derived="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v admin="${GCP_ADMIN_EMAIL}" '
+  /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  /^[[:space:]]*#/ { next }
+  section == "gcp" && gcp && /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/ && !/@example\.com/ {
+    if (admin != "" && index($0, admin) > 0) next
+    print NR ":" $0
+  }
+  section == "gcp" && gcp && /subnet_name:/ { print NR ":" $0 }
+' "${OUTPUT}")"
 cat <<EOF
 
 Next steps:
@@ -541,6 +552,11 @@ EOF
 if [[ -n "${remaining}" ]]; then
   printf '     Still placeholders (the plan rejects them until replaced):\n'
   printf '%s\n' "${remaining}" | sed 's/^/       line /'
+fi
+if [[ -n "${derived}" ]]; then
+  printf '     Derived, not verified (each group must exist in Cloud Identity and each\n'
+  printf '     subnet in the environment before the first apply):\n'
+  printf '%s\n' "${derived}" | sed 's/^/       line /'
 fi
 cat <<EOF
   2. Commit it: git add ${OUTPUT#"${REPO_ROOT}/"} && git commit -m "config: landing zone"

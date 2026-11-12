@@ -357,6 +357,10 @@ out3="${workdir}/gcp-only.yaml"
 if bash "${SCRIPT}" --non-interactive --output "${out3}" --org-name acme --tfc-org acme-tfc --clouds gcp --domain acme.com \
   </dev/null >"${log}" 2>&1; then
   assert_no_line "${log}" 'example\.com, ou:' "AWS account emails not reported on a gcp-only run"
+  assert_line "${log}" 'Derived, not verified' "derived values are reported"
+  assert_line "${log}" 'gcp-organization-admins@acme\.com' "derived admin group is listed"
+  assert_line "${log}" 'gcp-break-glass@acme\.com' "derived break-glass group is listed"
+  assert_line "${log}" 'subnet_name: acme-dev-vpc-private-' "derived subnet name is listed"
 else
   fail "gcp-only run exits 0"; cat "${log}" >&2
 fi
