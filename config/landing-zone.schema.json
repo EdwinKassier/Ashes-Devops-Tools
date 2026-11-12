@@ -1246,6 +1246,19 @@
         "enabled": {
           "type": "boolean"
         },
+        "layers": {
+          "type": "array",
+          "description": "Optional AWS layer workspaces to create besides aws-organization and aws-security (tfc-admin), and whose OIDC trust bindings aws-organization creates. Absent = all four. Without network, aws-workload-<env> runs a standalone VPC unless aws.contracts.network is set.",
+          "items": {
+            "enum": [
+              "network",
+              "identity",
+              "shared-services",
+              "backup"
+            ]
+          },
+          "uniqueItems": true
+        },
         "management_account_id": {
           "type": "string"
         },

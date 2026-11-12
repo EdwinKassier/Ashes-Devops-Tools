@@ -156,8 +156,8 @@ run "tfc_project_default_without_config_prefix" {
   }
 
   assert {
-    condition     = local.tfc_project == "landing-zone-aws" && length(local.tfc_workspace_bindings) == 6
-    error_message = "with no config file tfc_project defaults to landing-zone-aws (tfc-admin's default AWS project) and only the foundational bindings exist."
+    condition     = local.tfc_project == "landing-zone-aws" && keys(local.tfc_workspace_bindings) == tolist(["log_archive"])
+    error_message = "with no config file tfc_project defaults to landing-zone-aws (tfc-admin's default AWS project) and only the foundational bindings of accounts that exist are kept."
   }
 }
 
@@ -486,4 +486,44 @@ run "tag_policy_required_types_rejects_bad_entry" {
   }
 
   expect_failures = [var.tag_policy_required_resource_types]
+}
+
+# Minimum AWS footprint: aws.layers: [] and no network / backup accounts. The
+# OIDC trust bindings keep only accounts that exist and workspaces that
+# tfc-admin creates, and no management role pair is made for aws-backup.
+run "minimum_footprint_binds_only_present_layers" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-minimal.yaml"
+  }
+
+  assert {
+    condition     = !contains(keys(local.tfc_workspace_bindings), "network") && !contains(keys(local.tfc_workspace_bindings), "backup")
+    error_message = "Accounts that do not exist must get no tfc_workspace_bindings entry."
+  }
+
+  assert {
+    condition     = !contains(keys(local.tfc_workspace_bindings), "shared_services")
+    error_message = "Without the identity and shared-services layers the shared_services account must bind no workspace."
+  }
+
+  assert {
+    condition     = join(",", local.tfc_workspace_bindings["security_tooling"].workspaces) == "aws-security" && join(",", local.tfc_workspace_bindings["workload_prod"].workspaces) == "aws-workload-prod"
+    error_message = "aws-security and the workload bindings must stay."
+  }
+
+  assert {
+    condition     = join(",", keys(local.tfc_management_workspaces)) == "aws-security"
+    error_message = "Without the backup layer only aws-security gets a dedicated management role pair."
+  }
+}
+
+run "absent_layers_keep_every_binding" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for a in ["network", "shared_services", "backup"] : contains(keys(local.tfc_workspace_bindings), a)]) && join(",", local.tfc_workspace_bindings["shared_services"].workspaces) == "aws-identity,aws-shared-services" && join(",", keys(local.tfc_management_workspaces)) == "aws-backup,aws-security"
+    error_message = "Without aws.layers every foundational binding and both management role pairs must stay."
+  }
 }

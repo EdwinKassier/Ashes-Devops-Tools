@@ -60,6 +60,9 @@ locals {
     # <prefix>aws-workloads; the workload accounts' OIDC trust must name it.
     split_workload_projects = try(tobool(local.lz.org.tfc.split_workload_projects), false)
     tfc_workloads_project   = try(tostring(local.lz.org.tfc.aws_workloads_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws-workloads")
+    # aws.layers: the optional AWS layer workspaces tfc-admin creates (absent =
+    # all four). Their OIDC trust bindings and management role pairs follow it.
+    aws_layers = try([for l in local.lz.aws.layers : tostring(l)], ["network", "identity", "shared-services", "backup"])
     # Accounts normalised to the attribute types of var.accounts.
     accounts          = { for k, a in try({ for k, a in local.lz.aws.accounts : k => a }, {}) : k => local.normalise_account[k] }
     workload_accounts = { for k, a in try({ for k, a in local.lz.aws.workload_accounts : k => a }, {}) : k => local.normalise_account[k] }
@@ -184,16 +187,31 @@ locals {
     "aws_managed",
   )
   member_backup_dr_region = var.member_backup_dr_region != null ? var.member_backup_dr_region : local.cfg.backup_dr_region
+  # The workspaces tfc-admin creates for the foundational accounts:
+  # aws-security always, the other layers per aws.layers.
+  layer_workspace_bindings = {
+    for acct, wss in local.default_workspace_bindings : acct => [
+      for ws in wss : ws if ws == "aws-security" || contains(local.cfg.aws_layers, trimprefix(ws, "aws-"))
+    ]
+  }
   # Foundational bindings + the workload bindings derived from the config file;
-  # an explicit var.tfc_workspace_bindings replaces both.
+  # an explicit var.tfc_workspace_bindings replaces both. Only accounts that
+  # exist (accounts / workload_accounts) and still bind a workspace get one.
   tfc_workspace_bindings = var.tfc_workspace_bindings != null ? var.tfc_workspace_bindings : {
-    for acct in distinct(concat(keys(local.default_workspace_bindings), keys(local.cfg.workload_bindings))) : acct => {
-      workspaces = distinct(concat(lookup(local.default_workspace_bindings, acct, []), lookup(local.cfg.workload_bindings, acct, [])))
+    for acct in distinct(concat(keys(local.layer_workspace_bindings), keys(local.cfg.workload_bindings))) : acct => {
+      workspaces = distinct(concat(lookup(local.layer_workspace_bindings, acct, []), lookup(local.cfg.workload_bindings, acct, [])))
       # Workload-only accounts trust the workloads project when it is split out.
       project = (
         local.cfg.split_workload_projects && length(lookup(local.default_workspace_bindings, acct, [])) == 0
         ? local.cfg.tfc_workloads_project : null
       )
     }
+    if contains(keys(merge(local.accounts, local.workload_accounts)), acct) &&
+    length(distinct(concat(lookup(local.layer_workspace_bindings, acct, []), lookup(local.cfg.workload_bindings, acct, [])))) > 0
+  }
+  # Dedicated management role pairs: aws-security always, aws-backup only with
+  # the backup layer.
+  tfc_management_workspaces = {
+    for ws in ["aws-security", "aws-backup"] : ws => {} if ws == "aws-security" || contains(local.cfg.aws_layers, "backup")
   }
 }

@@ -330,10 +330,17 @@ locals {
 
   # The managed workspaces: the enabled clouds' entries, each per_environment
   # family expanded into <key>-<env> (environment = null for the others).
+  # aws-organization and aws-security are always created with AWS; the other
+  # AWS layers follow aws_layers (aws.layers). Every grant, trigger, consumer
+  # edge and variable below derives from this map, so a dropped layer leaves
+  # no trace.
+  aws_required_layers = ["aws-organization", "aws-security"]
   workspaces = merge(
     {
       for k, e in local.catalog_entries : k => merge(e, { environment = null })
-      if !e.per_environment && local.catalog_cloud_enabled[e.cloud]
+      if !e.per_environment && local.catalog_cloud_enabled[e.cloud] && (
+        e.cloud != "aws" || contains(local.aws_required_layers, k) || contains(local.aws_layers, trimprefix(k, "aws-"))
+      )
     },
     merge([
       for k, e in local.catalog_entries : {
@@ -603,8 +610,12 @@ locals {
 
   # Workload roots declare var.environment; set it from the workspace name so the
   # env is never hand-typed. aws-workload-<env> also gets workload_account_key
-  # when environments[env].aws_account_key is set. Overridable via
-  # workspace_variables (or the committed workspace_variables_file).
+  # when environments[env].aws_account_key is set, and enable_network_hub =
+  # false when there is no aws-network workspace and no aws.contracts.network
+  # (aws_workload_standalone): in hub mode the root reads aws-network's state.
+  # Overridable via workspace_variables (or the committed
+  # workspace_variables_file); aws_workloads_needing_network rejects an
+  # override back to hub mode.
   derived_terraform_vars = merge(
     {
       for ws in local.saas_workspace_names : ws => {
@@ -622,9 +633,20 @@ locals {
         try(local.aws_environments[local.workspaces[ws].environment].aws_account_key, null) == null ? {} : {
           workload_account_key = { value = local.aws_environments[local.workspaces[ws].environment].aws_account_key, category = "terraform", hcl = false, sensitive = false, description = "aws-organization account key this workload deploys into (environments[*].aws_account_key or aws.workload_environments[*].account_key)." }
         },
+        !local.aws_workload_standalone ? {} : {
+          enable_network_hub = { value = "false", category = "terraform", hcl = true, sensitive = false, description = "Standalone VPC: aws.layers has no network layer, so there is no aws-network workspace to attach to." }
+        },
       )
     },
   )
+
+  # aws-workload-<env> in hub mode (enable_network_hub, default true) reads the
+  # aws-network state unless aws.contracts.network supplies the contract.
+  aws_workload_standalone = !contains(local.aws_layers, "network") && !local.cfg.aws_network_contract
+  aws_workloads_needing_network = sort([
+    for ws in local.aws_workload_names : ws
+    if local.aws_workload_standalone && try(lower(trim(local.workspace_vars[ws].enable_network_hub.value, " \t\r\n\"'")), "true") != "false"
+  ])
 
   # ── Committed per-workspace variables (VCS-driven runs) ───────────────────
   workspace_variables_file_path = var.workspace_variables_file == null ? null : (
@@ -1142,6 +1164,10 @@ resource "terraform_data" "input_contract" {
     precondition {
       condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_outside_aws_pool) == 0 && length(local.cidr_pool_issues) == 0
       error_message = "config/landing-zone.yaml address plan conflicts (docs/architecture/cidr-plan.md: GCP 10.0.0.0/12, AWS 10.64.0.0/10, one regional pool per region): ${join("; ", concat(local.cidr_overlaps, local.cidr_outside_aws_top, local.cidr_outside_aws_pool, local.cidr_pool_issues))}. Give every aws.workload_environments entry its own vpc_cidr inside aws.network.regional_cidrs.<org.regions.aws> or one of its aws.network.regional_additional_cidrs, and keep aws.network.vpn.onprem_cidrs clear of every cloud range."
+    }
+    precondition {
+      condition     = length(local.aws_workloads_needing_network) == 0
+      error_message = "aws-workload-<env> in hub mode reads the aws-network workspace's state, but aws.layers (aws_layers) has no network layer: ${join(", ", local.aws_workloads_needing_network)}. Add network to aws.layers, set aws.contracts.network, or drop the enable_network_hub override (tfc-admin sets enable_network_hub = false without the network layer)."
     }
     precondition {
       condition     = length(local.file_bad_categories) == 0

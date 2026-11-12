@@ -91,6 +91,11 @@ locals {
     enable_aws      = try(tobool(local.lz.aws.enabled), null)
     enable_saas     = try(tobool(local.lz.saas.enabled), null)
     saas_workspaces = try([for n in local.lz.saas.workspaces : tostring(n)], null)
+    # aws.layers: the optional AWS layer workspaces (null = key absent).
+    aws_layers = try([for l in local.lz.aws.layers : tostring(l)], null)
+    # aws.contracts.network: aws-workload-<env> takes the hub contract from the
+    # config file and reads no aws-network state.
+    aws_network_contract = try(local.lz.aws.contracts.network, null) != null
     # gcp-workload-<env> per gcp.environments key; aws-workload-<env> per
     # aws.workload_environments key (with its account key).
     gcp_environment_keys = try(keys(local.lz.gcp.environments), [])
@@ -115,12 +120,17 @@ locals {
   # Effective values. Required ones fall back to an inert sentinel only so
   # static tools (tflint) can evaluate the root; the variable validations reject
   # the unset case first.
-  tfc_organization    = coalesce(var.tfc_organization, local.cfg.tfc_organization, "unset")
-  gcp_project_prefix  = var.gcp_project_prefix != null ? var.gcp_project_prefix : local.cfg.gcp_project_prefix
-  enable_gcp          = var.enable_gcp != null ? var.enable_gcp : coalesce(local.cfg.enable_gcp, false)
-  enable_aws          = var.enable_aws != null ? var.enable_aws : coalesce(local.cfg.enable_aws, false)
-  enable_saas         = var.enable_saas != null ? var.enable_saas : coalesce(local.cfg.enable_saas, false)
-  saas_workspaces     = var.saas_workspaces != null ? var.saas_workspaces : coalesce(local.cfg.saas_workspaces, [])
+  tfc_organization   = coalesce(var.tfc_organization, local.cfg.tfc_organization, "unset")
+  gcp_project_prefix = var.gcp_project_prefix != null ? var.gcp_project_prefix : local.cfg.gcp_project_prefix
+  enable_gcp         = var.enable_gcp != null ? var.enable_gcp : coalesce(local.cfg.enable_gcp, false)
+  enable_aws         = var.enable_aws != null ? var.enable_aws : coalesce(local.cfg.enable_aws, false)
+  enable_saas        = var.enable_saas != null ? var.enable_saas : coalesce(local.cfg.enable_saas, false)
+  saas_workspaces    = var.saas_workspaces != null ? var.saas_workspaces : coalesce(local.cfg.saas_workspaces, [])
+  # Optional AWS layers (aws-<layer> workspaces); absent = all four, so an
+  # existing estate keeps every workspace.
+  aws_layers = var.aws_layers != null ? var.aws_layers : (
+    local.cfg.aws_layers != null ? local.cfg.aws_layers : ["network", "identity", "shared-services", "backup"]
+  )
   project_name_prefix = var.project_name_prefix != null ? var.project_name_prefix : coalesce(local.cfg.project_name_prefix, "landing-zone-")
   vcs_repo            = var.vcs_repo != null ? var.vcs_repo : local.cfg.vcs_repo
   tfc_plan            = var.tfc_plan != null ? var.tfc_plan : local.cfg.tfc_plan

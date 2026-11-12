@@ -64,12 +64,39 @@ The GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network
 
 ### Minimum AWS footprint
 
-The minimum governed, monitored AWS baseline is:
+The minimum governed, monitored AWS baseline is `aws-organization` + `aws-security`, with
+four member accounts (`log_archive`, `security_tooling`, `forensics`, `shared_services`) plus
+the management account. Ask tfc-admin for only those workspaces:
 
-```text
-aws-organization   # foundational accounts + org structure
-aws-security       # security tooling, log archive, guardrails
+```yaml
+aws:
+  layers: []            # any of: network, identity, shared-services, backup (absent = all four)
+  accounts:             # keep only the accounts the chosen layers need
+    log_archive: {email: ..., ou: Security}
+    security_tooling: {email: ..., ou: Security}
+    forensics: {email: ..., ou: Security}
+    shared_services: {email: ..., ou: Infrastructure}
 ```
+
+`shared_services` stays in the minimum: `aws-organization` registers it as the IAM Identity
+Center delegated administrator, and `aws-security` reads its account ID. `network` needs the
+`network` account, and `backup` needs the `backup` account. `identity` and `shared-services`
+use `shared_services`. Accounts come only from `aws.accounts` and `aws.workload_accounts`:
+`aws.layers` creates or removes no account, so list or remove them yourself
+(`scripts/aws-preflight.sh` counts what you list).
+
+`aws.layers` decides which `aws-<layer>` workspaces tfc-admin creates (the variable
+`aws_layers` overrides it). A dropped layer has no workspace, run trigger, remote-state
+grant, team grant, drift entry or `TFC_AWS_*` variable. `aws-organization` reads the same key:
+it binds the OIDC trust of a foundational account only to workspaces that exist, and makes
+the dedicated management role pair for `aws-backup` only with the `backup` layer.
+
+`aws-workload-<env>` in hub mode reads the `aws-network` state. Without the `network` layer,
+tfc-admin sets `enable_network_hub = false` on every `aws-workload-<env>` (a standalone VPC),
+unless `aws.contracts.network` supplies the hub contract. tfc-admin fails the plan when a
+workload is set back to hub mode with neither the `network` layer nor that contract. No
+other AWS layer reads another optional layer: `aws-identity`, `aws-shared-services` and
+`aws-backup` read only `aws-organization`.
 
 ### Within a cloud: the layers are a dependency DAG, not independent add-ons
 

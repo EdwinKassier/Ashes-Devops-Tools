@@ -404,6 +404,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 - Root templates (`templates/aws/root`, `templates/shared/cloud-root`) now carry the root conventions:
   `config.tf`, a contract-gated remote-state read and a `tests/` suite. `templates/**` suites run in CI.
 - `scripts/check-consistency.sh` reports (does not fail on) single-platform `.terraform.lock.hcl` files.
+- **Minimum AWS footprint: `aws.layers`.** The config key (tfc-admin variable `aws_layers`) lists
+  the optional AWS layer workspaces: `network`, `identity`, `shared-services`, `backup`. Absent =
+  all four, so an existing estate keeps every workspace. `aws.layers: []` gives only `aws-organization`
+  and `aws-security`. tfc-admin drops every grant, trigger and variable of a dropped layer, and
+  sets `enable_network_hub = false` on `aws-workload-<env>` without `network`. `aws-organization`
+  binds OIDC trust only for accounts and workspaces that exist. See
+  `docs/architecture/provider-selection.md`.
 
 ### Security
 

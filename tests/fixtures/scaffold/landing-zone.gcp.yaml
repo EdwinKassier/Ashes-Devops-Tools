@@ -316,6 +316,12 @@ gcp:
 aws:
   # tfc-admin declares the aws-* workspaces only when true.
   enabled: false
+  # Optional AWS layer workspaces besides aws-organization and aws-security
+  # (always created): network, identity, shared-services, backup. Absent = all
+  # four. [] is the minimum footprint. Then keep only the accounts the chosen
+  # layers need (docs/architecture/provider-selection.md). Without network,
+  # tfc-admin sets enable_network_hub = false on every aws-workload-<env>.
+  # layers: [network, identity, shared-services, backup]
   # 12-digit management (payer) account ID, QUOTED (aws-organization,
   # aws-security, aws-backup).
   management_account_id: "123456789012"

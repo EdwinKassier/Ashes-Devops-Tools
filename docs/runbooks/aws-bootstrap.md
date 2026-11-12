@@ -280,13 +280,13 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 6. **Apply `aws-security`.** Security tooling, log archive, org CloudTrail, GuardDuty, Security Hub, Config aggregator — the second half of the minimum governed baseline.
 
-7. **Apply `aws-network`.** Shared networking (TGW, resolver, shared VPC constructs) in the network account.
+7. **Apply `aws-network`** (skip if `network` is not in `aws.layers`). Shared networking (TGW, resolver, shared VPC constructs) in the network account.
 
-8. **Apply `aws-identity`.** Permission sets and account assignments, now that Identity Center is delegated (gate in step 3).
+8. **Apply `aws-identity`** (skip if `identity` is not in `aws.layers`). Permission sets and account assignments, now that Identity Center is delegated (gate in step 3).
 
-9. **Apply `aws-shared-services`** *(optional / gated).* Shared platform services; apply only if you need them.
+9. **Apply `aws-shared-services`** *(optional / gated; skip if `shared-services` is not in `aws.layers`).* Shared platform services; apply only if you need them.
 
-10. **Apply `aws-backup`.** Centralized AWS Backup vaults and plans. A production scaffold turns on the locked central copy. Its Compliance-mode Vault Lock becomes irreversible after `changeable_for_days` (default 3). Read [UPGRADING.md](../../UPGRADING.md#central-backup-copy-to-a-locked-vault-opt-in-irreversible-lock-aws-backup) before you apply.
+10. **Apply `aws-backup`** (skip if `backup` is not in `aws.layers`). Centralized AWS Backup vaults and plans. A production scaffold turns on the locked central copy. Its Compliance-mode Vault Lock becomes irreversible after `changeable_for_days` (default 3). Read [UPGRADING.md](../../UPGRADING.md#central-backup-copy-to-a-locked-vault-opt-in-irreversible-lock-aws-backup) before you apply.
 
 11. **Apply `aws-workload-<env>`** *(per environment).* Select the env with `TF_WORKSPACE=aws-workload-<env>`. Each apply stands up that env's spoke VPC, workload roles and per-account baseline. It also creates a Transit Gateway attachment that waits in `pendingAcceptance`. Repeat per environment.
 

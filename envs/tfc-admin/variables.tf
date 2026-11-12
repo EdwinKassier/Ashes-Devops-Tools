@@ -71,6 +71,20 @@ variable "enable_aws" {
   default     = null
 }
 
+variable "aws_layers" {
+  description = "Optional AWS layer workspaces to create besides aws-organization and aws-security (always created when enable_aws): any of network, identity, shared-services, backup. aws-workload-<env> follows aws.workload_environments. Without network, tfc-admin sets enable_network_hub = false on every aws-workload-<env> (standalone VPC) unless aws.contracts.network supplies the hub contract. Null = aws.layers from config/landing-zone.yaml, else all four."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition = alltrue([
+      for l in(var.aws_layers != null ? var.aws_layers : (local.cfg.aws_layers != null ? local.cfg.aws_layers : [])) :
+      contains(["network", "identity", "shared-services", "backup"], l)
+    ])
+    error_message = "aws_layers (else aws.layers in config/landing-zone.yaml) entries must be network, identity, shared-services or backup."
+  }
+}
+
 variable "enable_saas" {
   description = "Declare one saas-<name> workspace (working dir envs/saas) per saas_workspaces entry. Null = saas.enabled from config/landing-zone.yaml, else false."
   type        = bool

@@ -30,6 +30,7 @@ module "aws_organization" {
   tfc_hostname                     = var.tfc_hostname
   pin_tfc_federation_to_org        = var.pin_tfc_federation_to_org
   enable_tfc_management_roles      = var.enable_tfc_management_roles
+  tfc_management_workspaces        = local.tfc_management_workspaces
   enable_security_service_teardown = var.enable_security_service_teardown
   guard_alert_emails               = local.guard_alert_emails
 

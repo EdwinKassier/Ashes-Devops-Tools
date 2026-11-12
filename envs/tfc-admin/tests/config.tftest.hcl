@@ -512,3 +512,124 @@ run "onprem_prefixes_clear_of_aws_ranges_pass" {
     error_message = "On-premises prefixes clear of every AWS and GCP range must pass, and they are not held to top_cidr or the pool."
   }
 }
+
+# ── aws.layers: the minimum AWS footprint ──────────────────────────────────
+# aws.layers: [] keeps aws-organization and aws-security (always created) and
+# the aws-workload-<env> family; the four optional layers, and every grant,
+# trigger and consumer edge that names them, drop out.
+run "aws_layers_empty_creates_only_organization_and_security" {
+  command = plan
+
+  variables {
+    landing_zone_config_path        = "tests/fixtures/landing-zone-aws-minimal.yaml"
+    platform_team_id                = "team-platform1"
+    drift_team_id                   = "team-drift1"
+    control_plane_approvers_team_id = "team-approvers1"
+    saas_approvers_team_id          = "team-saasapprove1"
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in ["aws-network", "aws-identity", "aws-shared-services", "aws-backup"] : !contains(keys(local.workspaces), ws)
+    ]) && contains(keys(local.workspaces), "aws-organization") && contains(keys(local.workspaces), "aws-security")
+    error_message = "aws.layers: [] must create aws-organization and aws-security only (plus aws-workload-<env>)."
+  }
+
+  assert {
+    condition     = contains(keys(local.workspaces), "aws-workload-dev") && contains(keys(local.workspaces), "aws-workload-staging")
+    error_message = "aws.layers must not change the aws-workload-<env> family (aws.workload_environments)."
+  }
+
+  # No run trigger, remote-state edge or drift entry names a dropped layer.
+  assert {
+    condition     = length([for k in keys(local.run_trigger_pairs) : k if can(regex("aws-(network|identity|shared-services|backup)", k))]) == 0 && contains(keys(local.run_trigger_pairs), "aws-security->aws-workload-dev")
+    error_message = "Run triggers must keep aws-security -> aws-workload-<env> and drop every edge of a dropped layer."
+  }
+  assert {
+    condition     = !contains(keys(local.consumer_names), "aws-network") && !contains(output.drift_workspaces, "aws-network") && !contains(output.drift_workspaces, "aws-backup")
+    error_message = "A dropped layer must have no remote-state consumers and no drift entry."
+  }
+
+  # Without aws-network the workloads run standalone: tfc-admin sets
+  # enable_network_hub = false on them.
+  assert {
+    condition     = local.workspace_vars["aws-workload-dev"]["enable_network_hub"].value == "false" && local.workspace_vars["aws-workload-dev"]["enable_network_hub"].hcl == true && local.workspace_vars["aws-workload-staging"]["enable_network_hub"].value == "false"
+    error_message = "Without the network layer every aws-workload-<env> must get enable_network_hub = false (HCL)."
+  }
+}
+
+run "aws_layers_absent_keeps_every_layer" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+  }
+
+  assert {
+    condition     = alltrue([for ws in ["aws-network", "aws-identity", "aws-shared-services", "aws-backup"] : contains(keys(local.workspaces), ws)])
+    error_message = "Without aws.layers every AWS layer workspace must exist."
+  }
+
+  assert {
+    condition     = !contains(keys(local.workspace_vars["aws-workload-dev"]), "enable_network_hub") && contains(keys(local.run_trigger_pairs), "aws-network->aws-workload-dev")
+    error_message = "With the network layer the workloads keep hub mode and the aws-network run trigger."
+  }
+}
+
+# An explicit aws_layers wins over aws.layers in the config file.
+run "aws_layers_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-aws-minimal.yaml"
+    aws_layers               = ["network", "backup"]
+  }
+
+  assert {
+    condition     = contains(keys(local.workspaces), "aws-network") && contains(keys(local.workspaces), "aws-backup") && !contains(keys(local.workspaces), "aws-identity") && !contains(keys(local.workspaces), "aws-shared-services")
+    error_message = "aws_layers = [network, backup] must create aws-network and aws-backup only among the optional layers."
+  }
+}
+
+run "aws_layers_rejects_unknown_layer" {
+  command = plan
+
+  variables {
+    aws_layers = ["networking"]
+  }
+
+  expect_failures = [var.aws_layers]
+}
+
+# aws-workload-<env> in hub mode reads aws-network's state: without that
+# workspace (and without aws.contracts.network) hub mode cannot plan.
+run "aws_layers_without_network_rejects_hub_mode_workloads" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-aws-minimal.yaml"
+    workspace_variables = {
+      "aws-workload-dev" = { enable_network_hub = { value = "true", hcl = true } }
+    }
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# aws.contracts.network supplies the hub contract, so the workloads read no
+# aws-network state and keep hub mode.
+run "aws_layers_without_network_keeps_hub_mode_with_a_network_contract" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-aws-minimal-contract.yaml"
+    workspace_variables = {
+      "aws-workload-dev" = { enable_network_hub = { value = "true", hcl = true } }
+    }
+  }
+
+  assert {
+    condition     = !contains(keys(local.workspaces), "aws-network") && !contains(keys(local.workspace_vars["aws-workload-staging"]), "enable_network_hub")
+    error_message = "With aws.contracts.network tfc-admin must not force standalone mode."
+  }
+}
