@@ -18,5 +18,11 @@ aws:
       account_ids:
         network: "066666666666"
   network:
-    egress_domain_allowlist: [.amazonaws.com, .github.com, .githubusercontent.com, .terraform.io]
+    egress_domain_allowlist:
+      - api.ecr.eu-west-2.amazonaws.com
+      - .dkr.ecr.eu-west-2.amazonaws.com
+      - secretsmanager.eu-west-2.amazonaws.com
+      - .github.com
+      - .githubusercontent.com
+      - .terraform.io
     stateful_default_actions: [aws:drop_established, aws:alert_established]

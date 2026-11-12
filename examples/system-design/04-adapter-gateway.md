@@ -629,8 +629,8 @@ Notes:
   list; never replace it. The network hub's interface endpoints default to
   `ec2`, `ssm`, `ssmmessages`, `ec2messages`, `kms`, `logs` and `sts`, and the
   stage does not expose that list (gap), so AppConfig and Secrets Manager need
-  the allowlist (or `.amazonaws.com`, as the repo's production allowlist test
-  fixture uses).
+  the allowlist. Do not use `.amazonaws.com` instead: it admits every S3 bucket
+  and AWS API in any account, and aws-network warns on it.
 - The literal `encryption_key_name` creates no Terraform dependency on
   `module.workload_cmek`, so the first apply can race the key and its grant:
   apply the key first, or target it.

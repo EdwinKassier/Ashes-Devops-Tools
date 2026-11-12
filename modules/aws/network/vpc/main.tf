@@ -163,13 +163,17 @@ resource "aws_flow_log" "this" {
   tags = merge(var.tags, { Name = "${var.name}-flow-log" })
 }
 
-# Gateway endpoints (S3, DynamoDB) keep that traffic on the AWS backbone.
+# Gateway endpoints (S3, DynamoDB) keep that traffic on the AWS backbone. They
+# bypass the hub egress firewall, so a caller that enforces egress passes an
+# endpoint policy per service (gateway_endpoint_policies).
 resource "aws_vpc_endpoint" "gateway" {
   for_each = toset(var.gateway_endpoints)
 
   vpc_id            = aws_vpc.this.id
   service_name      = "com.amazonaws.${var.region}.${each.value}"
   vpc_endpoint_type = "Gateway"
+  # null = no policy argument: AWS attaches its default full-access policy.
+  policy = lookup(var.gateway_endpoint_policies, each.value, null)
 
   tags = merge(var.tags, { Name = "${var.name}-${each.value}" })
 }

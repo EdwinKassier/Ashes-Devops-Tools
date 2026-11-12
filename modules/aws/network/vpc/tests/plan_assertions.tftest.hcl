@@ -249,3 +249,23 @@ run "allocation_outside_subnet_math_is_reported" {
 
   expect_failures = [check.ipam_allocation_matches_subnet_math]
 }
+
+# ARC-2: a gateway endpoint carries the policy given for its service. (A
+# service without an entry sends no policy; the provider then reports the AWS
+# default as a computed value, which a mocked plan cannot assert on.)
+run "gateway_endpoint_policy_per_service" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+    gateway_endpoint_policies = {
+      s3 = jsonencode({ Version = "2012-10-17", Statement = [{ Sid = "OrgOnly", Effect = "Allow", Principal = "*", Action = "s3:*", Resource = "*", Condition = { StringEquals = { "aws:ResourceOrgID" = "o-abc1234567" } } }] })
+    }
+  }
+
+  assert {
+    condition     = jsondecode(aws_vpc_endpoint.gateway["s3"].policy).Statement[0].Condition.StringEquals["aws:ResourceOrgID"] == "o-abc1234567"
+    error_message = "the s3 gateway endpoint must carry the s3 policy"
+  }
+
+}

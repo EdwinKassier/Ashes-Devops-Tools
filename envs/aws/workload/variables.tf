@@ -677,3 +677,16 @@ variable "app_alarm_sns_topic_arn" {
   type        = string
   default     = null
 }
+
+variable "enable_gateway_endpoint_policies" {
+  description = "Limit the spoke's S3 and DynamoDB gateway endpoints, which bypass the hub egress firewall, to resources of this organization (aws:ResourceOrgID) and the documented AWS-owned buckets of the region (ECR image layers, Amazon Linux repositories, SSM Agent, Patch Manager) plus gateway_endpoint_extra_s3_arns. Null = on in production (is_production), off elsewhere. Needs the organization_id of the aws-organization contract."
+  type        = bool
+  default     = null
+}
+
+variable "gateway_endpoint_extra_s3_arns" {
+  description = "Further S3 object ARNs (arn:aws:s3:::<bucket>/*) that workloads may read through the S3 gateway endpoint when gateway endpoint policies are on: AWS-owned buckets of other services, or a partner bucket outside the organization. Exact bucket names only."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}

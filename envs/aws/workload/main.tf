@@ -92,6 +92,19 @@ locals {
     local.read_network ? try(local.network_remote.resolver_profile_id, null) : local.network_contract.resolver_profile_id
   )
 
+  # Organization ID for the gateway endpoint policies (ARC-2). try(): an
+  # organization contract without the key leaves it null, and the
+  # gateway_endpoint_policy_inputs precondition fails the plan when it is needed.
+  organization_id = (
+    local.read_organization ?
+    try(local.org_remote.organization_id, null) :
+    try(local.organization_contract.organization_id, null)
+  )
+
+  # ARC-2: production S3 / DynamoDB gateway endpoints reach only organization
+  # resources and the documented AWS-owned buckets (explicit variable wins).
+  enable_gateway_endpoint_policies = coalesce(var.enable_gateway_endpoint_policies, local.is_production)
+
   # The central log-archive bucket name comes from aws-security (its owner) unless
   # a contract supplies it, so a rename there cannot silently leave this
   # workload writing to a stale bucket.
@@ -158,10 +171,31 @@ module "aws_workload" {
   enable_edge    = var.enable_edge
   workload_roles = var.workload_roles
 
+  # ARC-2: the S3 / DynamoDB gateway endpoints bypass the hub egress firewall.
+  # Passed on only with an organization ID, so a missing ID fails at
+  # terraform_data.gateway_endpoint_policy_inputs with the config key named.
+  enable_gateway_endpoint_policies = local.enable_gateway_endpoint_policies && local.organization_id != null
+  organization_id                  = local.organization_id
+  gateway_endpoint_extra_s3_arns   = var.gateway_endpoint_extra_s3_arns
+
   # CMP-3: weekly patch install on the account's SSM-managed instances.
   enable_patch_install     = var.enable_patch_install
   patch_install_target_tag = var.patch_install_target_tag
   patch_operating_systems  = var.patch_operating_systems
+}
+
+# Gateway endpoint policies need the organization ID. Fail closed: a
+# production workload (or one that sets enable_gateway_endpoint_policies) never
+# silently keeps full-access S3 and DynamoDB endpoints.
+resource "terraform_data" "gateway_endpoint_policy_inputs" {
+  input = local.enable_gateway_endpoint_policies
+
+  lifecycle {
+    precondition {
+      condition     = !local.enable_gateway_endpoint_policies || local.organization_id != null
+      error_message = "Gateway endpoint policies are on (production, or enable_gateway_endpoint_policies = true) but the organization ID is unknown. Set aws.contracts.organization.organization_id in config/landing-zone.yaml (or organization_contract.organization_id), or apply aws-organization so its contract output carries organization_id. To keep full-access endpoints, set enable_gateway_endpoint_policies = false."
+    }
+  }
 }
 
 # App ingress mode: internal (default) | public_alb | cloudfront_vpc_origin.

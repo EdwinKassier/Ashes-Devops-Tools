@@ -23,7 +23,7 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   workload_account_key     = "workload_dev"
-  organization_contract    = { account_ids = { workload_dev = "222222222222" } }
+  organization_contract    = { organization_id = "o-abc1234567", account_ids = { workload_dev = "222222222222" } }
   network_contract         = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } }
   security_contract        = { log_archive_bucket_name = "acme-org-log-archive" }
   services                 = { orders = {} }

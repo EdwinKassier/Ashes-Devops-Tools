@@ -41,3 +41,23 @@ run "resolver_profile_id_must_be_a_profile_id" {
 
   expect_failures = [var.resolver_profile_id]
 }
+
+run "gateway_endpoint_policies_need_organization_id" {
+  command = plan
+
+  variables {
+    enable_gateway_endpoint_policies = true
+  }
+
+  expect_failures = [var.organization_id]
+}
+
+run "organization_id_format_checked" {
+  command = plan
+
+  variables {
+    organization_id = "org-123"
+  }
+
+  expect_failures = [var.organization_id]
+}

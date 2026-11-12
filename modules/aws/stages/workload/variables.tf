@@ -344,3 +344,38 @@ variable "enable_vpc_bpa_exclusion" {
   type        = bool
   default     = false
 }
+
+variable "enable_gateway_endpoint_policies" {
+  description = "Attach endpoint policies to the spoke's S3 and DynamoDB gateway endpoints, which bypass the hub egress firewall: each service only on resources of the organization (aws:ResourceOrgID = organization_id), AWS service principals, and (S3) read-only access to the documented AWS-owned buckets of aws_region (ECR image layers, Amazon Linux repositories, SSM Agent, Patch Manager) plus gateway_endpoint_extra_s3_arns. Requires organization_id. Default false: no policy, so AWS applies full access. The aws-workload root turns it on for production."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "organization_id" {
+  description = "AWS Organizations ID (o-...) that the gateway endpoint policies require as aws:ResourceOrgID. Required when enable_gateway_endpoint_policies is true."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.organization_id == null || can(regex("^o-[a-z0-9]{10,32}$", coalesce(var.organization_id, "o-0000000000")))
+    error_message = "organization_id must be an AWS Organizations ID such as o-abc1234567."
+  }
+
+  validation {
+    condition     = !var.enable_gateway_endpoint_policies || var.organization_id != null
+    error_message = "enable_gateway_endpoint_policies needs organization_id (the aws-organization contract organization_id)."
+  }
+}
+
+variable "gateway_endpoint_extra_s3_arns" {
+  description = "Further S3 object ARNs (for example arn:aws:s3:::<bucket>/*) that workloads may read (s3:GetObject) through the S3 gateway endpoint when enable_gateway_endpoint_policies is true: AWS-owned buckets of services this stage does not list, or a partner bucket outside the organization. Use exact bucket names."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.gateway_endpoint_extra_s3_arns : can(regex("^arn:aws(-us-gov|-cn|-eusc)?:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](/.*)?$", a))])
+    error_message = "gateway_endpoint_extra_s3_arns entries must be S3 ARNs with an exact bucket name (arn:aws:s3:::<bucket>/<key pattern>)."
+  }
+}

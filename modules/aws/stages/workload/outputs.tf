@@ -62,3 +62,8 @@ output "patch_install_targets" {
   description = "Targets of the weekly patch install association (key and values): InstanceIds * for every managed instance, or tag:<key> when patch_install_target_tag is set. Null when the install is off."
   value       = try(module.systems_manager[0].patch_install_targets, null)
 }
+
+output "gateway_endpoint_policies" {
+  description = "Endpoint policy JSON per gateway endpoint service (s3, dynamodb) when enable_gateway_endpoint_policies is true; {} when off (AWS default full access)."
+  value       = local.gateway_endpoint_policies
+}

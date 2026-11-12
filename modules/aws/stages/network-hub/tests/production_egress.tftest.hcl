@@ -126,7 +126,7 @@ run "production_allowlist_without_drop_fails" {
 
   variables {
     enforce_egress_allowlist                 = true
-    network_firewall_egress_domain_allowlist = [".amazonaws.com"]
+    network_firewall_egress_domain_allowlist = [".github.com"]
   }
 
   expect_failures = [terraform_data.production_egress_enforced]
@@ -149,8 +149,21 @@ run "production_profile_with_seeded_allowlist_plans" {
   variables {
     enforce_egress_allowlist                  = true
     network_firewall_stateful_default_actions = ["aws:drop_established", "aws:alert_established"]
-    network_firewall_egress_domain_allowlist  = [".amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]
+    network_firewall_egress_domain_allowlist  = ["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]
   }
+}
+
+# ARC-2: ".amazonaws.com" admits every S3 bucket and AWS API in any account.
+run "allowlist_with_all_of_amazonaws_warns" {
+  command = plan
+
+  variables {
+    enforce_egress_allowlist                  = true
+    network_firewall_stateful_default_actions = ["aws:drop_established", "aws:alert_established"]
+    network_firewall_egress_domain_allowlist  = [".amazonaws.com", ".github.com"]
+  }
+
+  expect_failures = [check.egress_allowlist_not_all_of_aws]
 }
 
 run "starter_profile_unaffected" {

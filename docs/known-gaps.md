@@ -1068,6 +1068,26 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   - An enforced VPC-SC perimeter that restricts `backupdr.googleapis.com` or
     `sqladmin.googleapis.com` still lets the service agent back up.
 
+- **Organization-only gateway endpoint policies (ARC-2, on in production).**
+  A production `aws-workload-<env>` puts endpoint policies on its S3 and
+  DynamoDB gateway endpoints (`enable_gateway_endpoint_policies`, NET-12):
+  `aws:ResourceOrgID` equals the organization ID, AWS service principals, and
+  read-only access to the AWS-owned buckets that AWS documents for ECR image
+  layers, Amazon Linux, SSM Agent and Patch Manager (bucket names checked
+  2026-11-12). Mock-tested only. Prove in a sandbox with `is_production: true`:
+  - An ECS task pulls a private ECR image (layers from
+    `prod-<region>-starport-layer-bucket`), and an Amazon Linux 2023 instance
+    runs `dnf` and an SSM patch scan, through the gateway endpoint.
+  - DynamoDB calls to a table in the organization pass, and calls to a table
+    in another organization are denied. AWS lists no S3 or DynamoDB action as
+    unsupported for `aws:ResourceOrgID`, but no AWS page shows a DynamoDB
+    gateway endpoint policy that uses it.
+  - Writes to a bucket outside the organization (for example a third-party
+    upload bucket) are denied; add such buckets to
+    `gateway_endpoint_extra_s3_arns` only for reads.
+  - Patch Manager bucket names have a per-region suffix copied from the AWS
+    reference; a region missing from the map gets a `check` warning.
+
 - **Resource-organization policy on the hub interface endpoints**
   (`aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`,
   `modules/aws/network/vpc-endpoints` `endpoint_policy_mode`, CMP-7 D8). It adds

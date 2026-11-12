@@ -473,8 +473,18 @@ aws:
     # eu-west-2a/b/c, of which az_count = 2 uses a and b). Before you set IDs
     # on an existing estate, read UPGRADING.md: a changed zone replaces subnets.
     # availability_zone_ids: [euw2-az2, euw2-az3]
+    # Never list .amazonaws.com: it admits every S3 bucket and every AWS API
+    # in any account, so data can leave through the firewall. The hub
+    # interface endpoints already serve ec2, ssm, ssmmessages, ec2messages,
+    # kms, logs and sts, and the spoke S3 and DynamoDB gateway endpoints carry
+    # organization-only policies in production. List only the regional AWS
+    # APIs your workloads call that have no endpoint. The default app golden
+    # path (ECS on Fargate pulling from ECR, secrets from Secrets Manager)
+    # needs these three:
     egress_domain_allowlist:
-      - .amazonaws.com
+      - api.ecr.eu-west-2.amazonaws.com
+      - .dkr.ecr.eu-west-2.amazonaws.com
+      - secretsmanager.eu-west-2.amazonaws.com
       - .github.com
       - .githubusercontent.com
       - .terraform.io

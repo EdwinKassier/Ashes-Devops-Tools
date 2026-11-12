@@ -192,7 +192,7 @@ run "production_profile_with_seeded_allowlist_plans" {
   }
 
   assert {
-    condition     = local.enforce_egress_allowlist == true && length(local.network_firewall_egress_domain_allowlist) == 4
+    condition     = local.enforce_egress_allowlist == true && length(local.network_firewall_egress_domain_allowlist) == 6
     error_message = "production must enforce the allowlist and read it from config."
   }
 }

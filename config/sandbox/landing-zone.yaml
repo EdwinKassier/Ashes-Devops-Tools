@@ -101,8 +101,12 @@ aws:
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
   network:
+    # No .amazonaws.com (it admits every S3 bucket): only the regional AWS
+    # APIs without an endpoint that the app golden path calls.
     egress_domain_allowlist:
-      - .amazonaws.com
+      - api.ecr.eu-west-2.amazonaws.com
+      - .dkr.ecr.eu-west-2.amazonaws.com
+      - secretsmanager.eu-west-2.amazonaws.com
       - .github.com
       - .githubusercontent.com
       - .terraform.io

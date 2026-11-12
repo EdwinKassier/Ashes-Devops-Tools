@@ -122,7 +122,7 @@ The following resources are created:
 - resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L325)
 - resource.aws_sns_topic_subscription.alarm_email (modules/aws/stages/network-hub/alarms.tf#L80)
 - resource.aws_vpc_ipam_pool_cidr_allocation.hub_static (modules/aws/stages/network-hub/main.tf#L156)
-- resource.terraform_data.hybrid_needs_inspection (modules/aws/stages/network-hub/main.tf#L521)
+- resource.terraform_data.hybrid_needs_inspection (modules/aws/stages/network-hub/main.tf#L533)
 - resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L504)
 
 

@@ -15,7 +15,9 @@
 #                            literal vpc_cidr or allocated from the shared IPAM
 #                            pool (ipam_pool_id). Gateway endpoints for s3 +
 #                            dynamodb keep that traffic off the TGW (associated
-#                            with the module-owned non-public route tables).
+#                            with the module-owned non-public route tables);
+#                            enable_gateway_endpoint_policies limits them to
+#                            organization resources and AWS-owned buckets.
 #   - spoke routes         — the configured tiers (var.tgw_route_tiers, default
 #                            private) route var.tgw_destination_cidrs (default
 #                            0.0.0.0/0 -> centralized egress/inspection) to the
@@ -121,8 +123,10 @@ module "vpc" {
   ipam_pool_id             = var.ipam_pool_id
   ipam_allocation          = local.ipam_allocation
   gateway_endpoints        = ["s3", "dynamodb"]
-  routes                   = local.spoke_routes
-  tags                     = var.tags
+  # ARC-2: org-only S3/DynamoDB when enabled (gateway_endpoint_policies.tf).
+  gateway_endpoint_policies = local.gateway_endpoint_policies
+  routes                    = local.spoke_routes
+  tags                      = var.tags
 }
 
 # ---------------------------------------------------------------------------

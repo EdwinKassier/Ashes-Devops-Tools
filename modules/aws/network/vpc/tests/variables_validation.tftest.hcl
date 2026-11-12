@@ -120,3 +120,26 @@ run "rejects_unknown_partition_flow_log_arn" {
 
   expect_failures = [var.flow_log_destination_arn]
 }
+
+run "gateway_endpoint_policy_for_absent_endpoint_rejected" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn  = "arn:aws:s3:::example-log-archive-bucket"
+    gateway_endpoints         = ["s3"]
+    gateway_endpoint_policies = { dynamodb = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+  }
+
+  expect_failures = [var.gateway_endpoint_policies]
+}
+
+run "gateway_endpoint_policy_must_be_json" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn  = "arn:aws:s3:::example-log-archive-bucket"
+    gateway_endpoint_policies = { s3 = "not json" }
+  }
+
+  expect_failures = [var.gateway_endpoint_policies]
+}

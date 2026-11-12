@@ -549,8 +549,10 @@ default to `ec2`, `ssm`, `ssmmessages`, `ec2messages`, `kms`, `logs` and `sts`
 ([`modules/aws/network/vpc-endpoints/variables.tf`](../../modules/aws/network/vpc-endpoints/variables.tf)),
 with no SNS or SQS. Broker calls therefore leave through central inspection,
 and a fail-closed production firewall must allow them. The example
-`aws.network.egress_domain_allowlist` entry `.amazonaws.com` does; a narrowed
-list must keep the Regional `sns.` and `sqs.` hostnames.
+`aws.network.egress_domain_allowlist` names only the ECR and Secrets Manager
+hostnames, so add the Regional `sns.<region>.amazonaws.com` and
+`sqs.<region>.amazonaws.com` hostnames. Do not add `.amazonaws.com`: it admits
+every S3 bucket and AWS API in any account, and aws-network warns on it.
 
 ### Config
 

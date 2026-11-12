@@ -568,6 +568,27 @@ What to do:
 2. Update the stack with the new template (`aws cloudformation deploy` keeps your parameter values). The policy takes effect only after this update.
 3. To change the three phase-0 roles later, update the stack as a human administrator, not as `tfc-mgmt-apply`.
 
+#### Production gateway endpoints reach only organization resources (aws-workload, breaking)
+
+**Breaking for production workloads that use S3 or DynamoDB outside the organization.** The S3 and DynamoDB gateway endpoints of a spoke route that traffic past the hub egress firewall. With `is_production: true`, the next `aws-workload-<env>` plan now adds endpoint policies (in place, no replacement):
+
+- S3 and DynamoDB are allowed only on resources whose account is in the organization (`aws:ResourceOrgID`), and for requests by AWS service principals.
+- S3 also allows `s3:GetObject` on the AWS-owned buckets of the region that AWS documents for ECR image layers, Amazon Linux 2 and 2023 repositories, SSM Agent and Patch Manager.
+
+Requests from the VPC to any other bucket or table (a public dataset, a vendor bucket, a presigned URL to another organization) are denied. The organization ID comes from the `aws-organization` contract. A plan with no `organization_id` there (an old state, or an `aws.contracts.organization` block without it) fails at `terraform_data.gateway_endpoint_policy_inputs` and names the key.
+
+What to do before the plan:
+
+1. Make sure the organization ID reaches the root: re-apply `aws-organization`, or add `organization_id` under `aws.contracts.organization` in `config/landing-zone.yaml`.
+2. List the S3 buckets outside the organization that production workloads read through the VPC (VPC flow logs or S3 server access logs). Add each as `arn:aws:s3:::<bucket>/*` to `gateway_endpoint_extra_s3_arns` (read-only).
+3. If a workload must write outside the organization, or you cannot list the buckets yet, set `enable_gateway_endpoint_policies = false` on that workspace and record why.
+
+Non-production workloads keep full-access endpoints unless they set `enable_gateway_endpoint_policies = true`.
+
+#### `.amazonaws.com` in the egress allowlist warns (aws-network)
+
+`aws.network.egress_domain_allowlist` no longer lists `.amazonaws.com` in `config/landing-zone.example.yaml`. That entry admits every S3 bucket and AWS API in any account. aws-network now warns (a `check`, the plan still passes) when the list contains `.amazonaws.com`, `amazonaws.com` or `*.amazonaws.com`. Replace it with the regional service names your workloads call that have no VPC endpoint. For the default app golden path these are `api.ecr.<region>.amazonaws.com`, `.dkr.ecr.<region>.amazonaws.com` and `secretsmanager.<region>.amazonaws.com`. The hub interface endpoints serve `ec2`, `ssm`, `ssmmessages`, `ec2messages`, `kms`, `logs` and `sts`. With `aws:drop_established`, a call to any other AWS API that is not listed is dropped, so check the firewall ALERT logs after the change.
+
 #### Log-archive retention and lock mode from config (aws-security)
 
 The log-archive bucket retention is now set from `compliance.audit_log_retention_days` in `config/landing-zone.yaml`, the same key as the GCP audit bucket. `aws_overrides.log_archive_retention_days` wins over it. With neither set it stays 365 days, and the plan does not change. `aws_overrides.log_archive_object_lock_mode` sets the Object Lock mode for new objects (default `COMPLIANCE`).

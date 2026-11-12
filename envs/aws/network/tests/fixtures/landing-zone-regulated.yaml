@@ -21,6 +21,6 @@ aws:
       account_ids:
         network: "066666666666"
   network:
-    egress_domain_allowlist: [.amazonaws.com]
+    egress_domain_allowlist: [api.ecr.eu-west-2.amazonaws.com]
     stateful_default_actions: [aws:drop_established, aws:alert_established]
     vpc_endpoint_policy_mode: org_principals_and_resources

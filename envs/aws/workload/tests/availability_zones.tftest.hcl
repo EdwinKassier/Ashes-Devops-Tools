@@ -22,7 +22,7 @@ variables {
   kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
   enable_network_hub       = false
 
-  organization_contract = { account_ids = { workload_dev = "222222222222" } }
+  organization_contract = { organization_id = "o-abc1234567", account_ids = { workload_dev = "222222222222" } }
   security_contract     = { log_archive_bucket_name = "acme-org-log-archive" }
 }
 
@@ -159,7 +159,7 @@ run "network_zone_ids_apply_when_the_environment_sets_none" {
     landing_zone_config_path = "tests/fixtures/landing-zone-azs.yaml"
     workload_account_key     = "workload_prod"
     environment              = "prod"
-    organization_contract    = { account_ids = { workload_prod = "333333333333" } }
+    organization_contract    = { organization_id = "o-abc1234567", account_ids = { workload_prod = "333333333333" } }
   }
 
   override_data {

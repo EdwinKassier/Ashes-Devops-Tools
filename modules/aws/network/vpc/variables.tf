@@ -134,6 +134,23 @@ variable "gateway_endpoints" {
   default     = ["s3", "dynamodb"]
 }
 
+variable "gateway_endpoint_policies" {
+  description = "Endpoint policy (JSON string) per gateway endpoint service, keyed like gateway_endpoints (e.g. s3, dynamodb). A service without an entry gets no policy argument, so AWS applies its default full-access policy. Build the JSON with jsonencode."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for k in keys(var.gateway_endpoint_policies) : contains(var.gateway_endpoints, k)])
+    error_message = "Every gateway_endpoint_policies key must be a service listed in gateway_endpoints."
+  }
+
+  validation {
+    condition     = alltrue([for k, v in var.gateway_endpoint_policies : can(jsondecode(v).Statement)])
+    error_message = "Every gateway_endpoint_policies value must be a JSON policy document with a Statement."
+  }
+}
+
 variable "gateway_endpoint_tiers" {
   description = "Subnet tiers whose route tables the gateway endpoints are associated with. null (default) associates them with every non-public tier."
   type        = list(string)

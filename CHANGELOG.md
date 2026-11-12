@@ -609,6 +609,16 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   and assuming `OrganizationAccountAccessRole`, with the same actions as the dedicated
   `tfc-management-roles`. `tfc-mgmt-apply` keeps `AdministratorAccess` (`docs/known-gaps.md`).
   Operators must update the stack. See `UPGRADING.md`.
+- **Production gateway endpoints reach only organization resources (ARC-2, breaking, PREVIEW).**
+  The spoke S3 and DynamoDB gateway endpoints bypass the hub egress firewall. A production
+  `aws-workload-<env>` (or one with `enable_gateway_endpoint_policies = true`) now gives them
+  endpoint policies: each service only on resources of the organization (`aws:ResourceOrgID`),
+  AWS service principals, and `s3:GetObject` on the AWS-owned buckets that AWS documents for ECR
+  image layers, Amazon Linux, SSM Agent and Patch Manager, plus `gateway_endpoint_extra_s3_arns`.
+  The plan fails when the organization ID is missing. `modules/aws/network/vpc` takes
+  `gateway_endpoint_policies` (JSON per service). The example egress allowlist drops
+  `.amazonaws.com` for regional ECR and Secrets Manager names, and aws-network warns when the list
+  still contains it. See `UPGRADING.md`.
 
 ### Changed
 

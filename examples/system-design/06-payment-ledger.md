@@ -533,7 +533,9 @@ aws:
   network:
     stateful_default_actions: ["aws:drop_established", "aws:alert_established"] # fail closed, log drops
     egress_domain_allowlist: # org-wide: append to the existing list, never replace it
-      - .amazonaws.com
+      - api.ecr.<region>.amazonaws.com # image pulls (no interface endpoint)
+      - .dkr.ecr.<region>.amazonaws.com
+      - secretsmanager.<region>.amazonaws.com
       - api.stripe.com # the PSP API
   workload_environments:
     prod:

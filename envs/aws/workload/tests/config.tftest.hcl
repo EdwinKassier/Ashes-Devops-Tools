@@ -27,6 +27,7 @@ override_data {
   values = {
     outputs = {
       contract = {
+        organization_id   = "o-abc1234567"
         account_ids       = { workload_nonprod = "222222222222", workload_prod = "333333333333" }
         account_role_arns = { workload_nonprod = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
       }
@@ -150,6 +151,7 @@ run "scaffold_aws_plans" {
     values = {
       outputs = {
         contract = {
+          organization_id   = "o-abc1234567"
           account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
           account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
         }
@@ -172,6 +174,7 @@ run "scaffold_gcp_aws_plans" {
     values = {
       outputs = {
         contract = {
+          organization_id   = "o-abc1234567"
           account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
           account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
         }
@@ -194,6 +197,7 @@ run "scaffold_gcp_aws_saas_plans" {
     values = {
       outputs = {
         contract = {
+          organization_id   = "o-abc1234567"
           account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
           account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
         }

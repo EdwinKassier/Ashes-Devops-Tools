@@ -516,6 +516,18 @@ resource "terraform_data" "production_egress_enforced" {
   }
 }
 
+# ARC-2: ".amazonaws.com" (or "amazonaws.com") in the allowlist admits every
+# S3 bucket and every AWS API in any account, so the allowlist stops nothing
+# that goes to AWS. List the regional service names that have no endpoint
+# instead (config/landing-zone.example.yaml). A warning, so an estate that
+# still carries the old example keeps planning.
+check "egress_allowlist_not_all_of_aws" {
+  assert {
+    condition     = length(setintersection(var.network_firewall_egress_domain_allowlist, [".amazonaws.com", "amazonaws.com", "*.amazonaws.com"])) == 0
+    error_message = "network_firewall_egress_domain_allowlist (config aws.network.egress_domain_allowlist) contains .amazonaws.com, which admits every S3 bucket and AWS API in any account. Replace it with the regional service names your workloads call that have no VPC endpoint, for example api.ecr.<region>.amazonaws.com, .dkr.ecr.<region>.amazonaws.com and secretsmanager.<region>.amazonaws.com."
+  }
+}
+
 # The hybrid table sends on-premises traffic to inspection, which forwards
 # nothing without the firewall. Starter estates cannot run the VPN.
 resource "terraform_data" "hybrid_needs_inspection" {
