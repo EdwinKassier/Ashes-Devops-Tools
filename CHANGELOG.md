@@ -567,12 +567,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   new `production_vpc_sc_dry_run_waiver = { reason, expires }` lets a first rollout plan until its
   `expires` date (UTC). After that date the plan fails again. See `UPGRADING.md`.
 - **Control-plane and production applies run only code from VCS (SEC-1, PREVIEW).** The new
-  mandatory `tfc_vcs_run_only` rule in the hard-gate `policies/opa` set denies a run that can
+  mandatory `tfc_vcs_run_only` rule in the overridable `policies/opa-destructive` set denies a run that can
   apply on a VCS-connected workspace tagged `layer:control-plane`, `layer:bootstrap` or
   `tier:production` when it has no `run.commit_sha`. An approver can no longer upload a
-  configuration version through the API and confirm it without a pull request. Speculative plans
-  and CLI-driven workspaces are not affected. The field is checked against the HCP Terraform docs
-  only: confirm it on one real run (`docs/known-gaps.md`).
+  configuration version through the API and confirm it without a pull request or a security-team
+  override. Speculative plans and CLI-driven workspaces are not affected. The field is checked
+  against the HCP Terraform docs only, so the rule stays overridable until a sandbox run confirms
+  it (`docs/known-gaps.md`, `UPGRADING.md`).
 - **tfc-admin refuses env vars that run other code (SEC-6, breaking).** `workspace_variables` and
   the committed `workspace_variables_file` reject env-category `TERRAFORM_CONFIG`,
   `TF_CLI_CONFIG_FILE`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `GIT_*`, `BASH_ENV`, `ENV`,

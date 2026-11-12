@@ -1,4 +1,4 @@
-# MANDATORY (hard-gate set): a run that can apply on a VCS-connected
+# MANDATORY (overridable set, PREVIEW): a run that can apply on a VCS-connected
 # control-plane, bootstrap or production workspace must come from the
 # connected repository.
 #
@@ -19,8 +19,10 @@
 # The configuration versions API shows an API-created version with
 # "source": "tfe-api" and no ingress attributes (the commit data), and its
 # create request takes no commit field. So a run on an uploaded version has
-# no commit SHA. PREVIEW: confirm on one real run before relying on it
-# (docs/known-gaps.md).
+# no commit SHA. PREVIEW: that is not confirmed on a real run, so the rule
+# lives in the overridable policies/opa-destructive set (the security team
+# overrides a wrong deny) and moves to the hard-gate policies/opa set once a
+# sandbox run confirms the field (docs/known-gaps.md).
 #
 # run.message is NOT read: the API caller sets it.
 #

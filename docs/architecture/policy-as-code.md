@@ -14,8 +14,8 @@ variables. It also sees what a run is about to destroy.
 
 | Set | `policies_path` | Overridable | Contents |
 |---|---|---|---|
-| `tfe_policy_set.opa` (`<prefix>opa-guardrails`) | `policies/opa` | no (`policy_set_overridable`, default false) | 14 mandatory + 3 advisory guardrails |
-| `tfe_policy_set.destructive` (`<prefix>destructive-change-guard`) | `policies/opa-destructive` | **yes**, always | the mandatory `destroy_guard` and `tfc_admin_guard` |
+| `tfe_policy_set.opa` (`<prefix>opa-guardrails`) | `policies/opa` | no (`policy_set_overridable`, default false) | 13 mandatory + 3 advisory guardrails |
+| `tfe_policy_set.destructive` (`<prefix>destructive-change-guard`) | `policies/opa-destructive` | **yes**, always | the mandatory `destroy_guard`, `tfc_admin_guard` and `tfc_vcs_run_only` (PREVIEW) |
 
 Both sets are also attached to the `tfc-admin` workspace itself, whether or
 not it is self-managed (`manage_tfc_admin_workspace`): an unmanaged one is
@@ -57,7 +57,8 @@ and `tfc_vcs_run_only` reads only `input.plan.resource_changes[]`.
 `tfc_vcs_run_only` reads only `input.run` (`speculative`, `commit_sha`,
 `workspace.tags`, `workspace.vcs_repo`, the fields HCP Terraform documents in
 [Terraform run data](https://developer.hashicorp.com/terraform/cloud-docs/policy-enforcement/define-policies/opa)).
-It never reads `run.message`, which the API caller sets. That one also walks
+It never reads `run.message`, which the API caller sets.
+`no_plan_time_code_execution` reads `resource_changes[]` and also walks
 `input.plan.configuration`: every module's resource blocks, their
 `provisioners` and `mode`, the `source` of each module call, and
 `provider_config` (one entry per provider configuration, including the implied
@@ -103,7 +104,7 @@ returns a set of messages, and an empty set means the policy passed.
 | `aws_iam_no_admin_wildcard` | mandatory | No `Allow` statement with `Action "*"`, or with any `NotAction`, on `Resource "*"` in `aws_iam_policy`, `aws_iam_{role,user,group}_policy` or `aws_iam_role.inline_policy`. `Deny` statements are fine (break-glass deny-all). |
 | `aws_iam_federated_trust_pinned` | mandatory | Every `aws_iam_role` trust that allows `sts:AssumeRoleWithWebIdentity` from a federated provider must condition both `:aud` and `:sub`. The subject's tenant segment must be literal: no `*`, `organization:*:…` or `repo:*/…`. This blocks the "role trusting another TFC org / GitHub owner" persistence path at plan time. The RCP tenant pins are its runtime twin. |
 | `gcp_wif_principalset_pinned` | mandatory | A workload identity `principalSet://iam.googleapis.com/.../workloadIdentityPools/<pool>/...` member in any `google_*_iam_member`, `_iam_binding` or `_iam_policy` (`policy_data`), for any role, must pin one repository and a ref or an environment. Denied: the whole pool (`/*`), `attribute.repository_owner_id/`, `attribute.repository/` (a mutable name, every branch) and `attribute.ref/` (that ref in every repository). The GitHub provider condition pins only the owner (`custom.wifProviderTenantPinned`), so each of these trusts every repository of the owner. A member that is unknown at plan time (a pool created in the same run) is not denied; the advisory rule reports it. |
-| `tfc_vcs_run_only` | mandatory (**PREVIEW**) | A run that can apply (`run.speculative` is not `true`) on a VCS-connected workspace (`run.workspace.vcs_repo` is set) tagged `layer:control-plane`, `layer:bootstrap` or `tier:production` must carry a `run.commit_sha`. An API-uploaded configuration version has none, so an approver cannot upload unreviewed code and confirm it. Speculative plans, CLI-driven workspaces and plans without run data pass. The field is confirmed by the docs only ([known gaps](../known-gaps.md)). The set is not overridable: a wrong field blocks every control-plane apply until a policy fix merges. |
+| `tfc_vcs_run_only` | mandatory, **overridable** set (`policies/opa-destructive`), **PREVIEW** | A run that can apply (`run.speculative` is not `true`) on a VCS-connected workspace (`run.workspace.vcs_repo` is set) tagged `layer:control-plane`, `layer:bootstrap` or `tier:production` must carry a `run.commit_sha`. An API-uploaded configuration version has none, so an approver cannot upload unreviewed code and confirm it without a security-team override. Speculative plans, CLI-driven workspaces and plans without run data pass. The field is confirmed by the docs only, so the rule stays in the overridable set until a sandbox run confirms it ([known gaps](../known-gaps.md)). |
 | `gcp_no_basic_roles_high_scope` | mandatory | No `roles/owner` or `roles/editor` in `google_{organization,folder}_iam_{member,binding,policy}`. |
 | `aws_kms_key_rotation` | mandatory | Symmetric `aws_kms_key` sets `enable_key_rotation = true`. Asymmetric and HMAC keys are exempt. |
 | `database_private_encrypted` | mandatory | `google_sql_database_instance` sets `ipv4_enabled = false`, and a missing `ip_configuration` block counts as public. `aws_db_instance` / `aws_rds_cluster` set `storage_encrypted = true`. `aws_db_instance` / `aws_rds_cluster_instance` are not `publicly_accessible`. |

@@ -65,19 +65,25 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `identity_center_admin_account_key` is a `modules/aws/stages/organization`
   input that `envs/aws/organization` does not expose.
 - **PREVIEW: `tfc_vcs_run_only` relies on `run.commit_sha` (SEC-1).** The
-  mandatory rule in the hard-gate `policies/opa` set denies a run that can
+  mandatory rule in the overridable `policies/opa-destructive` set denies a
+  run that can
   apply (not speculative) on a VCS-connected workspace tagged
   `layer:control-plane`, `layer:bootstrap` or `tier:production` when the run
   has no commit SHA, which is the case for an API-uploaded configuration
   version. HCP Terraform documents `run.commit_sha` as "The checksum hash
   (SHA) that identifies the commit", but does not say what it holds for an
   uploaded version. The rule therefore assumes it is empty or absent there.
-  Only the OPA unit tests prove the rule. Before you rely on it, run one VCS
-  run and one API-upload run on a sandbox control-plane workspace and read
-  `run.commit_sha` in the policy evaluation input. If a VCS run carries no
-  SHA, the rule blocks every control-plane and production apply and no
-  override helps (the set is not overridable). Recover by merging a fix to
-  the policy, because the set is sourced from the main branch. Limits: it does
+  Only the OPA unit tests prove the rule. Run one VCS run, one UI-queued run
+  and one API-upload run on a sandbox control-plane workspace and read
+  `run.commit_sha` in the policy evaluation input. Once the VCS and UI-queued
+  runs show a non-empty `run.commit_sha`, promote the rule to the hard-gate
+  `policies/opa` set. Until then it is overridable, so an approver and a
+  security-team member together can still apply uploaded code. If a VCS run
+  carries no SHA, the rule stops every control-plane and production apply.
+  Recover with a security-team override on each run; as break-glass, an
+  organization owner can change the policy set in the HCP Terraform UI; and
+  a fix merged to the main branch takes effect when the policy set re-ingests
+  it (the VCS webhook). Limits: it does
   not cover non-production workloads (an approver there can still apply an
   uploaded version); it trusts the workspace tags, so a hand-created
   `tfc-admin` workspace (`manage_tfc_admin_workspace = false`) is covered only

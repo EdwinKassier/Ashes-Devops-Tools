@@ -1503,8 +1503,8 @@ import {
 # ── OPA policy sets (both sourced from this repo via VCS) ──────────────────
 # Two sets, attached to every managed workspace:
 #   - <prefix>opa-guardrails (policies/opa): enforcement per policy in its
-#     policies.hcl, 14 mandatory (public exposure, identity, encryption,
-#     plan-time code execution, VCS-only runs on the control plane) + 3 advisory. NOT overridable by default (policy_set_overridable = false), so
+#     policies.hcl, 13 mandatory (public exposure, identity, encryption,
+#     plan-time code execution, labels) + 3 advisory. NOT overridable by default (policy_set_overridable = false), so
 #     a mandatory failure is a hard stop no "Manage Policy Overrides" user can
 #     wave through.
 #   - <prefix>destructive-change-guard (policies/opa-destructive): the
@@ -1513,7 +1513,9 @@ import {
 #     detaches a policy set, turns on auto-apply for a production or
 #     control-plane workspace, widens team access, moves runs to local or
 #     agent execution, rewires a protected workspace (VCS, working directory,
-#     project) or writes a TFC_* / TF_CLI_ARGS* / code-execution env var.
+#     project) or writes a TFC_* / TF_CLI_ARGS* / code-execution env var,
+#     and the PREVIEW tfc_vcs_run_only, which stops a control-plane or
+#     production apply of code that did not come from VCS.
 #     Always overridable: an
 #     intended change is overridden on the run by the security team. An owner creates that team by hand (its ID is
 #     security_team_id) and grants it Manage Policy Overrides in the HCP UI;
