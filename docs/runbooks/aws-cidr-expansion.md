@@ -243,7 +243,7 @@ A clean no-op plan is the final proof: the associated secondary CIDR, its subnet
 
 - **Secondary-CIDR resource is not in the module yet.** `modules/aws/network/vpc` has no `aws_vpc_ipv4_cidr_block_association`; Option A requires the module enhancement in Step 2 (shipped as its own PR with `make docs && make test`). Until then the only code-native expansion is Option B (a larger/new VPC block).
 - **Spoke routing is wired from `aws.network.spoke_attachments`.** aws-network accepts each listed spoke attachment, associates it with its `prod`/`nonprod` table and propagates it into the inspection table. A propagated route follows the attachment's VPC CIDRs, so an added secondary CIDR propagates once it is associated; a spoke missing from `spoke_attachments` has no routing at all. The routing is mock-tested only, not yet proven in the sandbox ([known gaps](../known-gaps.md#open--validate-before-relying-on)).
-- **No `aws_vpc_ipam_pool_cidr_allocation` reservation resource.** The module provisions pool CIDRs (`aws_vpc_ipam_pool_cidr`) but allocations happen implicitly when a VPC requests from the pool. Utilization and overlap must be checked with the AWS CLI (above), not from Terraform state.
+- **Hub VPCs are reserved; spokes are not.** aws-network reserves each static hub VPC CIDR that lies inside the home-region pool (`aws_vpc_ipam_pool_cidr_allocation.hub_static`, output `hub_static_ipam_allocations`). The sandbox proof is pending ([known gaps](../known-gaps.md#open--validate-before-relying-on)). Spoke allocations happen when a VPC requests from the pool, so check utilization and overlap with the AWS CLI (above), not from Terraform state.
 
 ---
 

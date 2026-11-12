@@ -64,7 +64,7 @@ This landing zone implements defense-in-depth across every layer:
 - **VPC Service Controls** — data perimeter around sensitive projects. **Ships in dry-run mode by default** (audit-only; it logs would-be violations but does not block them). Promote to enforced per environment once ingress/egress rules are validated — see [known-gaps.md](docs/known-gaps.md).
 - **Private Service Access** — RFC 1918 connectivity to Google APIs (no public egress for managed services)
 - **Cloud Armor** — WAF with OWASP rule sets for internet-facing workloads
-- **VPC Flow Logs**: on every subnet, exported to a CMEK BigQuery dataset per environment (default 10% sampling, 30-day retention). Raise `log_config_flow_sampling` and `vpc_flow_logs_retention_days` for regulated environments.
+- **VPC Flow Logs**: on every subnet, exported to a CMEK BigQuery dataset per environment (default 10% sampling, 30-day retention). A `compliance_class: regulated` environment already gets sampling 1.0 and 365-day retention from the regulated preset, and its plan fails on a lower sampling rate or a retention under 365 days. For other environments, raise `log_config_flow_sampling` and `vpc_flow_logs_retention_days` by hand.
 
 ### Audit & Compliance
 

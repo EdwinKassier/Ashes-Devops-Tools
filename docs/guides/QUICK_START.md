@@ -71,7 +71,7 @@ The landing zone uses these HCP Terraform features. Tiers were checked against H
 | Two VCS-sourced OPA policy sets | Guardrails and the mandatory `destroy_guard` | tfc-admin `enable_policy_sets` (on by default for `standard` / `premium`) | Standard or Premium. The overview lists policy enforcement as not available on Free and Essentials |
 | Health assessments | Native drift detection | tfc-admin `enable_health_assessments` | Standard or Premium (the health assessments page) |
 | Agent pools | Node.js for Supabase vault secrets | `execution_mode = "agent"` | The documentation does not name a tier. Concurrent agent runs are listed on every tier (1 on Free and Essentials). Confirm on the pricing page |
-| Audit trail API | Daily export to WORM storage ([state backup](../runbooks/state-backup.md)) | `tfc-audit-trail` workflow | The overview lists audit logging as Premium only. The state backup runbook says Standard or Premium. Confirm on the pricing page |
+| Audit trail API | Daily export to WORM storage ([state backup](../runbooks/state-backup.md)) | `tfc-audit-trail` workflow | Standard or Premium (the [audit trails API page](https://developer.hashicorp.com/terraform/cloud-docs/api-docs/audit-trails)). HCP Terraform keeps 14 days of audit trail, so the export must not stop for longer than that |
 
 **Minimum for a production estate: Standard.** Free and Essentials can run the roots with `enable_policy_sets = false` and `enable_health_assessments = false`, but then no policy blocks a destructive change, and the Free tier has no teams at all. That is not a supported production setup. Set `org.tfc.plan` so tfc-admin picks the right defaults.
 

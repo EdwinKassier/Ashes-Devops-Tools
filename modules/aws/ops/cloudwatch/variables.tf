@@ -70,7 +70,7 @@ variable "sns_topic_arn" {
 }
 
 variable "sns_kms_master_key_id" {
-  description = "KMS key id/alias for encrypting the created SNS topic (only used when create_sns_topic = true). Null = AWS-managed key."
+  description = "KMS key id/alias for encrypting the created SNS topic (only used when create_sns_topic = true). Null = no server-side encryption. Do not use the AWS managed key (alias/aws/sns): its key policy does not let CloudWatch publish alarms to the topic. A customer managed key needs a key policy that allows cloudwatch.amazonaws.com kms:Decrypt and kms:GenerateDataKey*."
   type        = string
   default     = null
 }

@@ -699,9 +699,6 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   stage has a real-apply e2e test.
 - **Root config suites without assertions:** aws/security, gcp/bootstrap,
   gcp/guardrails, gcp/network-hub, gcp/organization.
-- **gcp-network-hub has three untyped (`any`) inputs** without unknown-key checks.
-  An object type drops undeclared keys silently, so map inputs here use `any`
-  plus key validation instead.
 - **CI hardening:** `check-jsonschema` is still installed without hashes
   (`terraform-plan.yml`).
 - **The egress allow-lists are traced from the steps, not from a run (CICD-12).**
@@ -747,8 +744,12 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 - **CMP-20: the org stage `allowed_regions` default mixes EU and US.** The default in
   `modules/gcp/stages/organization/variables.tf` allows `europe-west1`, `europe-west2` and
   `us-central1`. Narrowing it is a breaking change (the location policy would deny the
-  dropped regions for callers that rely on the default), so it is deferred out of Phase 0.
+  dropped regions for callers that rely on the default), so it is still deferred after Phase 2.
   The deployable root reads `gcp.allowed_regions` from `config/landing-zone.yaml`.
+- **IAC-8 covered deletion-protection names only.** The ten deletion-protection
+  inputs now follow the `enable_` rule. Other boolean inputs whose names start
+  with neither `enable_` nor `create_` remain (for example `auto_apply` and
+  `speculative_enabled` in `modules/tfc/workspace`).
 - **The AWS stage defaults for `availability_zones` still name `eu-west-2`.**
   The `availability_zones` defaults in `modules/aws/network/vpc`,
   `modules/aws/stages/network-hub` and `modules/aws/stages/workload` are
@@ -940,8 +941,10 @@ GCP:
   gcp-bootstrap `workload_folder_roles`.
 - **KMS Autokey / HSM-for-sensitive** (LOW, SAFE-CONFIG, future). No Cloud KMS
   Autokey; CMEK defaults to `SOFTWARE` protection (HSM is per-key selectable).
-  Autokey (GA 2024, dedicated-project storage GA 2026) and HSM-by-default for
-  audit/SCC keys are maturity improvements, not deficiencies.
+  `gcp.audit_key_protection_level: HSM` sets HSM on the two audit keys
+  (audit logs and audit analytics); the billing and SCC keys stay `SOFTWARE`.
+  Autokey (GA 2024, dedicated-project storage GA 2026) and HSM by default are
+  maturity improvements, not deficiencies.
 - **Flat folder tree** (LOW, BEHAVIOR-CHANGING, documented divergence). Folders
   are parented directly at the org (one per env + shared), not under a
   prod/nonprod grouping layer. Deliberate simplification for a smaller org;
@@ -1074,6 +1077,12 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   logging project's own service agents — no cross-project KMS grant) and the
   control-plane alerts all move there. The project must NOT be owned by the
   automation SA. Decide before the first apply (KMS keys are undeletable).
+  With a separate logging project, the audit dataset grant
+  (`roles/bigquery.dataEditor` for the BigQuery sink writer) relies on the
+  role-conditioned org `iam.securityAdmin` of organization-apply admitting
+  dataset IAM: BigQuery datasets ignore the `modifiedGrantsByRole` attribute,
+  and organization-apply holds `bigquery.admin` only on the admin project. A
+  sandbox apply must prove the grant before LOG-04 leaves PREVIEW.
 - **G5 — VPC-SC perimeter expansion** (`vpc_sc_additional_restricted_services`,
   `vpc_sc_ingress_identities`, `modules/gcp/stages/network-hub`). Set the ingress
   identity BEFORE expanding services or an enforced apply is blocked.
@@ -1396,7 +1405,10 @@ side (all mock-tested, secure defaults):
 
 - **Behaviour-changing security defaults** (not applied, would change posture):
   packet-mirroring default mirrors all traffic; vpc-peering exports public-IP
-  subnet routes; the shared VPC-endpoint policy is `Action="*"`.
+  subnet routes; the shared VPC-endpoint policy defaults to `Action="*"`,
+  limited to callers in the organization by `aws:PrincipalOrgID`. The PREVIEW
+  mode `aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`
+  also requires `aws:ResourceOrgID`.
 - **Toolchain currency automation.** Renovate owns Terraform providers and
   lockfiles (`renovate.json`: weekly `lockFileMaintenance`, one grouped
   `hashicorp/*` PR, labelled for review, never auto-merged, provider majors
