@@ -56,6 +56,8 @@ module "network_hub" {
   vpn_shared_secret_wo         = var.vpn_shared_secret_wo
   vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
   interconnects                = local.interconnects
+  hybrid_advertised_ranges     = local.hybrid_advertised_ranges
+  hybrid_dns                   = local.hybrid_dns
   hub_additional_regions       = local.hub_additional_regions
 
   vpc_sc_access_policy_name = local.vpc_sc_access_policy_name

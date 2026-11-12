@@ -339,3 +339,28 @@ run "additional_region_nat_off_when_nat_disabled" {
     error_message = "nat.enabled = false must suppress every NAT, additional regions included."
   }
 }
+
+# vpn.advertised_groups reaches the HA VPN Cloud Router, so a CUSTOM router can
+# keep announcing every hub subnet (ALL_SUBNETS) next to extra ranges.
+run "vpn_advertised_groups_reach_the_router" {
+  command = plan
+
+  variables {
+    vpn = {
+      enabled              = true
+      peer_gateway_ips     = ["203.0.113.1", "203.0.113.2"]
+      advertised_groups    = ["ALL_SUBNETS"]
+      advertised_ip_ranges = [{ range = "10.10.0.0/16", description = "environment dev" }]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition = (
+      module.vpn[0].router.bgp[0].advertise_mode == "CUSTOM" &&
+      tolist(module.vpn[0].router.bgp[0].advertised_groups) == tolist(["ALL_SUBNETS"]) &&
+      [for r in module.vpn[0].router.bgp[0].advertised_ip_ranges : r.range] == ["10.10.0.0/16"]
+    )
+    error_message = "vpn.advertised_groups and advertised_ip_ranges must reach the HA VPN Cloud Router."
+  }
+}

@@ -105,9 +105,9 @@ The following resources are created:
 - resource.google_compute_external_vpn_gateway.peer (modules/gcp/network/vpn/main.tf#L23)
 - resource.google_compute_ha_vpn_gateway.gateway (modules/gcp/network/vpn/main.tf#L14)
 - resource.google_compute_router.router (modules/gcp/network/vpn/main.tf#L40)
-- resource.google_compute_router_interface.interfaces (modules/gcp/network/vpn/main.tf#L81)
-- resource.google_compute_router_peer.peers (modules/gcp/network/vpn/main.tf#L93)
-- resource.google_compute_vpn_tunnel.tunnels (modules/gcp/network/vpn/main.tf#L61)
+- resource.google_compute_router_interface.interfaces (modules/gcp/network/vpn/main.tf#L84)
+- resource.google_compute_router_peer.peers (modules/gcp/network/vpn/main.tf#L96)
+- resource.google_compute_vpn_tunnel.tunnels (modules/gcp/network/vpn/main.tf#L64)
 
 
 ## Inputs
@@ -119,7 +119,8 @@ The following resources are created:
 | <a name="input_peer_external_gateway_ips"></a> [peer\_external\_gateway\_ips](#input\_peer\_external\_gateway\_ips) | List of external IPv4 addresses for the peer VPN gateway interfaces.<br/>Provide one IP for a single-IP gateway (tunnel\_count = 1) or two distinct IPs for<br/>an HA gateway (tunnel\_count = 2, TWO\_IPS\_REDUNDANCY).<br/>The GCP API rejects both interfaces sharing the same IP under TWO\_IPS\_REDUNDANCY.<br/>Example single: ["203.0.113.1"]<br/>Example HA:     ["203.0.113.1", "203.0.113.2"] | `list(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the VPN will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region for the VPN gateway (e.g., 'us-central1', 'europe-west1') | `string` | n/a | yes |
-| <a name="input_advertised_ip_ranges"></a> [advertised\_ip\_ranges](#input\_advertised\_ip\_ranges) | Custom IP ranges to advertise via BGP | <pre>list(object({<br/>    range       = string<br/>    description = optional(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_advertised_groups"></a> [advertised\_groups](#input\_advertised\_groups) | Groups the router advertises next to advertised\_ip\_ranges (CUSTOM mode only): ALL\_SUBNETS adds every subnet of the VPC, which DEFAULT mode advertises. Empty (default) = only the listed ranges. | `list(string)` | `[]` | no |
+| <a name="input_advertised_ip_ranges"></a> [advertised\_ip\_ranges](#input\_advertised\_ip\_ranges) | Custom IP ranges to advertise via BGP. Non-empty switches the router to CUSTOM mode (see advertised\_groups). | <pre>list(object({<br/>    range       = string<br/>    description = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to VPN resources | `map(string)` | `{}` | no |
 | <a name="input_local_ip_addresses"></a> [local\_ip\_addresses](#input\_local\_ip\_addresses) | List of local BGP IP addresses for each tunnel. Must contain exactly tunnel\_count entries (one per tunnel). | `list(string)` | <pre>[<br/>  "169.254.0.1",<br/>  "169.254.1.1"<br/>]</pre> | no |
 | <a name="input_peer_asn"></a> [peer\_asn](#input\_peer\_asn) | The ASN of the peer network (for BGP) | `number` | `65001` | no |

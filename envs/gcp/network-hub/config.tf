@@ -40,6 +40,8 @@ locals {
     # No secret lives here: the VPN pre-shared key is a write-only variable.
     vpn          = try(jsonencode(local.lz.gcp.network.vpn), null)
     interconnect = try(jsonencode(local.lz.gcp.network.interconnect), null)
+    # Hybrid DNS on the hub VPC (JSON text, same reason as vpn above).
+    hybrid_dns = try(jsonencode(local.lz.gcp.network.hybrid_dns), null)
     # Opt-in extra hub regions (JSON text, same reason as vpn above).
     additional_regions = try(jsonencode(local.lz.gcp.network.additional_regions), null)
     # Hub connectivity per environment: gcp.environments.<env>.network_connectivity,
@@ -119,6 +121,13 @@ locals {
   # Opt-in hybrid connectivity (default off: no VPN, no Interconnect).
   vpn           = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
   interconnects = jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}"))
+  hybrid_dns    = jsondecode(var.hybrid_dns != null ? jsonencode(var.hybrid_dns) : coalesce(local.cfg.hybrid_dns, "{}"))
+  # Every environment CIDR, announced on-premises over the VPN/Interconnect:
+  # DEFAULT BGP mode never announces the peered environments (ARC-12).
+  hybrid_advertised_ranges = [
+    for k in sort(keys(local.environments)) : { range = local.environments[k].cidr_block, description = "environment ${k}" }
+    if try(local.environments[k].cidr_block, "") != ""
+  ]
   # Opt-in extra hub regions (default none: single-region hub).
   hub_additional_regions = jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}"))
 }

@@ -21,3 +21,9 @@ gcp:
       hub-partner-1:
         region: europe-west1
         router_name: hub-ic-router
+    hybrid_dns:
+      enable_inbound_forwarding: true
+      forward_zones:
+        corp:
+          dns_name: corp.example.com.
+          target_ips: [192.168.0.10, 192.168.0.11]

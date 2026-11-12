@@ -607,6 +607,17 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   and Private Service Access holds one). A `hub_peering_active` check in `gcp-workload-<env>` warns
   while the spoke side is `INACTIVE`. The second `gcp-network-hub` run stays manual and is now step 5
   of `docs/runbooks/add-environment.md`.
+- **GCP hybrid: the environments are announced on-premises, and DNS works both ways (ARC-12,
+  breaking).** DEFAULT BGP mode announced only the hub subnets, never the peered environments. With
+  the VPN or an Interconnect and no `advertised_ip_ranges`, the hub routers now use CUSTOM mode: every
+  hub subnet (`ALL_SUBNETS`, what DEFAULT announced), every environment CIDR, and `35.199.192.0/19`
+  when forward zones exist. The VPN takes a new `advertised_groups` (`network/vpn`, `net-hub`). An
+  inbound DNS server policy on the hub VPC (`gcp.network.hybrid_dns.enable_inbound_forwarding`,
+  default on) lets on-premises resolvers query the internal zone, and
+  `gcp.network.hybrid_dns.forward_zones` forwards on-premises domains from the hub (private path,
+  new `forwarding_path` in `network/dns`). A forward zone that equals or sits under the internal
+  domain fails the plan. `UPGRADING.md` says what on-premises sees;
+  `docs/runbooks/gcp-hybrid-connectivity.md` has the steps.
 - **Spoke VPCs get the CIDR their subnets use (ARC-1, breaking).** An IPAM-backed VPC now
   requests `cidr_block` explicitly from the pool by default (`ipam_allocation = "explicit_cidr"`
   in `modules/aws/network/vpc`, `ipam_explicit_cidr = true` in aws-workload). Before, it asked

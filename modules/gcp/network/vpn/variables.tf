@@ -139,8 +139,20 @@ variable "local_ip_addresses" {
   }
 }
 
+variable "advertised_groups" {
+  description = "Groups the router advertises next to advertised_ip_ranges (CUSTOM mode only): ALL_SUBNETS adds every subnet of the VPC, which DEFAULT mode advertises. Empty (default) = only the listed ranges."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for g in var.advertised_groups : g == "ALL_SUBNETS"])
+    error_message = "advertised_groups accepts only ALL_SUBNETS."
+  }
+}
+
 variable "advertised_ip_ranges" {
-  description = "Custom IP ranges to advertise via BGP"
+  description = "Custom IP ranges to advertise via BGP. Non-empty switches the router to CUSTOM mode (see advertised_groups)."
   type = list(object({
     range       = string
     description = optional(string)

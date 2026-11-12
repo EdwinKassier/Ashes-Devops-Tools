@@ -91,6 +91,17 @@ variable "forwarding_targets" {
   default     = []
 }
 
+variable "forwarding_path" {
+  description = "Path to the forwarding targets: private (through the VPC, over VPN or Interconnect for on-premises targets; needed for targets outside RFC 1918) or default (RFC 1918 targets through the VPC, others over the internet). Null (default) = the API default."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.forwarding_path == null || contains(["default", "private"], coalesce(var.forwarding_path, "default"))
+    error_message = "forwarding_path must be default or private."
+  }
+}
+
 variable "labels" {
   description = "Labels to apply to the DNS zone"
   type        = map(string)

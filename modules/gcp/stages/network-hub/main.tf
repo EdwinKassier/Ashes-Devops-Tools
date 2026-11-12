@@ -43,6 +43,38 @@ locals {
     "cloudfunctions.googleapis.com",
     "run.googleapis.com"
   ], var.vpc_sc_additional_restricted_services))
+
+  # ── Hybrid routes and DNS (ARC-12) ──────────────────────────────────────
+  hybrid_enabled = var.vpn.enabled || length(var.interconnects) > 0
+
+  # DEFAULT BGP mode announces the hub VPC's own subnets only, never the
+  # peered environment ranges, so on-premises cannot reach the environments
+  # (https://docs.cloud.google.com/network-connectivity/docs/router/concepts/advertised-routes).
+  # With no explicit ranges the routers move to CUSTOM mode with the
+  # ALL_SUBNETS group (every hub subnet: what DEFAULT announced, including the
+  # inbound DNS entry points, which are hub subnet addresses) plus every
+  # environment CIDR. Forward zones add 35.199.192.0/19, the source range of
+  # Cloud DNS forwarded queries, which on-premises must route back over the
+  # VPN/Interconnect
+  # (https://docs.cloud.google.com/dns/docs/zones/forwarding-zones).
+  hybrid_derived_ranges = [
+    for r in concat(
+      var.hybrid_advertised_ranges,
+      length(var.hybrid_dns.forward_zones) > 0 ? [{ range = "35.199.192.0/19", description = "Cloud DNS forwarding source" }] : [],
+    ) : { range = r.range, description = r.description }
+  ]
+  vpn_explicit_ranges = length(var.vpn.advertised_ip_ranges) > 0
+  vpn_effective = merge(var.vpn, {
+    advertised_groups    = local.vpn_explicit_ranges ? var.vpn.advertised_groups : ["ALL_SUBNETS"]
+    advertised_ip_ranges = local.vpn_explicit_ranges ? var.vpn.advertised_ip_ranges : local.hybrid_derived_ranges
+  })
+  # The interconnect router keeps ALL_SUBNETS in CUSTOM mode by itself
+  # (network/interconnect advertised_groups default).
+  interconnects_effective = {
+    for k, ic in var.interconnects : k => merge(ic, {
+      advertised_ip_ranges = length(ic.advertised_ip_ranges) > 0 ? [for r in ic.advertised_ip_ranges : { range = r.range, description = r.description }] : local.hybrid_derived_ranges
+    })
+  }
 }
 
 # Hub network (the "pipes"): net-hub composition on the 'net-hub' project
@@ -81,10 +113,10 @@ module "hub" {
 
   # Opt-in hybrid connectivity: HA VPN (write-only pre-shared key) and Cloud
   # Interconnect attachments. Both off by default.
-  vpn                          = var.vpn
+  vpn                          = local.vpn_effective
   vpn_shared_secret_wo         = var.vpn_shared_secret_wo
   vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
-  interconnects                = var.interconnects
+  interconnects                = local.interconnects_effective
 
   # Opt-in central egress (Secure Web Proxy) and the data-plane alerts.
   secure_web_proxy = local.secure_web_proxy
@@ -225,6 +257,46 @@ module "dns_anchor" {
       additional_visibility_networks = [module.hub.network_self_link]
     }
   }
+}
+
+# Inbound DNS on the hub VPC, the network the VPN and Interconnects land in.
+# Cloud DNS takes an entry-point address from every hub subnet; on-premises
+# resolvers forward the internal domain to them, and the hub VPC sees the
+# internal-root zone (dns_anchor above). Entry points are not reachable across
+# VPC peering, so the policy belongs on the hub, not on the anchor VPC
+# (https://docs.cloud.google.com/dns/docs/server-policies-overview). A VPC takes
+# one DNS server policy, and nothing else attaches one to the hub VPC.
+resource "google_dns_policy" "hub_inbound" {
+  count = local.hybrid_enabled && var.hybrid_dns.enable_inbound_forwarding ? 1 : 0
+
+  project                   = var.hub_project_id
+  name                      = "${var.project_prefix}-hub-inbound"
+  description               = "Inbound forwarding for on-premises resolvers (hybrid DNS)."
+  enable_inbound_forwarding = true
+  enable_logging            = true
+
+  networks {
+    network_url = module.hub.network_self_link
+  }
+}
+
+# On-premises domains, forwarded from the hub VPC to the on-premises
+# resolvers over the VPN/Interconnect (private path). Their names may not
+# overlap the internal zone (variable validation); a parent domain of it is
+# fine, since Cloud DNS answers from the longest matching suffix. Query
+# logging comes from the DNS policy above (zone logging is public zones only).
+module "hybrid_forward_zones" {
+  source   = "../../network/dns"
+  for_each = local.hybrid_enabled ? var.hybrid_dns.forward_zones : {}
+
+  project_id                  = var.hub_project_id
+  zone_name                   = "fwd-${each.key}"
+  dns_name                    = each.value.dns_name
+  description                 = "Forward ${each.value.dns_name} to on-premises resolvers."
+  visibility                  = "private"
+  private_visibility_networks = [module.hub.network_self_link]
+  forwarding_targets          = each.value.target_ips
+  forwarding_path             = "private"
 }
 
 # Hierarchical rules are evaluated before VPC rules, and a match stops

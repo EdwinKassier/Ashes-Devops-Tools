@@ -212,6 +212,10 @@ variable "vpn" {
     lists the peer interface IPv4 addresses (one per tunnel). local_ips and
     peer_ips are the BGP link-local addresses. The pre-shared key is the separate
     write-only vpn_shared_secret_wo input. site_to_site_data_transfer lets on-premises sites exchange traffic through the NCC hybrid spoke. With enable_ncc_hub, the tunnels also join the NCC hub as a hybrid spoke.
+    Routes announced: empty advertised_ip_ranges (default) = CUSTOM mode with the ALL_SUBNETS
+    group (every hub subnet) plus hybrid_advertised_ranges (the environment CIDRs) and, with
+    hybrid DNS forward zones, 35.199.192.0/19 (DEFAULT mode when that list is empty).
+    Non-empty advertised_ip_ranges = exactly those ranges plus advertised_groups (default none).
   EOT
   type = object({
     enabled                    = optional(bool, false)
@@ -222,6 +226,7 @@ variable "vpn" {
     local_ips                  = optional(list(string), ["169.254.0.1", "169.254.0.3"])
     peer_ips                   = optional(list(string), ["169.254.0.2", "169.254.0.4"])
     site_to_site_data_transfer = optional(bool, false)
+    advertised_groups          = optional(list(string), [])
     advertised_ip_ranges = optional(list(object({
       range       = string
       description = string
@@ -325,6 +330,51 @@ variable "spoke_peerings" {
   validation {
     condition     = alltrue([for k in keys(var.spoke_peerings) : can(regex("^[a-z]([-a-z0-9]{0,53}[a-z0-9])?$", k))])
     error_message = "spoke_peerings keys must be environment keys usable in the peering name hub-to-<env>: lowercase letters, digits and hyphens, starting with a letter, at most 55 characters."
+  }
+}
+
+variable "hybrid_advertised_ranges" {
+  description = "Prefixes the hub Cloud Routers announce over VPN/Interconnect when vpn.advertised_ip_ranges (or an interconnect's) is empty, next to the ALL_SUBNETS group (every hub subnet): normally every environment CIDR (envs/gcp/network-hub derives them). DEFAULT BGP mode never announces peered environment subnets. With no ranges at all (no environment CIDR, no forward zone) the routers stay in DEFAULT mode (the hub subnets only)."
+  type = list(object({
+    range       = string
+    description = string
+  }))
+  default  = []
+  nullable = false
+
+  validation {
+    condition     = alltrue([for r in var.hybrid_advertised_ranges : can(cidrhost(r.range, 0))])
+    error_message = "hybrid_advertised_ranges entries need a valid CIDR range."
+  }
+}
+
+variable "hybrid_dns" {
+  description = "Hybrid DNS, used only when the VPN or an Interconnect is on. enable_inbound_forwarding (default true) adds an inbound DNS server policy on the hub VPC, so on-premises resolvers can forward the internal domain to its entry-point addresses. forward_zones forwards on-premises domains (dns_name ending with a dot) from the hub VPC to target_ips over the private path. A forward zone may not be internal_domain or a subdomain of it: the internal zone is bound to the hub VPC too."
+  type = object({
+    enable_inbound_forwarding = optional(bool, true)
+    forward_zones = optional(map(object({
+      dns_name   = string
+      target_ips = list(string)
+    })), {})
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for z in values(var.hybrid_dns.forward_zones) : endswith(z.dns_name, ".") && length(z.target_ips) > 0 && alltrue([for ip in z.target_ips : can(regex("^(\\d{1,3}\\.){3}\\d{1,3}$", ip))])])
+    error_message = "hybrid_dns.forward_zones entries need a dns_name ending with a dot and at least one IPv4 target_ips address."
+  }
+
+  validation {
+    condition     = alltrue([for k in keys(var.hybrid_dns.forward_zones) : can(regex("^[a-z]([-a-z0-9]{0,57}[a-z0-9])?$", k))])
+    error_message = "hybrid_dns.forward_zones keys name the zone fwd-<key>: lowercase letters, digits and hyphens, starting with a letter, at most 59 characters."
+  }
+
+  validation {
+    condition = alltrue([for z in values(var.hybrid_dns.forward_zones) :
+      lower(z.dns_name) != lower("${var.internal_domain}.") && !endswith(lower(z.dns_name), lower(".${var.internal_domain}."))
+    ])
+    error_message = "hybrid_dns.forward_zones may not forward internal_domain or a subdomain of it: the internal zone is bound to the hub VPC, two private zones on one network cannot share a DNS name, and a forwarded subdomain would hide part of the internal zone."
   }
 }
 

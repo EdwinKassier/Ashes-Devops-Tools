@@ -202,6 +202,7 @@ module "vpn" {
   local_ip_addresses        = var.vpn.local_ips
   peer_ip_addresses         = var.vpn.peer_ips
   advertised_ip_ranges      = var.vpn.advertised_ip_ranges
+  advertised_groups         = var.vpn.advertised_groups
   labels                    = var.labels
 }
 

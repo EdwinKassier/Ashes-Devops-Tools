@@ -1411,6 +1411,20 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Hub routes announced on-premises and hybrid DNS (gcp-network-hub, breaking)
+
+**Breaking: this changes what on-premises learns over BGP.** It applies to an estate with the hub HA VPN (`gcp.network.vpn.enabled: true`) or a Cloud Interconnect attachment (`gcp.network.interconnect`) whose `advertised_ip_ranges` is empty.
+
+Before, the Cloud Router used DEFAULT mode. It announced the hub VPC's own subnets and never the peered environment VPCs, so on-premises could not reach an environment. Now the router uses CUSTOM mode and announces:
+
+- every hub subnet (the `ALL_SUBNETS` group, which is what DEFAULT mode announced);
+- every `gcp.environments.<env>.cidr_block`;
+- `35.199.192.0/19`, when `gcp.network.hybrid_dns.forward_zones` lists a zone (Cloud DNS sends forwarded queries from it).
+
+On-premises keeps every route it learned before and learns the environment CIDRs (and the Cloud DNS range) in addition. Check that the on-premises routers accept the new prefixes, and that nothing on-premises already uses an environment CIDR. To keep the old announcement, set `advertised_ip_ranges` on the VPN or the Interconnect: an explicit list wins, and the router then announces exactly that list (add `advertised_groups: [ALL_SUBNETS]` on the VPN to keep the hub subnets).
+
+The same estates also get an inbound DNS server policy on the hub VPC (`<prefix>-hub-inbound`). Cloud DNS takes one address from every hub subnet for it; on-premises resolvers can forward the internal domain to those addresses (`gcloud compute addresses list --filter='purpose="DNS_RESOLVER"'`). A VPC network takes one DNS server policy: if you attached one to the hub VPC outside this repository, import it or set `gcp.network.hybrid_dns.enable_inbound_forwarding: false` before you apply. Estates without the VPN or an Interconnect see no change. Steps: [docs/runbooks/gcp-hybrid-connectivity.md](docs/runbooks/gcp-hybrid-connectivity.md#routes-announced-on-premises).
+
 #### Production VPC-SC dry-run fails the plan (gcp-workload, breaking)
 
 **Breaking: a production `gcp-workload-<env>` plan that passed before now fails.** The `vpc_sc_enforced_in_prod` check only warned. It is replaced by `terraform_data.production_vpc_sc_enforced`, whose precondition fails the plan when the environment is production (`environment_config.<env>.is_production = true`) and its VPC-SC perimeter is absent or in dry-run. Dry-run gives no exfiltration protection.

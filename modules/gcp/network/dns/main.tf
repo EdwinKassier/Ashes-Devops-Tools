@@ -46,7 +46,8 @@ resource "google_dns_managed_zone" "private_zone" {
       dynamic "target_name_servers" {
         for_each = var.forwarding_targets
         content {
-          ipv4_address = target_name_servers.value
+          ipv4_address    = target_name_servers.value
+          forwarding_path = var.forwarding_path
         }
       }
     }

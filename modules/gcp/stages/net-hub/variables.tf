@@ -209,6 +209,9 @@ variable "vpn" {
     lists the peer interface IPv4 addresses (one per tunnel). local_ips and
     peer_ips are the BGP link-local addresses. The pre-shared key is the separate
     vpn_shared_secret_wo (write-only) or legacy vpn_shared_secret input. With ncc.enabled, the tunnels also join the NCC hub as a hybrid spoke.
+    advertised_ip_ranges (non-empty) switches the Cloud Router to CUSTOM mode, which
+    announces only those ranges plus advertised_groups (ALL_SUBNETS = every hub subnet,
+    what DEFAULT mode announces). Empty = DEFAULT mode (the hub subnets only).
   EOT
   type = object({
     enabled          = optional(bool, false)
@@ -218,6 +221,8 @@ variable "vpn" {
     peer_gateway_ips = optional(list(string), [])
     local_ips        = optional(list(string), ["169.254.0.1", "169.254.0.3"])
     peer_ips         = optional(list(string), ["169.254.0.2", "169.254.0.4"])
+    # CUSTOM mode only: ALL_SUBNETS keeps every hub subnet next to the ranges.
+    advertised_groups = optional(list(string), [])
     advertised_ip_ranges = optional(list(object({
       range       = string
       description = string

@@ -166,14 +166,29 @@ gcp:
     #   local_ips: [169.254.0.1, 169.254.0.3]
     #   peer_ips: [169.254.0.2, 169.254.0.4]
     #   site_to_site_data_transfer: false
+    #   # Unset (default): the router announces every hub subnet (ALL_SUBNETS)
+    #   # plus every gcp.environments CIDR. Set it to announce exactly this list
+    #   # (add advertised_groups: [ALL_SUBNETS] to keep the hub subnets too).
     #   advertised_ip_ranges:
-    #     - { range: 10.0.0.0/16, description: hub VPC }
+    #     - { range: 10.0.0.0/12, description: GCP block }
     # Cloud Interconnect VLAN attachments, keyed by attachment name.
     # interconnect:
     #   hub-partner-1:
     #     region: europe-west2
     #     router_name: hub-ic-router
     #     interconnect_type: PARTNER    # PARTNER | DEDICATED
+    # Hybrid DNS on the hub VPC, used only with the VPN or an Interconnect.
+    # enable_inbound_forwarding (default true): an inbound DNS server policy, so
+    # on-premises resolvers can forward the internal domain to the hub. Its
+    # addresses: gcloud compute addresses list --filter=purpose=DNS_RESOLVER.
+    # forward_zones: on-premises domains the hub forwards to on-premises
+    # resolvers (not the internal domain or a subdomain of it).
+    # hybrid_dns:
+    #   enable_inbound_forwarding: true
+    #   forward_zones:
+    #     corp:
+    #       dns_name: corp.example.com.
+    #       target_ips: [192.168.0.10, 192.168.0.11]
     # Extra regions of the hub VPC, keyed by region (off by default: the hub
     # is single-region in org.regions.gcp). Each gets one regional subnet per
     # tier; the CIDRs must not overlap the primary hub subnets or each other.

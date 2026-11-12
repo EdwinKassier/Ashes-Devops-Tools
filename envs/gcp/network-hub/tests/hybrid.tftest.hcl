@@ -156,3 +156,50 @@ run "config_environment_without_is_production_fails" {
 
   expect_failures = [var.environments]
 }
+
+# Routes announced on-premises and hybrid DNS (ARC-12): the root derives the
+# environment CIDRs from the environments map and reads gcp.network.hybrid_dns.
+run "environment_ranges_and_hybrid_dns_reach_the_stage" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-hybrid.yaml"
+  }
+
+  assert {
+    condition     = jsonencode(local.hybrid_advertised_ranges) == jsonencode([{ description = "environment dev", range = "10.10.0.0/16" }])
+    error_message = "Every environment CIDR must reach the stage as a hybrid advertised range."
+  }
+
+  assert {
+    condition     = local.hybrid_dns.enable_inbound_forwarding == true && local.hybrid_dns.forward_zones.corp.dns_name == "corp.example.com." && length(local.hybrid_dns.forward_zones.corp.target_ips) == 2
+    error_message = "gcp.network.hybrid_dns must reach the stage from the config file."
+  }
+}
+
+run "no_hybrid_dns_config_is_empty" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+  }
+
+  assert {
+    condition     = length(local.hybrid_dns) == 0
+    error_message = "Without config or variable, hybrid_dns is {} (the stage defaults: inbound forwarding only, used only with VPN or Interconnect)."
+  }
+}
+
+run "hybrid_dns_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-hybrid.yaml"
+    hybrid_dns               = { enable_inbound_forwarding = false }
+  }
+
+  assert {
+    condition     = local.hybrid_dns.enable_inbound_forwarding == false && length(local.hybrid_dns.forward_zones) == 0
+    error_message = "An explicit hybrid_dns variable must win over the config file."
+  }
+}

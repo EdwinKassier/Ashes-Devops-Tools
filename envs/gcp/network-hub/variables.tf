@@ -110,7 +110,7 @@ variable "ncc_preset_topology" {
 }
 
 variable "vpn" {
-  description = "HA VPN from the hub VPC to an on-premises or other-cloud gateway, off by default. Same shape as the net-hub vpn input: enabled, tunnel_count (1 or 2), router_asn, peer_asn, peer_gateway_ips, local_ips, peer_ips, advertised_ip_ranges, site_to_site_data_transfer. With enable_ncc_hub the tunnels also join the NCC hub as a hybrid spoke. Null = gcp.network.vpn from config/landing-zone.yaml, else off. The pre-shared key is never config: set vpn_shared_secret_wo."
+  description = "HA VPN from the hub VPC to an on-premises or other-cloud gateway, off by default. Same shape as the net-hub vpn input: enabled, tunnel_count (1 or 2), router_asn, peer_asn, peer_gateway_ips, local_ips, peer_ips, advertised_ip_ranges, advertised_groups, site_to_site_data_transfer. Empty advertised_ip_ranges = the Cloud Router announces every hub subnet (ALL_SUBNETS) plus every environment CIDR (and 35.199.192.0/19 with hybrid_dns forward zones); set advertised_ip_ranges to announce exactly your own list. With enable_ncc_hub the tunnels also join the NCC hub as a hybrid spoke. Null = gcp.network.vpn from config/landing-zone.yaml, else off. The pre-shared key is never config: set vpn_shared_secret_wo."
   type        = any
   default     = null
 }
@@ -128,6 +128,18 @@ variable "vpn_shared_secret_wo_version" {
   type        = number
   default     = 1
   nullable    = false
+}
+
+variable "hybrid_dns" {
+  description = "Hybrid DNS on the hub VPC, used only when the VPN or an Interconnect is on: enable_inbound_forwarding (default true) adds an inbound DNS server policy, so on-premises resolvers can forward the internal domain to its entry-point addresses; forward_zones (key => dns_name ending with a dot, target_ips) forwards on-premises domains to the on-premises resolvers. Null = gcp.network.hybrid_dns from config/landing-zone.yaml, else inbound forwarding only."
+  type = object({
+    enable_inbound_forwarding = optional(bool, true)
+    forward_zones = optional(map(object({
+      dns_name   = string
+      target_ips = list(string)
+    })), {})
+  })
+  default = null
 }
 
 variable "interconnects" {

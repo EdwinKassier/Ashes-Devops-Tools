@@ -51,3 +51,57 @@ run "write_only_secret_never_reaches_the_planned_attribute" {
     error_message = "A write-only secret must leave shared_secret null and carry the rotation version."
   }
 }
+
+# CUSTOM mode advertises only what is listed. advertised_groups = ALL_SUBNETS
+# keeps every subnet of the VPC (what DEFAULT mode announces) next to the
+# custom ranges.
+run "custom_mode_keeps_all_subnets_group" {
+  command = plan
+
+  variables {
+    advertised_groups    = ["ALL_SUBNETS"]
+    advertised_ip_ranges = [{ range = "10.10.0.0/16", description = "environment dev" }]
+  }
+
+  assert {
+    condition = (
+      google_compute_router.router.bgp[0].advertise_mode == "CUSTOM" &&
+      tolist(google_compute_router.router.bgp[0].advertised_groups) == tolist(["ALL_SUBNETS"]) &&
+      [for r in google_compute_router.router.bgp[0].advertised_ip_ranges : r.range] == ["10.10.0.0/16"]
+    )
+    error_message = "advertised_groups must reach the router next to the custom ranges."
+  }
+}
+
+run "explicit_ranges_without_groups_unchanged" {
+  command = plan
+
+  variables {
+    advertised_ip_ranges = [{ range = "10.0.0.0/12", description = "GCP block" }]
+  }
+
+  assert {
+    condition     = google_compute_router.router.bgp[0].advertise_mode == "CUSTOM" && length(coalesce(google_compute_router.router.bgp[0].advertised_groups, [])) == 0
+    error_message = "Without advertised_groups a CUSTOM router announces only its listed ranges (unchanged)."
+  }
+}
+
+run "default_mode_without_ranges" {
+  command = plan
+
+  assert {
+    condition     = google_compute_router.router.bgp[0].advertise_mode == "DEFAULT" && length(coalesce(google_compute_router.router.bgp[0].advertised_groups, [])) == 0
+    error_message = "Without custom ranges the router stays in DEFAULT mode."
+  }
+}
+
+run "rejects_unknown_advertised_group" {
+  command = plan
+
+  variables {
+    advertised_groups    = ["ALL_PEERS"]
+    advertised_ip_ranges = [{ range = "10.10.0.0/16" }]
+  }
+
+  expect_failures = [var.advertised_groups]
+}
