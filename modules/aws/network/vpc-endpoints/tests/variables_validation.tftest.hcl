@@ -37,3 +37,16 @@ run "bad_region_rejected" {
 
   expect_failures = [var.region]
 }
+
+run "allowed_cidrs_must_be_cidrs" {
+  command = plan
+
+  variables {
+    vpc_id        = "vpc-0123456789abcdef0"
+    region        = "eu-west-2"
+    org_id        = "o-abc1234567"
+    allowed_cidrs = ["not-a-cidr"]
+  }
+
+  expect_failures = [var.allowed_cidrs]
+}

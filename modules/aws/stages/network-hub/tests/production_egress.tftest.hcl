@@ -85,8 +85,11 @@ override_module {
 }
 
 override_module {
-  target  = module.vpc_endpoints
-  outputs = { phz_id = "Z0000000000000000000" }
+  target = module.vpc_endpoints
+  outputs = {
+    phz_id               = "Z0000000000000000000"
+    shared_dns_zone_arns = { ssm = "arn:aws:route53:::hostedzone/Z0000000000000000001" }
+  }
 }
 
 override_module {

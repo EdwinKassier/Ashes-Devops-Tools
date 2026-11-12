@@ -942,6 +942,40 @@ you point them at `resolver_inbound_endpoint_ips`. The new outbound endpoint is
 replaced in the same apply, and forward rules fail between the destroy and the
 create. Do this in a change window.
 
+#### Central interface endpoints get a security group and shared private DNS (aws-network)
+
+**Breaking: the endpoint DNS changes in place.** aws-network now passes
+`allowed_cidrs = [top_cidr]` and `enable_shared_private_dns = true` to
+`modules/aws/network/vpc-endpoints`. Before, the endpoints had no security
+group, so they used the egress VPC default group, which the `vpc` module
+strips to deny-all: the endpoints accepted no traffic, even from the egress
+VPC. Their private DNS was also visible only inside the egress VPC.
+
+What the plan shows on an existing estate:
+
+- A new security group `interface-endpoints-*` (HTTPS from `top_cidr`).
+- Each `aws_vpc_endpoint.interface` updates in place (checked against aws
+  provider v6.72.0: `security_group_ids` and, for interface endpoints,
+  `private_dns_enabled` are not ForceNew): the default group is replaced by the
+  new group, and `private_dns_enabled` goes from `true` to `false`. No endpoint
+  is replaced, and the endpoint IPs do not change.
+- One new private hosted zone per service (`<service>.<region>.amazonaws.com`)
+  with an alias A record to the endpoint, associated with the egress VPC, and a
+  profile resource association for each zone (new output
+  `shared_dns_zone_arns`).
+
+Outage window: the zones are created after the endpoints stop using their own
+private DNS (`depends_on`), because the two names conflict. Between the two
+steps, clients in the egress VPC resolve the public service addresses and
+reach them through NAT, so AWS API calls keep working. The spokes do not
+resolve the endpoint names until they associate the Route 53 Profile. The
+change runs in one apply; nothing needs to be done by hand.
+
+Direct callers of the module: nothing changes unless you set
+`allowed_cidrs` or `enable_shared_private_dns`. With
+`enable_shared_private_dns`, list in `interface_services` only services whose
+private DNS name is `<service>.<region>.amazonaws.com`.
+
 #### Access Analyzer in every enabled region (aws-security)
 
 The external analyzer now exists in every `aws.enabled_regions` entry (the home

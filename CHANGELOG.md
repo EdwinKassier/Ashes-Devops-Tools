@@ -636,6 +636,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   DNS only to the forward targets. The profile now carries the DNS Firewall rule group, the
   forward rules and `profile_hosted_zone_arns`. `forward_rules` need the endpoints. New outputs
   `inbound_endpoint_ips` / `resolver_inbound_endpoint_ips`. See `UPGRADING.md`.
+- **The central interface endpoints serve the spokes (ARC-6, breaking).** The endpoints in the
+  egress VPC had no security group, so the deny-all default group blocked every caller, and their
+  private DNS was visible only in the egress VPC. `vpc-endpoints` gains `allowed_cidrs` (a
+  module-owned group that admits HTTPS) and `enable_shared_private_dns` (one private hosted zone
+  per service with an alias record, output `shared_dns_zone_arns`). aws-network admits `top_cidr`
+  and adds the zones to the Route 53 Profile. Spoke traffic to the endpoints stays inspected
+  (`docs/known-gaps.md`). See `UPGRADING.md`.
 - **AZs from another region fail at plan (ARC-3).** `modules/aws/network/vpc` now fails the plan
   when an availability zone name does not start with `region`. Before, the default
   `eu-west-2a`/`eu-west-2b` zones reached every subnet in another region and the apply failed with

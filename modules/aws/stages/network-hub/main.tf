@@ -462,29 +462,38 @@ resource "terraform_data" "production_egress_enforced" {
   }
 }
 
+locals {
+  # Resolver endpoints only serve on-premises resolution, so they follow the
+  # VPN unless set explicitly. Their security group admits DNS from the org
+  # supernet and the on-premises prefixes; the interface endpoints admit HTTPS
+  # from the org supernet. Locals so the tests can assert the wiring of the
+  # overridden endpoint and resolver modules.
+  enable_resolver_endpoints = coalesce(var.enable_resolver_endpoints, var.enable_vpn)
+  resolver_allowed_cidrs    = distinct(concat([var.top_cidr], var.vpn.onprem_cidrs))
+  endpoint_allowed_cidrs    = [var.top_cidr]
+}
+
 # ---------------------------------------------------------------------------
 # Centralized VPC endpoints — interface endpoints in the egress VPC
 # ---------------------------------------------------------------------------
 
+# Spokes reach the endpoints over the transit gateway (inspected: spoke tables
+# default-route to inspection, and the egress VPC returns top_cidr through it).
+# The module-owned security group admits HTTPS from the org supernet, and each
+# service name is served from a private hosted zone that the Route 53 Profile
+# carries to every associated spoke VPC.
 module "vpc_endpoints" {
   source = "../../network/vpc-endpoints"
 
-  vpc_id                   = module.egress_vpc.vpc_id
-  region                   = var.aws_region
-  subnet_ids               = module.egress_vpc.subnet_ids_by_tier["private"]
-  org_id                   = var.org_id
-  private_hosted_zone_name = var.private_hosted_zone_name
+  vpc_id                    = module.egress_vpc.vpc_id
+  region                    = var.aws_region
+  subnet_ids                = module.egress_vpc.subnet_ids_by_tier["private"]
+  org_id                    = var.org_id
+  private_hosted_zone_name  = var.private_hosted_zone_name
+  allowed_cidrs             = local.endpoint_allowed_cidrs
+  enable_shared_private_dns = true
 
   tags = var.tags
-}
-
-locals {
-  # Resolver endpoints only serve on-premises resolution, so they follow the
-  # VPN unless set explicitly. Their security group admits DNS from the org
-  # supernet and the on-premises prefixes. Locals so the tests can assert the
-  # wiring of the overridden resolver module.
-  enable_resolver_endpoints = coalesce(var.enable_resolver_endpoints, var.enable_vpn)
-  resolver_allowed_cidrs    = distinct(concat([var.top_cidr], var.vpn.onprem_cidrs))
 }
 
 # ---------------------------------------------------------------------------
@@ -502,6 +511,10 @@ module "route53_resolver" {
 
   enable_resolver_endpoints = local.enable_resolver_endpoints
   allowed_cidrs             = local.resolver_allowed_cidrs
+
+  # The central interface endpoint zones ride the profile. The map keys are the
+  # interface service names (plan-known), so the profile for_each is plan-safe.
+  profile_hosted_zone_arns = module.vpc_endpoints.shared_dns_zone_arns
 
   tags = var.tags
 }

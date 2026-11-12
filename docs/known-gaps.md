@@ -24,6 +24,14 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   profile shows the rule group, the rules and the zones; and with
   `aws.network.resolver_endpoints.enabled: true`, `aws-network` creates both
   endpoints with the module-owned security group.
+- **The central AWS interface endpoints are mock-tested only (ARC-6).** Mock
+  plans prove the endpoint security group (HTTPS from `top_cidr`), the private
+  DNS switch, one private hosted zone per service with an alias record, and the
+  zones in the Route 53 Profile. Confirm in the sandbox: from a hub-attached
+  spoke, `dig ssm.<region>.amazonaws.com` answers with the egress VPC endpoint
+  IPs, and `aws ssm describe-instance-information` and `aws sts
+  get-caller-identity` succeed through them. The alias target is the first
+  `dns_entry` of each endpoint (the regional name).
 - **On-premises DNS through the AWS Resolver endpoints has no return route.**
   The egress VPC `private` route tables send only `top_cidr` to the transit
   gateway, and the egress attachment's `shared` route table has no on-premises
@@ -1244,6 +1252,15 @@ side (all mock-tested, secure defaults):
   `semanticCommits` is off (the `fix(deps):` prefix is set by hand; Dependabot
   also updates the `pg` package of `vault-secrets`), and
   `required_version` / provider-major bumps stay manual by design.
+- **Spoke traffic to the central AWS interface endpoints is inspected (ARC-6,
+  D5).** It crosses Network Firewall in both directions, so it pays the per-GB
+  processing charge, and under a fail-closed production allowlist
+  (`aws:drop_established`) it passes only when
+  `aws.network.egress_domain_allowlist` covers the service names (for example
+  `.amazonaws.com`). A direct transit gateway route from the spoke tables to
+  the egress attachment would make return traffic asymmetric (the `shared`
+  table returns spoke traffic through inspection), and the stateful firewall
+  drops asymmetric flows. Revisit with a dedicated endpoints segment.
 
 ## Scanner coverage
 

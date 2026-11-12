@@ -26,9 +26,29 @@ variable "subnet_ids" {
 }
 
 variable "security_group_ids" {
-  description = "Security group IDs to associate with the interface endpoint ENIs."
+  description = "Security group IDs to associate with the interface endpoint ENIs. Empty (default) = a module-owned group that admits HTTPS from allowed_cidrs (when allowed_cidrs is set)."
   type        = list(string)
   default     = []
+  nullable    = false
+}
+
+variable "allowed_cidrs" {
+  description = "CIDRs that may reach the interface endpoints on 443 when security_group_ids is empty (the module then owns the group). Use the org supernet for centralized endpoints. Empty with no security_group_ids = the VPC default security group."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for c in var.allowed_cidrs : can(cidrnetmask(c))])
+    error_message = "allowed_cidrs entries must be IPv4 CIDR blocks."
+  }
+}
+
+variable "enable_shared_private_dns" {
+  description = "Serve each endpoint's regional name (<service>.<region>.amazonaws.com) from a private hosted zone with an alias record, instead of the endpoint's own private DNS, so other VPCs (through a Route 53 Profile) resolve the central endpoint. Only for services whose private DNS name is <service>.<region>.amazonaws.com. Default false."
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 variable "interface_services" {

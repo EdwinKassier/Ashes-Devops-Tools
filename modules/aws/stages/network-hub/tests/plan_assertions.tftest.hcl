@@ -85,8 +85,11 @@ override_module {
 }
 
 override_module {
-  target  = module.vpc_endpoints
-  outputs = { phz_id = "Z0000000000000000000" }
+  target = module.vpc_endpoints
+  outputs = {
+    phz_id               = "Z0000000000000000000"
+    shared_dns_zone_arns = { ssm = "arn:aws:route53:::hostedzone/Z0000000000000000001" }
+  }
 }
 
 override_module {
@@ -367,4 +370,17 @@ run "hub_vpc_straddling_the_regional_pool_fails" {
   }
 
   expect_failures = [aws_vpc_ipam_pool_cidr_allocation.hub_static["inspection"]]
+}
+
+run "interface_endpoints_admit_the_org_supernet" {
+  command = plan
+
+  variables {
+    top_cidr = "10.64.0.0/10"
+  }
+
+  assert {
+    condition     = length(local.endpoint_allowed_cidrs) == 1 && local.endpoint_allowed_cidrs[0] == "10.64.0.0/10"
+    error_message = "The central interface endpoints must admit HTTPS from top_cidr, so the spokes can reach them (the VPC default security group denies everything)."
+  }
 }
