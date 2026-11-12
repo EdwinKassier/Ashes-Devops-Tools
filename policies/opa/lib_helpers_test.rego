@@ -29,6 +29,20 @@ test_policy_doc_string_and_object if {
 	lib.statements({"Statement": [{"Effect": "Deny"}]}) == [{"Effect": "Deny"}]
 }
 
+test_unknown_or_not_flags_unknown if {
+	r := object.union(rc("x", ["create"], {}), {"change": {"after_unknown": {"a": true}}})
+	lib.unknown_or_not(r, "a", true)
+}
+
+test_unknown_or_not_flags_known_wrong if {
+	lib.unknown_or_not(rc("x", ["create"], {"a": false}), "a", true)
+	lib.unknown_or_not(rc("x", ["create"], {}), "a", true)
+}
+
+test_unknown_or_not_passes_expected if {
+	not lib.unknown_or_not(rc("x", ["create"], {"a": true}), "a", true)
+}
+
 test_unknown_values_are_skipped if {
 	r := object.union(rc("x", ["create"], {}), {"change": {"after_unknown": {"a": true}}})
 	not lib.known_and_not(r, "a", true)

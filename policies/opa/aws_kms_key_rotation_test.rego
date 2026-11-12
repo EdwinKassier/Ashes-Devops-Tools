@@ -26,3 +26,27 @@ test_rotation_omitted_fails if {
 test_asymmetric_key_exempt if {
 	count(p.deny) == 0 with input as key({"enable_key_rotation": false, "customer_master_key_spec": "RSA_2048"})
 }
+
+test_unknown_rotation_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "aws_kms_key.k", "mode": "managed", "type": "aws_kms_key",
+		"change": {"actions": ["create"], "after": {"customer_master_key_spec": "SYMMETRIC_DEFAULT"}, "after_unknown": {"enable_key_rotation": true}},
+	}]}}
+	count(p.deny) == 1 with input as inp
+}
+
+test_unknown_rotation_asymmetric_exempt if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "aws_kms_key.k", "mode": "managed", "type": "aws_kms_key",
+		"change": {"actions": ["create"], "after": {"customer_master_key_spec": "RSA_2048"}, "after_unknown": {"enable_key_rotation": true}},
+	}]}}
+	count(p.deny) == 0 with input as inp
+}
+
+test_unknown_key_spec_counts_as_symmetric if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "aws_kms_key.k", "mode": "managed", "type": "aws_kms_key",
+		"change": {"actions": ["create"], "after": {"enable_key_rotation": false}, "after_unknown": {"customer_master_key_spec": true}},
+	}]}}
+	count(p.deny) == 1 with input as inp
+}

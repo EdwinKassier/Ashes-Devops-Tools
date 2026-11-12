@@ -45,12 +45,30 @@ test_public_aurora_instance_fails if {
 	count(p.deny) == 1 with input as one("aws_rds_cluster_instance", {"publicly_accessible": true})
 }
 
-test_unknown_encryption_skipped if {
-	plan := {"plan": {"resource_changes": [{
-		"address": "aws_rds_cluster.x",
-		"mode": "managed",
-		"type": "aws_rds_cluster",
-		"change": {"actions": ["create"], "after": {}, "after_unknown": {"storage_encrypted": true}},
-	}]}}
-	count(p.deny) == 0 with input as plan
+unknown_attr(type, after, attr) := {"plan": {"resource_changes": [{
+	"address": sprintf("%s.x", [type]),
+	"mode": "managed",
+	"type": type,
+	"change": {"actions": ["create"], "after": after, "after_unknown": {attr: true}},
+}]}}
+
+test_unknown_encryption_denied if {
+	count(p.deny) == 1 with input as unknown_attr("aws_rds_cluster", {}, "storage_encrypted")
+}
+
+test_unknown_db_instance_encryption_denied if {
+	count(p.deny) == 1 with input as unknown_attr("aws_db_instance", {"publicly_accessible": false}, "storage_encrypted")
+}
+
+test_unknown_publicly_accessible_denied if {
+	count(p.deny) == 1 with input as unknown_attr("aws_rds_cluster_instance", {}, "publicly_accessible")
+}
+
+test_private_aurora_instance_passes if {
+	count(p.deny) == 0 with input as one("aws_rds_cluster_instance", {"publicly_accessible": false})
+}
+
+test_unknown_message_names_plan_known if {
+	some msg in p.deny with input as unknown_attr("aws_rds_cluster", {}, "storage_encrypted")
+	contains(msg, "plan-known")
 }

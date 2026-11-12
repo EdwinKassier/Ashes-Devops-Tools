@@ -480,6 +480,11 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   speculative plans (`enable_speculative_on_secret_bearing` opts back in) and the approvers team
   confirms runs. A `check` warns when a secret-bearing workload shares a project with the control
   plane. See `UPGRADING.md`.
+- **Mandatory OPA controls fail closed on unknown values (CICD-10, breaking).** `gcs_no_public_buckets`,
+  `aws_s3_public_access` (the four public access block switches), `aws_kms_key_rotation` and
+  `database_private_encrypted` (`storage_encrypted`, `publicly_accessible`) now deny a value that is
+  unknown at plan time, through the new `lib.unknown_or_not`. Before, an apply-time value passed
+  unchecked. See `UPGRADING.md`.
 - **Wildcard WIF bindings are denied (SEC-10, breaking).** The new mandatory OPA policy
   `gcp_wif_principalset_pinned` denies a workload identity principalSet on the whole pool (`/*`),
   `attribute.repository_owner_id`, `attribute.repository` or `attribute.ref`, in any

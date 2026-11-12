@@ -4,6 +4,8 @@
 #   - aws_db_instance:          storage_encrypted = true, publicly_accessible = false
 #   - aws_rds_cluster:          storage_encrypted = true
 #   - aws_rds_cluster_instance: publicly_accessible = false
+# An unknown storage_encrypted or publicly_accessible is a violation; so is an
+# unknown ipv4_enabled (absent from the plan, so it reads as the default).
 # Cloud SQL defaults ipv4_enabled to true when ip_configuration is omitted,
 # so an absent block is a violation.
 package terraform.policies.database_private_encrypted
@@ -37,13 +39,17 @@ private_types := {"aws_db_instance", "aws_rds_cluster_instance"}
 deny contains msg if {
 	some t in encrypted_types
 	some rc in lib.written_of_type(t)
-	lib.known_and_not(rc, "storage_encrypted", true)
-	msg := sprintf("%s: storage_encrypted must be true", [rc.address])
+	lib.unknown_or_not(rc, "storage_encrypted", true)
+	msg := sprintf("%s: storage_encrypted must be true%s", [rc.address, lib.unknown_hint])
 }
+
+publicly_accessible(rc) if lib.after(rc, "publicly_accessible") == true
+
+publicly_accessible(rc) if lib.unknown(rc, "publicly_accessible")
 
 deny contains msg if {
 	some t in private_types
 	some rc in lib.written_of_type(t)
-	lib.after(rc, "publicly_accessible") == true
-	msg := sprintf("%s: publicly_accessible must be false", [rc.address])
+	publicly_accessible(rc)
+	msg := sprintf("%s: publicly_accessible must be false%s", [rc.address, lib.unknown_hint])
 }

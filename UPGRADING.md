@@ -386,6 +386,27 @@ only log-named buckets. The `<prefix>opa-guardrails` set stays non-overridable.
 skipping it. A single-cloud estate sets the `TFC_DRIFT_WORKSPACES` repository
 variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
+#### Mandatory OPA controls deny unknown values (policies, breaking)
+
+**Breaking: the non-overridable guardrails set now fails runs that passed
+before.** These mandatory rules used to skip a value that is unknown at plan
+time. They now deny it:
+
+| Policy | Attributes |
+|---|---|
+| `gcs_no_public_buckets` | `google_storage_bucket` `uniform_bucket_level_access`, `public_access_prevention` |
+| `aws_s3_public_access` | `block_public_acls`, `block_public_policy`, `ignore_public_acls`, `restrict_public_buckets` on `aws_s3_bucket_public_access_block` and `aws_s3_account_public_access_block` |
+| `aws_kms_key_rotation` | symmetric `aws_kms_key` `enable_key_rotation` |
+| `database_private_encrypted` | `aws_db_instance` / `aws_rds_cluster` `storage_encrypted`; `aws_db_instance` / `aws_rds_cluster_instance` `publicly_accessible` |
+
+Every module in this repo sets these attributes to literals. A fork fails when
+it sets one from an apply-time value, or omits an attribute that the provider
+computes when it is not set (for example `public_access_prevention` and
+`uniform_bucket_level_access` on a new bucket, `storage_encrypted` on a new
+Aurora cluster, `publicly_accessible` on a new cluster instance). Set each one
+explicitly to a plan-known value. The message ends with "an unknown value
+counts as a violation".
+
 #### Wildcard workload identity bindings are denied (policies, breaking)
 
 **Breaking: the non-overridable guardrails set now fails runs that passed

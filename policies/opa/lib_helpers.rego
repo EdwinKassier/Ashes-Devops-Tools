@@ -36,8 +36,9 @@ written_of_type(t) := {rc |
 	writes(rc)
 }
 
-# The planned value is computed (unknown until apply). Policies skip unknown
-# values instead of failing on them; the apply-time value is not plannable.
+# The planned value is computed (unknown until apply). Mandatory policies on
+# security switches deny an unknown value (unknown_or_not); other rules skip
+# it or report it as advisory, because the apply-time value is not plannable.
 unknown(rc, attr) if rc.change.after_unknown[attr] == true
 
 # JSON policy documents may be strings (jsonencode) or already-decoded.
@@ -69,3 +70,13 @@ known_and_not(rc, attr, expected) if {
 	not unknown(rc, attr)
 	after(rc, attr) != expected
 }
+
+# Fail-closed form for MANDATORY controls: the value is unknown at plan time,
+# or known and different from the expected value. A security switch should be
+# a plan-known value; an apply-time value cannot be checked, so it is denied.
+unknown_or_not(rc, attr, _) if unknown(rc, attr)
+
+unknown_or_not(rc, attr, expected) if known_and_not(rc, attr, expected)
+
+# Message suffix for a rule that uses unknown_or_not.
+unknown_hint := " (an unknown value counts as a violation: set a plan-known value)"

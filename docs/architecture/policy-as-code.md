@@ -71,9 +71,9 @@ policy cannot see what is set that way ([known gaps](../known-gaps.md)). The
 | `address`, `module_address`, `mode`, `type`, `name` | Resource identity. `mode == "data"` entries are ignored. |
 | `change.actions` | `["create"]`, `["update"]`, `["delete"]`, `["no-op"]`, or a replace (`["delete","create"]` / `["create","delete"]`). |
 | `change.before` / `change.after` | Planned values. Nested blocks show up as lists (`settings[0].ip_configuration[0]`). |
-| `change.after_unknown` | `true` for values that are only known after apply. Policies **skip** unknown values instead of failing on them. |
+| `change.after_unknown` | `true` for values that are only known after apply. Mandatory policies deny an unknown value for the attribute they check (`lib.unknown_or_not`). Advisory policies may skip it. A value that is genuinely computed, such as a pool name that holds a new project number, is reported by an advisory rule instead. |
 
-Shared helpers (`writes`, `creates`, `deletes`, `known_and_not`, policy-JSON
+Shared helpers (`writes`, `creates`, `deletes`, `known_and_not`, `unknown_or_not`, policy-JSON
 decoding) are in `policies/opa/lib_helpers.rego` (`package terraform.lib`). A policy
 query can evaluate code from several `.rego` files.
 
@@ -110,8 +110,11 @@ returns a set of messages, and an empty set means the policy passed.
 
 The mandatory rules only encode controls that this repo's modules already meet
 by default: hardened GCS buckets, private Cloud SQL, KMS rotation, private and
-encrypted Aurora, no inline `*:*` Allow. Turning them on should not block an
-existing workspace. Run `enable_policy_sets` in a non-production project first
+encrypted Aurora, no inline `*:*` Allow. Each module sets the switches these
+rules check (`uniform_bucket_level_access`, `public_access_prevention`, the four
+public access block switches, `enable_key_rotation`, `storage_encrypted`,
+`publicly_accessible`) to a literal, so they are known at plan time. Turning
+them on should not block an existing workspace. Run `enable_policy_sets` in a non-production project first
 and read the advisory results before relying on them.
 
 ## The TFC-layer guard in practice
@@ -142,7 +145,10 @@ on CODEOWNERS for `envs/tfc-admin/**` and `policies/**`.
    `deny contains msg if { ... }` rule, or from `warn` for an advisory companion
    query in the same package.
 2. Filter with `lib.written_of_type("<type>")` (create/update/replace, managed
-   only). Use `lib.known_and_not(rc, attr, want)` so that unknown values pass.
+   only). In a mandatory rule, use `lib.unknown_or_not(rc, attr, want)`, so that
+   an unknown value fails, and append `lib.unknown_hint` to the message. Use
+   `lib.known_and_not(rc, attr, want)` (unknown values pass) only in an advisory
+   rule, or when the attribute is genuinely computed at apply time.
    Read optional attributes with `object.get`, never with a bare path that turns
    undefined.
 3. Add `policies/opa/<name>_test.rego` with at least one passing and one failing

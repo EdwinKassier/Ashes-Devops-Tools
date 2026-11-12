@@ -3,7 +3,7 @@
 #     - canned ACLs that grant public or any-authenticated-user access
 #       (aws_s3_bucket_acl.acl, legacy aws_s3_bucket.acl)
 #     - an aws_s3_bucket_public_access_block / aws_s3_account_public_access_block
-#       with any of its four switches turned off
+#       with any of its four switches turned off or unknown at plan time
 #   warn (ADVISORY):
 #     - a NEW aws_s3_bucket whose module instance does not also create an
 #       aws_s3_bucket_public_access_block (the bucket id is unknown at plan
@@ -32,8 +32,8 @@ deny contains msg if {
 	some t in pab_types
 	some rc in lib.written_of_type(t)
 	some switch in pab_switches
-	lib.known_and_not(rc, switch, true)
-	msg := sprintf("%s: %s must be true", [rc.address, switch])
+	lib.unknown_or_not(rc, switch, true)
+	msg := sprintf("%s: %s must be true%s", [rc.address, switch, lib.unknown_hint])
 }
 
 module_of(rc) := object.get(rc, "module_address", "")

@@ -61,3 +61,21 @@ test_account_pab_satisfies_warn if {
 		r("aws_s3_account_public_access_block", "acct", "", full_pab),
 	])
 }
+
+test_unknown_pab_switch_denied if {
+	count(p.deny) == 1 with input as plan([{
+		"address": "aws_s3_bucket_public_access_block.p", "module_address": "", "mode": "managed",
+		"type": "aws_s3_bucket_public_access_block", "name": "p",
+		"change": {"actions": ["create"], "after": {"block_public_acls": true, "ignore_public_acls": true, "restrict_public_buckets": true}, "after_unknown": {"block_public_policy": true}},
+	}])
+}
+
+# The bucket id is unknown when the bucket is created in the same run; that
+# does not matter, only the four switches are required known.
+test_unknown_bucket_id_passes if {
+	count(p.deny) == 0 with input as plan([{
+		"address": "aws_s3_bucket_public_access_block.p", "module_address": "", "mode": "managed",
+		"type": "aws_s3_bucket_public_access_block", "name": "p",
+		"change": {"actions": ["create"], "after": full_pab, "after_unknown": {"bucket": true, "id": true}},
+	}])
+}
