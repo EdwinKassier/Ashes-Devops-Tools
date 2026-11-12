@@ -139,7 +139,7 @@ variable "apply_role_policy_arns" {
 }
 
 variable "enable_apply_permissions_boundary" {
-  description = "Cap the apply role with a permissions boundary (default true). With apply_permissions_boundary_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; disabling Security Hub, Macie, Inspector or Access Analyzer; modifying the plan/apply roles, the OIDC provider or the boundary itself; creating/modifying/passing the break-glass, OrganizationAccountAccessRole or StackSet execution roles; destroying or re-policying protected KMS keys; dp:* tag changes; and iam:CreateUser/CreateAccessKey/CreateLoginProfile."
+  description = "Cap the apply role with a permissions boundary (default true). With apply_permissions_boundary_arn = null the StackSet embeds a managed boundary that allows everything EXCEPT: leaving the org; stopping/deleting CloudTrail, GuardDuty and Config; disabling Security Hub, Macie, Inspector or Access Analyzer; modifying the plan/apply roles, the OIDC provider or the boundary itself; creating/modifying/passing the break-glass, OrganizationAccountAccessRole or StackSet execution roles; destroying or re-policying protected KMS keys; deleting the Vault Lock, access policy or vault of protected_backup_vault_names; dp:* tag changes; and iam:CreateUser/CreateAccessKey/CreateLoginProfile."
   type        = bool
   default     = true
 }
@@ -309,6 +309,18 @@ variable "kms_protection_tag_key" {
   validation {
     condition     = can(regex("^[A-Za-z0-9 _.:/=+@-]{1,128}$", var.kms_protection_tag_key)) && !startswith(var.kms_protection_tag_key, "aws:")
     error_message = "kms_protection_tag_key must be a valid AWS tag key (1-128 chars, not starting with aws:)."
+  }
+}
+
+variable "protected_backup_vault_names" {
+  description = "AWS Backup vault names (any region of each member account) whose Vault Lock configuration, access policy and the vault itself the tfc-apply boundary forbids the apply identity to delete (DeleteBackupVaultLockConfiguration, DeleteBackupVaultAccessPolicy, DeleteBackupVault). Creating or replacing them (Put*) stays allowed, so the first aws-backup apply can create the lock and the policy. Default: the aws-backup central copy vault. Empty omits the statement."
+  type        = list(string)
+  default     = ["org-backup-copy-vault"]
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for n in var.protected_backup_vault_names : can(regex("^[A-Za-z0-9_-]{2,50}$", n))])
+    error_message = "protected_backup_vault_names entries must be AWS Backup vault names (2-50 letters, digits, hyphens or underscores; no wildcards)."
   }
 }
 

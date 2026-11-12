@@ -782,3 +782,70 @@ run "template_fits_with_many_bindings" {
     error_message = "the template with 24 bindings must stay within the 51,200-byte inline template limit"
   }
 }
+
+# The locked backup copy vault: during the lock's changeable_for_days window the
+# apply role must not delete the lock, the vault access policy or the vault.
+# Creating them (CreateBackupVault, PutBackupVaultLockConfiguration,
+# PutBackupVaultAccessPolicy) stays allowed, so the aws-backup apply that first
+# creates the copy vault still succeeds. Break-glass is a separate role, so
+# the boundary does not touch it.
+run "boundary_denies_copy_vault_unlock" {
+  command = plan
+
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]).Action) == toset([
+        "backup:DeleteBackupVault", "backup:DeleteBackupVaultAccessPolicy", "backup:DeleteBackupVaultLockConfiguration",
+      ]) &&
+      [for r in one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]).Resource : r["Fn::Sub"]] == [
+        "arn:$${AWS::Partition}:backup:*:$${AWS::AccountId}:backup-vault:org-backup-copy-vault",
+      ]
+    )
+    error_message = "the boundary must deny deleting the copy vault, its access policy and its Vault Lock configuration."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      !anytrue([for a in flatten([s.Action]) : contains(["backup:CreateBackupVault", "backup:PutBackupVaultAccessPolicy", "backup:PutBackupVaultLockConfiguration", "backup:*", "backup:Put*", "backup:Create*"], a)])
+      if s.Effect == "Deny"
+    ])
+    error_message = "the boundary must not deny creating the copy vault, its Vault Lock or its access policy (the first aws-backup apply needs them)."
+  }
+}
+
+run "boundary_fits_quota_with_long_names" {
+  # Long role, tag and vault names must keep the embedded boundary under the
+  # 6,144-character managed-policy quota (measured 5,171 on 2026-11-12).
+  command = plan
+
+  variables {
+    break_glass_role_name        = "landing-zone/break-glass-organization-administrator-role"
+    protected_role_names         = ["OrganizationAccountAccessRole", "stacksets-exec-*", "landing-zone/security-incident-response-administrator-role"]
+    protected_backup_vault_names = ["org-backup-copy-vault-eu-west-2-organization-001", "org-backup-copy-vault-eu-west-1-organization-002"]
+    kms_protection_tag_key       = "landing-zone:protected-encryption-key"
+  }
+
+  assert {
+    condition     = length(jsonencode(jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument)) < 6144
+    error_message = "the embedded boundary must stay under the 6,144-character managed-policy quota with long names"
+  }
+
+  assert {
+    condition     = length(one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]).Resource) == 2
+    error_message = "every protected_backup_vault_names entry must be a resource of the deny"
+  }
+}
+
+run "copy_vault_unlock_deny_omitted_without_protected_vaults" {
+  command = plan
+
+  variables {
+    protected_backup_vault_names = []
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]) == 0
+    error_message = "an empty protected_backup_vault_names must omit the statement (an empty Resource list is invalid policy)."
+  }
+}

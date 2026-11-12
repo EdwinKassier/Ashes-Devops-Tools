@@ -16,7 +16,8 @@
 #       managed policy) so the apply identity cannot leave the org, blind the
 #       detective controls, rewrite its own trust/boundary, squat or modify the
 #       break-glass / OrganizationAccountAccessRole / stacksets-exec-* roles,
-#       destroy or re-policy protected KMS keys, touch dp:* perimeter tags,
+#       destroy or re-policy protected KMS keys, delete the locked backup
+#       copy vault's lock, access policy or vault, touch dp:* perimeter tags,
 #       mint long-lived IAM user credentials, or create/grant to a role that
 #       does not carry the same boundary (boundary propagation); every other
 #       action stays allowed.
@@ -142,6 +143,23 @@ locals {
       Resource = "*"
     },
   ] : s if var.enable_apply_boundary_propagation]
+
+  # The locked backup copy vault (protected_backup_vault_names): during the
+  # Vault Lock's changeable_for_days window the apply identity must not delete
+  # the lock, the vault access policy or the vault. Only Delete* is denied:
+  # the first aws-backup apply creates the lock and the policy with
+  # PutBackupVaultLockConfiguration / PutBackupVaultAccessPolicy, and IAM has no
+  # condition key that tells a first Put from a later overwrite (known-gaps).
+  # Break-glass is a separate role and is not capped by this boundary.
+  # (for-expression filter: an empty Resource list is invalid policy.)
+  protected_backup_vault_statements = [for s in [
+    {
+      Sid      = "DenyProtectedBackupVaultUnlock"
+      Effect   = "Deny"
+      Action   = ["backup:DeleteBackupVault", "backup:DeleteBackupVaultAccessPolicy", "backup:DeleteBackupVaultLockConfiguration"]
+      Resource = [for n in var.protected_backup_vault_names : { "Fn::Sub" = "arn:$${AWS::Partition}:backup:*:$${AWS::AccountId}:backup-vault:${n}" }]
+    },
+  ] : s if length(var.protected_backup_vault_names) > 0]
 
   apply_boundary_document = {
     Version = "2012-10-17"
@@ -297,6 +315,7 @@ locals {
         Resource = "*"
       },
       ],
+      local.protected_backup_vault_statements,
       local.apply_boundary_propagation_statements,
     )
   }

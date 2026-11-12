@@ -49,6 +49,28 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   so a failed copy may be reported on the source vault only. Do this in a
   throwaway vault first or within `changeable_for_days`: the lock cannot be
   removed after that window.
+- **The pipeline can still overwrite the copy vault's lock and access policy
+  during `changeable_for_days`.** The tfc-apply boundary
+  (`tfc-oidc-baseline` `protected_backup_vault_names`, statement
+  `DenyProtectedBackupVaultUnlock`) denies `DeleteBackupVaultLockConfiguration`,
+  `DeleteBackupVaultAccessPolicy` and `DeleteBackupVault` on
+  `org-backup-copy-vault`, so only break-glass can remove them. It cannot deny
+  `PutBackupVaultLockConfiguration` or `PutBackupVaultAccessPolicy`: the
+  aws-backup apply that creates the vault calls both, and IAM has no condition
+  key that tells the first call from a later overwrite. Until the window ends, a
+  compromised tfc-apply could lower `min_retention_days` or replace the access
+  policy so that copies stop arriving. After the window, AWS rejects every lock
+  change. Three more limits: the boundary caps only `tfc-apply`, so a run that
+  assumes `OrganizationAccountAccessRole` (the aws-backup legacy path without
+  TFC dynamic credentials) or a local administrator is not covered; the deny is
+  not in the deny-tamper SCP because that SCP has no room left under the
+  5,120-character AWS limit with long names (5,007 characters with the long
+  test names on 2026-11-12); and the protection exists only after aws-organization
+  applies the updated StackSet. Mitigation: keep `changeable_for_days` short
+  and watch `PutBackupVaultLockConfiguration` and `PutBackupVaultAccessPolicy`
+  in CloudTrail for the backup account during the window. Confirm in the
+  sandbox that tfc-apply gets AccessDenied on the three Delete calls and that
+  the first aws-backup apply still creates the lock and the policy.
 
 - **The explicit-CIDR IPAM default for spoke VPCs needs the sandbox proof (ARC-1).**
   `modules/aws/network/vpc` requests `cidr_block` from the IPAM pool by default.

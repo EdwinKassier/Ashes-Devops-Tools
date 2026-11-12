@@ -389,7 +389,7 @@ You opt in with `compliance.backup.copy_to_central_vault: true` in `config/landi
 
 What you cannot undo:
 
-- The copy vault lock is in Compliance mode. `changeable_for_days` (default 3) is your window to back out: during those days after the apply you can still delete the lock (`aws backup delete-backup-vault-lock-configuration --backup-vault-name org-backup-copy-vault` in the backup account) and then delete the vault's recovery points and the vault. After that window nobody can remove the lock or delete the vault while it holds recovery points, including the root user and AWS, and recovery points in it cannot be deleted before `min_retention_days`.
+- The copy vault lock is in Compliance mode. `changeable_for_days` (default 3) is your window to back out: during those days after the apply you can still delete the lock (`aws backup delete-backup-vault-lock-configuration --backup-vault-name org-backup-copy-vault` in the backup account, as break-glass: the `tfc-apply` boundary denies it, see below) and then delete the vault's recovery points and the vault. After that window nobody can remove the lock or delete the vault while it holds recovery points, including the root user and AWS, and recovery points in it cannot be deleted before `min_retention_days`.
 - Turning `copy_to_central_vault` off again stops the copies, but the plan stops at the copy vault key's deletion guard (`prevent_destroy`). Keep the key, or remove the guard from state first as the kms-key module describes.
 - Check `min_retention_days` (default 7), `max_retention_days` (default 3650) and `copy_retention_days` before the apply. `copy_retention_days` must lie between the two, or every copy job fails. After the window you cannot lower `max_retention_days` or raise `min_retention_days` beyond what the lock allows.
 - The copy vault key is tagged `protected = true`. Only break-glass can disable it, schedule its deletion or change its key policy. Its key policy names the backup account's `break-glass` role (`copy_vault_key_policy_admin_role_name`), which must exist before the apply (aws-organization `enable_member_break_glass_role`, default on). Later changes to the key policy fail as the pipeline; apply them as break-glass.
@@ -445,6 +445,12 @@ What to do:
 - A stack that plans REST API keys must set `enable_plan_role_data_read_deny = false`.
 
 The StackSet update creates the policy and removes the old inline policy.
+
+#### The tfc-apply boundary protects the locked backup copy vault (aws-organization)
+
+The embedded `tfc-apply-boundary` (tfc-oidc-baseline) has a new statement, `DenyProtectedBackupVaultUnlock`. In every member account it denies `tfc-apply` `backup:DeleteBackupVaultLockConfiguration`, `backup:DeleteBackupVaultAccessPolicy` and `backup:DeleteBackupVault` on the vaults in `protected_backup_vault_names` (default `org-backup-copy-vault`, the aws-backup central copy vault). The next aws-organization apply updates the StackSet. Creating the vault, its lock and its access policy stays allowed, so the first aws-backup apply is unaffected.
+
+What changes for you: with central copy on, a Terraform change that deletes or replaces the copy vault's lock or access policy, or the vault itself, fails as the pipeline. Apply it as break-glass, within `changeable_for_days` for the lock. The tfc-oidc-baseline input `protected_backup_vault_names` lists the vaults; the organization stage keeps its default. `PutBackupVaultLockConfiguration` and `PutBackupVaultAccessPolicy` are not denied (docs/known-gaps.md).
 
 #### The deny-tamper SCP protects StackSet-owned policies (aws-organization)
 
