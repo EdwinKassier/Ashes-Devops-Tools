@@ -970,7 +970,7 @@ run "policies_fit_aws_size_quotas_worst_case" {
   # Non-vacuous: every statement-adding option is on.
   assert {
     condition = length(setsubtract(
-      ["DenyConfigRecorderChanges", "DenyCentralDetectionOutsideSecurityAccounts", "DenyPrivilegedRoleTampering", "DenyStackSetPolicyTampering"],
+      ["DenyConfigRecorderChanges", "DenyCentralDetectionOutsideSecurityAccounts", "DenyPrivilegedRoleTampering", "DenyStackSetPolicyTampering", "DenyStackSetStackTampering"],
       [for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s.Sid]
       )) == 0 && length(setsubtract(
       ["PinTfcFederationToOrg", "PinGithubFederationToOwners", "DenyBuiltinIdpCognitoIdentity"],
@@ -1073,5 +1073,51 @@ run "tag_policy_default_reports_nothing" {
       !can(jsondecode(aws_organizations_policy.policy["tag-policy"].content).tags.CostCenter.enforced_for)
     )
     error_message = "with no resource types the tag policy must not require any key, and the free-form keys must not restrict values or enforce anything."
+  }
+}
+
+# SEC-2: the stacks a service-managed StackSet creates in member accounts are
+# named StackSet-<stack set name>-<id>. A member principal that updates one of
+# them directly (UpdateStack, a change set, a stack policy) could rewrite the
+# StackSet-owned roles and boundary outside the StackSet. Only break-glass and
+# the StackSet execution role may write to those stacks.
+run "stackset_stacks_protected" {
+  command = plan
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Resource == "arn:aws:cloudformation:*:*:stack/StackSet-*" &&
+      toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Action) == toset([
+        "cloudformation:UpdateStack", "cloudformation:DeleteStack", "cloudformation:CreateChangeSet", "cloudformation:ExecuteChangeSet",
+        "cloudformation:SetStackPolicy", "cloudformation:UpdateTerminationProtection", "cloudformation:ContinueUpdateRollback", "cloudformation:CancelUpdateStack",
+      ])
+    )
+    error_message = "the deny-tamper SCP must deny stack writes on stack/StackSet-* (UpdateStack, DeleteStack, change sets, stack policy, termination protection, rollback control)"
+  }
+
+  # Exempt: break-glass and the StackSet execution role only. Never tfc-apply.
+  assert {
+    condition = toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Condition.ArnNotLike["aws:PrincipalArn"]) == toset([
+      "arn:aws:iam::*:role/break-glass", "arn:aws:iam::*:role/stacksets-exec-*",
+    ])
+    error_message = "only break-glass and the StackSet execution role may write to StackSet stacks"
+  }
+
+  assert {
+    condition     = length(aws_organizations_policy.policy["scp-deny-tamper"].content) <= 10240
+    error_message = "deny-tamper SCP must stay within the 10,240-character SCP size quota"
+  }
+}
+
+run "stackset_stacks_follow_the_partition" {
+  command = plan
+
+  variables {
+    partition = "aws-us-gov"
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Resource == "arn:aws-us-gov:cloudformation:*:*:stack/StackSet-*"
+    error_message = "the StackSet stack deny must use the configured partition"
   }
 }

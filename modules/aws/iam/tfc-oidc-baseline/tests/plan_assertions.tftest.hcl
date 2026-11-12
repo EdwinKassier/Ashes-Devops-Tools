@@ -816,8 +816,9 @@ run "boundary_denies_copy_vault_unlock" {
 
 run "boundary_fits_quota_with_long_names" {
   # Long role, tag and vault names must keep the embedded boundary under the
-  # 6,144-character managed-policy quota (measured 5,771 on 2026-11-12, with
-  # the brownfield escalation denies and the trust-update lock).
+  # 6,144-character managed-policy quota (measured 6,059 on 2026-11-12, with
+  # the brownfield escalation denies, the trust-update lock and the StackSet
+  # stack deny).
   command = plan
 
   variables {
@@ -925,5 +926,49 @@ run "trust_update_lock_opt_out" {
       s.Sid == "DenyTamperingWithTfcBaseline" && contains(flatten([s.Action]), "iam:UpdateAssumeRolePolicy")
     ])
     error_message = "the opt-out must keep the trust deny on the TFC baseline roles."
+  }
+}
+
+# SEC-2: tfc-apply must not write to the stacks that service-managed StackSets
+# create in its account (StackSet-<name>-<id>): a direct UpdateStack or change
+# set there could rewrite the StackSet-owned roles and this boundary, and
+# CloudFormation does not report it as StackSet drift. The wildcards cover
+# UpdateStack, DeleteStack, CreateStack (name squatting), CancelUpdateStack,
+# RollbackStack and every change-set action. Same deny as the org SCP
+# DenyStackSetStackTampering (which also exempts break-glass and the StackSet
+# execution role; neither carries this boundary).
+run "boundary_denies_stackset_stack_writes" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyStackSetStackTampering" && s.Effect == "Deny" &&
+      s.Resource == "arn:*:cloudformation:*:*:stack/StackSet-*" &&
+      toset(s.Action) == toset([
+        "cloudformation:*Stack", "cloudformation:*ChangeSet", "cloudformation:SetStackPolicy",
+        "cloudformation:UpdateTerminationProtection", "cloudformation:ContinueUpdateRollback",
+      ])
+    ])
+    error_message = "the embedded boundary must deny stack, change-set, stack-policy, termination-protection and rollback writes on stack/StackSet-*"
+  }
+}
+
+run "external_boundary_mode_denies_stackset_stack_writes_inline" {
+  command = plan
+
+  variables {
+    apply_permissions_boundary_arn = "arn:aws:iam::111111111111:policy/org-apply-boundary"
+  }
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcApplyRole") || anytrue([
+        for s in r.Properties.Policies[0].PolicyDocument.Statement :
+        s.Sid == "DenyStackSetStackTampering" && s.Resource == "arn:*:cloudformation:*:*:stack/StackSet-*"
+      ])
+    ])
+    error_message = "with an external boundary the StackSet stack deny must be inline on every apply role."
   }
 }

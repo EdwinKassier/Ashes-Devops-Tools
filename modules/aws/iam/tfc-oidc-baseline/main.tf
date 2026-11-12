@@ -20,7 +20,8 @@
 #       copy vault's lock, access policy or vault, touch dp:* perimeter tags,
 #       mint long-lived IAM user credentials, grant through IAM groups or
 #       users, re-version customer-managed policies outside /tfc-managed/,
-#       retarget the aliases of protected KMS keys, update any role trust
+#       retarget the aliases of protected KMS keys, write to the StackSet-*
+#       stacks, update any role trust
 #       (trust-update lock), or create/grant to a role that does not carry
 #       the same boundary (boundary propagation); every other action stays
 #       allowed.
@@ -313,6 +314,7 @@ locals {
         Condition = { "ForAnyValue:StringLike" = { "aws:TagKeys" = "dp:*" } }
       },
       local.baseline_tamper_statement,
+      local.stackset_stack_tamper_statement,
       {
         # No new trust anchors from the pipeline. A role carrying this
         # boundary may still be granted AdministratorAccess; if the pipeline
@@ -545,6 +547,32 @@ locals {
     Resource = [for a in local.baseline_protected_arns : { "Fn::Sub" = a }]
   }
 
+  # The stacks that service-managed StackSets create in this account are named
+  # StackSet-<stack set name>-<id> (AWS CloudFormation User Guide, StackSets
+  # drift detection example StackId ".../stack/StackSet-stack-set-drift-example-...",
+  # checked 2026-11-12). The same guide: "Changes made through CloudFormation
+  # to a stack directly, rather than at the StackSet level, aren't considered
+  # drift." A direct UpdateStack or change set on such a stack could rewrite
+  # this baseline (roles, boundary, plan deny) unseen, so the apply identity
+  # may not write to them. The wildcards cover CreateStack (name squatting),
+  # UpdateStack, DeleteStack, CancelUpdateStack, RollbackStack and every
+  # change-set action; reads stay allowed. "arn:*" (any partition) instead of
+  # an Fn::Sub keeps the boundary under its 6,144-character quota. Mirrors the
+  # org SCP DenyStackSetStackTampering. Lives with the tamper deny: in the
+  # embedded boundary, or inline on the apply role with an external boundary.
+  stackset_stack_tamper_statement = {
+    Sid    = "DenyStackSetStackTampering"
+    Effect = "Deny"
+    Action = [
+      "cloudformation:*Stack",
+      "cloudformation:*ChangeSet",
+      "cloudformation:SetStackPolicy",
+      "cloudformation:UpdateTerminationProtection",
+      "cloudformation:ContinueUpdateRollback",
+    ]
+    Resource = "arn:*:cloudformation:*:*:stack/StackSet-*"
+  }
+
   # External boundary mode: the embedded boundary (and the tamper deny in it)
   # does not exist, so the same deny is attached to the apply role itself.
   apply_role_policies_property = {
@@ -552,7 +580,7 @@ locals {
       PolicyName = "deny-baseline-tampering"
       PolicyDocument = {
         Version   = "2012-10-17"
-        Statement = [local.baseline_tamper_statement]
+        Statement = [local.baseline_tamper_statement, local.stackset_stack_tamper_statement]
       }
     }]
   }

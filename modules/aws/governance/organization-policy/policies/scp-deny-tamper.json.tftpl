@@ -147,6 +147,26 @@
     },
 %{ endif ~}
     {
+      "Sid": "DenyStackSetStackTampering",
+      "Effect": "Deny",
+      "Action": [
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:SetStackPolicy",
+        "cloudformation:UpdateTerminationProtection",
+        "cloudformation:ContinueUpdateRollback",
+        "cloudformation:CancelUpdateStack"
+      ],
+      "Resource": "arn:${partition}:cloudformation:*:*:stack/StackSet-*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${jsonencode(stackset_exempt_arns)}
+        }
+      }
+    },
+    {
       "Sid": "DenyLogArchiveObjectLockTampering",
       "Effect": "Deny",
       "Action": [

@@ -111,7 +111,7 @@ variable "stackset_managed_policy_names" {
 }
 
 variable "stackset_execution_role_names" {
-  description = "Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles); themselves protected break-glass-only by DenyPrivilegedRoleTampering."
+  description = "Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering, DenyStackSetPolicyTampering and DenyStackSetStackTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles, the StackSet policies and the StackSet stacks); themselves protected break-glass-only by DenyPrivilegedRoleTampering. A self-managed StackSet or AWS Quick Setup writes its StackSet stacks as its own execution role: add that role name here, or those stack updates are denied."
   type        = list(string)
   default     = ["stacksets-exec-*"]
 

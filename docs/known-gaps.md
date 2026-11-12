@@ -369,6 +369,18 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   Essentials estate sets `enable_policy_sets = true` itself, or runs without
   the destroy guard (the `destructive_changes_guarded` check warns).
 
+- **StackSet stack deny is mock-tested only (SEC-2).** The deny-tamper SCP
+  (`DenyStackSetStackTampering`) and the `tfc-apply` boundary deny writes to
+  `stack/StackSet-*` in member accounts. The name pattern comes from AWS
+  examples (the StackSets drift-detection guide and the managed policy
+  `AWSQuickSetupSSMDeploymentRolePolicy`, checked 2026-11-12), not from a
+  stated naming rule. **Validate in the sandbox:** (1) the service-managed
+  stack in a member account is named `StackSet-<stack set name>-<id>`; (2) an
+  `aws-organization` apply that changes the `tfc-oidc-baseline` template
+  still updates every stack instance (the caller there is `stacksets-exec-*`);
+  (3) `tfc-apply` gets `AccessDenied` on `UpdateStack` for that stack. It is
+  not proven whether a direct `UpdateStack` without a role ARN would reuse a
+  service-managed stack's execution role; the deny makes that question moot.
 - **Region SCP no longer exempts the run role.** `scp-region-restriction`
   now exempts break-glass only; global-endpoint services stay in `NotAction`
   (plus `networkmanager:*` and `notifications:*`). Mock-tested only.

@@ -680,6 +680,37 @@ What changes for you:
 
 The new statement `DenyStackSetPolicyTampering` limits who can create, version, delete or tag `tfc-apply-boundary` and `tfc-plan-data-read-deny`. Only break-glass and the StackSet execution role can. Configure the names with `stackset_managed_policy_names`. An external boundary set through `apply_permissions_boundary_arn` is not covered.
 
+#### StackSet stacks are written only by the StackSet (aws-organization, breaking)
+
+**Breaking for anyone who updates a `StackSet-*` stack directly in a member account.** A
+StackSet creates a stack named `StackSet-<stack set name>-<id>` in each target account.
+CloudFormation does not report a direct update of that stack as StackSet drift, so a member
+principal could rewrite the StackSet-owned roles and the `tfc-apply` boundary that way. The next
+`aws-organization` apply changes two things:
+
+- The deny-tamper SCP gets `DenyStackSetStackTampering`. In every member account it denies
+  `cloudformation:UpdateStack`, `DeleteStack`, `CreateChangeSet`, `ExecuteChangeSet`,
+  `SetStackPolicy`, `UpdateTerminationProtection`, `ContinueUpdateRollback` and
+  `CancelUpdateStack` on `arn:<partition>:cloudformation:*:*:stack/StackSet-*`. Only break-glass
+  and the roles in `stackset_execution_role_names` (default `stacksets-exec-*`) are exempt.
+- The `tfc-apply` boundary gets `DenyStackSetStackTampering`, which denies `cloudformation:*Stack`,
+  `*ChangeSet`, `SetStackPolicy`, `UpdateTerminationProtection` and `ContinueUpdateRollback` on
+  `arn:*:cloudformation:*:*:stack/StackSet-*`. With `apply_permissions_boundary_arn` set, the
+  deny is inline on the apply role. The StackSet updates the boundary in every member account.
+
+What to do before the apply:
+
+1. Find stack writes that are not made by a service-managed StackSet. In each member account,
+   search CloudTrail for `UpdateStack`, `DeleteStack` and `ExecuteChangeSet` on `StackSet-*`
+   stacks whose caller is not `stacksets-exec-*`.
+2. If you use a self-managed StackSet or AWS Systems Manager Quick Setup, its stacks are also named
+   `StackSet-*` and are written by its own execution role (for example
+   `AWSCloudFormationStackSetExecutionRole`). Add that role name to `stackset_execution_role_names`
+   on the organization-policy module. That name is then also protected break-glass-only by
+   `DenyPrivilegedRoleTampering`.
+3. Do not fix a stuck StackSet stack by hand in the member account. Retry the StackSet operation
+   from the management account, or use break-glass.
+
 #### The log-archive SCP covers all bucket configuration changes (aws-organization)
 
 On the log archive and its access-log bucket, the SCP now denies:

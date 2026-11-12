@@ -102,6 +102,21 @@ locals {
   # Same exemptions as DenyStackSetRoleTampering: break-glass and the StackSet
   # execution role that creates and updates the policy.
   stackset_policy_arns = [for n in var.stackset_managed_policy_names : "arn:${var.partition}:iam::*:policy/${n}"]
+  # DenyStackSetStackTampering (same exemptions): the stack that a StackSet
+  # creates in each target account is named StackSet-<stack set name>-<id>
+  # (AWS CloudFormation User Guide, "Performing drift detection on
+  # CloudFormation StackSets", example StackId
+  # "arn:aws:cloudformation:eu-west-1:123456789012:stack/StackSet-stack-set-drift-example-...";
+  # the AWS managed policy AWSQuickSetupSSMDeploymentRolePolicy scopes its stack
+  # writes to "arn:aws:cloudformation:*:*:stack/StackSet-AWS-QuickSetup-SSM-*";
+  # both checked 2026-11-12). The same guide says "Changes made through
+  # CloudFormation to a stack directly, rather than at the StackSet level,
+  # aren't considered drift", so a direct UpdateStack or change set on one of
+  # these stacks could rewrite the StackSet-owned roles and boundary unseen.
+  # Only break-glass and stackset_execution_role_names may write to them. A
+  # SELF_MANAGED StackSet (or AWS Quick Setup) runs as its own execution role
+  # name in the target account: list that name in stackset_execution_role_names,
+  # or its stack updates are denied.
   policy_tamper_actions = [
     "iam:CreatePolicy",
     "iam:CreatePolicyVersion",
