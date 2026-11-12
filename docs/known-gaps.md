@@ -547,8 +547,14 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   - A no-op folder IAM write passes the `modifiedGrantsByRole` delegation condition.
   - The hub Secure Web Proxy (preview): the PSC endpoint, the FQDN allowlist,
     and a spoke private tier with no Cloud NAT.
-- **No default VPC-SC ingress rule for the TFC workload identities.** Add one
-  before you enforce an environment perimeter (`examples/vpc-sc`).
+- **An enforced environment perimeter admits the environment's own plan and
+  apply SAs (ARC-13).** Mock-tested only. gcp-projects publishes them in
+  `environment_config.<env>.automation_identities`, and the environment stage
+  adds one ingress rule for them: any source, every resource in the perimeter,
+  the restricted services only (enforced plus staged dry-run). Prove it in the
+  sandbox: enforce the dev perimeter and run a plan and an apply. Other callers
+  (CI, app deploy SAs, cross-project readers) still need rules of their own
+  (`examples/vpc-sc`).
 - **GKE Autopilot still runs in the Shared VPC host project** in production.
 - **The Secure Web Proxy has no TLS inspection.** Rules match on host name only.
 - **AWS data-plane alarms are not implemented:** TGW `PacketDropCountBlackhole` /

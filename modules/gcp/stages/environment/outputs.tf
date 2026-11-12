@@ -107,7 +107,7 @@ output "public_ingress" {
 }
 
 output "components" {
-  description = "Plan-time summary of what the environment creates: budget, cloud_armor and saas_secret_bridge (bool), the keys of vpc_sc_perimeters, service_teams, vm_backup_targets, os_patch_targets and public_ingress, the effective psc_target, and host_project_workloads (whether app services without a service_team may run in the host project)."
+  description = "Plan-time summary of what the environment creates: budget, cloud_armor and saas_secret_bridge (bool), the keys of vpc_sc_perimeters, service_teams, vm_backup_targets, os_patch_targets and public_ingress, the effective psc_target, vpc_sc_pipeline_identities (the identities the perimeter's pipeline ingress rule admits), and host_project_workloads (whether app services without a service_team may run in the host project)."
   value = {
     budget             = length(module.budget) > 0
     cloud_armor        = module.host.cloud_armor != null
@@ -118,6 +118,9 @@ output "components" {
     saas_secret_bridge = length(module.saas_secret_bridge) > 0
     public_ingress     = keys(module.app_ingress)
     psc_target         = local.psc_target
+    # The identities the perimeter's pipeline ingress rule admits (empty when
+    # there is no perimeter or no automation_identities).
+    vpc_sc_pipeline_identities = local.vpc_sc.access_policy_name == null ? [] : flatten([for p in local.automation_ingress_policy : p.identities])
     # Whether app services may run in the Shared VPC host project.
     host_project_workloads = coalesce(var.enable_host_project_workloads, !var.is_production)
   }

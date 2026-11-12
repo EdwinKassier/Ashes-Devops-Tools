@@ -28,6 +28,14 @@ locals {
         # This environment's folder-scoped VPC-SC access policy (gcp-organization);
         # null when scoped policies are disabled or the org state predates them.
         vpc_sc_access_policy_id = try(local.org.scoped_access_policy_ids[env_key], null)
+        # This environment's own Terraform plan and apply SAs (gcp-bootstrap
+        # workload_service_accounts), as serviceAccount:<email>. gcp-workload
+        # passes them to the environment stage, whose perimeter admits them.
+        # Empty when the bootstrap state has no workload SAs.
+        automation_identities = [for sa in compact([
+          try(local.bootstrap.workload_service_accounts[env_key].plan, ""),
+          try(local.bootstrap.workload_service_accounts[env_key].apply, ""),
+        ]) : "serviceAccount:${sa}"]
       }
     }
     automation_folder_grants = module.projects.automation_folder_grants
@@ -62,6 +70,7 @@ output "contract" {
       tag_value_ids           = object({ environment = string })
       is_production           = bool
       vpc_sc_access_policy_id = string
+      automation_identities   = list(string)
     }))
     automation_folder_grants = map(object({ folder = string, role = string }))
   })
@@ -87,7 +96,7 @@ output "project_numbers" {
 # org folders/tag values (remote state) with this root's project IDs/numbers and
 # the environment definitions. gcp-workload reads this.
 output "environment_config" {
-  description = "Deprecated: read contract.environment_config (removed in v1.0). Per-environment config: folder, host project, region, CIDR, labels, environment tag value, is_production, and the environment's folder-scoped VPC-SC access policy ID."
+  description = "Deprecated: read contract.environment_config (removed in v1.0). Per-environment config: folder, host project, region, CIDR, labels, environment tag value, is_production, the environment's folder-scoped VPC-SC access policy ID, and its own plan/apply automation identities."
   value       = local.contract.environment_config
 }
 

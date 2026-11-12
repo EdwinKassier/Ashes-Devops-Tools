@@ -27,7 +27,11 @@ Promotion steps:
    policy **before** flipping. Set `vpc_sc_ingress_identities` on
    `envs/gcp/organization` to the specific automation identities, and scope the
    ingress to the services they need (do not leave it as the default wildcard;
-   see audit finding M2).
+   see audit finding M2). An environment perimeter (`envs/gcp/workload`)
+   already admits that environment's own `wl-<env>-plan` and `wl-<env>-apply`
+   SAs for its restricted services (`environment_config[<env>].automation_identities`
+   from gcp-projects). Add rules (`vpc_sc_ingress_policies`) only for other
+   callers, such as CI or app deploy identities.
 4. When the logs show only expected blocks, set `vpc_sc_enable_dry_run = false`
    (hub, via `envs/gcp/organization`), the per-perimeter `enable_dry_run` on the
    host stage, and the workload perimeter on `envs/gcp/workload`.

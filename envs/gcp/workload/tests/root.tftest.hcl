@@ -155,6 +155,59 @@ run "workload_consumes_cross_root_contract" {
   }
 }
 
+# ARC-13: the environment's own plan and apply SAs travel gcp-bootstrap ->
+# gcp-projects environment_config -> this root -> the environment stage, whose
+# perimeter admits them with one ingress rule.
+run "perimeter_admits_pipeline_from_projects_contract" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            dev = {
+              folder_id               = "folders/111"
+              folder_name             = "Development"
+              host_project_id         = "acme-dev-host-abcd"
+              host_project_number     = "222222222222"
+              is_production           = false
+              region                  = "europe-west1"
+              cidr_block              = "10.10.0.0/16"
+              labels                  = {}
+              tag_value_ids           = { environment = "tagValues/1" }
+              vpc_sc_access_policy_id = "555555555"
+              automation_identities = [
+                "serviceAccount:acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com",
+                "serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com",
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = module.environment.components.vpc_sc_pipeline_identities == tolist([
+      "serviceAccount:acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com",
+      "serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com",
+    ])
+    error_message = "environment_config.<env>.automation_identities from gcp-projects must reach the environment perimeter's pipeline ingress rule."
+  }
+}
+
+# A gcp-projects state that predates automation_identities still plans: no rule.
+run "pre_arc13_projects_state_adds_no_pipeline_rule" {
+  command = plan
+
+  assert {
+    condition     = length(module.environment.components.vpc_sc_pipeline_identities) == 0
+    error_message = "An environment_config without automation_identities must add no pipeline ingress rule."
+  }
+}
+
 # Data-driven service-team registry: declaring a team is a map entry,
 # which fans out to one workload module instance with normalised folder/billing IDs.
 run "service_team_registry_fans_out" {

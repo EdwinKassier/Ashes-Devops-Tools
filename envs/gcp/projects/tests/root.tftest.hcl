@@ -89,10 +89,10 @@ run "projects_output_contract" {
   # producer drift, so this is the real guard on the seam.
   assert {
     condition = alltrue([
-      for k in ["folder_id", "folder_name", "host_project_id", "host_project_number", "region", "cidr_block", "labels", "tag_value_ids", "is_production", "vpc_sc_access_policy_id"] :
+      for k in ["folder_id", "folder_name", "host_project_id", "host_project_number", "region", "cidr_block", "labels", "tag_value_ids", "is_production", "vpc_sc_access_policy_id", "automation_identities"] :
       contains(keys(output.environment_config["dev"]), k)
     ])
-    error_message = "environment_config must expose every key gcp-workload consumes: folder_id, folder_name, host_project_id, host_project_number, region, cidr_block, labels, tag_value_ids, is_production, vpc_sc_access_policy_id."
+    error_message = "environment_config must expose every key gcp-workload consumes: folder_id, folder_name, host_project_id, host_project_number, region, cidr_block, labels, tag_value_ids, is_production, vpc_sc_access_policy_id, automation_identities."
   }
 
   assert {

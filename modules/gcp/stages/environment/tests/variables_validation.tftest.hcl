@@ -277,6 +277,18 @@ run "rejects_wif_pool_as_ingress_source" {
   expect_failures = [var.vpc_service_controls]
 }
 
+# The pipeline ingress rule takes service accounts only, never a user, group
+# or domain.
+run "rejects_non_service_account_automation_identity" {
+  command = plan
+
+  variables {
+    automation_identities = ["user:someone@example.com"]
+  }
+
+  expect_failures = [var.automation_identities]
+}
+
 # VPC-SC: any identity to any project is the exfiltration path.
 run "rejects_any_identity_egress_to_anywhere" {
   command = plan

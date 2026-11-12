@@ -120,7 +120,7 @@ variable "organization_contract" {
 }
 
 variable "projects_contract" {
-  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id). This root needs: environment_config, which must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
+  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id, automation_identities). This root needs: environment_config, which must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
   type = object({
     project_ids     = optional(map(string), {})
     project_numbers = optional(map(string), {})
@@ -133,6 +133,7 @@ variable "projects_contract" {
       labels                  = optional(map(string), {})
       is_production           = optional(bool)
       vpc_sc_access_policy_id = optional(string)
+      automation_identities   = optional(list(string), [])
     })), {})
   })
   default = null

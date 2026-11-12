@@ -82,6 +82,34 @@ run "contracts_replace_remote_state" {
   }
 }
 
+# A supplied projects_contract carries the pipeline identities too.
+run "projects_contract_carries_pipeline_identities" {
+  command = plan
+
+  variables {
+    enable_network_hub = false
+    projects_contract = {
+      environment_config = {
+        dev = {
+          folder_id               = "folders/111"
+          host_project_id         = "acme-dev-host-abcd"
+          host_project_number     = "222222222222"
+          is_production           = false
+          region                  = "europe-west1"
+          cidr_block              = "10.10.0.0/16"
+          vpc_sc_access_policy_id = "555555555"
+          automation_identities   = ["serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com"]
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.environment.components.vpc_sc_pipeline_identities == tolist(["serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com"])
+    error_message = "projects_contract.environment_config.<env>.automation_identities must reach the environment perimeter."
+  }
+}
+
 # gcp-workload without gcp-network-hub: no hub peering, no DNS peering zone.
 run "standalone_without_network_hub" {
   command = plan
@@ -144,9 +172,10 @@ run "contracts_from_config_file" {
       length(data.terraform_remote_state.network_hub) == 0 &&
       output.host_project_id == "cfgco-dev-host" &&
       local.billing_account == "billingAccounts/000000-111111-222222" &&
-      local.hub_network.dns_domain == "hub.internal."
+      local.hub_network.dns_domain == "hub.internal." &&
+      module.environment.components.vpc_sc_pipeline_identities == tolist(["serviceAccount:cfgco-wl-dev-apply@cfgco-admin.iam.gserviceaccount.com"])
     )
-    error_message = "gcp.contracts.<layer> in the config file must replace the remote-state reads"
+    error_message = "gcp.contracts.<layer> in the config file must replace the remote-state reads, automation_identities included"
   }
 }
 

@@ -106,6 +106,7 @@ locals {
           labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
           is_production           = try(tobool(e.is_production), null)
           vpc_sc_access_policy_id = try(tostring(e.vpc_sc_access_policy_id), null)
+          automation_identities   = [for i in try(e.automation_identities, []) : tostring(i)]
         }
       }
     }

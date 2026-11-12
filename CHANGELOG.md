@@ -472,6 +472,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   speculative plans (`enable_speculative_on_secret_bearing` opts back in) and the approvers team
   confirms runs. A `check` warns when a secret-bearing workload shares a project with the control
   plane. See `UPGRADING.md`.
+- **An enforced environment perimeter admits its own pipeline (ARC-13).** gcp-projects adds
+  `automation_identities` (the environment's own `wl-<env>-plan` and `wl-<env>-apply` SAs from the
+  gcp-bootstrap contract) to each `environment_config` entry. gcp-workload passes them to the
+  environment stage (new input `automation_identities`), which adds one ingress rule: those
+  identities, any source, every resource in the perimeter, the restricted services only (enforced
+  plus staged dry-run). Existing perimeters show an in-place update that adds the rule after
+  gcp-projects is re-applied.
 
 ### Changed
 

@@ -130,6 +130,7 @@ locals {
     labels                  = {}
     is_production           = null
     vpc_sc_access_policy_id = null
+    automation_identities   = []
   })
 
   labels = merge({ environment = var.environment, managed-by = "terraform" }, local.env_config.labels, var.extra_labels)
@@ -235,6 +236,12 @@ module "environment" {
     adaptive_protection = var.enable_adaptive_protection
     owasp_sensitivity   = var.owasp_sensitivity
   }
+
+  # This environment's own plan and apply SAs (gcp-bootstrap ->
+  # gcp-projects environment_config). The perimeter admits them with one
+  # ingress rule, so enforcing it does not block this workspace. A gcp-projects
+  # state that predates the key gives [] (no rule).
+  automation_identities = try(local.env_config.automation_identities, [])
 
   vpc_service_controls = {
     access_policy_name          = local.vpc_sc_access_policy

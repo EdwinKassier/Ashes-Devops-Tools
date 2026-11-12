@@ -203,6 +203,64 @@ run "enforced_perimeter_stages_dry_run_delta" {
   }
 }
 
+# An enforced perimeter admits the environment's own plan and apply service
+# accounts (ARC-13): one ingress rule, those two identities only, on the
+# restricted services (and the staged dry-run ones) only.
+run "enforced_perimeter_admits_the_environment_pipeline" {
+  command = plan
+
+  variables {
+    vpc_service_controls = {
+      access_policy_name          = "1234567890"
+      enable_dry_run              = false
+      dry_run_restricted_services = ["storage.googleapis.com", "bigquery.googleapis.com", "logging.googleapis.com"]
+    }
+    automation_identities = [
+      "serviceAccount:wl-dev-plan@admin-abc.iam.gserviceaccount.com",
+      "serviceAccount:wl-dev-apply@admin-abc.iam.gserviceaccount.com",
+    ]
+  }
+
+  assert {
+    condition = anytrue([
+      for p in local.effective_vpc_sc_ingress_policies :
+      toset(p.identities) == toset(var.automation_identities)
+    ])
+    error_message = "the perimeter must carry one ingress rule for the environment's own plan and apply service accounts"
+  }
+
+  assert {
+    condition     = length(local.effective_vpc_sc_ingress_policies) == 1 && local.effective_vpc_sc_ingress_policies[0].sources[0].access_level == "*" && local.effective_vpc_sc_ingress_policies[0].resources == tolist(["*"])
+    error_message = "The pipeline rule must admit the identities from any source (TFC runs outside Google Cloud) to every resource in the perimeter."
+  }
+
+  assert {
+    condition = (
+      toset([for o in local.effective_vpc_sc_ingress_policies[0].operations : o.service_name]) == setunion(toset(var.vpc_service_controls.restricted_services), toset(var.vpc_service_controls.dry_run_restricted_services)) &&
+      alltrue([for o in local.effective_vpc_sc_ingress_policies[0].operations : o.method_selectors[0].method == "*"])
+    )
+    error_message = "The pipeline rule must name the restricted services (enforced plus staged dry-run) one by one, never service_name \"*\"."
+  }
+}
+
+run "no_identities_means_no_default_rule" {
+  command = plan
+
+  variables {
+    vpc_service_controls = {
+      access_policy_name          = "1234567890"
+      enable_dry_run              = false
+      dry_run_restricted_services = ["storage.googleapis.com", "bigquery.googleapis.com", "logging.googleapis.com"]
+    }
+    automation_identities = []
+  }
+
+  assert {
+    condition     = length(local.effective_vpc_sc_ingress_policies) == length(var.vpc_service_controls.ingress_policies)
+    error_message = "without automation identities the stage must add no ingress rule"
+  }
+}
+
 run "explicit_psc_target_wins" {
   command = plan
 

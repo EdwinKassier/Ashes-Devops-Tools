@@ -196,8 +196,9 @@ variable "vpc_service_controls" {
     perimeter_title null = "<ENVIRONMENT> Perimeter". enable_dry_run keeps the
     perimeter in dry-run; dry_run_restricted_services stages a dry-run delta on
     an enforced perimeter. ingress_policies / egress_policies are used as given;
-    empty (default) = no rule, so an enforced perimeter admits nothing across
-    its edge until the operator names identities and projects. An ingress
+    empty (default) = no rule of the caller's, so an enforced perimeter admits
+    only the environment's own pipeline (automation_identities) across its
+    edge until the operator names identities and projects. An ingress
     source.resource must be projects/<number> or a VPC network
     (//compute.googleapis.com/projects/<p>/global/networks/<n>); use
     access_level "*" for callers from outside Google Cloud (CI, TFC). An egress
@@ -268,6 +269,18 @@ variable "vpc_service_controls" {
       for p in var.vpc_service_controls.egress_policies : p.identity_type == "ANY_IDENTITY" && p.resources != null && contains(coalesce(p.resources, ["-"]), "*")
     ])
     error_message = "vpc_service_controls.egress_policies may not combine identity_type = \"ANY_IDENTITY\" with resources = [\"*\"]: that lets any identity copy data to any project. Name the identities and the target projects (projects/<number>)."
+  }
+}
+
+variable "automation_identities" {
+  description = "The environment's own Terraform plan and apply identities (serviceAccount:<email>), from gcp-projects environment_config. When set, the perimeter gets one ingress rule that lets them reach the restricted services (enforced and staged dry-run) from any source, so an enforced perimeter does not block the pipeline. Empty = no rule."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for i in var.automation_identities : can(regex("^serviceAccount:[a-z0-9-]+@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com$", i))])
+    error_message = "automation_identities entries must be serviceAccount:<name>@<project>.iam.gserviceaccount.com."
   }
 }
 

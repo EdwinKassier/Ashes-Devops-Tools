@@ -14,13 +14,30 @@
 locals {
   vpc_sc = var.vpc_service_controls
 
-  # Effective VPC-SC policies: exactly what the caller supplies. There is no
-  # default rule in either direction. A default egress rule would have to name
-  # its identities and target projects to be safe, and this stage knows
-  # neither; a default ingress rule would need the automation identities,
-  # which the caller holds. So the perimeter starts closed and the operator
-  # opens it with named identities and projects (examples/vpc-sc).
-  effective_vpc_sc_ingress_policies = local.vpc_sc.ingress_policies
+  # Effective VPC-SC policies. There is no default egress rule: to be safe it
+  # would have to name its identities and target projects, and this stage
+  # knows neither. The one default ingress rule admits the environment's own
+  # plan and apply service accounts (var.automation_identities), so an
+  # enforced perimeter does not block its own pipeline. It is scoped to those
+  # identities and to the restricted services (enforced plus any staged
+  # dry-run ones, because the dry-run spec reuses these ingress rules), one
+  # operation per service, never service_name "*". A request to a service the
+  # perimeter does not restrict is not checked, so naming the restricted
+  # services loses nothing. Source access_level "*" (any source) is needed
+  # because HCP Terraform runs outside Google Cloud. Every other rule is the
+  # caller's (examples/vpc-sc).
+  automation_ingress_services = distinct(concat(local.vpc_sc.restricted_services, coalesce(local.vpc_sc.dry_run_restricted_services, [])))
+  automation_ingress_policy = length(var.automation_identities) == 0 || length(local.automation_ingress_services) == 0 ? [] : [{
+    identity_type = null
+    identities    = var.automation_identities
+    sources       = [{ access_level = "*", resource = null }]
+    resources     = ["*"]
+    operations = [for svc in local.automation_ingress_services : {
+      service_name     = svc
+      method_selectors = [{ method = "*", permission = null }]
+    }]
+  }]
+  effective_vpc_sc_ingress_policies = concat(local.automation_ingress_policy, local.vpc_sc.ingress_policies)
   effective_vpc_sc_egress_policies  = local.vpc_sc.egress_policies
 
   # Google APIs via PSC. Behind an ENFORCED perimeter the endpoint targets the
