@@ -241,13 +241,13 @@ variable "enable_deletion_protection" {
 }
 
 variable "enable_cloud_armor" {
-  description = "Enable the environment Cloud Armor security policy (also implied by public ingress). Null = a configured preset (e.g. prod-gcp-workload), else false."
+  description = "Enable the environment Cloud Armor security policy (also implied by public ingress). Null = a configured preset (e.g. prod-gcp-workload), else false. A regulated environment (compliance_class: regulated) fails the plan with false."
   type        = bool
   default     = null
 }
 
 variable "enable_owasp_rules" {
-  description = "Enable Cloud Armor OWASP managed rules. Null = a configured preset (e.g. prod-gcp-workload), else false."
+  description = "Enable Cloud Armor OWASP managed rules. Null = a configured preset (e.g. prod-gcp-workload), else false. A regulated environment (compliance_class: regulated) fails the plan with false."
   type        = bool
   default     = null
 }

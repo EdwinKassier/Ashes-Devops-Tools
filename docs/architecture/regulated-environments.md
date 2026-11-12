@@ -27,12 +27,12 @@ that read the key also fail the plan on any other value.
 Every guard below fails the plan and names the config key or variable to fix.
 A guard does not create or change a resource.
 
-| Control | GCP (`gcp-workload-<env>`) | AWS (`aws-network`) |
+| Control | GCP (`gcp-workload-<env>`) | AWS (`aws-network`, `aws-security`) |
 |:--|:--|:--|
 | Exfiltration perimeter | The VPC-SC perimeter must be enforced. A dry-run or absent perimeter fails the plan, and `production_vpc_sc_dry_run_waiver` is refused. The perimeter admits the environment's own plan and apply service accounts (`automation_identities` from `gcp-projects`), so enforcement does not block the pipeline. | The hub endpoint policy stays `aws:PrincipalOrgID` until you set `aws.network.vpc_endpoint_policy_mode: org_principals_and_resources` (PREVIEW, see below). A regulated estate without it plans with a warning. |
 | Egress inspection | Cloud NAT and the firewall policy (no change). | The Network Firewall is on, on every profile. The egress gate is on: the plan fails unless `aws.network.stateful_default_actions` includes `aws:drop_established` and `aws.network.egress_domain_allowlist` is not empty. `aws.network.egress_alert_only_waived`, `enforce_egress_allowlist = false` and `enable_network_firewall = false` are refused. |
-| Flow logs | Every flow is sampled (`log_config_flow_sampling = 1`), aggregated at `INTERVAL_5_SEC` (the default), and the export is kept 365 days (`vpc_flow_logs_retention_days`). Lower values fail the plan. | No change: VPC flow logs already record `ALL` traffic to the log-archive bucket (LOG-13). Their retention is the log-archive retention, `compliance.audit_log_retention_days` (default 365). |
-| Edge | Cloud Armor with the OWASP managed rules (preset values; an explicit variable can still turn them off). | No change. |
+| Flow logs | Every flow is sampled (`log_config_flow_sampling = 1`), aggregated at `INTERVAL_5_SEC` (the default), and the export is kept 365 days (`vpc_flow_logs_retention_days`). Lower values fail the plan. | VPC flow logs already record `ALL` traffic to the log-archive bucket (LOG-13). Their retention is the log-archive retention (`aws_overrides.log_archive_retention_days`, else `compliance.audit_log_retention_days`, else 365). `aws-security` fails the plan when it is below 365 days. |
+| Edge | Cloud Armor with the OWASP managed rules. `enable_cloud_armor = false` or `enable_owasp_rules = false` fails the plan. | No change. |
 | Backups | A Backup and DR vault in the host project with enforced retention (default 35 days) and organization-only access, and a daily plan for every app-service database (BCK-07, PREVIEW). `enable_backup_vault = false` fails the plan. The retention lock is never set by the class. | No change. |
 | Audit store | `gcp-organization` fails the plan until the audit bucket is WORM-locked in a separate logging project, or `gcp.audit_store_waived` is true (LOG-03, LOG-04). | No change. |
 

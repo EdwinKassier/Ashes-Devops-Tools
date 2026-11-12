@@ -391,6 +391,20 @@ resource "terraform_data" "regulated_flow_logs_guard" {
   }
 }
 
+# The regulated preset turns Cloud Armor and its OWASP rules on; an explicit
+# enable_cloud_armor = false or enable_owasp_rules = false fails the plan.
+resource "terraform_data" "regulated_cloud_armor_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    precondition {
+      condition     = local.enable_cloud_armor && local.enable_owasp_rules
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so the Cloud Armor policy and its OWASP managed rules must stay on (enable_cloud_armor now ${local.enable_cloud_armor}, enable_owasp_rules now ${local.enable_owasp_rules}). Remove the overriding variable: the regulated preset sets both."
+    }
+  }
+}
+
 # CMP-8: a regulated environment keeps its Cloud SQL backups in an
 # enforced-retention, organization-only Backup and DR vault.
 resource "terraform_data" "regulated_backup_vault_guard" {

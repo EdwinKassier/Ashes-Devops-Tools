@@ -937,7 +937,7 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or gcp.audit_store_waived is true. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), flow-log sampling is 1, flow-log retention is at least 365 days and the Backup and DR vault (backup_vault) is on.",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or gcp.audit_store_waived is true. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), Cloud Armor and its OWASP rules are on, flow-log sampling is 1, flow-log retention is at least 365 days and the Backup and DR vault (backup_vault) is on.",
                 "enum": [
                   "standard",
                   "regulated"
@@ -1551,7 +1551,7 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). Any regulated entry hardens the shared aws-network hub: the Network Firewall is on and the egress gate fails closed on every profile, and aws.network.egress_alert_only_waived is refused.",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). Any regulated entry hardens the shared aws-network hub: the Network Firewall is on and the egress gate fails closed on every profile, and aws.network.egress_alert_only_waived is refused. aws-security then fails the plan when the log-archive retention (which holds the VPC flow logs) is below 365 days.",
                 "enum": [
                   "standard",
                   "regulated"

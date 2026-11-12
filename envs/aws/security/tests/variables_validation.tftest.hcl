@@ -293,6 +293,54 @@ run "log_archive_governance_without_frameworks_plans" {
   }
 }
 
+# Regulated floor: any aws.workload_environments entry with
+# compliance_class: regulated needs at least 365 days of log-archive retention,
+# because the VPC flow logs of every account land in that bucket.
+run "regulated_estate_rejects_short_config_retention" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+run "regulated_estate_rejects_short_override_retention" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { log_archive_retention_days = 364, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+run "regulated_estate_accepts_365_days" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { log_archive_retention_days = 365, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  assert {
+    condition     = module.aws_security.log_archive_retention_days == 365
+    error_message = "a regulated estate must plan with 365 days of log-archive retention."
+  }
+}
+
 run "log_archive_retention_zero_fails" {
   command = plan
 

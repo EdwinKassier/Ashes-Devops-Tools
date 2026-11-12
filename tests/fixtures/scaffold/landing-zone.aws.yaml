@@ -380,7 +380,8 @@ aws:
       is_production: true
       # Opt-in regulated class (docs/architecture/regulated-environments.md).
       # One regulated environment hardens the shared aws-network hub: Network
-      # Firewall on and egress fail-closed on every profile, no alert-only waiver.
+      # Firewall on and egress fail-closed on every profile, no alert-only waiver,
+      # and at least 365 days of log-archive retention (the VPC flow logs).
       # compliance_class: regulated
 
   # IAM Identity Center access by name (aws-identity): Identity Store group

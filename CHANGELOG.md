@@ -552,6 +552,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   Network Firewall and egress gate on every profile and refuses the alert-only waiver.
   `aws.network.vpc_endpoint_policy_mode` adds `aws:ResourceOrgID` to the hub endpoint policy
   (PREVIEW, off by default). See `docs/architecture/regulated-environments.md`.
+- **Regulated floors for Cloud Armor and AWS flow-log retention.** A regulated `gcp-workload-<env>`
+  fails the plan on `enable_cloud_armor = false` or `enable_owasp_rules = false`. Any regulated
+  `aws.workload_environments` entry makes `aws-security` fail the plan when the log-archive
+  retention, which holds the VPC flow logs, is below 365 days.
 - **Cloud SQL backups stay in region; Backup and DR vault (breaking, CMP-8).** `backup_location =
   null` now means the instance region, not Cloud SQL's nearest multi-region, so new backups stay
   inside `gcp.allowed_regions`. The new `modules/gcp/backup/backup-vault` creates a Backup and DR

@@ -368,6 +368,56 @@ run "standard_env_in_a_regulated_estate_is_unchanged" {
   }
 }
 
+# A regulated environment keeps Cloud Armor and its OWASP rules: an explicit
+# variable may not turn either off.
+run "regulated_env_refuses_disabled_cloud_armor" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    enable_cloud_armor       = false
+    projects_contract = {
+      environment_config = {
+        prod = {
+          folder_id               = "folders/333"
+          host_project_id         = "acme-prod-host-abcd"
+          host_project_number     = "333333333333"
+          region                  = "europe-west2"
+          cidr_block              = "10.30.0.0/16"
+          is_production           = false
+          vpc_sc_access_policy_id = "555555555"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.regulated_cloud_armor_guard]
+}
+
+run "regulated_env_refuses_disabled_owasp_rules" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    enable_owasp_rules       = false
+    projects_contract = {
+      environment_config = {
+        prod = {
+          folder_id               = "folders/333"
+          host_project_id         = "acme-prod-host-abcd"
+          host_project_number     = "333333333333"
+          region                  = "europe-west2"
+          cidr_block              = "10.30.0.0/16"
+          is_production           = false
+          vpc_sc_access_policy_id = "555555555"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.regulated_cloud_armor_guard]
+}
+
 # CMP-8: a regulated environment may not switch the Backup and DR vault off.
 run "regulated_env_refuses_disabled_backup_vault" {
   command = plan

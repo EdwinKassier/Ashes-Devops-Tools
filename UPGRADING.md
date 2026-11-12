@@ -2196,6 +2196,12 @@ dry-run violation logs (GCP) and complete `aws.network.egress_domain_allowlist`
 (AWS). `aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`
 (`aws:ResourceOrgID` on the hub endpoints) is a separate PREVIEW opt-in. See
 [`docs/architecture/regulated-environments.md`](docs/architecture/regulated-environments.md).
+A regulated GCP environment also fails the plan on `enable_cloud_armor = false`
+or `enable_owasp_rules = false`. A regulated AWS environment also makes
+`aws-security` fail the plan when the log-archive retention
+(`aws_overrides.log_archive_retention_days`, else
+`compliance.audit_log_retention_days`) is below 365 days: that bucket holds
+the VPC flow logs.
 
 #### `config/landing-zone.yaml` is now schema-validated (`make config-check`, CI, pre-commit)
 

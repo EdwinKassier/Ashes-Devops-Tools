@@ -136,6 +136,13 @@ variable "aws_overrides" {
     error_message = "The log-archive retention (aws_overrides.log_archive_retention_days, else compliance.audit_log_retention_days, else 365) is ${coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365)} days. It must be at least 1 and at least the ${local.retention_floor}-day floor of compliance.frameworks (${join(", ", local.cfg.compliance_frameworks)})."
   }
 
+  # A regulated workload environment (compliance_class: regulated) keeps its
+  # VPC flow logs, which land in the log-archive bucket, at least 365 days.
+  validation {
+    condition     = length(local.cfg.workload_regulated) == 0 || coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365) >= 365
+    error_message = "aws.workload_environments ${join(", ", local.cfg.workload_regulated)} is compliance_class: regulated, so the log-archive retention, which holds every account's VPC flow logs, must be at least 365 days. It is ${coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365)} (aws_overrides.log_archive_retention_days, else compliance.audit_log_retention_days, else 365)."
+  }
+
   validation {
     condition     = contains(["COMPLIANCE", "GOVERNANCE"], coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE"))
     error_message = "aws_overrides.log_archive_object_lock_mode must be COMPLIANCE or GOVERNANCE."

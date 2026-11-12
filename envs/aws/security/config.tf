@@ -34,6 +34,13 @@ locals {
     workload_production = try([
       for k, e in local.lz.aws.workload_environments : k if try(tobool(e.is_production), false)
     ], [])
+    # aws.workload_environments entries with compliance_class: regulated. Any
+    # one sets a 365-day floor on the log-archive retention: every account's
+    # VPC flow logs land in that bucket (LOG-13).
+    workload_regulated = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tostring(e.compliance_class), "standard") == "regulated"
+    ])
     # compliance: the log-archive retention and the framework floors (CMP-2).
     audit_log_retention_days = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
     compliance_frameworks    = try([for f in local.lz.compliance.frameworks : tostring(f)], [])
