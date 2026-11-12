@@ -55,6 +55,69 @@ def rel(p: Path) -> str:
     return p.relative_to(ROOT).as_posix()
 
 
+LINK = re.compile(r"\]\((modules/[^)#]+?)/?\)")
+HEADER = re.compile(r"<strong>([^<]+)</strong> — GCP (\d+) · AWS (\d+)")
+
+
+def check_readme(modules: set[Path], wired: set[Path]) -> list[str]:
+    """Cross-check README.md against the module graph. Skipped when there is no README.md."""
+    readme = ROOT / "README.md"
+    if not readme.is_file():
+        return []
+    text = readme.read_text(encoding="utf-8", errors="replace")
+    errors: list[str] = []
+
+    # 1. Library-only labels. The module a "*(library-only)*" mark belongs to is the
+    #    last link before it. Every labelled or tabled module must be unwired, and
+    #    every unwired module must be in the "Library-only modules" table.
+    marked: set[str] = set()
+    for line in text.splitlines():
+        for segment in line.split("*(library-only)*")[:-1]:
+            found = LINK.findall(segment)
+            if found:
+                marked.add(found[-1])
+    section = ""
+    if "Library-only modules" in text:
+        section = text.split("Library-only modules", 1)[1].split("</details>", 1)[0]
+    table = {
+        path
+        for line in section.splitlines() if line.startswith("| [")
+        for path in LINK.findall(line.split("|")[1])
+    }
+    unwired = {rel(m) for m in modules - wired}
+    for m in sorted((marked | table) - unwired):
+        errors.append(f"README.md labels {m} library-only, but an envs/** root composes it")
+    for m in sorted(unwired - table):
+        errors.append(f"{m} is not wired into any root but is missing from README.md's Library-only table")
+
+    # 2. Domain tables ("Cloud modules by domain"): each header's GCP/AWS counts must equal
+    #    the distinct modules linked in that column, and every cloud module must be linked.
+    if "### Cloud modules by domain" not in text:
+        return errors
+    domains = text.split("### Cloud modules by domain", 1)[1].split("Library-only modules", 1)[0]
+    linked: set[str] = set()
+    for block in domains.split("<details>")[1:]:
+        header = HEADER.search(block)
+        if not header:
+            continue
+        cols: list[set[str]] = [set(), set()]
+        for line in block.splitlines():
+            cells = line.split("|")
+            if line.startswith("| ") and len(cells) >= 5:
+                for i in (0, 1):
+                    cols[i].update(LINK.findall(cells[2 + i]))
+        linked |= cols[0] | cols[1]
+        want = (int(header.group(2)), int(header.group(3)))
+        got = (len(cols[0]), len(cols[1]))
+        if want != got:
+            errors.append(f"README.md domain '{header.group(1)}' says GCP {want[0]} / AWS {want[1]}, "
+                          f"but its table links GCP {got[0]} / AWS {got[1]} modules")
+    for m in sorted(rel(x) for x in modules):
+        if m.startswith(("modules/gcp/", "modules/aws/")) and m not in linked:
+            errors.append(f"{m} is not linked in any README.md domain table")
+    return errors
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv[1:]
     modules = module_dirs()
@@ -118,9 +181,13 @@ def main() -> int:
     for m in stale:
         print(f"check-module-usage: WARNING {m} has a caller but still carries "
               f'"{marker}"; remove the marker', file=sys.stderr)
-    if "--check" in sys.argv[1:] and unreferenced:
-        print("check-module-usage: FAIL - wire the module, or add the line "
-              f'"{marker}" to its README.', file=sys.stderr)
+    readme_errors = check_readme(modules, wired)
+    for e in readme_errors:
+        print(f"check-module-usage: {e}", file=sys.stderr)
+    if "--check" in sys.argv[1:] and (unreferenced or readme_errors):
+        if unreferenced:
+            print("check-module-usage: FAIL - wire the module, or add the line "
+                  f'"{marker}" to its README.', file=sys.stderr)
         return 1
     return 0
 

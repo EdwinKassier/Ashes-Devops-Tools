@@ -59,5 +59,60 @@ printf '# orphan\n\n> Status: experimental\n' >"${t}/modules/orphan/README.md"
 expect_rc "stale marker only warns" 0 "${t}"
 grep -q 'WARNING modules/used' "${workdir}/out" && ok "stale marker warned" || bad "stale warning missing"
 
+# README cross-check: library-only labels must match the module graph.
+lib_readme() { # lib_readme <tree> <table rows...>
+  local tree="$1"; shift
+  {
+    printf '<details>\n<summary><strong>Library-only modules</strong></summary>\n\n| Module | Why |\n|---|---|\n'
+    for r in "$@"; do printf '%s\n' "$r"; done
+    printf '\n</details>\n'
+  } >"${tree}/README.md"
+}
+t="$(new_tree readme_ok)"
+printf '# orphan\n\n> Status: experimental\n' >"${t}/modules/orphan/README.md"
+lib_readme "${t}" '| [`orphan`](modules/orphan/) | not wired |'
+expect_rc "README listing exactly the unwired modules passes" 0 "${t}"
+
+t="$(new_tree readme_wired)"
+printf '# orphan\n\n> Status: experimental\n' >"${t}/modules/orphan/README.md"
+lib_readme "${t}" '| [`orphan`](modules/orphan/) | x |' '| [`used`](modules/used/) | wrongly listed |'
+expect_rc "README labelling a wired module library-only fails" 1 "${t}"
+grep -q 'modules/used' "${workdir}/out" && ok "wired module named" || bad "wired module named"
+
+t="$(new_tree readme_mark)"
+printf '# orphan\n\n> Status: experimental\n' >"${t}/modules/orphan/README.md"
+{
+  printf '| [`used`](modules/used/) *(library-only)* | [`orphan`](modules/orphan/) |\n'
+  printf '<summary><strong>Library-only modules</strong></summary>\n\n| Module | Why |\n|---|---|\n| [`orphan`](modules/orphan/) | x |\n</details>\n'
+} >"${t}/README.md"
+expect_rc "inline library-only mark on a wired module fails" 1 "${t}"
+
+t="$(new_tree readme_missing)"
+printf '# orphan\n\n> Status: experimental\n' >"${t}/modules/orphan/README.md"
+lib_readme "${t}"
+expect_rc "README missing an unwired module fails" 1 "${t}"
+
+# README domain tables: header counts must equal the distinct modules linked per cloud.
+domain_readme() { # domain_readme <tree> <gcp count> <aws count>
+  {
+    printf '<summary><strong>Library-only modules</strong></summary>\n\n| Module | Why |\n|---|---|\n| [`orphan`](modules/orphan/) | x |\n</details>\n'
+    printf '### Cloud modules by domain\n\n<details>\n<summary><strong>Demo</strong> — GCP %s · AWS %s</summary>\n\n' "$2" "$3"
+    printf '| Capability | Google Cloud | Amazon Web Services |\n|:--|:--|:--|\n'
+    printf '| A | [`used`](modules/gcp/used/), [`orphan`](modules/gcp/orphan/) | [`x`](modules/aws/x/) |\n\n</details>\n'
+  } >"$1/README.md"
+}
+t="$(new_tree domain_ok)"
+printf '# orphan\n\n> Status: experimental\n' >"${t}/modules/orphan/README.md"
+domain_readme "${t}" 2 1
+sed -i.bak 's|modules/gcp/used|modules/used|; s|modules/gcp/orphan|modules/orphan|; s|modules/aws/x/|modules/used/|' "${t}/README.md"
+expect_rc "domain header counts that match the table pass" 0 "${t}"
+
+t="$(new_tree domain_stale)"
+printf '# orphan\n\n> Status: experimental\n' >"${t}/modules/orphan/README.md"
+domain_readme "${t}" 9 1
+sed -i.bak 's|modules/gcp/used|modules/used|; s|modules/gcp/orphan|modules/orphan|; s|modules/aws/x/|modules/used/|' "${t}/README.md"
+expect_rc "stale domain header count fails" 1 "${t}"
+grep -q 'Demo' "${workdir}/out" && ok "stale domain named" || bad "stale domain named"
+
 [ "${failures}" -eq 0 ] || { echo "${failures} failure(s)" >&2; exit 1; }
 echo "all ok"

@@ -143,21 +143,22 @@ Both clouds are organized into the **same conceptual domains** so you can map a 
 ### Cloud modules by domain
 
 <details>
-<summary><strong>Networking</strong> — GCP 19 · AWS 10</summary>
+<summary><strong>Networking</strong> — GCP 24 · AWS 12</summary>
 
 Both clouds build a hub-and-spoke private network from the same primitives; the names differ, the roles line up.
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Core private network | [`network/vpc`](modules/gcp/network/vpc/), [`network/subnet`](modules/gcp/network/subnet/) | [`network/vpc`](modules/aws/network/vpc/) |
+| Core private network | [`network/vpc`](modules/gcp/network/vpc/), [`network/subnet`](modules/gcp/network/subnet/), [`network/tiered-vpc`](modules/gcp/network/tiered-vpc/) (shared VPC, three subnet tiers, baseline firewall core) | [`network/vpc`](modules/aws/network/vpc/) |
 | IP address management | *(manual CIDR planning)* | [`network/ipam`](modules/aws/network/ipam/) |
 | Hub interconnect / transit | [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/), [`network/vpc-peering`](modules/gcp/network/vpc-peering/), [`network/ncc-hub`](modules/gcp/network/ncc-hub/) + [`network/ncc-spoke`](modules/gcp/network/ncc-spoke/) (opt-in), [`network/interconnect`](modules/gcp/network/interconnect/) | [`network/transit-gateway`](modules/aws/network/transit-gateway/) |
 | Private service access | [`network/private-service-connect`](modules/gcp/network/private-service-connect/), [`network/private-service-access`](modules/gcp/network/private-service-access/) | [`network/vpc-endpoints`](modules/aws/network/vpc-endpoints/) |
-| DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/) |
+| DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/), [`network/dns-records`](modules/aws/network/dns-records/) *(library-only)* |
 | Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA VPN on the hub; `gcp.network.vpn` + `vpn_shared_secret_wo` on `gcp-network-hub`) | [`network/vpn`](modules/aws/network/vpn/) (Site-to-Site on the Transit Gateway; `aws.network.vpn`) |
 | Egress NAT | [`network/nat`](modules/gcp/network/nat/) | *(native, in `network/vpc`)* |
 | Egress FQDN control | [`network/secure-web-proxy`](modules/gcp/network/secure-web-proxy/) (opt-in preview, hub + PSC) | [`network/network-firewall`](modules/aws/network/network-firewall/) (egress domain allowlist) |
 | Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) *(library-only)* | [`network/load-balancer`](modules/aws/network/load-balancer/) (ALB/NLB) |
+| Application ingress | [`network/app-ingress`](modules/gcp/network/app-ingress/) (Cloud Run front door) | [`network/load-balancer`](modules/aws/network/load-balancer/) |
 | Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) *(library-only)* | [`security/edge-security`](modules/aws/security/edge-security/) (CloudFront + WAF/Shield) |
 | API gateway / edge | [`network/api-gateway`](modules/gcp/network/api-gateway/) *(library-only)* | [`network/api-gateway`](modules/aws/network/api-gateway/) *(library-only)* |
 | Stateful firewall | [`network/network-firewall`](modules/gcp/network/network-firewall/), [`network/hierarchical-firewall`](modules/gcp/network/hierarchical-firewall/) | [`network/network-firewall`](modules/aws/network/network-firewall/) |
@@ -169,7 +170,7 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 </details>
 
 <details>
-<summary><strong>IAM &amp; Identity</strong> — GCP 7 · AWS 2</summary>
+<summary><strong>IAM &amp; Identity</strong> — GCP 8 · AWS 4</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
@@ -178,11 +179,12 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 | Deny-policy guardrails | [`iam/deny-policy`](modules/gcp/iam/deny-policy/), [`iam/principal-access-boundary`](modules/gcp/iam/principal-access-boundary/) | *(SCP/RCP — see Governance)* |
 | Service / machine identity | [`iam/service-account`](modules/gcp/iam/service-account/) | *(IAM roles + instance profiles)* |
 | Federated workload identity | [`iam/workload-identity`](modules/gcp/iam/workload-identity/) | *(OIDC via `iam/iam-role`)* |
+| Terraform Cloud run roles | *(plan/apply service accounts from `stages/bootstrap`)* | [`iam/tfc-oidc-baseline`](modules/aws/iam/tfc-oidc-baseline/), [`iam/tfc-management-roles`](modules/aws/iam/tfc-management-roles/) |
 
 </details>
 
 <details>
-<summary><strong>Security &amp; Threat Detection</strong> — GCP 2 · AWS 13</summary>
+<summary><strong>Security &amp; Threat Detection</strong> — GCP 2 · AWS 14</summary>
 
 GCP consolidates detection into Security Command Center plus audit logs; the AWS SRA breaks the same surface into many org-wide, delegated-admin services — hence the count asymmetry.
 
@@ -230,7 +232,7 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 </details>
 
 <details>
-<summary><strong>Backup &amp; Resilience</strong> — GCP 1 · AWS 2</summary>
+<summary><strong>Backup &amp; Resilience</strong> — GCP 2 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
@@ -240,27 +242,32 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 </details>
 
 <details>
-<summary><strong>Observability &amp; Operations</strong> — GCP 3 · AWS 2</summary>
+<summary><strong>Observability &amp; Operations</strong> — GCP 5 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) *(library-only)* | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (metric alarms + SNS) |
+| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) (used by `net-hub` / `net-spoke` data-plane alerts) | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (metric alarms + SNS) |
 | Dashboards | [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) *(library-only)* | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (dashboard) |
+| Landing-zone self-observability | [`monitoring/control-plane`](modules/gcp/monitoring/control-plane/) | *(see `ops/cloudwatch`)* |
+| Service level objectives | [`monitoring/slo`](modules/gcp/monitoring/slo/) | *(see `ops/cloudwatch`)* |
 | Fleet / patch management | [`ops/os-config`](modules/gcp/ops/os-config/) (VM Manager) | [`ops/systems-manager`](modules/aws/ops/systems-manager/) |
 
 </details>
 
 <details>
-<summary><strong>Application Platform</strong> — GCP 1 · AWS 0</summary>
+<summary><strong>Application Platform</strong> — GCP 6 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
+| Container runtime | [`compute/cloud-run`](modules/gcp/compute/cloud-run/), [`compute/cloud-run-job`](modules/gcp/compute/cloud-run-job/), [`compute/gke-autopilot`](modules/gcp/compute/gke-autopilot/) | [`compute/ecs-fargate`](modules/aws/compute/ecs-fargate/) |
+| Relational database | [`data/cloud-sql`](modules/gcp/data/cloud-sql/) | [`data/rds-aurora`](modules/aws/data/rds-aurora/) |
+| Application secrets | [`data/secret-manager`](modules/gcp/data/secret-manager/) | *(see Security → `secrets-baseline`)* |
 | App / mobile backend | [`firebase/project`](modules/gcp/firebase/project/) *(library-only)* | *(Amplify / App Runner — no module)* |
 
 </details>
 
 <details>
-<summary><strong>Orchestration Stages</strong> — GCP 7 · AWS 6</summary>
+<summary><strong>Orchestration Stages</strong> — GCP 11 · AWS 7</summary>
 
 Composite stages wrap the primitives above into deployable landing-zone layers, one per root/workspace. Layers line up across clouds even where a cloud folds two responsibilities into one stage.
 
@@ -273,6 +280,7 @@ Composite stages wrap the primitives above into deployable landing-zone layers, 
 | Network hub | [`stages/network-hub`](modules/gcp/stages/network-hub/) (composes [`stages/net-hub`](modules/gcp/stages/net-hub/) + [`stages/dns-anchor`](modules/gcp/stages/dns-anchor/)) | [`stages/network-hub`](modules/aws/stages/network-hub/) |
 | Shared services | *(via `stages/projects`)* | [`stages/shared-services`](modules/aws/stages/shared-services/) |
 | Backup | — | [`stages/backup`](modules/aws/stages/backup/) |
+| Application services (golden path) | [`stages/app-services`](modules/gcp/stages/app-services/) | [`stages/app-services`](modules/aws/stages/app-services/) |
 | Workload (per environment) | [`stages/environment`](modules/gcp/stages/environment/), [`stages/workload`](modules/gcp/stages/workload/), [`stages/net-spoke`](modules/gcp/stages/net-spoke/) *(replaced the removed `stages/host`)* | [`stages/workload`](modules/aws/stages/workload/) |
 
 </details>
@@ -288,9 +296,8 @@ These modules are tested and documented but **no `envs/**` root composes them** 
 | [`gcp/firebase/project`](modules/gcp/firebase/project/) | Example-only; Firebase is opt-in per app |
 | [`gcp/iam/identity-group`](modules/gcp/iam/identity-group/), [`gcp/iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | Example-only; Cloud Identity groups are usually managed in the IdP / Workspace |
 | [`gcp/iam/role`](modules/gcp/iam/role/) | Example-only; custom roles are org-specific |
-| [`gcp/monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/), [`gcp/monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | Example-only; app-level alerting/dashboards (the landing zone's own alerting is `monitoring/control-plane`) |
+| [`gcp/monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | Example-only; app-level dashboards (the landing zone's own alerting is `monitoring/control-plane`) |
 | [`gcp/network/api-gateway`](modules/gcp/network/api-gateway/), [`gcp/network/cdn`](modules/gcp/network/cdn/), [`gcp/network/internal-lb`](modules/gcp/network/internal-lb/), [`gcp/network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | Not composed by `net-hub` / `net-spoke`; example-only — compose directly |
-| [`gcp/network/app-ingress`](modules/gcp/network/app-ingress/) | Golden-path Cloud Run front door; opt-in per service |
 | [`gcp/governance/private-ca`](modules/gcp/governance/private-ca/) | Private CA (CAS) is opt-in; no root needs internal certificates by default |
 | [`aws/network/dns-records`](modules/aws/network/dns-records/) | Write records into an existing zone (DNS unification); caller-owned records |
 | [`aws/network/api-gateway`](modules/aws/network/api-gateway/) | Opt-in API edge per workload |
