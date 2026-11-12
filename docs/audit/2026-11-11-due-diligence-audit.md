@@ -255,3 +255,58 @@ The findings above are not rewritten. This table records where each Critical sta
 | ADO-1 to ADO-4 | closed in Phase 0 | Phase 0 commits up to 5da21f7a | None. |
 | New Critical found in Phase 1: the GCP delegated folder IAM grant used one `hasOnly()` condition with more than the 10 roles Google allows | closed in code (mock-tested; sandbox proof pending, see known-gaps) | 78b16978 | A real `gcp-organization` apply binds every chunk, and a `gcp-projects` apply grants the workload and network roles. |
 | ARC-18 | closed in code | 6bbcffcc | None. |
+
+## Status after Phase 2 (2026-11-12)
+
+Phase 2 fixed the High and Medium findings in code. Every item below is mock-tested only; the sandbox proof for each is listed in [known gaps](../known-gaps.md). Statuses: closed in code; closed as opt-in (the control exists but is off by default or tied to the regulated class); closed with residual (a documented remainder); open.
+
+| Finding | Status | Evidence |
+|---|---|---|
+| SEC-3 | closed with residual (PAM, principal access boundary and alert-deletion paths in known gaps) | 477dfe0a |
+| SEC-4 | closed with residual (infrastructure roles such as compute.admin stay delegable) | ba9432de, 34114e47 |
+| SEC-5 | closed in code | 62973bf2 |
+| SEC-6 | closed in code (operator updates the phase-0 stack) | 8fd70cb5 |
+| SEC-7 | closed with residual (SaaS secrets stay in `saas-*` state, a provider limit) | 4fb91e28, cd47a75e |
+| SEC-8 | closed in code (time-boxed waiver) | dcc0863a, a4d9c923 |
+| SEC-9 | closed in code (opt-out flag) | 9e07c1a5 |
+| SEC-10 | closed with residual (workload SAs keep workloadIdentityPoolAdmin) | d4225640 |
+| SEC-11 | closed with residual (token made by hand; secret-bearing workspaces rely on health assessments) | c4af2f78, a217bbd4, 5e3610f4 |
+| SEC-12 | closed in code | a49d0536, 9ccfa83b, 9e07c1a5 |
+| CMP-3 | closed in code | efe97c28, d7c37c8b |
+| CMP-4 | closed as opt-in (required for regulated; production warns) | 3f8e1561 |
+| CMP-5 | closed in code | 1f5fbf35, 8dc2f6e5 |
+| CMP-6 | closed in code (non-production warns) | 6025f937, 1d9f1344 |
+| CMP-7 | closed as opt-in (regulated class; the resource-org endpoint mode is PREVIEW) | 9f45fa29, 395fb63a |
+| CMP-8 | closed in code (region pin); vault opt-in or regulated, PREVIEW | 34114e47 |
+| CMP-9 | closed in docs and config | 8674fd0a, e76f67d6 |
+| CMP-10, ARC-17 | closed in code (GCP); AWS required-tag reporting opt-in | d89ddfc1 |
+| CMP-11 | closed in code | 9ef5ff35 |
+| CMP-12 | closed as opt-in (HSM opt-in; CMEK required for regulated) | 9981e815 |
+| CMP-13 | closed as opt-in (needs the token, the environment and Standard or Premium) | cdb77124 |
+| CMP-14 | closed in code | e0ba1e7c |
+| CMP-15, CMP-16 | closed in docs (no Terraform API) | 0b9f49b6 |
+| CMP-20 | closed with residual (organization stage `allowed_regions` default) | 9d805ef9 |
+| ARC-4 | closed as opt-in (pool growth and OU share; GKE ranges documented, not provisioned) | 9c3fd7ac, cd4703f9 |
+| ARC-5 | closed with residual (second gcp-network-hub run stays manual, documented) | b31d1d59 |
+| ARC-6, ARC-21 | closed in code (spoke traffic to endpoints stays inspected, a DECISION item) | 40192b15, 2c07f8bb, 0fa8fe3e, a55976b4 |
+| ARC-8 | closed with residual (RTO/RPO stated as design targets; still single region) | 9da7bda3 |
+| ARC-10 | closed in code | 87961023 |
+| ARC-11 | closed in code | d1fc970f, 98a2a02c |
+| ARC-12 | closed in code | 9e3066c9, e16f85e8 |
+| ARC-13 | closed in code | a4d9c923 |
+| ARC-14 | closed with residual (GitHub fallback list) | c4af2f78, a217bbd4, 5e3610f4 |
+| ARC-15 | closed with residual (no Network Firewall alarm, reasoned in known gaps) | b0804b6a |
+| ARC-16 | closed in code | 4e3ee57a, 43177c96 |
+| CICD-10, CICD-11, CICD-12 | closed in code | 304cbd30, 3e04b888, b3c9f5f0 |
+| CICD-13, IAC-6 | closed as opt-in (Renovate app not installed; the heartbeat fails on schedule until it is) | 25697446 |
+| CICD-16, CICD-18 | closed in code | 339f0d21 |
+| CICD-17 | closed with residual (attestation, no admission enforcement) | e49c982f |
+| IAC-3 | closed with residual (one SemVer for all modules, by policy) | 2558a84b |
+| IAC-4 | closed in code | 201451f4 |
+| IAC-8 | closed for deletion-protection names only | b94fb051 |
+| IAC-9, IAC-10, IAC-11, IAC-14 | closed in code | 8a5601c0, 612d278d, e9f84053, 451e58da |
+| ADO-5, ADO-6, ADO-13 to ADO-27 | closed | 589eb907, a8a94b89, b6807416, 4e357a48, 745c40b4, 9039361e, 01210777, 3eebcd39, 9375d6b4, 6b35939b, c96a94ef, 5cac96b5, 3f6f64e6, ea50c61f, 87c9a965, d226f7ee |
+| CICD-1, CICD-3 to CICD-9 | open, Phase 3 (needs owner decisions O1 and O3) | none |
+| ARC-7, ARC-9, ADO-7 | open, Phase 5 (ADR 0015 and 0016) | none |
+| ARC-19, ARC-20 | open (per-zone GCP subnets, IPv6) | none |
+| IAC-5, IAC-7, ADO-8 to ADO-12 | open (real-cloud proof, oversized roots, scope and governance; Phases 3 to 5) | none |
