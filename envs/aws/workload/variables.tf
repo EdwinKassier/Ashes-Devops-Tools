@@ -245,6 +245,15 @@ variable "enable_patch_install" {
   nullable    = false
 }
 
+variable "patch_install_target_tag" {
+  description = "Install patches only on the managed instances in this workload account that carry this tag (key and value), which narrows the reboot scope. Null (default) installs on every SSM-managed instance in the account and region. The daily scan always covers every managed instance."
+  type = object({
+    key   = string
+    value = string
+  })
+  default = null
+}
+
 variable "patch_operating_systems" {
   description = "Operating systems that get a custom patch baseline in this workload account, each set as the account default for that OS. Default Amazon Linux 2023. An account that still runs Amazon Linux 2 sets [\"AMAZON_LINUX_2\", \"AMAZON_LINUX_2023\"]."
   type        = set(string)

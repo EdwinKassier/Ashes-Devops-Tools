@@ -289,6 +289,15 @@ variable "enable_patch_install" {
   nullable    = false
 }
 
+variable "patch_install_target_tag" {
+  description = "With enable_ssm and enable_patch_install: install patches only on the managed instances that carry this tag (key and value), which narrows the reboot scope. Null (default) installs on every SSM-managed instance in this account and region. The daily scan always covers every managed instance."
+  type = object({
+    key   = string
+    value = string
+  })
+  default = null
+}
+
 variable "patch_operating_systems" {
   description = "With enable_ssm: operating systems that get a custom patch baseline, each set as the account default for that OS. Default Amazon Linux 2023 (Amazon Linux 2 reached end of support on 2026-06-30)."
   type        = set(string)

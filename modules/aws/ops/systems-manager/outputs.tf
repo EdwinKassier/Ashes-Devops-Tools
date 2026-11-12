@@ -23,6 +23,11 @@ output "patch_install_schedule" {
   value       = try(aws_ssm_association.patch_install[0].schedule_expression, null)
 }
 
+output "patch_install_targets" {
+  description = "Targets of the weekly patch install association (key and values), or null when enable_patch_install is false."
+  value       = var.enable_patch_install ? local.patch_install_target : null
+}
+
 output "patch_operating_systems" {
   description = "Operating systems that have a custom default patch baseline in this account and region."
   value       = sort(tolist(local.patch_operating_systems))

@@ -82,3 +82,8 @@ output "config_aggregator_role_arn" {
   description = "IAM role the Config organization aggregator assumes (created by the stage unless aggregator_role_arn was set)."
   value       = module.config.aggregator_role_arn
 }
+
+output "patch_install_targets" {
+  description = "Targets of the weekly patch install association (key and values): InstanceIds * for every managed instance, or tag:<key> when patch_install_target_tag is set. Null when the install is off."
+  value       = module.systems_manager.patch_install_targets
+}

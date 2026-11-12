@@ -156,8 +156,9 @@ module "aws_workload" {
   workload_roles = var.workload_roles
 
   # CMP-3: weekly patch install on the account's SSM-managed instances.
-  enable_patch_install    = var.enable_patch_install
-  patch_operating_systems = var.patch_operating_systems
+  enable_patch_install     = var.enable_patch_install
+  patch_install_target_tag = var.patch_install_target_tag
+  patch_operating_systems  = var.patch_operating_systems
 }
 
 # App ingress mode: internal (default) | public_alb | cloudfront_vpc_origin.

@@ -160,8 +160,22 @@ run "patch_install_on_by_default" {
   }
 
   assert {
-    condition     = module.systems_manager[0].patch_install_schedule == "cron(0 3 ? * SUN *)" && module.systems_manager[0].patch_operating_systems == tolist(["AMAZON_LINUX_2023"])
+    condition     = module.systems_manager[0].patch_install_schedule == "cron(0 3 ? * SUN *)" && module.systems_manager[0].patch_operating_systems == tolist(["AMAZON_LINUX_2023"]) && module.systems_manager[0].patch_install_targets.key == "InstanceIds"
     error_message = "the workload account must get the weekly install association and an Amazon Linux 2023 baseline by default."
+  }
+}
+
+run "patch_install_target_tag_reaches_module" {
+  command = plan
+
+  variables {
+    environment              = "dev"
+    patch_install_target_tag = { key = "PatchInstall", value = "true" }
+  }
+
+  assert {
+    condition     = module.systems_manager[0].patch_install_targets.key == "tag:PatchInstall" && module.systems_manager[0].patch_install_targets.values[0] == "true"
+    error_message = "patch_install_target_tag must narrow the install association to tagged instances."
   }
 }
 

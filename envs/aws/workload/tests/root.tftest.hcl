@@ -526,3 +526,30 @@ run "bridge_off_reads_nothing" {
     error_message = "with the bridge off, no bridge resource is planned."
   }
 }
+
+# CMP-3: patch_install_target_tag reaches the systems-manager module.
+run "patch_install_target_tag_reaches_module" {
+  command = plan
+
+  variables {
+    patch_install_target_tag = { key = "PatchInstall", value = "true" }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
+  }
+
+  assert {
+    condition     = module.aws_workload.patch_install_targets.key == "tag:PatchInstall" && module.aws_workload.patch_install_targets.values[0] == "true"
+    error_message = "patch_install_target_tag must narrow the install association to tagged instances."
+  }
+}

@@ -481,7 +481,7 @@ What to do:
 1. Find the managed instances that will be patched: `aws ssm describe-instance-information` in each account and region. Check that their workloads tolerate a reboot on Sunday 03:00 UTC.
 2. To keep scan-only: aws-workload `enable_patch_install = false`; aws-security `aws_overrides.enable_patch_install = false`.
 3. An account that still runs Amazon Linux 2 keeps its custom baseline with `patch_operating_systems = ["AMAZON_LINUX_2", "AMAZON_LINUX_2023"]` (aws-workload variable, or `aws_overrides.patch_operating_systems` in aws-security). The AL2 baseline keeps its name, so it is not replaced.
-4. A direct caller of the module can limit the install to tagged instances with `patch_install_target_tag = { key = "PatchInstall", value = "true" }`. If you already patch with a Quick Setup patch policy or a maintenance window, set `enable_patch_install = false` so instances are not patched twice.
+4. To narrow the reboot scope, limit the install to tagged instances: aws-workload `patch_install_target_tag = { key = "PatchInstall", value = "true" }`; aws-security `aws_overrides.patch_install_target_tag`. Only instances with that tag are then patched and rebooted; the daily scan still covers every managed instance. If you already patch with a Quick Setup patch policy or a maintenance window, set `enable_patch_install = false` so instances are not patched twice.
 
 #### ECS services autoscale in production by default (aws-workload, breaking)
 

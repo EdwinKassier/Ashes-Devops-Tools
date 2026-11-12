@@ -57,3 +57,8 @@ output "availability_zones" {
   description = "Availability zone names the spoke VPC subnets are placed in (the first az_count entries of availability_zones), index-aligned with subnet_ids_by_tier."
   value       = module.vpc.availability_zones
 }
+
+output "patch_install_targets" {
+  description = "Targets of the weekly patch install association (key and values): InstanceIds * for every managed instance, or tag:<key> when patch_install_target_tag is set. Null when the install is off."
+  value       = try(module.systems_manager[0].patch_install_targets, null)
+}

@@ -179,6 +179,12 @@ variable "aws" {
     # concurrency) on every SSM-managed instance in the security-tooling account (home region).
     # False keeps the daily patch scan only. Default true.
     enable_patch_install = optional(bool, true)
+    # Install patches only on the managed instances that carry this tag (key and value), which
+    # narrows the reboot scope. Null (default) installs on every SSM-managed instance.
+    patch_install_target_tag = optional(object({
+      key   = string
+      value = string
+    }))
     # Operating systems that get a custom patch baseline (set as the account default for that OS) in
     # the security-tooling account. Default Amazon Linux 2023.
     patch_operating_systems = optional(set(string), ["AMAZON_LINUX_2023"])

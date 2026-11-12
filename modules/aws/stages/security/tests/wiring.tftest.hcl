@@ -232,6 +232,21 @@ run "patch_install_wiring" {
   }
 }
 
+run "patch_install_target_tag_wiring" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      patch_install_target_tag = { key = "PatchInstall", value = "true" }
+    })
+  }
+
+  assert {
+    condition     = module.systems_manager.patch_install_targets.key == "tag:PatchInstall" && module.systems_manager.patch_install_targets.values[0] == "true"
+    error_message = "aws.patch_install_target_tag must narrow the install association to tagged instances."
+  }
+}
+
 run "patch_install_opt_out_wiring" {
   command = plan
 

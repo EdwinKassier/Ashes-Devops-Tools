@@ -39,7 +39,9 @@ maintenance window:
   immediately; here the first install is the next cron time.
 - **Opt out or narrow.** `enable_patch_install = false` keeps the scan only.
   `patch_install_target_tag = { key = "PatchInstall", value = "true" }` limits
-  the install to the instances that carry that tag.
+  the install to the instances that carry that tag. The aws-workload root
+  (`patch_install_target_tag`) and the aws-security root
+  (`aws_overrides.patch_install_target_tag`) pass it through.
 - **Operating systems.** `patch_operating_systems` (default
   `["AMAZON_LINUX_2023"]`) creates one custom baseline per OS. Amazon Linux 2
   reached end of support on 2026-06-30. Linux baselines approve `Security` and
@@ -128,6 +130,7 @@ The following resources are created:
 | <a name="output_patch_baseline_ids"></a> [patch\_baseline\_ids](#output\_patch\_baseline\_ids) | Patch baseline ID per operating system. |
 | <a name="output_patch_install_association_id"></a> [patch\_install\_association\_id](#output\_patch\_install\_association\_id) | ID of the weekly patch install association, or null when enable\_patch\_install is false. |
 | <a name="output_patch_install_schedule"></a> [patch\_install\_schedule](#output\_patch\_install\_schedule) | Cron schedule of the weekly patch install association, or null when enable\_patch\_install is false. |
+| <a name="output_patch_install_targets"></a> [patch\_install\_targets](#output\_patch\_install\_targets) | Targets of the weekly patch install association (key and values), or null when enable\_patch\_install is false. |
 | <a name="output_patch_operating_systems"></a> [patch\_operating\_systems](#output\_patch\_operating\_systems) | Operating systems that have a custom default patch baseline in this account and region. |
 | <a name="output_session_document_name"></a> [session\_document\_name](#output\_session\_document\_name) | Name of the Session Manager preferences document. |
 <!-- END_TF_DOCS -->

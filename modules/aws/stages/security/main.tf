@@ -443,8 +443,9 @@ module "systems_manager" {
   kms_key_id = module.sectool_cmk.key_arn
 
   # CMP-3: weekly patch install on the account's SSM-managed instances.
-  enable_patch_install    = var.aws.enable_patch_install
-  patch_operating_systems = var.aws.patch_operating_systems
+  enable_patch_install     = var.aws.enable_patch_install
+  patch_install_target_tag = var.aws.patch_install_target_tag
+  patch_operating_systems  = var.aws.patch_operating_systems
 }
 
 # ---------------------------------------------------------------------------
