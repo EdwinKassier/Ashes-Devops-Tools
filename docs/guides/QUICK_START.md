@@ -9,7 +9,7 @@ This guide covers everything needed to deploy the **GCP** landing zone from scra
 1. **Configure once:** run `scripts/init-landing-zone.sh` (or `make init ARGS="..."`), or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml) to `config/landing-zone.yaml` and edit it. This one file holds the org name and prefix, domain, Terraform Cloud organization and projects, regions, the GCP environments, the AWS accounts and workload environments, and which clouds are enabled ([section 2a](#2a-configure-the-landing-zone-one-file)).
 2. **Commit it.** It holds no secrets. Every root reads it, so VCS-driven Terraform Cloud runs (which never see a local tfvars file) get their values from the repo.
 3. **Apply `envs/tfc-admin`.** It creates every workspace from the same file: the enabled clouds, one `gcp-workload-<env>` / `aws-workload-<env>` per environment, and the TFC projects.
-4. **Bootstrap in order:** GCP `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (below). AWS: the [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md).
+4. **Bootstrap in order:** GCP `gcp-bootstrap` → `gcp-organization` → `gcp-guardrails` (security team) → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` (below). AWS: the [AWS Bootstrap runbook](../runbooks/aws-bootstrap.md).
 
 **How long it takes.** The applies themselves take minutes to an hour. The elapsed
 time is set by the steps around them: organization and billing access, quota and
@@ -52,7 +52,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] `gcloud version` reports `>= 450.0.0`
 - [ ] `jq` installed (used by CI scripts)
 - [ ] Node.js >= 18 installed (required only if using `enable_vault_secrets = true` in any `saas-workload` call)
-- [ ] A Terraform Cloud organization with the five GCP workspaces: `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub` and one `gcp-workload-<env>` per environment. Create them with `envs/tfc-admin` (`gcp.enabled: true` in `config/landing-zone.yaml`, or `enable_gcp = true`; every cloud defaults to disabled). It creates `gcp-bootstrap` in **local** execution mode, so the phase-0 apply below runs on your machine with your ADC while TFC stores the state ([bootstrap runbook](../runbooks/bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass))
+- [ ] A Terraform Cloud organization with the GCP workspaces (`gcp-bootstrap`, `gcp-organization`, `gcp-guardrails`, `gcp-projects`, `gcp-network-hub` and one `gcp-workload-<env>` per environment). Create them with `envs/tfc-admin` (`gcp.enabled: true` in `config/landing-zone.yaml`, or `enable_gcp = true`; every cloud defaults to disabled). It creates `gcp-bootstrap` in **local** execution mode, so the phase-0 apply below runs on your machine with your ADC while TFC stores the state ([bootstrap runbook](../runbooks/bootstrap.md#creating-and-wiring-the-tfc-workspaces-tfc-admin-two-pass))
 
 ---
 
@@ -146,7 +146,7 @@ The `modules/gcp/stages/bootstrap` module creates the WIF pool that GitHub Actio
 
 **Step 1 — Point every GCP root at your Terraform Cloud organization:**
 
-Each root's `backend.tf` is an HCP Terraform `cloud {}` block. It hard-codes the workspace name (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network-hub`). The per-environment `gcp-workload` root instead selects by the tags `cloud:gcp` + `layer:workload` plus `TF_WORKSPACE`. The block takes only the TFC **organization**, from the environment. Export it once for every `init`:
+Each root's `backend.tf` is an HCP Terraform `cloud {}` block. It hard-codes the workspace name (`gcp-bootstrap`, `gcp-organization`, `gcp-guardrails`, `gcp-projects`, `gcp-network-hub`). The per-environment `gcp-workload` root instead selects by the tags `cloud:gcp` + `layer:workload` plus `TF_WORKSPACE`. The block takes only the TFC **organization**, from the environment. Export it once for every `init`:
 
 ```bash
 export TF_CLOUD_ORGANIZATION=YOUR_TFC_ORG_NAME
@@ -187,8 +187,8 @@ Skip it only for a non-production estate. Without it the plan fails naming `prod
 
 **Step 4 — Apply the bootstrap root first (two-phase, as the human admin):**
 
-The GCP control plane is four roots applied in order: `gcp-bootstrap` →
-`gcp-organization` → `gcp-projects` → `gcp-network-hub`. Bootstrap is first and is
+The GCP control plane is four layered roots applied in order: `gcp-bootstrap` →
+`gcp-organization` → `gcp-projects` → `gcp-network-hub`. The security team applies a fifth, `gcp-guardrails`, after `gcp-organization`. Bootstrap is first and is
 special: its providers can impersonate a `terraform-admin` service account that
 the bootstrap apply itself creates. For this phase-0 local apply leave
 `terraform_admin_email` unset (`null`) so Terraform runs as your own ADC. Every
@@ -245,9 +245,10 @@ for VCS-driven runs, or queue a run on each workspace in order. Each root reads 
 previous one's remote state, so wait for each apply to finish:
 
 1. `gcp-organization` — folders, org policies, KMS, audit logging, billing
-2. `gcp-projects` — host/spoke projects, `environment_config`
-3. `gcp-network-hub` — hub VPC, DNS, hub VPC-SC
-4. `gcp-workload-<env>` — one per environment (see [Add Environment](../runbooks/add-environment.md))
+2. `gcp-guardrails` — org IAM deny policies, applied by the security team ([bootstrap runbook](../runbooks/bootstrap.md#security-team-and-gcp-guardrails))
+3. `gcp-projects` — host/spoke projects, `environment_config`
+4. `gcp-network-hub` — hub VPC, DNS, hub VPC-SC
+5. `gcp-workload-<env>` — one per environment (see [Add Environment](../runbooks/add-environment.md))
 
 You can preview any root locally first, e.g. `terraform -chdir=envs/gcp/projects plan`.
 Once bootstrap has run, revoke your personal ADC credentials:
@@ -278,6 +279,7 @@ The AWS landing zone does **not** share the GCP bootstrap above. It has its own 
 |------|------|---------------|-------|
 | 1 | `envs/gcp/bootstrap` | `gcp-bootstrap` | Admin project, Terraform admin SA, WIF pools (apply first, as the human admin) |
 | 2 | `envs/gcp/organization` | `gcp-organization` | Folders, org policies, KMS, audit logging, billing |
+| 2a | `envs/gcp/guardrails` | `gcp-guardrails` | Org IAM deny policies (admin containment); security team only; after gcp-organization |
 | 3 | `envs/gcp/projects` | `gcp-projects` | Host/spoke projects; publishes `environment_config` |
 | 4 | `envs/gcp/network-hub` | `gcp-network-hub` | Hub VPC, DNS, VPC-SC; publishes `hub_network` |
 | 5 | `envs/gcp/workload` | `gcp-workload-{env}` (e.g. `gcp-workload-dev`) | Reads env config + hub network, builds the spoke |
@@ -369,7 +371,7 @@ make plan-gcp-workload APP_ENV=dev
 - [ ] `make help` prints supported commands
 - [ ] `make fmt-check`, `make docs-check`, and `make security` succeed
 - [ ] `make test` reports `X passed, 0 failed`
-- [ ] `terraform init` succeeds for all five GCP roots (`bootstrap`, `organization`, `projects`, `network-hub`, `workload`)
+- [ ] `terraform init` succeeds for all six GCP roots (`bootstrap`, `organization`, `guardrails`, `projects`, `network-hub`, `workload`)
 - [ ] Bootstrap outputs include `tfc_oidc_pool_id` (and `github_oidc_pool_id` only if you enabled `enable_github_wif`)
 
 ---

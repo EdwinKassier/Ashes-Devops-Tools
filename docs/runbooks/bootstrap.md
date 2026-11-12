@@ -10,19 +10,20 @@
 
 ## Overview
 
-Where the AWS SRA spreads its foundation across seven layered roots, GCP uses **five roots**, applied in order (see the [GCP landing zone](../architecture/gcp-landing-zone.md#layer-map--which-root-deploys-what)):
+Where the AWS SRA spreads its foundation across seven layered roots, GCP uses **six roots**: five layered roots applied in order, plus the security-team root `gcp-guardrails` (see the [GCP landing zone](../architecture/gcp-landing-zone.md#layer-map--which-root-deploys-what)):
 
 1. **`envs/gcp/bootstrap`** (workspace `gcp-bootstrap`) stands up the automation foundation: the admin project, the `terraform-admin` service account, and the WIF pools. Apply it **first**. It is the phase-0 **producer** of `admin_project_id`, `admin_project_number`, `terraform_admin_email`, `suffix`, and the OIDC pool outputs (`envs/gcp/bootstrap/outputs.tf`).
 2. **`envs/gcp/organization`** (workspace `gcp-organization`) **reads** the bootstrap remote state and runs the organization stage: folders, org policy, KMS, audit logging, billing. Producer of `org_id`, `folders`, `tag_values`/`tag_keys`, `cmek_key_names`, `billing_account`, and the re-exported WIF pool IDs.
 3. **`envs/gcp/projects`** (workspace `gcp-projects`) **reads** gcp-organization (folders, tags, billing) and gcp-bootstrap (admin project, suffix), and vends the host/spoke projects. Producer of `project_ids`, `project_numbers`, and the `environment_config` contract that gcp-workload consumes.
 4. **`envs/gcp/network-hub`** (workspace `gcp-network-hub`) **reads** gcp-projects (host project IDs) and gcp-organization (folders, org_id), and builds the hub VPC, DNS anchor, and hub VPC-SC perimeter. Producer of `hub_network`.
 5. **`envs/gcp/workload`** (workspace `gcp-workload-<env>`, one per environment) **reads** gcp-projects (`environment_config`), gcp-network-hub (`hub_network`), and gcp-organization (`org_id`, `billing_account`, `admin_project_number`), and stands up that environment's Shared VPC host network + budget.
+6. **`envs/gcp/guardrails`** (workspace `gcp-guardrails`, security team only) applies the organization IAM deny policies, including admin containment. It reads no state. It looks up the org and the `containment/protected` tag that `gcp-organization` creates, so apply it after `gcp-organization`. See [Security team and gcp-guardrails](#security-team-and-gcp-guardrails).
 
 The control plane was split into separate states (bootstrap / organization / projects / network-hub) to shrink the blast radius — see [gcp-state-decomposition.md](../architecture/gcp-state-decomposition.md) (audit H3).
 
 The wrinkle unique to GCP is in step 1: the providers **impersonate** a `terraform-admin` service account, but *that SA is created by the `gcp-bootstrap` apply itself*. So the first `gcp-bootstrap` apply cannot impersonate a SA that does not exist yet — it must run as the human `admin_email`. This runbook calls that the **two-phase first apply** and details it below.
 
-> **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Ordering across the five roots is enforced entirely by **apply order** (this runbook) plus remote-state reads: a downstream root fails at plan time with an "output not found" error if its upstream has not been applied yet.
+> **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Ordering across the roots is enforced entirely by **apply order** (this runbook) plus remote-state reads: a downstream root fails at plan time with an "output not found" error if its upstream has not been applied yet.
 
 ---
 
@@ -164,8 +165,9 @@ gcloud auth application-default revoke
 
 ## What the control-plane roots create
 
-The GCP control plane is four roots (audit H3), one stage each, applied in order
-(`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub`). The
+The GCP control plane is four layered roots (audit H3), one stage each, applied in order
+(`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub`), plus the
+security-team root `gcp-guardrails` (see [Security team and gcp-guardrails](#security-team-and-gcp-guardrails)). The
 stages and what each creates:
 
 **`module.bootstrap`** — the automation foundation:
@@ -229,6 +231,20 @@ The same flow applies to AWS (`aws.enabled: true`): see the [AWS bootstrap runbo
 See [CI_SECRETS.md](../guides/CI_SECRETS.md).
 
 > **Escape hatch — run #1 with local state.** If you want the bootstrap applied before any TFC workspace exists, run phase 1 with `terraform -chdir=envs/gcp/bootstrap init -backend=false` and a local apply, then (after tfc-admin pass 1 creates `gcp-bootstrap`) re-`init` **with** the `cloud` backend to migrate the local state into it. The default path — tfc-admin creates `gcp-bootstrap` in `local` execution mode and you apply from your machine with TFC holding state — avoids the migration.
+
+---
+
+## Security team and gcp-guardrails
+
+Setting `gcp.break_glass_group` (the scaffolder does) or marking any environment `is_production: true` turns admin containment **on**. But `gcp-organization` only creates the `containment/protected` tag. The deny policy itself is applied by `gcp-guardrails`, and nothing applies it until the security team does:
+
+1. An HCP Terraform organization owner creates a team for the security staff (**Settings > Teams > Create a team**) with no organization-level permissions, adds its members, and copies its ID (`team-...`).
+2. Set `security_team_id = "team-..."` on tfc-admin. It must differ from `platform_team_id` and `control_plane_approvers_team_id`. Keep `enable_projects = true`. Apply tfc-admin. It puts `gcp-guardrails` in its own `<prefix>guardrails` project and grants only that team. A check warns while `security_team_id` is null.
+3. Production estates: `gcp-bootstrap` binds the guardrails plan and apply service accounts to the workspace by its immutable ID, so `tfc_workspace_ids` must include `gcp-guardrails`. Run `make bootstrap-ids` again if you ran it before tfc-admin created that workspace, then apply `gcp-bootstrap`.
+4. After `gcp-organization` has applied, a security-team member queues a run on `gcp-guardrails` and confirms the apply. The workspace never auto-applies.
+5. Verify: `gcloud iam policies list --kind=denypolicies --attachment-point=cloudresourcemanager.googleapis.com%2Forganizations%2F<org-id>` lists the containment policy.
+
+Details and the break-glass path: [production hardening](production-hardening.md). The default `guardrail_owner_mode = "separate"` is assumed here. With `guardrail_owner_mode = "organization"` do not apply `gcp-guardrails`. The organization apply SA owns the deny policy.
 
 ---
 
