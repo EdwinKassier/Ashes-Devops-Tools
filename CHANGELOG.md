@@ -649,13 +649,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `aws.contracts.network.resolver_profile_id`). The spoke inherits the DNS Firewall, the resolver
   forward rules and the central interface endpoint zones. Standalone spokes and a network state
   without the key associate nothing.
-- **Prod and nonprod spokes cannot reach each other (ARC-11).** Both segment tables default-route
+- **Prod and nonprod spokes cannot reach each other (ARC-11, breaking).** Both segment tables default-route
   to the same inspection (or, on starter, egress) attachment, whose table knows every spoke, so a
   prod↔nonprod flow was routable and only the firewall policy (pass in alert-only mode) stopped it.
   Each segment table now blackholes the other segment's spoke CIDRs (`spoke_attachments.<key>.cidr`,
   default `aws.workload_environments.<key>.vpc_cidr`; new stage output
   `segment_isolation_routes`). Cross-segment flows that worked before now drop at the TGW. A
-  `check` warns when both segments are attached and a spoke has no CIDR.
+  `check` warns when both segments are attached and a spoke has no CIDR. See `UPGRADING.md`.
 - **The egress VPC routes on-premises prefixes to the VPN.** The egress VPC private route tables
   sent only `top_cidr` to the transit gateway, and the `shared` TGW table had no on-premises route,
   so Resolver endpoint replies and forwards to on-premises went to NAT. With the VPN on, each

@@ -1070,6 +1070,41 @@ propagation from `shared` to `inspection` (replaced) and adds the two
 inspection hub routes. Spoke traffic drops while the propagations are
 replaced. Do it in a change window.
 
+#### Cross-segment spoke traffic is dropped at the transit gateway (aws-network, breaking)
+
+**Breaking: prod to nonprod spoke flows stop.** Each segment table (`prod`,
+`nonprod`) now holds a blackhole route for every spoke CIDR of the other
+segment. The spoke CIDR is `aws.network.spoke_attachments.<key>.cidr`, else
+`aws.workload_environments.<key>.vpc_cidr`. Before, both segments
+default-routed to the same inspection (or, on starter, egress) attachment,
+whose table knows every spoke. A prod to nonprod flow was therefore routable,
+and only the Network Firewall policy stopped it. In alert-only mode (and on
+starter, through the NAT gateway) it passed. Such flows now drop at the
+transit gateway, whatever the firewall policy.
+
+What the plan shows on an existing estate with spokes: one
+`aws_ec2_transit_gateway_route.segment_isolation["<table>|<spoke>"]`
+(blackhole) per spoke and per other segment. Nothing is removed or replaced.
+Spokes in the same segment, egress, the interface endpoints and on-premises
+traffic do not change.
+
+Find cross-segment flows before you apply:
+
+1. Network Firewall flow logs (in the log archive): look for flows whose
+   source is in a prod spoke CIDR and whose destination is in a nonprod spoke
+   CIDR, or the reverse.
+2. On starter (no firewall), use the VPC flow logs of the spokes: accepted
+   flows between a prod spoke CIDR and a nonprod spoke CIDR.
+3. List the blackholes the plan adds with the stage output
+   `segment_isolation_routes` (in the plan, under the network-hub module).
+
+If a workload needs a cross-segment flow: this is not supported, and there is
+no switch to turn the blackholes off. Move the shared dependency to a
+shared-services path that both segments may reach (for example the egress VPC
+interface endpoints, or a service reached through the hub), or design a
+deliberate, reviewed exception outside this module. Do not remove a spoke
+`cidr` to bypass the isolation: the `segments_isolated` check warns about it.
+
 #### The egress VPC routes on-premises prefixes to the VPN (aws-network)
 
 With the VPN on, aws-network now routes the on-premises prefixes from the
