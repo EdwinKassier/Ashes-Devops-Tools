@@ -480,14 +480,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   secret). A refresh-only plan still runs with the workspace's variables, so those workspaces rely
   on HCP health assessments alone (on tiers that offer them). The new output `drift_workspaces` lists what the token can check. The
   token is still made by hand with an expiry, so it never enters state.
-- **`npm ci` in vault-secrets runs with a cleared environment (SEC-12).** The bootstrap and
+- **`npm ci` in vault-secrets runs with a cleared environment (SEC-12, breaking).** The bootstrap and
   reconcile commands run npm under `env -i`. npm gets back only `PATH`, `HOME`, `TMPDIR`, the
   npm cache variables, the proxy variables and `NODE_EXTRA_CA_CERTS`, each one only when it is
   set. `POSTGRES_URL`, `VAULT_DESIRED_JSON`, `SUPABASE_SSL_CERT` and the workspace's
   `SUPABASE_ACCESS_TOKEN` reach `node` only, never npm, its config files or its registry. The
   trigger hashes do not include the command, so no provisioner re-runs on upgrade. A registry or
   auth setting that an estate passed to npm as an environment variable (for example
-  `npm_config_registry`) must move to an `.npmrc` file under `HOME`.
+  `npm_config_registry`) must move to an `.npmrc` file. See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

@@ -1756,6 +1756,25 @@ or destroyed.
 
 ### SaaS and cross-cloud
 
+#### npm settings must come from .npmrc in vault-secrets (saas, breaking)
+
+The bootstrap and reconcile provisioners now run `npm ci` under `env -i`. npm gets back only these environment variables, each one only when it is set:
+
+- `PATH`, `HOME` and `TMPDIR`
+- `npm_config_cache` and `NPM_CONFIG_CACHE`
+- `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `http_proxy`, `https_proxy` and `no_proxy`
+- `NODE_EXTRA_CA_CERTS`
+
+Every other variable no longer reaches npm. This includes the provisioner secrets (`POSTGRES_URL`, `VAULT_DESIRED_JSON`, `SUPABASE_SSL_CERT`), the workspace's `SUPABASE_ACCESS_TOKEN`, and any other `npm_config_*` or `NPM_CONFIG_*` setting, such as `npm_config_registry`, `npm_config_userconfig`, `npm_config_strict_ssl` or a registry `_authToken`. `node` still gets the full environment.
+
+If your apply runner set npm through environment variables, move the settings to an `.npmrc` file before you upgrade:
+
+1. Registry auth (for example `//npm.example.com/:_authToken=...`): put it in `$HOME/.npmrc` on the apply runner (the agent image or its start script). Never commit a token.
+2. A registry URL without secrets: put it in `$HOME/.npmrc`, or commit it as `registry=https://npm.example.com/` in `modules/supabase/vault-secrets/scripts/.npmrc`. npm reads that file as the project config because the command uses `--prefix modules/supabase/vault-secrets/scripts`.
+3. A corporate proxy or CA bundle needs no change: the proxy variables and `NODE_EXTRA_CA_CERTS` still pass.
+
+The trigger hashes do not include the command, so the upgrade itself re-runs no provisioner. A missing setting shows up on the next bootstrap or reconcile run as an `npm ci` failure (for example `E401`, `E404` or a TLS error).
+
 #### vault-secrets installs its dependencies in each script run (saas)
 
 `terraform_data.npm_install` is gone. It ran only when `package-lock.json` changed, so a later bootstrap or reconcile on a fresh runner failed with "module not found". Bootstrap and reconcile now each run `npm ci --ignore-scripts` in the same command, before `node`. `removed` blocks drop the old resource from state without running anything. The runner still needs Node.js 18+ and npm.
