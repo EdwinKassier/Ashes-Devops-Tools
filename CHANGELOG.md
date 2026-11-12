@@ -74,26 +74,6 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 #### Fixed
 
-- **Compliance docs no longer overstate controls (CMP-01, CMP-09, CMP-12).** DET-05 is a
-  Scaffold: the incident-response Lambda only logs the finding. SECURITY.md states what the
-  `gcp_no_basic_roles_high_scope` policy covers, that Cloud Armor is off by default, and that
-  Google APIs are reached through Private Google Access and Private Service Connect, not Private
-  Service Access. The HIPAA 164.312(c)(1) row maps to backup and deletion-protection controls.
-- **The AWS bootstrap docs match the code (ADO-02, ADO-08).** The operator creates only the
-  management account; `aws-organization` creates the organization or imports one through
-  `aws.adopt`. That apply also enables trusted access for `sso.amazonaws.com` and registers the
-  IAM Identity Center delegated administrator, so the manual gate is now only enabling Identity
-  Center in the console. The old runbook told operators to register the delegated administrator
-  by hand, which fails after the apply. Known gaps records the unproven order and the missing
-  brownfield import.
-- **The quick start works as written (ADO-01, ADO-03, ADO-07, ADO-10, ADO-12, ADO-13).** The
-  config commit in README.md, QUICK_START.md and the scaffolder is now `chore(config): landing
-  zone`, which the commitizen hook accepts. `config/landing-zone.example.yaml` and the scaffold
-  fixtures name the phase-0 stack's `OrganizationBreakGlass` role in `aws.break_glass_role_arn`.
-  The scaffolder lists both phase-0 role ARNs as values to check against the stack outputs, and
-  names the SaaS bootstrap runbook when SaaS is enabled. The GCP bootstrap verification reads the
-  `contract` outputs and checks the GitHub pool only with `enable_github_wif`. The README module
-  counts per domain now add up to 66 GCP and 53 AWS, and its CI table lists every workflow.
 - **Every root's backend now initialises (C1).** All 14 `envs/**/backend.tf`, plus both clone-me
   templates, declared `backend "cloud" {}`. That is not a valid backend type: Terraform rejects
   it, so `terraform init` failed on every root. They are now top-level `cloud {}` blocks.
@@ -771,6 +751,26 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   (`name`, `address`) override both. The `private-service-connect` module now requires `address`
   and validates `name`. The old name and an address-less reservation could never be created by
   the API, so no existing state holds them and no migration is needed.
+- **Compliance docs no longer overstate controls (CMP-01, CMP-09, CMP-12).** DET-05 is a
+  Scaffold: the incident-response Lambda only logs the finding. SECURITY.md states what the
+  `gcp_no_basic_roles_high_scope` policy covers, that Cloud Armor is off by default, and that
+  Google APIs are reached through Private Google Access and Private Service Connect, not Private
+  Service Access. The HIPAA 164.312(c)(1) row maps to backup and deletion-protection controls.
+- **The AWS bootstrap docs match the code (ADO-02, ADO-08).** The operator creates only the
+  management account; `aws-organization` creates the organization or imports one through
+  `aws.adopt`. That apply also enables trusted access for `sso.amazonaws.com` and registers the
+  IAM Identity Center delegated administrator, so the manual gate is now only enabling Identity
+  Center in the console. The old runbook told operators to register the delegated administrator
+  by hand, which fails after the apply. Known gaps records the unproven order and the missing
+  brownfield import.
+- **The quick start works as written (ADO-01, ADO-03, ADO-07, ADO-10, ADO-12, ADO-13).** The
+  config commit in README.md, QUICK_START.md and the scaffolder is now `chore(config): landing
+  zone`, which the commitizen hook accepts. `config/landing-zone.example.yaml` and the scaffold
+  fixtures name the phase-0 stack's `OrganizationBreakGlass` role in `aws.break_glass_role_arn`.
+  The scaffolder lists both phase-0 role ARNs as values to check against the stack outputs, and
+  names the SaaS bootstrap runbook when SaaS is enabled. The GCP bootstrap verification reads the
+  `contract` outputs and checks the GitHub pool only with `enable_github_wif`. The README module
+  counts per domain now add up to 66 GCP and 53 AWS, and its CI table lists every workflow.
 - **The AWS root template writes the required tags and accepts every partition's regions.**
   `templates/aws/root` sets provider `default_tags` (`ManagedBy`, `Environment`, `CostCenter`,
   `Owner` from `org.cost_center` and `org.owner`, `DataClassification`) and validates `aws_region`

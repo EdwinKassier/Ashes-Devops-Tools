@@ -292,7 +292,7 @@ Checklist:
 
 - [ ] `terraform_service_account_email` resolves to `terraform-admin@<admin-project>.iam.gserviceaccount.com`.
 - [ ] `tfc_oidc_pool_id` is non-empty (with the default `enable_tfc_oidc = true`).
-- [ ] Only when `enable_github_wif = true`: `github_oidc_pool_id` is non-empty. With the default (`false`) it is `null`, and that is correct.
+- [ ] Only when the `gcp-bootstrap` input `enable_github_wif = true`: `github_oidc_pool_id` is non-empty. With the default (`false`) it is `null`, and that is correct.
 - [ ] The admin project exists and has `deletion_policy = PREVENT`.
 - [ ] One folder exists per `environments` key plus `Shared Services`.
 - [ ] `environment_config` keys match your `environments` keys.

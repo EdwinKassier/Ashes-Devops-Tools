@@ -560,7 +560,8 @@ fi
 if [[ -n "${derived}" ]]; then
   printf '     Derived, not verified (before the first apply each group must exist in\n'
   printf '     Cloud Identity, each subnet in the environment, and each AWS role ARN\n'
-  printf '     must equal the phase-0 stack outputs TerraformRunRoleArn / BreakGlassRoleArn):\n'
+  printf '     must equal the phase-0 stack outputs TerraformRunRoleArn / BreakGlassRoleArn,\n'
+  printf '     or your hand-created role):\n'
   printf '%s\n' "${derived}" | sed 's/^/       line /'
 fi
 cat <<EOF

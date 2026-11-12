@@ -56,7 +56,14 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `DELEGATED_ADMINISTRATOR_EXISTS_FOR_THIS_SERVICE` (another account). Add an
   `import` block for
   `module.aws_organization.aws_organizations_delegated_administrator.identity_center[0]`
-  with the ID `<account-id>/sso.amazonaws.com` before that apply.
+  with the ID `<account-id>/sso.amazonaws.com` before that apply. If the
+  greenfield order fails in a real organization, recover by hand in the
+  management account: run `aws organizations deregister-delegated-administrator
+  --account-id <shared-services-id> --service-principal sso.amazonaws.com`,
+  enable Identity Center in the console, then re-apply `aws-organization` so it
+  registers the account again. The root cannot skip the registration:
+  `identity_center_admin_account_key` is a `modules/aws/stages/organization`
+  input that `envs/aws/organization` does not expose.
 - **GCP Private Service Connect endpoint for Google APIs is mock-tested only
   (ARC-1).** `net-hub` and `net-spoke` name the endpoint by Google's rule
   (1-20 lower-case letters and numbers, starting with a letter) and reserve an
