@@ -121,7 +121,7 @@ run "published_proxy_accepts_environment_host_projects_by_default" {
     secure_web_proxy = {
       enabled             = true
       allowed_fqdns       = ["*.github.com"]
-      psc_nat_subnet_cidr = "10.0.253.0/24"
+      psc_nat_subnet_cidr = "10.0.252.0/24"
     }
   }
 
@@ -137,7 +137,7 @@ run "published_proxy_explicit_consumers_win" {
   variables {
     secure_web_proxy = {
       enabled                  = true
-      psc_nat_subnet_cidr      = "10.0.253.0/24"
+      psc_nat_subnet_cidr      = "10.0.252.0/24"
       consumer_accept_projects = ["555555555555"]
     }
   }

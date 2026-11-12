@@ -323,7 +323,7 @@ variable "hub_additional_regions" {
 }
 
 variable "hub_private_service_connect" {
-  description = "Overrides for the hub VPC's Private Service Connect endpoint for Google APIs (gcp.network.private_service_connect in config). name: 1-20 lower-case letters and numbers, starting with a letter (null = hubvpccorepsc). address: the endpoint's internal IPv4 address, outside every hub subnet range (null = the second-to-last address of the hub CIDR, for example 10.0.255.254)."
+  description = "Overrides for the hub VPC's Private Service Connect endpoint for Google APIs (gcp.network.private_service_connect in config). name: 1-20 lower-case letters and numbers, starting with a letter (null = hubvpccorepsc). address: the endpoint's internal IPv4 address, outside every hub subnet range, including the Secure Web Proxy proxy-only and PSC NAT subnets (null = the second-to-last address of the hub CIDR, for example 10.0.255.254)."
   type = object({
     name    = optional(string)
     address = optional(string)

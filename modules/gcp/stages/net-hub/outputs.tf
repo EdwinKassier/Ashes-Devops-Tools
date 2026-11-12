@@ -142,7 +142,7 @@ output "network_alert_policy_ids" {
 }
 
 output "private_service_connect" {
-  description = "The Private Service Connect endpoint for Google APIs: name, address and target; null when private_service_connect.enabled is false. The plan fails here when the address is inside a subnet range of this VPC."
+  description = "The Private Service Connect endpoint for Google APIs: name, address and target; null when private_service_connect.enabled is false. The plan fails here when the address is inside a subnet range of this VPC, including the Secure Web Proxy proxy-only and PSC NAT subnets when the proxy is enabled."
   value = var.private_service_connect.enabled ? {
     name    = local.psc_name
     address = local.psc_address
@@ -151,9 +151,9 @@ output "private_service_connect" {
 
   precondition {
     condition = !var.private_service_connect.enabled || alltrue([
-      for r in module.network.subnet_ip_ranges :
+      for r in local.psc_checked_ranges :
       try(cidrhost("${local.psc_address}/${split("/", r)[1]}", 0) != cidrhost(r, 0), true)
     ])
-    error_message = "The Private Service Connect address ${local.psc_address} is inside a subnet range of ${var.network.name} (${join(", ", module.network.subnet_ip_ranges)}). Google requires the endpoint IP to be outside every primary and secondary subnet range. Set private_service_connect.address (config: gcp.network.private_service_connect.address) to a free address."
+    error_message = "The Private Service Connect address ${local.psc_address} is inside a subnet range of ${var.network.name} or of its Secure Web Proxy (${join(", ", local.psc_checked_ranges)}). Google requires the endpoint IP to be outside every primary and secondary subnet range. Set private_service_connect.address (config: gcp.network.private_service_connect.address) to a free address."
   }
 }

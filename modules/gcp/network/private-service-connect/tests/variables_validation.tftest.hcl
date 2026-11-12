@@ -134,23 +134,3 @@ run "rejects_ipv6_address" {
     address = "fd20::1"
   }
 }
-
-run "rejects_address_inside_a_subnet" {
-  command = plan
-
-  expect_failures = [var.address]
-
-  variables {
-    address           = "10.0.16.5"
-    vpc_subnet_ranges = ["10.0.0.0/24", "10.0.16.0/24"]
-  }
-}
-
-run "accepts_address_outside_subnets" {
-  command = plan
-
-  variables {
-    address           = "10.0.255.254"
-    vpc_subnet_ranges = ["10.0.0.0/24", "10.0.16.0/24", "100.64.0.0/14"]
-  }
-}

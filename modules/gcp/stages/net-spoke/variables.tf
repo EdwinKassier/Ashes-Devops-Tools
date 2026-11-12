@@ -182,7 +182,7 @@ variable "private_service_access" {
 }
 
 variable "private_service_connect" {
-  description = "Private Service Connect endpoint for Google APIs. target is 'all-apis' or 'vpc-sc'. name (null = the network name in lower case without non-alphanumerics, cut to 17 characters, plus psc) must follow Google's rule: 1-20 lower-case letters and numbers, starting with a letter. address (null = the second-to-last address of network.cidr_block, for example 10.0.255.254 for 10.0.0.0/16) is the endpoint's internal IPv4 address; the plan fails when it is inside a subnet range of this VPC."
+  description = "Private Service Connect endpoint for Google APIs. target is 'all-apis' or 'vpc-sc'. name (null = the network name in lower case without non-alphanumerics, cut to 17 characters, plus psc) must follow Google's rule: 1-20 lower-case letters and numbers, starting with a letter. address (null = the second-to-last address of network.cidr_block, for example 10.10.255.254 for 10.10.0.0/16) is the endpoint's internal IPv4 address; the plan fails when it is inside a subnet range of this VPC."
   type = object({
     enabled = optional(bool, true)
     target  = optional(string, "all-apis")
@@ -205,7 +205,7 @@ variable "private_service_connect" {
 
   validation {
     condition     = var.private_service_connect.address == null || (can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$", coalesce(var.private_service_connect.address, "x"))) && try(cidrhost("${var.private_service_connect.address}/32", 0) == var.private_service_connect.address, false))
-    error_message = "private_service_connect.address (config: gcp.environments.<env>.private_service_connect.address) must be a single IPv4 address (for example 10.0.255.254), not a range or an IPv6 address."
+    error_message = "private_service_connect.address (config: gcp.environments.<env>.private_service_connect.address) must be a single IPv4 address (for example 10.10.255.254), not a range or an IPv6 address."
   }
 }
 

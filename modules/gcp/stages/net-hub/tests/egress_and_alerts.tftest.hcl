@@ -74,8 +74,8 @@ run "secure_web_proxy_with_psc_publishing" {
     secure_web_proxy = {
       enabled                  = true
       allowed_fqdns            = ["*.github.com", "pypi.org"]
-      proxy_only_subnet_cidr   = "10.0.254.0/23"
-      psc_nat_subnet_cidr      = "10.0.253.0/24"
+      proxy_only_subnet_cidr   = "10.0.250.0/23"
+      psc_nat_subnet_cidr      = "10.0.252.0/24"
       consumer_accept_projects = ["333333333333"]
     }
   }
@@ -94,6 +94,39 @@ run "secure_web_proxy_with_psc_publishing" {
     condition     = output.secure_web_proxy.service_attachment_id != null && output.secure_web_proxy.ports == tolist([443])
     error_message = "psc_nat_subnet_cidr must publish the proxy through a service attachment."
   }
+}
+
+# ARC-1 review: the PSC endpoint address must also stay outside the Secure Web
+# Proxy subnets. A proxy-only subnet 10.0.254.0/23 holds the default 10.0.255.254.
+run "psc_default_address_inside_swp_proxy_only_subnet_fails" {
+  command = plan
+
+  variables {
+    secure_web_proxy = {
+      enabled                = true
+      allowed_fqdns          = ["pypi.org"]
+      proxy_only_subnet_cidr = "10.0.254.0/23"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
+}
+
+run "psc_address_inside_swp_psc_nat_subnet_fails" {
+  command = plan
+
+  variables {
+    secure_web_proxy = {
+      enabled                  = true
+      allowed_fqdns            = ["pypi.org"]
+      proxy_only_subnet_cidr   = "10.0.250.0/23"
+      psc_nat_subnet_cidr      = "10.0.252.0/24"
+      consumer_accept_projects = ["333333333333"]
+    }
+    private_service_connect = { address = "10.0.252.9" }
+  }
+
+  expect_failures = [output.private_service_connect]
 }
 
 run "secure_web_proxy_name_fits_long_network_names" {

@@ -744,7 +744,9 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   environment network apply failed. The name is now the network name without non-alphanumerics
   (first 17 characters) plus `psc` (for example `hubvpccorepsc`). The global address also needs
   an explicit IP: it defaults to the second-to-last address of the VPC block (for example
-  `10.0.255.254`), and the plan fails when it is inside a subnet range of the VPC. New config
+  `10.0.255.254`), and the plan fails when it is inside a subnet range of the VPC (in the hub,
+  also the Secure Web Proxy proxy-only and PSC NAT subnets when the proxy is on). The Secure Web
+  Proxy examples now use `10.0.250.0/23` and `10.0.252.0/24`, which do not hold that address. New config
   keys `gcp.network.private_service_connect` and `gcp.environments.<env>.private_service_connect`
   (`name`, `address`) override both. The `private-service-connect` module now requires `address`
   and validates `name`. The old name and an address-less reservation could never be created by

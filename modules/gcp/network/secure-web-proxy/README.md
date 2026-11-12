@@ -47,10 +47,10 @@ module "secure_web_proxy" {
   allowed_fqdns = ["*.github.com", "pypi.org"]
 
   create_proxy_only_subnet = true
-  proxy_only_subnet_cidr   = "10.0.254.0/23"
+  proxy_only_subnet_cidr   = "10.0.250.0/23"
 
   create_service_attachment = true
-  psc_nat_subnet_cidr       = "10.0.253.0/24"
+  psc_nat_subnet_cidr       = "10.0.252.0/24"
   consumer_accept_projects  = ["111111111111"]
 }
 ```

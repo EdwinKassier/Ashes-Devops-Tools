@@ -43,34 +43,13 @@ variable "address_name" {
 }
 
 variable "address" {
-  description = "The internal IPv4 address of the endpoint (required: Google reserves an endpoint address only with an explicit IP or an internal range). It must be a single IPv4 address outside every primary and secondary subnet range of the VPC network and of any network peered with it."
+  description = "The internal IPv4 address of the endpoint (required: Google reserves an endpoint address only with an explicit IP or an internal range). It must be a single IPv4 address. Google also requires it to be outside every primary and secondary subnet range of the VPC network and of any network peered with it; this module does not check that (the net-hub and net-spoke compositions check it against their VPC's subnets)."
   type        = string
   nullable    = false
 
   validation {
     condition     = can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$", var.address)) && try(cidrhost("${var.address}/32", 0) == var.address, false)
     error_message = "address must be a single IPv4 address (for example 10.0.255.254), not a range or an IPv6 address."
-  }
-
-  validation {
-    # An address is inside a range when masking it with the range's prefix gives the range's network address.
-    condition = alltrue([
-      for r in var.vpc_subnet_ranges :
-      try(cidrhost("${var.address}/${split("/", r)[1]}", 0) != cidrhost(r, 0), true)
-    ])
-    error_message = "address ${var.address} is inside a subnet range of the VPC (${join(", ", var.vpc_subnet_ranges)}). Google requires the endpoint IP to be outside every primary and secondary subnet range: choose another address."
-  }
-}
-
-variable "vpc_subnet_ranges" {
-  description = "Primary and secondary subnet ranges of the VPC network (and of peered networks), in CIDR notation. The address must be outside all of them. Empty skips the check."
-  type        = list(string)
-  default     = []
-  nullable    = false
-
-  validation {
-    condition     = alltrue([for r in var.vpc_subnet_ranges : can(cidrnetmask(r))])
-    error_message = "Every vpc_subnet_ranges entry must be an IPv4 CIDR (for example 10.0.0.0/24)."
   }
 }
 

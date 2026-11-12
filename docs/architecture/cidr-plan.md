@@ -34,6 +34,8 @@ Defined by the `environments` map (`cidr_block` per env) and the hub CIDRs on th
 | Per-env host VPC (uat) | `10.11.0.0/16` | `environments["uat"].cidr_block` |
 | Per-env host VPC (prod) | `10.12.0.0/16` | `environments["prod"].cidr_block` |
 | New environments | `10.13.0.0/16` onward | `environments[<new>].cidr_block` |
+| Secure Web Proxy proxy-only subnet (hub, opt-in, example) | `10.0.250.0/23` | `secure_web_proxy.proxy_only_subnet_cidr` variable (gcp-network-hub) |
+| Secure Web Proxy PSC NAT subnet (hub, opt-in, example) | `10.0.252.0/24` | `secure_web_proxy.psc_nat_subnet_cidr` variable (gcp-network-hub) |
 | PSC endpoint for Google APIs (hub) | `10.0.255.254` (second-to-last address of the hub CIDR) | `gcp.network.private_service_connect.address` (gcp-network-hub) |
 | PSC endpoint for Google APIs (each environment) | second-to-last address of the environment CIDR, for example `10.10.255.254` | `gcp.environments.<env>.private_service_connect.address` |
 
@@ -47,8 +49,12 @@ networks, so each VPC gets its own endpoint. The default is the second-to-last
 address of the VPC's own block. The default subnet layout uses only the first 48
 `/24` blocks of a `/16`, so that address is free, and it is outside every other
 VPC's block. `net-hub` and `net-spoke` fail the plan when the address is inside a
-subnet range of their VPC. If you place a subnet or secondary range at the top of
-the block, set `private_service_connect.address` to a free address first.
+subnet range of their VPC. In the hub that includes the Secure Web Proxy
+proxy-only and PSC NAT subnets when the proxy is enabled. The repository's
+examples put those at `10.0.250.0/23` and `10.0.252.0/24`, below the default
+address. If you place a subnet or secondary range at the top of the block (for
+example a proxy-only subnet at `10.0.254.0/23`), set
+`private_service_connect.address` to a free address first.
 
 Rule: each GCP environment gets one `/16`, assigned sequentially from `10.10.0.0/16`.
 The hub and DNS VPCs must not overlap any env CIDR. tfc-admin enforces this: its

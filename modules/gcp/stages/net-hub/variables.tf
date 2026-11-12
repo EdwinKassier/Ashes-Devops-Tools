@@ -165,7 +165,7 @@ variable "private_service_access" {
 }
 
 variable "private_service_connect" {
-  description = "Private Service Connect endpoint for Google APIs. target is 'all-apis' or 'vpc-sc'. name (null = the network name in lower case without non-alphanumerics, cut to 17 characters, plus psc) must follow Google's rule: 1-20 lower-case letters and numbers, starting with a letter. address (null = the second-to-last address of network.cidr_block, for example 10.0.255.254 for 10.0.0.0/16) is the endpoint's internal IPv4 address; the plan fails when it is inside a subnet range of this VPC."
+  description = "Private Service Connect endpoint for Google APIs. target is 'all-apis' or 'vpc-sc'. name (null = the network name in lower case without non-alphanumerics, cut to 17 characters, plus psc) must follow Google's rule: 1-20 lower-case letters and numbers, starting with a letter. address (null = the second-to-last address of network.cidr_block, for example 10.0.255.254 for 10.0.0.0/16) is the endpoint's internal IPv4 address; the plan fails when it is inside a subnet range of this VPC, including the secure_web_proxy proxy_only_subnet_cidr and psc_nat_subnet_cidr when the proxy is enabled."
   type = object({
     enabled = optional(bool, true)
     target  = optional(string, "all-apis")

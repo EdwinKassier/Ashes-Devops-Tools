@@ -205,7 +205,7 @@ variable "hub_private_service_connect_name" {
 }
 
 variable "hub_private_service_connect_address" {
-  description = "Internal IPv4 address of the hub VPC's Private Service Connect endpoint. It must be outside every hub subnet range and every subnet range of the peered environment VPCs. Null = gcp.network.private_service_connect.address from config/landing-zone.yaml, else the second-to-last address of the hub CIDR (10.0.255.254 for 10.0.0.0/16)."
+  description = "Internal IPv4 address of the hub VPC's Private Service Connect endpoint. It must be outside every hub subnet range (including the Secure Web Proxy proxy-only and PSC NAT subnets) and every subnet range of the peered environment VPCs. Null = gcp.network.private_service_connect.address from config/landing-zone.yaml, else the second-to-last address of the hub CIDR (10.0.255.254 for 10.0.0.0/16)."
   type        = string
   default     = null
 }

@@ -102,7 +102,7 @@ run "rejects_published_proxy_without_consumers" {
   variables {
     secure_web_proxy = {
       enabled             = true
-      psc_nat_subnet_cidr = "10.0.253.0/24"
+      psc_nat_subnet_cidr = "10.0.252.0/24"
     }
   }
 
