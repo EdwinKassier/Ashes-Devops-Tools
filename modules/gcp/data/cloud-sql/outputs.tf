@@ -44,3 +44,13 @@ output "backup_location" {
   description = "Location of the automated backups: backup_location, else the instance region."
   value       = coalesce(var.backup_location, var.region)
 }
+
+output "encryption_key_name" {
+  description = "The customer-managed key that encrypts the instance, or null for Google-managed encryption."
+  value       = var.encryption_key_name
+}
+
+output "cmek_required" {
+  description = "True when require_cmek is set, so the plan fails without a customer-managed key."
+  value       = var.require_cmek
+}

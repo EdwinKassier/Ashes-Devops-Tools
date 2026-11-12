@@ -17,6 +17,8 @@ gcp:
   logging_project_id: acme-logging-prod
   logging_project_number: "222233334444"
   enable_audit_bucket_lock: true
+  # A new logging project: its audit keys are created fresh, so HSM is safe.
+  audit_key_protection_level: HSM
   environments:
     prod:
       display_name: Production

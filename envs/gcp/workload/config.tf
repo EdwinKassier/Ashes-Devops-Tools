@@ -200,6 +200,11 @@ locals {
   # regulated (CMP-7). main.tf (compliance_class_guard) rejects other values.
   compliance_class = try(tostring(local.lz.gcp.environments[var.environment].compliance_class), "standard")
   regulated        = local.compliance_class == "regulated"
+  # CMP-12: every app-service database of a regulated environment must set
+  # database.encryption_key_name (cloud-sql require_cmek fails the plan). It is
+  # never derived for a standard environment, so no existing database is ever
+  # replaced to add a key.
+  require_database_cmek = local.regulated
 
   preset_root = "envs/gcp/workload"
   preset_names = distinct(concat(

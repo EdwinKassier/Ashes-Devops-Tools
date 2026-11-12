@@ -570,6 +570,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   Vercel region lists follow Vercel's published table: `arn1`, `hkg1`, `syd1` and `yul1` are added
   and `sea1` is removed. New `docs/compliance/third-parties.md` (DPA, BAA, subprocessors, exit plan
   per provider) and matrix row DP-09. See `UPGRADING.md`.
+- **HSM option for audit keys; CMEK for regulated Cloud SQL (CMP-12).** `gcp.audit_key_protection_level`
+  (`SOFTWARE` default, or `HSM`) sets the protection level of the two audit CMEK keys; it is
+  ForceNew, so a change on existing keys fails the plan. A `compliance_class: regulated`
+  `gcp-workload-<env>` fails the plan for an app-service database without `encryption_key_name` or
+  without deletion protection (`require_cmek` in `cloud-sql`, `require_database_cmek` in
+  app-services). An existing database is never replaced to add a key. See `UPGRADING.md`.
 - **aws-backup is tagged `DataClassification = restricted`.** The backup account holds copies of
   every data class, so its default tag moves from `confidential` to the highest class (in-place
   tag update).

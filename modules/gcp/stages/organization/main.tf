@@ -87,14 +87,18 @@ locals {
   audit_project_number     = local.separate_logging_project ? coalesce(var.gcp.logging_project_number, "0") : var.admin_project_number
 
   # CMEK keys for the audit store, granted to the GCS / BigQuery service agents
-  # of the project that actually holds the bucket and dataset.
+  # of the project that actually holds the bucket and dataset. The protection
+  # level (CMP-12) is ForceNew: the KMS module's prevent_destroy turns a change on
+  # existing keys into a plan error, never a lost key.
   audit_cmek_keys = {
     "audit-logs" = {
+      protection_level = var.gcp.audit_key_protection_level
       encrypter_decrypters = [
         "serviceAccount:service-${local.audit_project_number}@gs-project-accounts.iam.gserviceaccount.com",
       ]
     }
     "audit-analytics" = {
+      protection_level = var.gcp.audit_key_protection_level
       encrypter_decrypters = [
         "serviceAccount:bq-${local.audit_project_number}@bigquery-encryption.iam.gserviceaccount.com",
       ]

@@ -44,11 +44,14 @@ locals {
     enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
     logging_project_id        = try(tostring(local.lz.gcp.logging_project_id), null)
     logging_project_number    = try(tostring(local.lz.gcp.logging_project_number), null)
-    audit_store_waived        = try(tobool(local.lz.gcp.audit_store_waived), null)
-    hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
-    dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
-    audit_log_retention_days  = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
-    compliance_frameworks     = try([for f in local.lz.compliance.frameworks : tostring(f)], [])
+    # SOFTWARE or HSM for the two audit CMEK keys (CMP-12). ForceNew: set it
+    # only where the audit keys are created fresh.
+    audit_key_protection_level = try(tostring(local.lz.gcp.audit_key_protection_level), null)
+    audit_store_waived         = try(tobool(local.lz.gcp.audit_store_waived), null)
+    hub_vpc_cidr_block         = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
+    dns_hub_vpc_cidr_block     = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    audit_log_retention_days   = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
+    compliance_frameworks      = try([for f in local.lz.compliance.frameworks : tostring(f)], [])
     # gcp.contracts.bootstrap: stage contract override (same shape as the
     # bootstrap_contract variable). Present => the remote-state read is skipped.
     bootstrap_contract = try(local.lz.gcp.contracts.bootstrap.admin_project_number, null) == null ? null : {
@@ -117,6 +120,7 @@ locals {
     enable_audit_bucket_lock         = local.cfg.enable_audit_bucket_lock
     logging_project_id               = local.cfg.logging_project_id
     logging_project_number           = local.cfg.logging_project_number
+    audit_key_protection_level       = local.cfg.audit_key_protection_level
     enable_admin_containment         = local.cfg.admin_containment
     enable_principal_access_boundary = local.cfg.principal_access_boundary
     # gcp.break_glass_group as an IAM v2 principal.

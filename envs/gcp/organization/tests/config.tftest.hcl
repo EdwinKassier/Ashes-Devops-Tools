@@ -186,6 +186,12 @@ run "logging_project_from_config" {
     condition     = local.gcp.logging_project_id == "acme-logging-prod" && local.gcp.logging_project_number == "222233334444" && local.gcp.enable_audit_bucket_lock == true
     error_message = "gcp.logging_project_id/number and gcp.enable_audit_bucket_lock must flow from config into the stage object."
   }
+
+  # CMP-12: gcp.audit_key_protection_level reaches the stage object.
+  assert {
+    condition     = local.gcp.audit_key_protection_level == "HSM"
+    error_message = "gcp.audit_key_protection_level must flow from config into the stage object."
+  }
 }
 
 run "compliance_class_defaults_to_standard" {

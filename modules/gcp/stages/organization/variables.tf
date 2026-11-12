@@ -105,6 +105,14 @@ variable "gcp" {
     # Numeric project number of logging_project_id (required when it is set). Used to grant the
     # logging project's GCS and BigQuery service agents access to the audit CMEK keys.
     logging_project_number = optional(string)
+    # Cloud KMS protection level of the two audit CMEK keys (audit-logs, audit-analytics): SOFTWARE
+    # (default) or HSM (Cloud HSM, FIPS 140-2 Level 3). It is set on the key's version template,
+    # which the provider marks ForceNew, and the KMS module sets prevent_destroy: changing it on
+    # existing keys fails the plan. Use HSM only where the audit keys are created fresh (a new
+    # estate, or a new logging_project_id). HSM key versions cost more than SOFTWARE ones
+    # (https://docs.cloud.google.com/kms/docs/key-management-service). The billing and SCC keys
+    # stay SOFTWARE.
+    audit_key_protection_level = optional(string, "SOFTWARE")
     # Soft-delete window (days) on the org audit-log buckets: deleted/overwritten objects stay
     # restorable for this long. 7-90, or 0 to disable. Default 30.
     audit_soft_delete_retention_days = optional(number, 30)
@@ -378,6 +386,11 @@ variable "gcp" {
   validation {
     condition     = var.gcp.logging_project_id == null || var.gcp.logging_project_number != null
     error_message = "gcp_overrides.logging_project_number is required when gcp_overrides.logging_project_id is set."
+  }
+
+  validation {
+    condition     = contains(["SOFTWARE", "HSM"], var.gcp.audit_key_protection_level)
+    error_message = "gcp_overrides.audit_key_protection_level (gcp.audit_key_protection_level) must be SOFTWARE or HSM."
   }
 
   validation {

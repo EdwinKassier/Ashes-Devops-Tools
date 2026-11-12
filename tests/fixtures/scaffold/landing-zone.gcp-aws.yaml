@@ -144,6 +144,10 @@ gcp:
   # logging_project_id: my-org-logging
   # logging_project_number: "123456789012"
   # audit_store_waived: false
+  # Protection level of the two audit CMEK keys: SOFTWARE (default) or HSM
+  # (Cloud HSM, FIPS 140-2 Level 3; costs more per key version). It cannot
+  # change on existing keys: set it with a new logging project or a new estate.
+  # audit_key_protection_level: HSM
   # Regions allowed by the resource-location org policy (gcp-organization).
   allowed_regions:
     - europe-west2

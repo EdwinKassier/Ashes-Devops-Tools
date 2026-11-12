@@ -218,6 +218,12 @@ run "regulated_env_applies_regulated_preset" {
     condition     = local.enable_backup_vault && module.environment.components.backup_vault && local.backup_vault_enforced_retention_days == 35 && local.backup_vault_lock_effective_time == null
     error_message = "compliance_class: regulated must turn the Backup and DR vault on (35-day enforced retention, no lock)."
   }
+
+  # CMP-12: a regulated environment's app-service databases need a CMEK.
+  assert {
+    condition     = local.regulated && local.require_database_cmek
+    error_message = "compliance_class: regulated must require a CMEK on app-service databases."
+  }
 }
 
 run "regulated_env_rejects_dry_run_perimeter" {
@@ -362,9 +368,10 @@ run "standard_env_in_a_regulated_estate_is_unchanged" {
       local.flow_log_sampling == 0.1 &&
       local.flow_logs_retention_days == 30 &&
       !local.enable_backup_vault &&
-      !module.environment.components.backup_vault
+      !module.environment.components.backup_vault &&
+      !local.require_database_cmek
     )
-    error_message = "A standard environment in a regulated estate must keep today's defaults (no backup vault)."
+    error_message = "A standard environment in a regulated estate must keep today's defaults (no backup vault, no CMEK requirement)."
   }
 }
 

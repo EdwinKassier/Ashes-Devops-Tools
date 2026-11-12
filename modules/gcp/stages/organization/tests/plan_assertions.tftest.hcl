@@ -231,6 +231,34 @@ run "dedicated_logging_project_holds_audit_store_and_cmek" {
   }
 }
 
+# CMP-12: the audit keys take gcp.audit_key_protection_level; the default is
+# SOFTWARE, and HSM is for audit keys created fresh (it is ForceNew).
+run "audit_keys_software_by_default" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for k, v in local.audit_cmek_keys : v.protection_level == "SOFTWARE"])
+    error_message = "audit keys must default to SOFTWARE protection."
+  }
+}
+
+run "audit_keys_hsm" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      audit_key_protection_level = "HSM"
+      logging_project_id         = "acme-logging"
+      logging_project_number     = "222233334444"
+    })
+  }
+
+  assert {
+    condition     = length(local.audit_cmek_keys) == 2 && alltrue([for k, v in local.audit_cmek_keys : v.protection_level == "HSM"])
+    error_message = "audit keys must take audit_key_protection_level."
+  }
+}
+
 run "logging_project_requires_number" {
   command = plan
 

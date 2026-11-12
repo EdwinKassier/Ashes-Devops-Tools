@@ -35,6 +35,7 @@ A guard does not create or change a resource.
 | Edge | Cloud Armor with the OWASP managed rules. `enable_cloud_armor = false` or `enable_owasp_rules = false` fails the plan. | No change. |
 | Backups | A Backup and DR vault in the host project with enforced retention (default 35 days) and organization-only access, and a daily plan for every app-service database (BCK-07, PREVIEW). `enable_backup_vault = false` fails the plan. The retention lock is never set by the class. | No change. |
 | Audit store | `gcp-organization` fails the plan until the audit bucket is WORM-locked in a separate logging project, or `gcp.audit_store_waived` is true (LOG-03, LOG-04). | No change. |
+| Database encryption | Every app-service database must set `database.encryption_key_name` (a CMEK in the instance region) and keep deletion protection on, or the plan fails (DP-05). An existing database without a key is never replaced: the plan fails until you migrate it (`UPGRADING.md`). | No change. |
 
 On GCP the values come from the preset
 [`examples/presets/regulated-gcp-workload.yaml`](../../examples/presets/regulated-gcp-workload.yaml),
@@ -78,8 +79,13 @@ sandbox. See [`docs/known-gaps.md`](../known-gaps.md).
 - FIPS endpoints.
 - Sovereign partitions (AWS GovCloud, the AWS European Sovereign Cloud,
   Assured Workloads).
-- Data-layer controls: Cloud SQL CMEK and data classification tags are not
-  tied to the class. The Backup and DR vault is, but its retention lock is
+- Data-layer controls: data classification tags are not tied to the class.
+  Cloud SQL CMEK is required, but the class does not create the key: create a
+  key in the instance region (Cloud SQL rejects a multi-region or global key)
+  and give the Cloud SQL service agent, and with the vault the Backup and DR
+  service agent, access to it
+  ([Cloud SQL CMEK](https://docs.cloud.google.com/sql/docs/postgres/cmek)).
+  The Backup and DR vault is tied to the class, but its retention lock is
   not: set `gcp.environments.<env>.backup_vault.lock_effective_time` yourself.
 - Operating evidence. The guards prove the configuration at plan time. Your
   auditor still needs evidence that the controls operated.

@@ -173,6 +173,14 @@
           "pattern": "^[0-9]+$",
           "description": "Numeric project number of logging_project_id (quote it in YAML)."
         },
+        "audit_key_protection_level": {
+          "type": "string",
+          "enum": [
+            "SOFTWARE",
+            "HSM"
+          ],
+          "description": "Cloud KMS protection level of the audit CMEK keys (gcp-organization). Default SOFTWARE. HSM (Cloud HSM) costs more per key version. It cannot change on existing keys (ForceNew; the plan fails): set it for a new estate or a new logging project only."
+        },
         "audit_store_waived": {
           "type": "boolean",
           "description": "Let a regulated estate (any gcp.environments entry with compliance_class: regulated) plan without logging_project_id and enable_audit_bucket_lock. Record why in your risk register."

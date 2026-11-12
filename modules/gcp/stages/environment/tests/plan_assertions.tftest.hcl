@@ -667,3 +667,24 @@ run "backup_vault_protects_every_database" {
     error_message = "Only a team project that hosts a database is a source project (it gets the Cloud SQL operator grant); the host project needs none."
   }
 }
+
+# CMP-12: app_platform.require_database_cmek reaches every app-service database.
+run "require_database_cmek_reaches_app_services" {
+  command = plan
+
+  variables {
+    app_platform = {
+      require_database_cmek = true
+    }
+    app_services = {
+      api = {
+        database = { encryption_key_name = "projects/acme-kms/locations/europe-west1/keyRings/sql/cryptoKeys/api" }
+      }
+    }
+  }
+
+  assert {
+    condition     = output.app_services["api"].database_cmek_required == true
+    error_message = "app_platform.require_database_cmek must reach the app-service databases."
+  }
+}

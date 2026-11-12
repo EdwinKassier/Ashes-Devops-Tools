@@ -422,6 +422,26 @@ run "override_key_with_prefix_rejected" {
   }
 }
 
+run "audit_key_protection_level_rejects_unknown" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      audit_key_protection_level = "EXTERNAL"
+    })
+  }
+
+  expect_failures = [var.gcp]
+  override_module {
+    target  = module.cmek
+    outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
+  }
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+  }
+}
+
 run "non_https_issuer_rejected" {
   command = plan
 

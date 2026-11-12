@@ -145,9 +145,16 @@ variable "enable_iam_authentication" {
 }
 
 variable "encryption_key_name" {
-  description = "Optional CMEK: the self_link of a Cloud KMS CryptoKey used to encrypt the instance. Leave null to use Google-managed encryption."
+  description = "Optional CMEK: the self_link of a Cloud KMS CryptoKey used to encrypt the instance. Leave null to use Google-managed encryption. Changing it on an existing instance replaces the instance (the provider marks it ForceNew); enable_deletion_protection makes that plan fail instead."
   type        = string
   default     = null
+}
+
+variable "require_cmek" {
+  description = "Fail the plan unless encryption_key_name is set and enable_deletion_protection is true. Set it for regulated environments. The key cannot be added to an existing instance in place: adding one replaces the instance, so an existing instance without a key keeps failing the plan until you migrate it (see UPGRADING.md)."
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 # -----------------------------------------------------------------------------

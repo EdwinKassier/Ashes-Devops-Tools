@@ -1030,3 +1030,43 @@ run "empty_health_check_path_keeps_the_tcp_probe" {
     error_message = "health_check_path = \"\" must leave the service without an HTTP probe."
   }
 }
+
+# CMP-12: require_database_cmek makes every app-service database require a
+# customer-managed key (set by gcp-workload for compliance_class: regulated).
+run "require_database_cmek_passes_with_a_key" {
+  command = plan
+
+  variables {
+    require_database_cmek = true
+    services = {
+      api = {
+        database = { encryption_key_name = "projects/acme-kms/locations/europe-west1/keyRings/sql/cryptoKeys/api" }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.database["api"].cmek_required && output.services["api"].database_cmek_required && module.database["api"].encryption_key_name == "projects/acme-kms/locations/europe-west1/keyRings/sql/cryptoKeys/api"
+    error_message = "require_database_cmek must reach each database (require_cmek) with its key."
+  }
+}
+
+run "database_cmek_not_required_by_default" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        database = {}
+      }
+    }
+  }
+
+  assert {
+    condition     = !module.database["api"].cmek_required && module.database["api"].encryption_key_name == null
+    error_message = "without require_database_cmek a database must not require a key."
+  }
+}
+
+# The guard itself (require_cmek with no key) is tested in
+# modules/gcp/data/cloud-sql/tests/variables_validation.tftest.hcl.

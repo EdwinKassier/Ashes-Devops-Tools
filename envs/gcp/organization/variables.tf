@@ -146,6 +146,7 @@ variable "gcp_overrides" {
     budget_currency                       = optional(string)
     logging_project_id                    = optional(string)
     logging_project_number                = optional(string)
+    audit_key_protection_level            = optional(string)
     audit_soft_delete_retention_days      = optional(number)
     enable_control_plane_alerting         = optional(bool)
     enable_cis_log_metrics                = optional(bool)

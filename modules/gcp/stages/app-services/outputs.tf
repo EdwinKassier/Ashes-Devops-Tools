@@ -5,7 +5,7 @@
  */
 
 output "services" {
-  description = "Per-service golden-path facts: runtime, Cloud Run service name, URL, effective minimum instance count and probe path (null for a job; the probe path is also null when probing is off) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user and availability type (REGIONAL or ZONAL); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
+  description = "Per-service golden-path facts: runtime, Cloud Run service name, URL, effective minimum instance count and probe path (null for a job; the probe path is also null when probing is off) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user, availability type (REGIONAL or ZONAL) and whether a customer-managed key is required (database_cmek_required); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
   value = {
     for k, s in var.services : k => {
       runtime                  = s.runtime
@@ -21,6 +21,7 @@ output "services" {
       database_connection_name = s.database == null ? null : module.database[k].connection_name
       database_iam_user        = s.database == null ? null : trimsuffix(local.runtime_sa_email[k], ".gserviceaccount.com")
       database_availability    = s.database == null ? null : module.database[k].availability_type
+      database_cmek_required   = s.database == null ? null : module.database[k].cmek_required
       pubsub_topic             = try(local.pubsub_topic[k], null)
       pubsub_subscription      = try(local.pubsub_subscription[k], null)
       pubsub_dead_letter_topic = try(local.pubsub_dlq_topic[k], null)

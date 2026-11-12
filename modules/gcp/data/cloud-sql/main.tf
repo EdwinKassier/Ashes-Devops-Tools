@@ -66,6 +66,28 @@ resource "terraform_data" "deletion_protection_guard" {
   }
 }
 
+# CMEK requirement (CMP-12) — present only when require_cmek = true.
+# encryption_key_name is ForceNew on google_sql_database_instance (google
+# provider 8.x), so this module never adds a key to an existing instance as a
+# side effect: the guard fails the plan and says how to migrate instead. The
+# deletion guard above must be on, so that a later key change also fails the
+# plan rather than replacing the database.
+resource "terraform_data" "cmek_guard" {
+  count = var.require_cmek ? 1 : 0
+  input = var.encryption_key_name
+
+  lifecycle {
+    precondition {
+      condition     = var.encryption_key_name != null
+      error_message = "Cloud SQL instance ${var.name}: require_cmek is true (a regulated environment) but encryption_key_name is null. Regulated Cloud SQL must use a customer-managed key. For a NEW instance, set encryption_key_name before the first apply. For an EXISTING instance, do not just add the key: that replaces the instance and deletes its data. Export the data and follow the migration in UPGRADING.md (\"CMEK for regulated Cloud SQL\") before you mark the environment regulated."
+    }
+    precondition {
+      condition     = var.enable_deletion_protection
+      error_message = "Cloud SQL instance ${var.name}: require_cmek is true, so enable_deletion_protection must stay true. encryption_key_name is ForceNew; without the deletion guard a key change would replace the database instead of failing the plan."
+    }
+  }
+}
+
 resource "google_sql_database_instance" "this" {
   # Checkov cannot statically resolve a standalone reusable module (no caller
   # variable values; the database_flags are a computed dynamic block), so it

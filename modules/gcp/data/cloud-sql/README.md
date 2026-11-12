@@ -54,9 +54,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_sql_database.this (modules/gcp/data/cloud-sql/main.tf#L151)
-- resource.google_sql_database_instance.this (modules/gcp/data/cloud-sql/main.tf#L69)
-- resource.google_sql_user.this (modules/gcp/data/cloud-sql/main.tf#L159)
+- resource.google_sql_database.this (modules/gcp/data/cloud-sql/main.tf#L173)
+- resource.google_sql_database_instance.this (modules/gcp/data/cloud-sql/main.tf#L91)
+- resource.google_sql_user.this (modules/gcp/data/cloud-sql/main.tf#L181)
+- resource.terraform_data.cmek_guard (modules/gcp/data/cloud-sql/main.tf#L75)
 - resource.terraform_data.deletion_protection_guard (modules/gcp/data/cloud-sql/main.tf#L58)
 
 
@@ -79,11 +80,12 @@ The following resources are created:
 | <a name="input_enable_iam_authentication"></a> [enable\_iam\_authentication](#input\_enable\_iam\_authentication) | Enable Cloud SQL IAM database authentication (sets the cloudsql.iam\_authentication flag on). | `bool` | `true` | no |
 | <a name="input_enable_point_in_time_recovery"></a> [enable\_point\_in\_time\_recovery](#input\_enable\_point\_in\_time\_recovery) | Enable point-in-time recovery (continuous WAL archiving). Requires backups, which this module always enables. | `bool` | `true` | no |
 | <a name="input_enable_secure_log_flags"></a> [enable\_secure\_log\_flags](#input\_enable\_secure\_log\_flags) | Apply a secure-by-default PostgreSQL logging flag set (log\_checkpoints/connections/disconnections/lock\_waits, log\_min\_messages=error, log\_statement=ddl). Default true. Caller flags in database\_flags override these per name. Set false to manage all flags yourself. | `bool` | `true` | no |
-| <a name="input_encryption_key_name"></a> [encryption\_key\_name](#input\_encryption\_key\_name) | Optional CMEK: the self\_link of a Cloud KMS CryptoKey used to encrypt the instance. Leave null to use Google-managed encryption. | `string` | `null` | no |
+| <a name="input_encryption_key_name"></a> [encryption\_key\_name](#input\_encryption\_key\_name) | Optional CMEK: the self\_link of a Cloud KMS CryptoKey used to encrypt the instance. Leave null to use Google-managed encryption. Changing it on an existing instance replaces the instance (the provider marks it ForceNew); enable\_deletion\_protection makes that plan fail instead. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | A map of key/value labels to apply to the instance | `map(string)` | `{}` | no |
 | <a name="input_maintenance_window_day"></a> [maintenance\_window\_day](#input\_maintenance\_window\_day) | Day of week (1 = Monday … 7 = Sunday) for the maintenance window | `number` | `7` | no |
 | <a name="input_maintenance_window_hour"></a> [maintenance\_window\_hour](#input\_maintenance\_window\_hour) | Hour of day (0-23, UTC) for the maintenance window | `number` | `3` | no |
 | <a name="input_maintenance_window_update_track"></a> [maintenance\_window\_update\_track](#input\_maintenance\_window\_update\_track) | Maintenance release track: 'canary' (earlier) or 'stable' (later) | `string` | `"stable"` | no |
+| <a name="input_require_cmek"></a> [require\_cmek](#input\_require\_cmek) | Fail the plan unless encryption\_key\_name is set and enable\_deletion\_protection is true. Set it for regulated environments. The key cannot be added to an existing instance in place: adding one replaces the instance, so an existing instance without a key keeps failing the plan until you migrate it (see UPGRADING.md). | `bool` | `false` | no |
 | <a name="input_tier"></a> [tier](#input\_tier) | The machine type / tier for the instance (e.g. db-custom-1-3840) | `string` | `"db-custom-1-3840"` | no |
 | <a name="input_transaction_log_retention_days"></a> [transaction\_log\_retention\_days](#input\_transaction\_log\_retention\_days) | Number of days of transaction (WAL) logs to retain for point-in-time recovery | `number` | `7` | no |
 | <a name="input_user_passwords"></a> [user\_passwords](#input\_user\_passwords) | Ephemeral built-in user passwords as user name => password, for users declared in var.users with ephemeral\_password = true. Never stored in plan or state; feed it from an ephemeral resource (e.g. google\_secret\_manager\_secret\_version) or an ephemeral root variable. Every key must name such a user. | `map(string)` | `{}` | no |
@@ -95,7 +97,9 @@ The following resources are created:
 |------|-------------|
 | <a name="output_availability_type"></a> [availability\_type](#output\_availability\_type) | REGIONAL (high availability, synchronous standby in a second zone) or ZONAL. |
 | <a name="output_backup_location"></a> [backup\_location](#output\_backup\_location) | Location of the automated backups: backup\_location, else the instance region. |
+| <a name="output_cmek_required"></a> [cmek\_required](#output\_cmek\_required) | True when require\_cmek is set, so the plan fails without a customer-managed key. |
 | <a name="output_connection_name"></a> [connection\_name](#output\_connection\_name) | The connection name of the instance, used by the Cloud SQL Auth Proxy (<project>:<region>:<name>) |
+| <a name="output_encryption_key_name"></a> [encryption\_key\_name](#output\_encryption\_key\_name) | The customer-managed key that encrypts the instance, or null for Google-managed encryption. |
 | <a name="output_name"></a> [name](#output\_name) | The name of the Cloud SQL instance |
 | <a name="output_private_ip_address"></a> [private\_ip\_address](#output\_private\_ip\_address) | The private IPv4 address assigned to the instance |
 | <a name="output_private_network"></a> [private\_network](#output\_private\_network) | The VPC network the instance is peered into via Private Service Access. |

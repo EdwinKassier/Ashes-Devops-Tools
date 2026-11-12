@@ -427,6 +427,7 @@ module "database" {
   backup_location               = each.value.database.backup_location
   enable_point_in_time_recovery = each.value.database.enable_point_in_time_recovery
   encryption_key_name           = each.value.database.encryption_key_name
+  require_cmek                  = var.require_database_cmek
   enable_deletion_protection    = coalesce(each.value.database.enable_deletion_protection, var.enable_deletion_protection)
 
   databases = each.value.database.databases

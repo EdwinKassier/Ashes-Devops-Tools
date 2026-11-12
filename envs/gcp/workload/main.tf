@@ -307,6 +307,8 @@ module "environment" {
     github_repository_owner_id     = var.github_repository_owner_id
     enable_alerts                  = var.enable_app_alerts
     alert_notification_channel_ids = var.app_alert_notification_channel_ids
+    # CMP-12: a regulated environment's app-service databases need a CMEK.
+    require_database_cmek = local.require_database_cmek
     gke = {
       enabled                       = var.enable_gke_autopilot
       master_ipv4_cidr_block        = var.gke_master_ipv4_cidr_block

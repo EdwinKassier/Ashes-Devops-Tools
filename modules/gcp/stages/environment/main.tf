@@ -369,6 +369,7 @@ module "app_services" {
   services                       = local.app_services
   bootstrap_image                = var.app_platform.bootstrap_image
   enable_deletion_protection     = var.deletion_protection
+  require_database_cmek          = var.app_platform.require_database_cmek
   artifact_registry_kms_key_name = var.app_platform.artifact_registry_kms_key_name
   enable_vulnerability_scanning  = var.app_platform.enable_vulnerability_scanning
 

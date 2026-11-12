@@ -98,6 +98,13 @@ variable "labels" {
   default     = {}
 }
 
+variable "require_database_cmek" {
+  description = "Every app-service database must set database.encryption_key_name, and keep deletion protection on, or the plan fails (cloud-sql require_cmek). gcp-workload sets it for compliance_class: regulated. A key cannot be added to an existing instance without replacing it; see UPGRADING.md for the migration."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "enable_deletion_protection" {
   description = "Default deletion protection for Cloud Run services, Cloud SQL instances and the GKE cluster. Per-service `enable_deletion_protection` / `database.enable_deletion_protection` override it."
   type        = bool

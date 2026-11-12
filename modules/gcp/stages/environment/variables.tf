@@ -469,7 +469,7 @@ variable "public_ingress" {
 }
 
 variable "app_platform" {
-  description = "Settings shared by every app service: subnetwork_id (null = the first private subnet), bootstrap_image (first revision), artifact_registry_kms_key_name, enable_vulnerability_scanning, the app-deploy WIF pool (enable_deploy_wif, deploy_wif_pool_id, github_repository_owner_id), alerts (enable_alerts, alert_notification_channel_ids) and the optional GKE Autopilot cluster (gke)."
+  description = "Settings shared by every app service: subnetwork_id (null = the first private subnet), bootstrap_image (first revision), artifact_registry_kms_key_name, enable_vulnerability_scanning, the app-deploy WIF pool (enable_deploy_wif, deploy_wif_pool_id, github_repository_owner_id), alerts (enable_alerts, alert_notification_channel_ids), require_database_cmek (every app-service database must set a CMEK) and the optional GKE Autopilot cluster (gke)."
   type = object({
     subnetwork_id                  = optional(string)
     bootstrap_image                = optional(string, "us-docker.pkg.dev/cloudrun/container/hello")
@@ -480,6 +480,9 @@ variable "app_platform" {
     github_repository_owner_id     = optional(string)
     enable_alerts                  = optional(bool, true)
     alert_notification_channel_ids = optional(list(string), [])
+    # Every app-service database must use a customer-managed key (CMP-12);
+    # gcp-workload sets it for compliance_class: regulated.
+    require_database_cmek = optional(bool, false)
     gke = optional(object({
       enabled                = optional(bool, false)
       master_ipv4_cidr_block = optional(string, "172.16.0.0/28")

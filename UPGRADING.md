@@ -1450,6 +1450,78 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### CMEK for regulated Cloud SQL (gcp-workload, CMP-12)
+
+**Who:** forks with a `compliance_class: regulated` environment whose app
+services declare a `database`. Nothing changes for a standard environment.
+
+**What changes:** in a regulated `gcp-workload-<env>`, every app-service
+database must set `database.encryption_key_name` and keep deletion protection
+on, or the plan fails and names the instance. The new inputs are
+`require_cmek` (`modules/gcp/data/cloud-sql`), `require_database_cmek`
+(app-services stage) and `app_platform.require_database_cmek` (environment
+stage); `envs/gcp/workload` sets them from the class.
+
+`encryption_key_name` is ForceNew on `google_sql_database_instance` (google
+provider 8.x, `resource_sql_database_instance.go`), and Google does not let you
+enable CMEK on an existing instance
+([Cloud SQL CMEK](https://docs.cloud.google.com/sql/docs/postgres/cmek)). So the
+landing zone never adds a key to an existing database for you: adding one would
+replace the instance and lose its data. The deletion guard makes such a plan
+fail too.
+
+**New database:** create a Cloud KMS key in the instance region (a
+multi-region or global key does not work), grant the Cloud SQL service agent
+access to it (and the Backup and DR service agent, because the regulated class
+turns the vault on), set `database.encryption_key_name`, then apply.
+
+**Existing database without a key:** a regulated plan fails while the old
+database is in the config, so migrate it **before** you set
+`compliance_class: regulated` on the environment. `compliance_class` is new in
+this release, so no released estate has a regulated environment yet.
+
+The app-services stage names the instance after the service, so the new
+CMEK instance replaces the old one under the same name. Plan a maintenance
+window, and keep your own copy of the data, because the replacement deletes
+the old instance. Cloning does not help: a clone keeps the source instance's
+key.
+
+1. Create the key as above.
+2. Stop writes. Export every database of the instance to a Cloud Storage
+   bucket that is itself CMEK-encrypted (`gcloud sql export sql`), and check
+   that the export is complete.
+3. Lift the guard for this one database: `terraform state rm` its
+   `terraform_data.deletion_protection_guard[0]`, set
+   `database.enable_deletion_protection: false` and apply. This apply only
+   turns the instance's own `deletion_protection` off; the provider refuses to
+   delete an instance while it is on.
+4. Set `database.encryption_key_name`. Read the plan: it must replace only
+   this instance. Apply.
+5. Import the export into the new instance (`gcloud sql import sql`) and
+   check the application.
+6. Set `database.enable_deletion_protection` back to true (or remove the
+   line) and apply.
+7. Set `compliance_class: regulated`.
+
+A policy set with the `destroy_guard` policy stops the step 4 run until the
+security team overrides it; record the override.
+
+#### `audit_key_protection_level` (gcp-organization, CMP-12)
+
+`gcp.audit_key_protection_level` (or `gcp_overrides.audit_key_protection_level`)
+sets the Cloud KMS protection level of the two audit CMEK keys (`audit-logs`,
+`audit-analytics`): `SOFTWARE` (default, no change) or `HSM` (Cloud HSM, FIPS
+140-2 Level 3). The billing and SCC keys stay `SOFTWARE`.
+
+**Changing it on existing audit keys fails the plan (keys are never destroyed).**
+`protection_level` lives on the key's version template, which the google
+provider marks ForceNew (`resource_kms_crypto_key.go`), and the KMS module sets
+`prevent_destroy`. Use it for a new estate or a new logging project only: set it
+in the same change that first sets `gcp.logging_project_id`. Cloud HSM key
+versions cost more than software ones (Google lists USD 0.06 per software key
+version and USD 1.00 to 2.50 per HSM key version per month,
+[Cloud KMS overview](https://docs.cloud.google.com/kms/docs/key-management-service)).
+
 #### Cloud SQL backups stay in the instance region; Backup and DR vault for regulated environments (gcp-workload, gcp-bootstrap, gcp-organization, breaking, CMP-8)
 
 **Cloud SQL backups stay in the instance region.** `backup_location = null` (`modules/gcp/data/cloud-sql`, and `database.backup_location` of an app service) now means the instance region, not Cloud SQL's nearest multi-region. Before, an instance in `europe-west2` wrote its backups to the `eu` multi-region, which can be outside `gcp.allowed_regions`; Cloud SQL backups fail when they land in a region the organization policy does not allow ([Create and manage on-demand and automatic backups](https://docs.cloud.google.com/sql/docs/postgres/backup-recovery/backing-up)). The next `gcp-workload-<env>` plan shows an in-place update of `settings.backup_configuration.location` on every app-service database that does not set `backup_location`. Existing backups stay where they are; new ones land in the region. Set `backup_location: eu` (or `us`, `asia`) on the service's `database` to keep multi-region backups.
