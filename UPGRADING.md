@@ -1559,7 +1559,8 @@ Apply order for an estate that uses the vault:
 4. `gcp-workload-<env>`.
 
 A regulated environment fails the plan with `enable_backup_vault = false`.
- on public ingress and Google APIs (gcp-workload, gcp-organization, breaking, CMP-5)
+
+#### TLS 1.2 minimum on public ingress and Google APIs (gcp-workload, gcp-organization, breaking, CMP-5)
 
 **Breaking for old clients.** Each `public_ingress` load balancer (`modules/gcp/network/app-ingress`) now gets a new SSL policy, `<env>-<service>-tls`: profile `MODERN`, minimum TLS 1.2. Before, the HTTPS proxy had no SSL policy, so Google used `COMPATIBLE` with a TLS 1.0 minimum ([SSL policies overview](https://docs.cloud.google.com/load-balancing/docs/ssl-policies-concepts)). The first `gcp-workload-<env>` apply creates the policy and updates the proxy in place. After it:
 
@@ -1591,6 +1592,10 @@ Production Cloud Run services without `min_instances` now keep one instance warm
 Every Cloud Run service now gets an HTTP startup probe (up to 120 seconds to become ready) and an HTTP liveness probe (every 30 seconds) on `health_check_path`. The default is `/`, which the bootstrap image serves. Set `health_check_path` to your health route. Set it to an empty string to keep Cloud Run's default TCP probe. The key is valid in `app_services`, in `gcp.environments.<env>.services` and in `config/landing-zone.yaml`.
 
 The first apply rolls a new revision of each existing service. The delivery pipeline owns the image and Terraform ignores it, so the new revision runs the image that is deployed now. If your image does not answer `GET /` (or your path) with a 2xx status, the new revision fails its startup probe and Cloud Run keeps the old one serving. Check the path before you apply.
+
+#### Unknown keys in the hub hybrid and region inputs fail the plan (gcp-network-hub, breaking)
+
+The `vpn`, `interconnects` and `hub_additional_regions` inputs of `envs/gcp/network-hub` now reject keys the network-hub stage does not accept. The check covers the variable and the config file (`gcp.network.vpn`, `gcp.network.interconnect`, `gcp.network.additional_regions`), and the nested `advertised_ip_ranges`, `subnet_cidrs` and `secondary_ranges` entries. Before, a misspelled key was dropped silently, so its setting never reached the hub. Now the plan fails and the error names each unknown key. Fix the spelling, or remove the key. The accepted keys are in `envs/gcp/network-hub/allowed_keys.tf`.
 
 #### Internal DNS domain from config (gcp-network-hub)
 
@@ -1723,7 +1728,7 @@ gcp-organization now grants them to each workload SA directly.
    Run `terraform state rm '<address>'` for each. The plan must then show no change to `workload_sa_folder_roles`.
 4. Apply gcp-projects.
 
-#### Data-plane admin workload roles are no longer delegable (gcp-bootstrap, gcp-organization, gcp-projects)
+#### Data-plane admin workload roles are no longer delegable (gcp-bootstrap, gcp-organization, gcp-projects, breaking)
 
 projects-apply could grant itself any delegated role on an environment folder, for example `secretmanager.admin` on a production folder, and then read every secret. These roles join the non-delegable list. gcp-organization now grants them to each workload SA directly:
 
@@ -2847,3 +2852,14 @@ Each dual mode keeps both paths until v1.0. Migrate before then.
 | Flag-off recorder path of the SCP (recorder actions in `DenyWeakenSecurityServices`) | `enable_config_recorder_scp = true` | AWS Config recorders move to an aws-organization StackSet |
 | The individual cross-root outputs of the producer roots, and the consumers' fallback to them when `contract` is absent | The `contract` output (`outputs.contract.<key>`) | One `contract` output per producer root |
 | `connectivity = peering` as the default hub connectivity (VPC peering from each spoke) | `connectivity = ncc`, the default from v1.0 once sandbox-proven. `peering` stays selectable. | NCC hub/spoke connectivity, opt-in |
+| `deletion_protection` on `modules/gcp/network/tiered-vpc` (deprecated alias) | `enable_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `deletion_protection` on `modules/gcp/stages/dns-anchor` (deprecated alias) | `enable_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `deletion_protection` on `modules/gcp/stages/net-hub` (deprecated alias) | `enable_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `deletion_protection` on `modules/gcp/stages/net-spoke` (deprecated alias) | `enable_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `deletion_protection` on `modules/gcp/stages/environment` (deprecated alias) | `enable_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `deletion_protection` on `modules/gcp/governance/private-ca` (deprecated alias) | `enable_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `deletion_protection` on `modules/aws/data/rds-aurora` (deprecated alias) | `enable_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `delete_protection` on `modules/aws/network/network-firewall` (deprecated alias) | `enable_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `alb_enable_deletion_protection` on `modules/aws/stages/app-services` (deprecated alias) | `enable_alb_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `app_alb_enable_deletion_protection` on `envs/aws/workload` (deprecated alias) | `enable_app_alb_deletion_protection` | Deletion-protection inputs renamed to `enable_*deletion_protection` |
+| `patch_operating_system` on `modules/aws/ops/systems-manager` (deprecated, one OS) | `patch_operating_systems` (a list) | Patch Manager now installs patches |
