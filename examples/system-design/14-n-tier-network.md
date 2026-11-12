@@ -162,7 +162,7 @@ tiers enforce, and the **cross-root outputs** that let a spoke find its hub.
 | Application → internet | 443 | SG egress 443 → TGW → firewall → NAT | Cloud NAT, not inspected |
 | Application → cloud APIs | 443 | Gateway endpoints (S3, DynamoDB); others via inspection | PSC `googleapis.com` endpoint |
 | Operators → VMs | 22 | SSM Session Manager, no inbound | IAP range `35.235.240.0/20` in the VPC rules, but the hub's hierarchical deny blocks it first (see deep dive 1) |
-| Prod ↔ nonprod | none | Separate TGW tables; firewall policy decides | Peering is non-transitive; no route |
+| Prod ↔ nonprod | none | Separate TGW tables; each blackholes the other segment's spoke CIDRs | Peering is non-transitive; no route |
 
 Sources: [`modules/aws/stages/app-services/main.tf:509`](../../modules/aws/stages/app-services/main.tf),
 [`modules/gcp/network/tiered-vpc/main.tf:258`](../../modules/gcp/network/tiered-vpc/main.tf).
@@ -320,11 +320,10 @@ firewall rule you might forget.
   `hybrid` with VPN) with default association and propagation off. A spoke is
   associated with `prod` or `nonprod`, whose only route is `0.0.0.0/0` →
   inspection, and propagated only into `inspection`. Prod and nonprod never
-  learn each other's routes. A prod ↔ nonprod flow is still *routable through*
-  the firewall, because the inspection table knows every spoke, so only the
-  firewall policy separates the segments, and alert-only mode lets that flow
-  pass ([AWS landing zone](../../docs/architecture/aws-landing-zone.md#network-topology)).
-  Per-segment inspection tables would close this at the routing layer.
+  learn each other's routes. The inspection table knows every spoke, so each
+  segment table also blackholes the other segment's spoke CIDRs: a prod ↔
+  nonprod packet is dropped at the Transit Gateway, even in alert-only mode
+  ([AWS landing zone](../../docs/architecture/aws-landing-zone.md#network-topology)).
 - **GCP: Shared VPC hosts peered to a hub, or NCC.** Each environment's
   `<env>-host` VPC peers to `hub-vpc-core`. VPC Network Peering is not
   transitive, so dev and prod, both peered to the hub, cannot reach each other

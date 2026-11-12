@@ -69,7 +69,7 @@ output "vpn_preshared_key_arn" {
 }
 
 output "spoke_attachment_route_tables" {
-  description = "Map of spoke_attachments key to the TGW route table its attachment is associated with (prod or nonprod segment); every listed spoke also propagates into the inspection route table."
+  description = "Map of spoke_attachments key to the TGW route table its attachment is associated with (prod or nonprod segment); every listed spoke also propagates into the inspection route table (without the firewall: the shared route table)."
   value       = { for k, s in var.spoke_attachments : k => module.transit_gateway.route_table_ids[s.segment] }
 }
 
@@ -81,4 +81,9 @@ output "hub_static_ipam_allocations" {
 output "availability_zones" {
   description = "Availability zone names the inspection and egress VPC subnets are placed in (the first az_count entries of availability_zones)."
   value       = module.inspection_vpc.availability_zones
+}
+
+output "segment_isolation_routes" {
+  description = "Blackhole routes that isolate prod and non-prod spokes, keyed <table>|<spoke>: the route table (prod or nonprod) and the other segment's spoke CIDR it drops."
+  value       = local.segment_isolation_routes
 }

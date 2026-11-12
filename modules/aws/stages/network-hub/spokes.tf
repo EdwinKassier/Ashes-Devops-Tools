@@ -13,8 +13,9 @@
 #   - associate it with its segment table (prod / nonprod), whose 0.0.0.0/0
 #     points at the inspection attachment, so everything it sends is inspected;
 #   - propagate its CIDR into the inspection table, so inspected traffic
-#     (east-west, egress replies, on-premises via the hybrid table) can reach it.
-#     prod and nonprod never learn each other's routes directly.
+#     (east-west, egress replies, on-premises via the hybrid table) can reach it;
+#   - with a cidr, blackhole it in the other segment's table (segment isolation
+#     at the end of this file).
 #
 # Without the Network Firewall (the starter profile) the inspection VPC
 # forwards nothing, so the segment tables default-route to the egress
@@ -62,4 +63,38 @@ resource "aws_ec2_transit_gateway_route_table_propagation" "spoke" {
   transit_gateway_route_table_id = module.transit_gateway.route_table_ids[local.spoke_return_route_table]
 
   depends_on = [aws_ec2_transit_gateway_vpc_attachment_accepter.spoke]
+}
+
+# Segment isolation (ARC-11). Both segments default-route to the same
+# inspection (or, without the firewall, egress) attachment, and the tables
+# behind it know every spoke, so prod could reach nonprod through the firewall
+# or the NAT gateway. A blackhole for each spoke CIDR in the OTHER segment's
+# table wins over 0.0.0.0/0 by longest prefix and drops the packet at the
+# TGW. Spokes in the same segment still reach each other. Keyed
+# "<table>|<spoke>": plan-known.
+locals {
+  segment_isolation_routes = merge([
+    for k, s in var.spoke_attachments : {
+      for seg in ["prod", "nonprod"] : "${seg}|${k}" => { route_table = seg, cidr = s.cidr }
+      if seg != s.segment
+    } if s.cidr != null
+  ]...)
+}
+
+resource "aws_ec2_transit_gateway_route" "segment_isolation" {
+  for_each = local.segment_isolation_routes
+
+  destination_cidr_block         = each.value.cidr
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids[each.value.route_table]
+  blackhole                      = true
+}
+
+check "segments_isolated" {
+  assert {
+    condition = !(
+      contains([for s in values(var.spoke_attachments) : s.segment], "prod") &&
+      contains([for s in values(var.spoke_attachments) : s.segment], "nonprod")
+    ) || alltrue([for s in values(var.spoke_attachments) : s.cidr != null])
+    error_message = "prod and nonprod spokes are both attached but some spoke_attachments have no cidr, so their segments can reach each other. Set aws.workload_environments.<env>.vpc_cidr (the root copies it) or spoke_attachments.<key>.cidr."
+  }
 }

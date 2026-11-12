@@ -88,3 +88,47 @@ run "explicit_variable_beats_config" {
     error_message = "An explicit spoke_attachments variable must win over the config file."
   }
 }
+
+# A spoke's cidr defaults to aws.workload_environments.<key>.vpc_cidr, so the
+# other segment's table can blackhole it (ARC-11).
+run "spoke_cidr_comes_from_the_workload_vpc_cidr" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-spokes.yaml"
+    landing_zone_name        = null
+    log_archive_bucket_name  = null
+    availability_zones       = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs           = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+  }
+
+  assert {
+    condition     = local.spoke_attachments["dev"].cidr == "10.72.0.0/16" && local.spoke_attachments["prod"].cidr == "10.73.0.0/16"
+    error_message = "spoke_attachments.<key>.cidr must default to aws.workload_environments.<key>.vpc_cidr."
+  }
+
+  assert {
+    condition     = module.aws_network_hub.segment_isolation_routes["prod|dev"].cidr == "10.72.0.0/16" && module.aws_network_hub.segment_isolation_routes["nonprod|prod"].cidr == "10.73.0.0/16"
+    error_message = "The workload CIDRs must reach the stage as segment blackholes."
+  }
+}
+
+run "explicit_spoke_cidr_beats_the_workload_vpc_cidr" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-spokes.yaml"
+    landing_zone_name        = null
+    log_archive_bucket_name  = null
+    availability_zones       = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs           = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "nonprod", cidr = "10.80.0.0/16" }
+    }
+  }
+
+  assert {
+    condition     = local.spoke_attachments["dev"].cidr == "10.80.0.0/16" && local.spoke_attachments["dev"].accept
+    error_message = "An explicit spoke cidr must win over aws.workload_environments.<key>.vpc_cidr."
+  }
+}

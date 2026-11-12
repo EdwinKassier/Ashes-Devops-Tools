@@ -271,15 +271,21 @@ variable "vpn" {
 
 variable "spoke_attachments" {
   description = <<-EOT
-    Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment_id is the aws-workload-<env> output tgw_attachment_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. Without the firewall (enable_network_firewall = false, the starter profile) the segment tables route 0.0.0.0/0 to the egress attachment instead and the spoke propagates into the shared route table: egress is NAT only, not inspected. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. With the firewall, a non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change.
+    Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment_id is the aws-workload-<env> output tgw_attachment_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. Without the firewall (enable_network_firewall = false, the starter profile) the segment tables route 0.0.0.0/0 to the egress attachment instead and the spoke propagates into the shared route table: egress is NAT only, not inspected. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. cidr is the spoke VPC CIDR; when set, the other segment's table blackholes it, so prod and nonprod spokes cannot reach each other. With the firewall, a non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change.
   EOT
   type = map(object({
     attachment_id = string
     segment       = string
     accept        = optional(bool, true)
+    cidr          = optional(string)
   }))
   default  = {}
   nullable = false
+
+  validation {
+    condition     = alltrue([for k, s in var.spoke_attachments : s.cidr == null || can(cidrnetmask(coalesce(s.cidr, "x")))])
+    error_message = "spoke_attachments[*].cidr must be an IPv4 CIDR block (the spoke's vpc_cidr)."
+  }
 
   validation {
     condition     = alltrue([for k, s in var.spoke_attachments : contains(["prod", "nonprod"], s.segment)])

@@ -406,7 +406,9 @@ aws:
     # NAT only, not inspected). Until a spoke is listed it has NO
     # routing. After an aws-workload-<env> first apply, copy its output
     # tgw_attachment_id here and apply aws-network. accept: false for an
-    # attachment someone already accepted.
+    # attachment someone already accepted. Use the environment name as the key:
+    # cidr defaults to aws.workload_environments.<key>.vpc_cidr, and the other
+    # segment's table blackholes it (prod and nonprod cannot reach each other).
     # spoke_attachments:
     #   dev:  {attachment_id: tgw-attach-0123456789abcdef0, segment: nonprod}
     #   prod: {attachment_id: tgw-attach-0fedcba9876543210, segment: prod}

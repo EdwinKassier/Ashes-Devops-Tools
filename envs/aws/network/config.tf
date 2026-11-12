@@ -51,6 +51,12 @@ locals {
     # aws.network.spoke_attachments: workload spokes the hub accepts, associates
     # and propagates (JSON text for the same reason as vpn).
     spoke_attachments = try(jsonencode(local.lz.aws.network.spoke_attachments), null)
+    # aws.workload_environments.<env>.vpc_cidr, copied onto a spoke_attachments
+    # entry with the same key that sets no cidr (segment isolation, ARC-11).
+    workload_vpc_cidrs = {
+      for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.vpc_cidr)
+      if try(e.vpc_cidr, null) != null
+    }
     # aws.workload_environments production flags (is_production is required).
     workload_production = try([
       for k, e in local.lz.aws.workload_environments : k if try(tobool(e.is_production), false)
@@ -106,5 +112,16 @@ locals {
   # Null = the stage turns the resolver endpoints on only with the VPN.
   enable_resolver_endpoints = var.enable_resolver_endpoints != null ? var.enable_resolver_endpoints : local.cfg.enable_resolver_endpoints
   # Workload spoke routing (default none: no change).
-  spoke_attachments = jsondecode(var.spoke_attachments != null ? jsonencode(var.spoke_attachments) : coalesce(local.cfg.spoke_attachments, "{}"))
+  spoke_attachments_input = jsondecode(var.spoke_attachments != null ? jsonencode(var.spoke_attachments) : coalesce(local.cfg.spoke_attachments, "{}"))
+  # Every entry gets the same attribute set, so the map has one element type
+  # (config entries may omit accept or cidr). cidr defaults to the workload
+  # vpc_cidr with the same key.
+  spoke_attachments = {
+    for k, s in local.spoke_attachments_input : k => {
+      attachment_id = s.attachment_id
+      segment       = s.segment
+      accept        = try(s.accept, null) != null ? s.accept : true
+      cidr          = try(s.cidr, null) != null ? s.cidr : lookup(local.cfg.workload_vpc_cidrs, k, null)
+    }
+  }
 }

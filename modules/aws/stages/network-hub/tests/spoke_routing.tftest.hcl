@@ -119,8 +119,8 @@ run "spokes_are_accepted_associated_and_propagated" {
 
   variables {
     spoke_attachments = {
-      prod = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "prod" }
-      dev  = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod" }
+      prod = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "prod", cidr = "10.73.0.0/16" }
+      dev  = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.72.0.0/16" }
     }
   }
 
@@ -136,7 +136,7 @@ run "spokes_are_accepted_associated_and_propagated" {
 
   assert {
     condition     = alltrue([for p in aws_ec2_transit_gateway_route_table_propagation.spoke : p.transit_gateway_route_table_id == "tgw-rtb-inspection00"]) && length(aws_ec2_transit_gateway_route_table_propagation.spoke) == 2
-    error_message = "spoke CIDRs must propagate into the inspection table only (prod and nonprod never learn each other)."
+    error_message = "spoke CIDRs must propagate into the inspection table only, never into the other segment's table."
   }
 
   assert {
@@ -263,4 +263,87 @@ run "starter_with_vpn_is_rejected" {
   }
 
   expect_failures = [terraform_data.hybrid_needs_inspection]
+}
+
+# Segment isolation (ARC-11): each segment table blackholes the other
+# segment's spoke CIDRs, which win over 0.0.0.0/0 by longest prefix.
+run "segments_blackhole_each_others_spokes" {
+  command = apply
+
+  variables {
+    spoke_attachments = {
+      prod = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "prod", cidr = "10.73.0.0/16" }
+      dev  = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.72.0.0/16" }
+    }
+  }
+
+  assert {
+    condition = (
+      aws_ec2_transit_gateway_route.segment_isolation["prod|dev"].blackhole &&
+      aws_ec2_transit_gateway_route.segment_isolation["prod|dev"].transit_gateway_route_table_id == "tgw-rtb-prod00000000" &&
+      aws_ec2_transit_gateway_route.segment_isolation["prod|dev"].destination_cidr_block == "10.72.0.0/16" &&
+      aws_ec2_transit_gateway_route.segment_isolation["nonprod|prod"].blackhole &&
+      aws_ec2_transit_gateway_route.segment_isolation["nonprod|prod"].transit_gateway_route_table_id == "tgw-rtb-nonprod00000" &&
+      aws_ec2_transit_gateway_route.segment_isolation["nonprod|prod"].destination_cidr_block == "10.73.0.0/16" &&
+      length(aws_ec2_transit_gateway_route.segment_isolation) == 2
+    )
+    error_message = "Each segment table must blackhole the other segment's spoke CIDRs, so prod and non-prod cannot reach each other through inspection or NAT (ARC-11)."
+  }
+
+  assert {
+    condition     = output.segment_isolation_routes["prod|dev"].cidr == "10.72.0.0/16" && output.segment_isolation_routes["nonprod|prod"].route_table == "nonprod"
+    error_message = "The segment_isolation_routes output must list the blackholes keyed <table>|<spoke>."
+  }
+}
+
+# The same isolation holds on starter, where the segment defaults go to NAT.
+run "starter_segments_blackhole_each_others_spokes" {
+  command = apply
+
+  variables {
+    enable_network_firewall = false
+    spoke_attachments = {
+      prod = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "prod", cidr = "10.73.0.0/16" }
+      dev  = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.72.0.0/16" }
+      qa   = { attachment_id = "tgw-attach-0aaaaaaaaaaaaaaa0", segment = "nonprod", cidr = "10.74.0.0/16" }
+    }
+  }
+
+  assert {
+    condition = (
+      toset(keys(aws_ec2_transit_gateway_route.segment_isolation)) == toset(["prod|dev", "prod|qa", "nonprod|prod"]) &&
+      aws_ec2_transit_gateway_route.segment_isolation["prod|qa"].destination_cidr_block == "10.74.0.0/16"
+    )
+    error_message = "Spokes in the same segment must not be blackholed from each other; only the other segment's spokes are."
+  }
+}
+
+run "spoke_without_cidr_is_not_isolated" {
+  command = apply
+
+  variables {
+    spoke_attachments = {
+      prod = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "prod" }
+      dev  = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.72.0.0/16" }
+    }
+  }
+
+  assert {
+    condition     = toset(keys(aws_ec2_transit_gateway_route.segment_isolation)) == toset(["prod|dev"])
+    error_message = "Only spokes with a cidr can be blackholed."
+  }
+
+  expect_failures = [check.segments_isolated]
+}
+
+run "spoke_cidr_must_be_a_cidr" {
+  command = plan
+
+  variables {
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.72.0.0" }
+    }
+  }
+
+  expect_failures = [var.spoke_attachments]
 }

@@ -334,11 +334,12 @@ variable "vpn" {
 }
 
 variable "spoke_attachments" {
-  description = "Workload spoke attachments the hub accepts, associates with their segment table (prod or nonprod) and propagates into the inspection table (without the Network Firewall, the starter profile: the shared table, and egress is NAT only, not inspected): map of name to {attachment_id, segment, accept (default true)}. attachment_id is the aws-workload-<env> output tgw_attachment_id. Null = aws.network.spoke_attachments from config/landing-zone.yaml, else none. See docs/architecture/aws-landing-zone.md."
+  description = "Workload spoke attachments the hub accepts, associates with their segment table (prod or nonprod) and propagates into the inspection table (without the Network Firewall, the starter profile: the shared table, and egress is NAT only, not inspected): map of name to {attachment_id, segment, accept (default true), cidr}. attachment_id is the aws-workload-<env> output tgw_attachment_id. cidr (default aws.workload_environments.<key>.vpc_cidr) is blackholed in the other segment's table, so prod and nonprod spokes cannot reach each other. Null = aws.network.spoke_attachments from config/landing-zone.yaml, else none. See docs/architecture/aws-landing-zone.md."
   type = map(object({
     attachment_id = string
     segment       = string
     accept        = optional(bool, true)
+    cidr          = optional(string)
   }))
   default = null
 }

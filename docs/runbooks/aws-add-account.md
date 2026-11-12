@@ -120,7 +120,7 @@ aws:
       payments-prod: {attachment_id: tgw-attach-0123456789abcdef0, segment: prod}   # segment: prod | nonprod
 ```
 
-Then apply `aws-network`. It accepts the attachment, associates it with the `prod` / `nonprod` route table (whose `0.0.0.0/0` goes to inspection) and propagates the spoke CIDR into the inspection table, so egress replies and on-premises traffic reach it (see [network topology](../architecture/aws-landing-zone.md#network-topology)). Set `accept: false` for an attachment that is already accepted.
+Then apply `aws-network`. It accepts the attachment, associates it with the `prod` / `nonprod` route table (whose `0.0.0.0/0` goes to inspection) and propagates the spoke CIDR into the inspection table, so egress replies and on-premises traffic reach it (see [network topology](../architecture/aws-landing-zone.md#network-topology)). Set `accept: false` for an attachment that is already accepted. Use the environment name (the `aws.workload_environments` key) as the `spoke_attachments` key: aws-network then copies its `vpc_cidr` as the spoke `cidr` and blackholes it in the other segment's table, so prod and nonprod spokes cannot reach each other. With another key, set `cidr` yourself.
 
 > **New-account defaults not covered by Terraform.** A brand-new account still has a default VPC per Region and needs EBS-encryption-by-default, S3 Block Public Access, and a password policy. The default-VPC deletion is handled by the org-wide **auto-deploying StackSet** from [`aws-bootstrap.md`](aws-bootstrap.md#phase-05-org-wide-default-vpc-deletion-stackset-out-of-band); the rest is applied per layer via `modules/aws/governance/account-baseline`. Confirm the StackSet auto-deployed to the new account.
 

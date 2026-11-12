@@ -209,15 +209,22 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
     `0.0.0.0/0` straight to the egress attachment and spokes propagate into the
     `shared` table, so starter spokes reach the internet through NAT only. Use
     the `production` profile when egress must be inspected;
-  - prod↔nonprod flows are routable *through* inspection (the inspection
-    table knows every spoke); only the Network Firewall policy separates the
-    segments. Alert-only mode passes them. Separate per-segment inspection
-    tables would enforce it at the routing layer;
+  - prod↔nonprod isolation is a blackhole route per spoke CIDR in the other
+    segment's table (`spoke_attachments.<key>.cidr`, default
+    `aws.workload_environments.<key>.vpc_cidr`). A spoke whose CIDR is not
+    known (no `vpc_cidr`, or a key that differs from the environment name) is
+    not blackholed; a `check` warns when both segments are attached. A
+    secondary VPC CIDR added to a spoke
+    ([CIDR expansion](runbooks/aws-cidr-expansion.md)) propagates but is not
+    blackholed, so the other segment can reach it through inspection until
+    a blackhole is added for it;
   - **validate in the sandbox:** the accepter on a `pendingAcceptance`
     attachment, the association of a cross-account attachment, end-to-end
     egress and reply through the firewall (appliance mode), on-premises →
     spoke over the VPN, and on a starter estate `curl -sI https://aws.amazon.com`
-    from a spoke with VPC flow logs showing the NAT gateway as the path.
+    from a spoke with VPC flow logs showing the NAT gateway as the path, and
+    a connection from a prod spoke to a nonprod spoke times out with
+    `aws ec2 search-transit-gateway-routes` showing the blackhole route.
 
 - **Org-wide Config recorders are mock-tested only.** The
   `org-config-recorders` StackSet (`modules/aws/security/config-recorder-stackset`)
