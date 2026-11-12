@@ -1617,6 +1617,71 @@ run "drift_team_must_be_dedicated" {
   expect_failures = [terraform_data.input_contract, check.secret_bearing_projects_have_approvers]
 }
 
+# gcp-guardrails release tags (terraform-apply.yml, TFC_TOKEN_GUARDRAILS): a
+# dedicated team reads runs on the guardrails project and nothing else.
+run "guardrails_release_reader_gets_read_runs_only" {
+  command = plan
+
+  variables {
+    guardrails_release_reader_team_id = "team-guardrelease1"
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["guardrails/release-reader"].access == "custom" && tfe_team_project_access.this["guardrails/release-reader"].workspace_access[0].runs == "read" && tfe_team_project_access.this["guardrails/release-reader"].workspace_access[0].state_versions == "none" && tfe_team_project_access.this["guardrails/release-reader"].workspace_access[0].variables == "none"
+    error_message = "The guardrails release reader may read runs and nothing else."
+  }
+
+  assert {
+    condition     = tfe_team_project_access.this["guardrails/release-reader"].workspace_access[0].locking == false && tfe_team_project_access.this["guardrails/release-reader"].project_access[0].teams == "none" && tfe_team_project_access.this["guardrails/release-reader"].workspace_access[0].policy_overrides == false
+    error_message = "The guardrails release reader must not lock workspaces, manage teams or override policies."
+  }
+
+  assert {
+    condition     = jsonencode([for k, g in tfe_team_project_access.this : k if g.team_id == "team-guardrelease1"]) == jsonencode(["guardrails/release-reader"]) && contains(keys(tfe_team_project_access.this), "guardrails/security")
+    error_message = "The release reader gets one grant, on the guardrails project, and the security team keeps its own."
+  }
+}
+
+run "guardrails_release_reader_null_creates_no_grant" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(tfe_team_project_access.this), "guardrails/release-reader")
+    error_message = "guardrails_release_reader_team_id = null must create no release-reader grant."
+  }
+}
+
+run "guardrails_release_reader_must_be_dedicated" {
+  command = plan
+
+  variables {
+    guardrails_release_reader_team_id = "team-security1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "guardrails_release_reader_must_not_be_the_drift_team" {
+  command = plan
+
+  variables {
+    guardrails_release_reader_team_id = "team-same1"
+    drift_team_id                     = "team-same1"
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "guardrails_release_reader_id_is_validated" {
+  command = plan
+
+  variables {
+    guardrails_release_reader_team_id = "not-a-team"
+  }
+
+  expect_failures = [var.guardrails_release_reader_team_id]
+}
+
 # TFC applies with the exact version CI tests.
 run "terraform_version_is_exact" {
   command = plan

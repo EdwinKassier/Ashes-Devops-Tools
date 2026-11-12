@@ -98,7 +98,7 @@ workflow ("Terraform Release Metadata") applies nothing: HCP Terraform runs ever
 apply, and the workflow only publishes a GitHub Release for an applied tag. It
 keeps its file name because docs and environment policies link to it. The
 workflow acts on all of these patterns (keep this list in sync with its `on.push.tags`):
-`gcp-organization/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`.
+`gcp-bootstrap/v*`, `gcp-organization/v*`, `gcp-guardrails/v*`, `gcp-projects/v*`, `gcp-network-hub/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`, `tfc-admin/v*`.
 
 - Only allow tag creation by the **infra-admins** team or repository admins
 - Require signed tags if your signing policy enforces it
@@ -111,7 +111,7 @@ gh api repos/OWNER/REPO/rulesets \
   --field name="Release tag protection" \
   --field target="tag" \
   --field enforcement="active" \
-  --field conditions='{"ref_name":{"include":["refs/tags/gcp-organization/v*","refs/tags/gcp-workload/*/v*","refs/tags/aws-*/v*","refs/tags/aws-workload/*/v*","refs/tags/saas/*/v*"],"exclude":[]}}' \
+  --field conditions='{"ref_name":{"include":["refs/tags/gcp-bootstrap/v*","refs/tags/gcp-organization/v*","refs/tags/gcp-guardrails/v*","refs/tags/gcp-projects/v*","refs/tags/gcp-network-hub/v*","refs/tags/gcp-workload/*/v*","refs/tags/aws-*/v*","refs/tags/aws-workload/*/v*","refs/tags/saas/*/v*","refs/tags/tfc-admin/v*"],"exclude":[]}}' \
   --field rules='[{"type":"deletion"},{"type":"non_fast_forward"}]'
 ```
 

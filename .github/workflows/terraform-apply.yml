@@ -11,6 +11,7 @@ on:
     tags:
       - "gcp-bootstrap/v*"
       - "gcp-organization/v*"
+      - "gcp-guardrails/v*"
       - "gcp-projects/v*"
       - "gcp-network-hub/v*"
       - "gcp-workload/*/v*"
@@ -81,7 +82,8 @@ jobs:
             echo "workspace=saas-${NAME}" >> "$GITHUB_OUTPUT"
             echo "release_name=SaaS ${NAME} ${VERSION}" >> "$GITHUB_OUTPUT"
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG_NAME" == gcp-bootstrap/* || "$TAG_NAME" == gcp-projects/* \
+          elif [[ "$TAG_NAME" == gcp-bootstrap/* || "$TAG_NAME" == gcp-guardrails/* \
+                || "$TAG_NAME" == gcp-projects/* \
                 || "$TAG_NAME" == gcp-network-hub/* || "$TAG_NAME" == tfc-admin/* \
                 || "$TAG_NAME" == aws-organization/* || "$TAG_NAME" == aws-security/* \
                 || "$TAG_NAME" == aws-network/* || "$TAG_NAME" == aws-identity/* \
@@ -94,7 +96,7 @@ jobs:
             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           else
             echo "::error::Unrecognized release tag '$TAG_NAME'." >&2
-            echo "Expected: gcp-{bootstrap,organization,projects,network-hub}/v*," >&2
+            echo "Expected: gcp-{bootstrap,organization,guardrails,projects,network-hub}/v*," >&2
             echo "gcp-workload/<env>/v*, aws-*/v*, aws-workload/<env>/v*," >&2
             echo "saas/<name>/v*, tfc-admin/v*." >&2
             exit 1
@@ -109,17 +111,32 @@ jobs:
         # Drift detection needs to CREATE speculative runs and therefore uses a
         # SEPARATE token, TFC_TOKEN_DRIFT (Queue Plans). Keep the two distinct so
         # this release token stays read-only (see drift-detection.yml).
+        # gcp-guardrails lives in a security-only project that TFC_TOKEN cannot
+        # see, so its tags use TFC_TOKEN_GUARDRAILS (runs = read on that project
+        # only; tfc-admin guardrails_release_reader_team_id). There is no
+        # fallback: a guardrails tag without that secret fails here.
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN: >-
+            ${{ startsWith(github.ref_name, 'gcp-guardrails/')
+            && secrets.TFC_TOKEN_GUARDRAILS || secrets.TFC_TOKEN }}
+          GUARDRAILS_TOKEN_SET: ${{ secrets.TFC_TOKEN_GUARDRAILS != '' }}
+          TAG_NAME: ${{ github.ref_name }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
         run: |
+          if [[ "$TAG_NAME" == gcp-guardrails/* && "$GUARDRAILS_TOKEN_SET" != "true" ]]; then
+            echo "::error::TFC_TOKEN_GUARDRAILS is not set. gcp-guardrails tags need it" \
+              "(docs/guides/CI_SECRETS.md)." >&2
+            exit 1
+          fi
           test -n "$TFC_TOKEN"
           test -n "$TFC_ORGANIZATION"
 
       - name: Fetch latest Terraform Cloud run
         id: run_status
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN: >-
+            ${{ startsWith(github.ref_name, 'gcp-guardrails/')
+            && secrets.TFC_TOKEN_GUARDRAILS || secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ steps.parse.outputs.workspace }}
           TAG_COMMIT: ${{ github.sha }}

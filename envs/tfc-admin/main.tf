@@ -746,6 +746,16 @@ locals {
     sentinel_mocks = "none"
     locking        = true
   }
+  # Release reader on the guardrails project (terraform-apply.yml, gcp-guardrails
+  # tags): sees run status and the run's source commit, nothing else. Fixed
+  # read would also return the state file, so the grant is custom.
+  release_reader_custom_access = {
+    runs           = "read"
+    variables      = "none"
+    state_versions = "none"
+    sentinel_mocks = "none"
+    locking        = false
+  }
   approvers_custom_access = {
     runs           = "apply"
     variables      = "read"
@@ -957,6 +967,9 @@ locals {
     var.security_team_id == null || !local.guardrails_project ? {} : {
       "guardrails/security" = { project = "guardrails", team_id = var.security_team_id, access = "custom", custom = local.security_custom_access }
     },
+    var.guardrails_release_reader_team_id == null || !local.guardrails_project ? {} : {
+      "guardrails/release-reader" = { project = "guardrails", team_id = var.guardrails_release_reader_team_id, access = "custom", custom = local.release_reader_custom_access }
+    },
     var.state_backup_team_id == null ? {} : {
       for p in local.shared_access_projects : "${p}/state-backup" => {
         project = p
@@ -1102,6 +1115,13 @@ resource "terraform_data" "input_contract" {
         coalesce(var.drift_team_id, "-"),
       )
       error_message = "drift_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, state_backup_team_id, saas_approvers_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its token sits in GitHub (environment tfc-drift) and may queue plans, so it must carry nothing else."
+    }
+    precondition {
+      condition = var.guardrails_release_reader_team_id == null || !contains(
+        concat(compact([var.platform_team_id, var.control_plane_approvers_team_id, var.security_team_id, var.tfc_admin_team_id, var.state_backup_team_id, var.saas_approvers_team_id, var.drift_team_id]), var.viewer_team_ids, values(var.saas_outputs_reader_team_ids)),
+        coalesce(var.guardrails_release_reader_team_id, "-"),
+      )
+      error_message = "guardrails_release_reader_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, state_backup_team_id, saas_approvers_team_id, drift_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its token sits in GitHub (environment tfc-readonly) and must carry runs = read on the guardrails project and nothing else."
     }
     precondition {
       condition     = length(distinct(values(var.saas_outputs_reader_team_ids))) == length(var.saas_outputs_reader_team_ids)

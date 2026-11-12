@@ -10,6 +10,7 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 | Name | Kind | Used by | Purpose |
 |------|------|---------|---------|
 | `TFC_TOKEN` | Secret | `terraform-apply.yml` | Terraform Cloud team token with **READ** access to workspace runs. Used only to verify run status before publishing a release; it does not trigger or modify runs. |
+| `TFC_TOKEN_GUARDRAILS` | Secret (environment `tfc-readonly`) | `terraform-apply.yml` | Token of the team set as tfc-admin `guardrails_release_reader_team_id`: runs = read on the guardrails project only (no state, no variables). Needed only for `gcp-guardrails/v*` tags, because `gcp-guardrails` sits in a security-only project that `TFC_TOKEN` cannot see. There is no fallback to `TFC_TOKEN`: a guardrails tag without this secret fails. An organization owner creates the team and its token by hand with an expiry, never with `tfe_team_token`, so it stays out of state. |
 | `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Token of the team set as tfc-admin `drift_team_id`. tfc-admin codifies its grants: **Queue Plans** (`runs = plan`), **Read state versions** and no variable access, on every project except guardrails and the secret-bearing projects (tfc-admin, `saas-*`, and any project that holds a workspace with a static secret). An organization owner creates the token by hand with an expiry (`expired_at` 90 days out) and never with `tfe_team_token`, so it stays out of state. Never use a token with rights on a secret-bearing project: a refresh-only plan still runs with the workspace's variables. On those workspaces HCP health assessments (`enable_health_assessments`) are the only drift check, and only on tiers that offer them. Drift detection reads the current state version to find the last applied run and its configuration version, then creates a speculative refresh-only run pinned to that configuration (`POST /runs`), which read access cannot do. Merged but unapplied configuration is reported as a separate warning, not as drift. There is **no fallback** to `TFC_TOKEN`: if unset, scheduled runs skip and manual runs fail with an explicit error, so the release token is never silently granted Queue Plans. |
 | `TFC_ORGANIZATION` | Variable | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud organization name that owns the workspaces. |
 | `RELEASE_APP_ID` | Variable (`release` environment) | `release.yml` | ID of the release GitHub App. **Required; no fallback.** See [below](#release_app). |
@@ -190,7 +191,7 @@ environment, not at repository level, and restrict the environment's deployment 
 | `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
 | `tfc-state-backup` | `TFC_TOKEN_STATE_BACKUP` | `main` only | `state-backup.yml` |
 | `tfc-audit-trail` | `TFC_TOKEN_AUDIT_TRAIL` | `main` only | `tfc-audit-trail.yml` |
-| `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
+| `tfc-readonly` | `TFC_TOKEN`, `TFC_TOKEN_GUARDRAILS` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
 | `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label. **Required reviewers: yes** (at least one, prevent self-review) | `sandbox-e2e.yml` |
 
 ```bash

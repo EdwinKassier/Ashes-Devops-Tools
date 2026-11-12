@@ -437,6 +437,17 @@ variable "security_team_id" {
   }
 }
 
+variable "guardrails_release_reader_team_id" {
+  description = "TFC team ID (team-...) whose hand-created team token is the GitHub secret TFC_TOKEN_GUARDRAILS, which terraform-apply.yml uses to verify gcp-guardrails runs for `gcp-guardrails/v*` release tags: custom access with runs = read on the guardrails project, no state, no variables, no locking. Keep it a dedicated team: it must differ from every other team input. An organization owner creates the token by hand, with an expiry, so it never enters state. Null = no grant (`gcp-guardrails/v*` tags then fail verification)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.guardrails_release_reader_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.guardrails_release_reader_team_id))
+    error_message = "guardrails_release_reader_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "platform_team_control_plane_runs" {
   description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). The same level applies to production gcp/aws workload workspaces; non-production workload workspaces keep fixed write access. On secret-bearing projects (the self-managed tfc-admin project, the saas project, and every project holding a workspace with a sensitive or secret-named workspace variable or enable_saas_secret_bridge = true, or every shared project when common_workspace_variables carries one) the platform team always gets runs = read whatever this is set to: queuing a plan, including a CLI speculative plan, runs code that can read the workspace's variables."
   type        = string
