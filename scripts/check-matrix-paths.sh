@@ -22,7 +22,7 @@ while IFS= read -r p; do
   case "$p" in
     modules/* | envs/* | policies/* | scripts/* | .github/* | docs/* | config/* | examples/* | templates/*)
       if [ ! -e "$p" ]; then
-        echo "control-matrix cites a missing path: $p"
+        echo "compliance doc (control matrix or framework crosswalk) cites a missing path: $p"
         fail=1
       fi
       ;;

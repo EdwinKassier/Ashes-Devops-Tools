@@ -77,4 +77,5 @@ parity in **rigor**; they differ in **shape**, which is expected.
 
 - [GCP Landing Zone](gcp-landing-zone.md) · [AWS Landing Zone](aws-landing-zone.md) — per-cloud conformance tables.
 - [Known Gaps](../known-gaps.md) — the actionable tracker (IDs above).
+- [Framework crosswalk](../compliance/framework-crosswalk.md): PCI DSS, HIPAA, DORA, NIST SP 800-53, FedRAMP Moderate and ISO/IEC 27001 requirements mapped to the control matrix, with defaults.
 - [Cross-Cloud Comparison](cross-cloud-comparison.md) — where each capability lives per cloud.

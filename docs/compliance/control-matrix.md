@@ -4,7 +4,9 @@ Maps the controls this landing zone **actually implements in code** to SOC 2
 (2017 Trust Services Criteria, 2022 points of focus), ISO/IEC 27001:2022 Annex A,
 NIST SP 800-53 Rev 5 and the CIS GCP / CIS AWS Foundations Benchmarks. Every row
 names the code path, the variable that turns it on, and its default. Reviewed
-against the tree on 2026-11-11.
+against the tree on 2026-11-11. For PCI DSS, HIPAA, DORA and FedRAMP Moderate,
+see the [framework crosswalk](framework-crosswalk.md), which maps their
+requirements to the rows below.
 
 > **Read this first.**
 >
