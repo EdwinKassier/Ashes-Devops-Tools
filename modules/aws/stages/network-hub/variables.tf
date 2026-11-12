@@ -62,6 +62,24 @@ variable "regional_cidrs" {
   }
 }
 
+variable "regional_additional_cidrs" {
+  description = "Extra CIDRs per region, provisioned into that region's IPAM pool next to regional_cidrs (capacity growth without touching existing allocations). Each must sit in top_cidr and overlap nothing. A static hub VPC range inside one of the home-region CIDRs is reserved in the pool."
+  type        = map(list(string))
+  default     = {}
+  nullable    = false
+
+  validation {
+    condition     = alltrue(flatten([for r, cs in var.regional_additional_cidrs : [for c in cs : can(cidrhost(c, 0))]]))
+    error_message = "Every value in regional_additional_cidrs must be a valid IPv4 CIDR block."
+  }
+}
+
+variable "share_principal_arns" {
+  description = "RAM principals the regional IPAM pools are shared with. Null (default) = the whole organization (org_arn). Use the Workloads OU ARN(s) so accounts outside them cannot allocate from the pools."
+  type        = list(string)
+  default     = null
+}
+
 variable "inspection_cidr" {
   description = "IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment."
   type        = string

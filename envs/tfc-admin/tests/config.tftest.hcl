@@ -435,6 +435,49 @@ run "hub_cidr_outside_the_pool_overlapping_a_workload_fails" {
   expect_failures = [terraform_data.input_contract]
 }
 
+# A workload may take its range from any CIDR of the home-region pool, the first
+# one or an additional one (aws.network.regional_additional_cidrs). perf at
+# 10.96.0.0/16 sits in neither, so it is still reported.
+run "workload_inside_an_additional_pool_cidr_passes" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-additional-pool.yaml"
+  }
+
+  assert {
+    condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_pool_issues) == 0
+    error_message = "A second pool CIDR inside top_cidr and clear of the first must pass."
+  }
+
+  assert {
+    condition     = length(local.cidr_outside_aws_pool) == 1 && contains(local.cidr_outside_aws_pool, "aws.workload_environments.perf.vpc_cidr (10.96.0.0/16) is outside the eu-west-2 regional pool (10.64.0.0/12, 10.80.0.0/12)")
+    error_message = "Only the workload outside every home-region pool CIDR is reported; 10.81.0.0/16 (inside the additional CIDR) is not."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# Additional pool CIDRs must sit inside top_cidr and overlap no other pool CIDR.
+run "additional_pool_cidrs_outside_top_or_overlapping_fail" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-additional-bad.yaml"
+  }
+
+  assert {
+    condition = (
+      contains(local.cidr_pool_issues, "aws.network.regional_additional_cidrs.eu-west-2[0] (10.20.0.0/12) is outside aws.network.top_cidr (10.64.0.0/10)") &&
+      contains(local.cidr_pool_issues, "aws.network.regional_additional_cidrs.eu-west-2[1] (10.64.0.0/13) overlaps aws.network.regional_cidrs.eu-west-2 (10.64.0.0/12)") &&
+      length(local.cidr_pool_issues) == 2
+    )
+    error_message = "An additional pool CIDR outside top_cidr, or overlapping another pool CIDR, must be reported (and a clean one must not)."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
 # With the AWS VPN on, each on-premises prefix is checked against the AWS and
 # GCP ranges. Prefixes on the on-premises side may overlap each other.
 run "onprem_prefix_overlapping_aws_ranges_fails_the_plan" {

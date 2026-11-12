@@ -107,21 +107,21 @@ The following resources are created:
 
 
 - resource.aws_ec2_transit_gateway_route.segment_isolation (modules/aws/stages/network-hub/spokes.tf#L84)
-- resource.aws_ec2_transit_gateway_route.vpn_onprem (modules/aws/stages/network-hub/main.tf#L454)
+- resource.aws_ec2_transit_gateway_route.vpn_onprem (modules/aws/stages/network-hub/main.tf#L466)
 - resource.aws_ec2_transit_gateway_route_table_association.spoke (modules/aws/stages/network-hub/spokes.tf#L50)
-- resource.aws_ec2_transit_gateway_route_table_association.vpn (modules/aws/stages/network-hub/main.tf#L438)
+- resource.aws_ec2_transit_gateway_route_table_association.vpn (modules/aws/stages/network-hub/main.tf#L450)
 - resource.aws_ec2_transit_gateway_route_table_propagation.spoke (modules/aws/stages/network-hub/spokes.tf#L59)
-- resource.aws_ec2_transit_gateway_route_table_propagation.vpn (modules/aws/stages/network-hub/main.tf#L446)
+- resource.aws_ec2_transit_gateway_route_table_propagation.vpn (modules/aws/stages/network-hub/main.tf#L458)
 - resource.aws_ec2_transit_gateway_vpc_attachment_accepter.spoke (modules/aws/stages/network-hub/spokes.tf#L38)
-- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L266)
-- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L274)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L289)
-- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L299)
-- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L321)
-- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L313)
-- resource.aws_vpc_ipam_pool_cidr_allocation.hub_static (modules/aws/stages/network-hub/main.tf#L145)
-- resource.terraform_data.hybrid_needs_inspection (modules/aws/stages/network-hub/main.tf#L507)
-- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L490)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L278)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L286)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L301)
+- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L311)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L333)
+- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L325)
+- resource.aws_vpc_ipam_pool_cidr_allocation.hub_static (modules/aws/stages/network-hub/main.tf#L156)
+- resource.terraform_data.hybrid_needs_inspection (modules/aws/stages/network-hub/main.tf#L519)
+- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L502)
 
 
 ## Inputs
@@ -151,7 +151,9 @@ The following resources are created:
 | <a name="input_network_firewall_stateful_default_actions"></a> [network\_firewall\_stateful\_default\_actions](#input\_network\_firewall\_stateful\_default\_actions) | STRICT\_ORDER default actions for unmatched traffic. Default ["aws:alert\_established"] = log-but-pass (no day-one blackhole); move to ["aws:drop\_established", "aws:alert\_established"] once allow rules cover legitimate egress. | `list(string)` | <pre>[<br/>  "aws:alert_established"<br/>]</pre> | no |
 | <a name="input_network_firewall_suricata_rules"></a> [network\_firewall\_suricata\_rules](#input\_network\_firewall\_suricata\_rules) | Optional custom Suricata rules (STRICT\_ORDER semantics) evaluated after the managed threat groups. Empty (default) = none. | `string` | `""` | no |
 | <a name="input_private_hosted_zone_name"></a> [private\_hosted\_zone\_name](#input\_private\_hosted\_zone\_name) | Name of the shared Route 53 private hosted zone for split-horizon DNS in the egress VPC. Empty string skips creating the zone. | `string` | `""` | no |
+| <a name="input_regional_additional_cidrs"></a> [regional\_additional\_cidrs](#input\_regional\_additional\_cidrs) | Extra CIDRs per region, provisioned into that region's IPAM pool next to regional\_cidrs (capacity growth without touching existing allocations). Each must sit in top\_cidr and overlap nothing. A static hub VPC range inside one of the home-region CIDRs is reserved in the pool. | `map(list(string))` | `{}` | no |
 | <a name="input_regional_cidrs"></a> [regional\_cidrs](#input\_regional\_cidrs) | Map of region to the CIDR each regional IPAM pool provisions. Every CIDR should fall within top\_cidr. | `map(string)` | <pre>{<br/>  "eu-west-2": "10.0.0.0/12"<br/>}</pre> | no |
+| <a name="input_share_principal_arns"></a> [share\_principal\_arns](#input\_share\_principal\_arns) | RAM principals the regional IPAM pools are shared with. Null (default) = the whole organization (org\_arn). Use the Workloads OU ARN(s) so accounts outside them cannot allocate from the pools. | `list(string)` | `null` | no |
 | <a name="input_spoke_attachments"></a> [spoke\_attachments](#input\_spoke\_attachments) | Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment\_id is the aws-workload-<env> output tgw\_attachment\_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. Without the firewall (enable\_network\_firewall = false, the starter profile) the segment tables route 0.0.0.0/0 to the egress attachment instead and the spoke propagates into the shared route table: egress is NAT only, not inspected. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. cidr is the spoke VPC CIDR; when set, the other segment's table blackholes it, so prod and nonprod spokes cannot reach each other. With the firewall, a non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top\_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change. | <pre>map(object({<br/>    attachment_id = string<br/>    segment       = string<br/>    accept        = optional(bool, true)<br/>    cidr          = optional(string)<br/>  }))</pre> | `{}` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to the stage's own taggable resources (NAT gateways, EIPs) and passed to every child module (hub VPCs, IPAM, TGW, Network Firewall, endpoints, Resolver, Network Access Analyzer). Org-wide tags normally come from the provider default\_tags; use this for stage-specific additions. | `map(string)` | `{}` | no |
 | <a name="input_top_cidr"></a> [top\_cidr](#input\_top\_cidr) | CIDR of the top-level supernet owned by the top IPAM pool. | `string` | `"10.0.0.0/8"` | no |

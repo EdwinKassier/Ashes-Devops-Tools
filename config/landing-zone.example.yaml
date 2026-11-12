@@ -361,6 +361,13 @@ aws:
     # The values below are the defaults.
     # top_cidr: 10.64.0.0/10
     # regional_cidrs: {eu-west-2: 10.64.0.0/12}
+    # One /12 pool holds 16 /16 VPCs, minus the hub ranges inside it. When it is
+    # full, add a second CIDR inside top_cidr (see docs/runbooks/aws-cidr-expansion.md):
+    # regional_additional_cidrs: {eu-west-2: [10.80.0.0/12]}
+    # Who may allocate from the pools: unset = every account in the organization.
+    # Set OU names (keys of the aws-organization ou_ids) to limit it; every account
+    # that allocates must sit in a listed OU (UPGRADING.md).
+    # ipam_share_ou_keys: [Workloads]
     # inspection_cidr: 10.64.0.0/16
     # egress_cidr: 10.65.0.0/16
     # Availability zones (aws-network and every aws-workload-<env>). AZ IDs

@@ -45,6 +45,18 @@ variable "regional_cidrs" {
   }
 }
 
+variable "regional_additional_cidrs" {
+  description = "Extra CIDRs per region, provisioned into that region's pool next to regional_cidrs (capacity growth without touching existing allocations). Each must sit in top_cidr and overlap nothing."
+  type        = map(list(string))
+  default     = {}
+  nullable    = false
+
+  validation {
+    condition     = alltrue(flatten([for r, cs in var.regional_additional_cidrs : [for c in cs : can(cidrhost(c, 0)) && contains(var.aws_enabled_regions, r)]]))
+    error_message = "regional_additional_cidrs keys must be enabled regions and values valid IPv4 CIDR blocks."
+  }
+}
+
 variable "share_name" {
   description = "Name of the AWS RAM resource share used to share the regional IPAM pools organization-wide."
   type        = string
@@ -63,6 +75,17 @@ variable "org_arn" {
   validation {
     condition     = can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
     error_message = "org_arn must be an AWS Organizations ARN beginning with arn:aws:organizations::."
+  }
+}
+
+variable "share_principal_arns" {
+  description = "RAM principals the regional pools are shared with. Null (default) = the whole organization (org_arn). Use the Workloads OU ARN(s) so other accounts cannot allocate from the pools."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.share_principal_arns == null || alltrue([for p in(var.share_principal_arns == null ? [] : var.share_principal_arns) : can(regex("^arn:aws(-us-gov|-cn)?:organizations::[0-9]{12}:(organization|ou)/", p))])
+    error_message = "share_principal_arns entries must be AWS Organizations organization or OU ARNs."
   }
 }
 

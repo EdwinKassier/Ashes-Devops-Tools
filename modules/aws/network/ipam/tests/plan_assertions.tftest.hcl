@@ -51,3 +51,44 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_vpc_ipam.this"
   }
 }
+
+run "regional_pool_can_grow_and_share_narrowly" {
+  command = plan
+
+  variables {
+    org_arn                   = "arn:aws:organizations::111111111111:organization/o-abc1234567"
+    aws_enabled_regions       = ["eu-west-2"]
+    top_cidr                  = "10.64.0.0/10"
+    regional_cidrs            = { eu-west-2 = "10.64.0.0/12" }
+    regional_additional_cidrs = { eu-west-2 = ["10.80.0.0/12"] }
+    share_principal_arns      = ["arn:aws:organizations::111111111111:ou/o-abc1234567/ou-ab12-workload1"]
+  }
+
+  assert {
+    condition     = aws_vpc_ipam_pool_cidr.regional_additional["eu-west-2|10.80.0.0/12"].cidr == "10.80.0.0/12"
+    error_message = "A region must be able to provision a second CIDR when its first /12 is full (14 workloads at /16)."
+  }
+
+  assert {
+    condition     = length(aws_ram_principal_association.org) == 0 && keys(aws_ram_principal_association.this) == ["arn:aws:organizations::111111111111:ou/o-abc1234567/ou-ab12-workload1"]
+    error_message = "The pools must be shareable to named OUs only, so accounts outside them cannot drain the pool."
+  }
+}
+
+run "default_share_stays_org_wide" {
+  command = plan
+
+  variables {
+    org_arn = "arn:aws:organizations::111111111111:organization/o-abc1234567"
+  }
+
+  assert {
+    condition     = length(aws_ram_principal_association.org) == 1 && aws_ram_principal_association.org[0].principal == "arn:aws:organizations::111111111111:organization/o-abc1234567" && length(aws_ram_principal_association.this) == 0
+    error_message = "With no share_principal_arns the share keeps the org principal at aws_ram_principal_association.org[0] (moved from the un-indexed address)."
+  }
+
+  assert {
+    condition     = length(aws_vpc_ipam_pool_cidr.regional_additional) == 0
+    error_message = "With no regional_additional_cidrs no extra pool CIDR is provisioned."
+  }
+}

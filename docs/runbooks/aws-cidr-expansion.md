@@ -14,7 +14,7 @@ Unlike a self-service literal-CIDR world, spoke VPC CIDRs in this landing zone a
 
 - A single **top-level pool** owns the whole supernet (`var.top_cidr`, default `10.0.0.0/8`) with no locale.
 - One **regional pool per enabled Region** (`var.regional_cidrs`, e.g. `eu-west-2 = "10.0.0.0/12"`) is sourced from the top pool and carries the Region locale.
-- The regional pools are **RAM-shared organization-wide** to the org ARN (`aws_ram_resource_share` + `aws_ram_principal_association`), so every member account can allocate VPC CIDRs from centrally governed space.
+- The regional pools are **RAM-shared** to the org ARN by default (`aws_ram_resource_share` + `aws_ram_principal_association`; narrowed to named OUs with `ipam_share_ou_keys`), so every member account can allocate VPC CIDRs from centrally governed space.
 
 A workload spoke pulls its pool id from the network cross-root contract — `envs/aws/workload/main.tf` reads `data.terraform_remote_state.aws_network.outputs.ipam_pool_ids[var.aws_region]` and passes it to the VPC module as `ipam_pool_id`. The VPC module then allocates its CIDR from that pool (`ipv4_ipam_pool_id` + `cidr_block`, the explicit-CIDR default, on `aws_vpc.this`, in `modules/aws/network/vpc/main.tf`), so the pool allocates exactly the block the subnets are cut from.
 
@@ -127,6 +127,31 @@ The new CIDR is only reachable from other segments once the hub learns it. TGW s
 
 ---
 
+## Region pool is full: add `aws.network.regional_additional_cidrs`
+
+**When to use:** Step 1 above shows the home-region pool has no room for the next VPC. One `/12` pool (`10.64.0.0/12`) holds sixteen `/16` ranges. The inspection and egress VPCs use two of them in the default plan, so 14 workloads fit.
+
+1. Pick a `/12` (or smaller) inside `aws.network.top_cidr` that overlaps no other pool CIDR, no GCP range and no on-premises prefix. In the default plan `10.80.0.0/12` is free ([`cidr-plan.md`](../architecture/cidr-plan.md)).
+2. Add it in `config/landing-zone.yaml`:
+
+   ```yaml
+   aws:
+     network:
+       regional_cidrs: {eu-west-2: 10.64.0.0/12}
+       regional_additional_cidrs: {eu-west-2: [10.80.0.0/12]}
+   ```
+
+   The key must be an enabled region. The CIDR is added to that region's pool next to the first one. Existing allocations do not change.
+3. Plan `tfc-admin`. It accepts a workload `vpc_cidr` inside any pool CIDR of the home region, and it fails the plan when the new CIDR is outside `top_cidr` or overlaps another pool CIDR.
+4. Apply `aws-network`. The plan adds one `aws_vpc_ipam_pool_cidr.regional_additional` per CIDR and changes nothing else. If a static hub VPC (`inspection_cidr`, `egress_cidr`) sits inside the new CIDR, the plan also adds its reservation in the pool.
+5. Give the next workload a `vpc_cidr` inside the new CIDR and apply `aws-workload-<env>` as usual.
+
+Limit who can allocate with `aws.network.ipam_share_ou_keys`. By default the pools are shared with the whole organization. The list names OUs (keys of the `aws-organization` `ou_ids` output). Accounts outside the listed OUs, child OUs included, lose access to the pools for new VPCs. Existing VPCs keep their CIDR. Add every OU that holds a workload account before you set the list. See `UPGRADING.md`.
+
+---
+
+---
+
 ## Option B: Widen the allocation (larger block, cutover)
 
 Use this when the workload has outgrown its primary CIDR entirely (e.g. a `/24`-per-tier `/16` needs to become a `/14`) and a secondary block is not enough — for example because you want a single contiguous supernet.
@@ -135,7 +160,7 @@ Because the primary CIDR is immutable and IPAM allocations cannot grow, "widenin
 
 ### Step 1 — Confirm the Region pool has room, or widen the pool first
 
-A larger VPC block needs room in the regional pool. Check utilization (Step 1 of Option A). If the regional pool itself is too small, the network account owner widens it by adding a CIDR to the regional pool in `modules/aws/network/ipam` — set/extend `var.regional_cidrs[<region>]` (it must stay inside `var.top_cidr`) and apply the `aws-network` root. This is an additive pool CIDR, not a resize, and is RAM-shared org-wide automatically.
+A larger VPC block needs room in the regional pool. Check utilization (Step 1 of Option A). If the regional pool itself is too small, the network account owner adds a CIDR to the regional pool. Follow [Region pool is full](#region-pool-is-full-add-awsnetworkregional_additional_cidrs) below. This is an additive pool CIDR, not a resize, and it is shared through the same RAM share automatically.
 
 ### Step 2 — Request the larger block for a new VPC
 
@@ -158,7 +183,7 @@ Address space is org-wide shared state — treat allocations as a shared resourc
 - **Always allocate from the Region's shared pool**, never a literal `cidr_block`, for spoke VPCs. Literal CIDRs bypass IPAM's overlap protection. (The module allows literal CIDRs via empty `ipam_pool_id` for the hub/test cases; production spokes should set `ipam_pool_id`.)
 - **Check utilization and existing allocations before every allocation** (the two `aws ec2 get-ipam-pool-*` commands above). IPAM will refuse an overlapping allocation, but you want to avoid the failed apply and pick a sensibly-placed block.
 - **New blocks must sit inside the regional pool's CIDR** (`var.regional_cidrs[<region>]`), which in turn sits inside `var.top_cidr`. Going outside means widening the pool first (Option B, Step 1).
-- **Pools are RAM-shared to the org ARN, not to external principals** (`allow_external_principals = false`). Do not add external-account sharing.
+- **Pools are RAM-shared inside the organization only** (`allow_external_principals = false`), with the org ARN by default or the OUs in `aws.network.ipam_share_ou_keys`. Do not add external-account sharing.
 - **Coordinate pool sizing changes with the network account owner** — `regional_cidrs` / `top_cidr` live in the `aws-network` root and affect every account that allocates from that Region.
 
 ---

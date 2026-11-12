@@ -372,6 +372,59 @@ run "hub_vpc_straddling_the_regional_pool_fails" {
   expect_failures = [aws_vpc_ipam_pool_cidr_allocation.hub_static["inspection"]]
 }
 
+# The home-region pool can hold extra CIDRs (regional_additional_cidrs). A static
+# hub VPC inside one of them is reserved there too, or IPAM could hand its range
+# to a spoke.
+run "static_hub_vpc_in_an_additional_pool_cidr_is_reserved" {
+  command = plan
+
+  variables {
+    top_cidr                  = "10.0.0.0/8"
+    regional_additional_cidrs = { eu-west-2 = ["10.80.0.0/12"] }
+    egress_cidr               = "10.80.0.0/16"
+  }
+
+  assert {
+    condition = (
+      keys(aws_vpc_ipam_pool_cidr_allocation.hub_static) == ["egress", "inspection"] &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"].cidr == "10.80.0.0/16" &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"].ipam_pool_id == "ipam-pool-eu-west-2-0"
+    )
+    error_message = "A static hub VPC inside an additional home-region pool CIDR must be reserved in the pool."
+  }
+}
+
+# Partly overlapping an additional CIDR is the same hazard as partly overlapping
+# the first one.
+run "hub_vpc_straddling_an_additional_pool_cidr_fails" {
+  command = plan
+
+  variables {
+    top_cidr                  = "10.0.0.0/8"
+    regional_additional_cidrs = { eu-west-2 = ["10.80.0.0/12"] }
+    egress_cidr               = "10.64.0.0/10"
+  }
+
+  expect_failures = [aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"]]
+}
+
+# Additional CIDRs of another region do not hold the home-region hub ranges.
+run "additional_cidrs_of_another_region_do_not_reserve_hub_vpcs" {
+  command = plan
+
+  variables {
+    aws_enabled_regions       = ["eu-west-2", "eu-west-1"]
+    top_cidr                  = "10.0.0.0/8"
+    regional_additional_cidrs = { eu-west-1 = ["10.80.0.0/12"] }
+    egress_cidr               = "10.80.0.0/16"
+  }
+
+  assert {
+    condition     = keys(aws_vpc_ipam_pool_cidr_allocation.hub_static) == ["inspection"]
+    error_message = "Only the home-region pool CIDRs decide which hub VPCs are reserved."
+  }
+}
+
 run "interface_endpoints_admit_the_org_supernet" {
   command = plan
 

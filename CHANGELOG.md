@@ -586,6 +586,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   aws-organization stage tests that no target carries more than 5 RCPs, `RCPFullAWSAccess`
   included. The worst case measures 6,485 characters for `scp-deny-tamper` and 2,811 for
   `rcp-data-perimeter`, so no policy is split and no plan changes.
+- **A regional IPAM pool can grow, and its share can be limited to OUs (ARC-4).** One `/12` pool holds
+  14 workloads in the default plan. `aws.network.regional_additional_cidrs` (region => CIDRs) provisions
+  extra CIDRs into a region's pool without touching existing allocations. A static hub VPC inside an
+  extra CIDR is reserved there, and tfc-admin accepts a workload `vpc_cidr` inside any pool CIDR of the
+  home region and fails on an extra CIDR outside `top_cidr` or overlapping another pool CIDR.
+  `aws.network.ipam_share_ou_keys` shares the pools with the named OUs instead of the whole
+  organization. Both are opt-in: unset keeps one CIDR per region and the org-wide share. The org share
+  moves from `aws_ram_principal_association.org` to `.org[0]` (a `moved` block, no change to AWS).
+  `docs/runbooks/aws-cidr-expansion.md` has the steps; `UPGRADING.md` has the OU warning.
 - **Spoke VPCs get the CIDR their subnets use (ARC-1, breaking).** An IPAM-backed VPC now
   requests `cidr_block` explicitly from the pool by default (`ipam_allocation = "explicit_cidr"`
   in `modules/aws/network/vpc`, `ipam_explicit_cidr = true` in aws-workload). Before, it asked

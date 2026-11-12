@@ -33,10 +33,15 @@ locals {
     egress_alert_only_waived = try(tobool(local.lz.aws.network.egress_alert_only_waived), null)
     # aws.network addressing (docs/architecture/cidr-plan.md: AWS owns
     # 10.64.0.0/10). tfc-admin fails its plan when these overlap a GCP range.
-    top_cidr        = try(tostring(local.lz.aws.network.top_cidr), null)
-    regional_cidrs  = try({ for r, c in local.lz.aws.network.regional_cidrs : r => tostring(c) }, null)
-    inspection_cidr = try(tostring(local.lz.aws.network.inspection_cidr), null)
-    egress_cidr     = try(tostring(local.lz.aws.network.egress_cidr), null)
+    top_cidr       = try(tostring(local.lz.aws.network.top_cidr), null)
+    regional_cidrs = try({ for r, c in local.lz.aws.network.regional_cidrs : r => tostring(c) }, null)
+    # aws.network.regional_additional_cidrs: extra pool CIDRs per region.
+    regional_additional_cidrs = try({ for r, cs in local.lz.aws.network.regional_additional_cidrs : r => [for c in cs : tostring(c)] }, null)
+    # aws.network.ipam_share_ou_keys: OU keys (aws.contracts.organization.ou_ids)
+    # the IPAM pools are shared with; unset = the whole organization.
+    ipam_share_ou_keys = try([for k in local.lz.aws.network.ipam_share_ou_keys : tostring(k)], null)
+    inspection_cidr    = try(tostring(local.lz.aws.network.inspection_cidr), null)
+    egress_cidr        = try(tostring(local.lz.aws.network.egress_cidr), null)
     # aws.network.availability_zone_ids: AZ IDs (azs.tf), also read by every
     # aws-workload root so the spokes land in the hub's physical zones.
     availability_zone_ids = try([for id in local.lz.aws.network.availability_zone_ids : tostring(id)], null)
@@ -102,10 +107,16 @@ locals {
   # Opt-in hybrid connectivity (default off: no VPN).
   # Addressing: explicit variable > aws.network.* in config > the CIDR plan's
   # AWS block (10.64.0.0/10), clear of the GCP block 10.0.0.0/12.
-  top_cidr        = coalesce(var.top_cidr, local.cfg.top_cidr, "10.64.0.0/10")
-  regional_cidrs  = var.regional_cidrs != null ? var.regional_cidrs : coalesce(local.cfg.regional_cidrs, { (contains(local.aws_enabled_regions, local.aws_region) ? local.aws_region : local.aws_enabled_regions[0]) = "10.64.0.0/12" })
-  inspection_cidr = coalesce(var.inspection_cidr, local.cfg.inspection_cidr, "10.64.0.0/16")
-  egress_cidr     = coalesce(var.egress_cidr, local.cfg.egress_cidr, "10.65.0.0/16")
+  top_cidr       = coalesce(var.top_cidr, local.cfg.top_cidr, "10.64.0.0/10")
+  regional_cidrs = var.regional_cidrs != null ? var.regional_cidrs : coalesce(local.cfg.regional_cidrs, { (contains(local.aws_enabled_regions, local.aws_region) ? local.aws_region : local.aws_enabled_regions[0]) = "10.64.0.0/12" })
+  # Extra pool CIDRs per region (capacity growth). Default none: no change.
+  regional_additional_cidrs = var.regional_additional_cidrs != null ? var.regional_additional_cidrs : coalesce(local.cfg.regional_additional_cidrs, {})
+  inspection_cidr           = coalesce(var.inspection_cidr, local.cfg.inspection_cidr, "10.64.0.0/16")
+  egress_cidr               = coalesce(var.egress_cidr, local.cfg.egress_cidr, "10.65.0.0/16")
+
+  # IPAM pool share: null = the whole organization (today's scope); OU keys =
+  # only those OUs. The OU ARNs are built in main.tf from the organization contract.
+  ipam_share_ou_keys = var.ipam_share_ou_keys != null ? var.ipam_share_ou_keys : local.cfg.ipam_share_ou_keys
 
   enable_vpn = coalesce(var.enable_vpn, local.cfg.enable_vpn, false)
   vpn        = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))

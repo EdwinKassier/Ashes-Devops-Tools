@@ -109,6 +109,9 @@ module "ipam" {
   regional_cidrs      = var.regional_cidrs
   org_arn             = var.org_arn
 
+  regional_additional_cidrs = var.regional_additional_cidrs
+  share_principal_arns      = var.share_principal_arns
+
   tags = var.tags
 }
 
@@ -123,16 +126,24 @@ locals {
     name => (!var.ipam_mode_for_new_vpcs_only || contains(var.ipam_new_vpcs, name)) ? local.hub_regional_pool_id : ""
   }
 
-  # Static hub VPCs (no pool) whose range overlaps the home-region pool CIDR.
-  # Two ranges overlap when their network addresses agree on the shorter prefix
-  # (cidrhost masks the host bits of the address it is given). The keys come
-  # from variables only, so the for_each below is known at plan.
-  hub_regional_cidr = lookup(var.regional_cidrs, var.aws_region, null)
-  hub_static_overlapping_pool = local.hub_regional_cidr == null || !contains(var.aws_enabled_regions, var.aws_region) ? {} : {
-    for name, cidr in { inspection = var.inspection_cidr, egress = var.egress_cidr } : name => cidr
+  # Static hub VPCs (no pool) whose range overlaps a home-region pool CIDR (the
+  # first one or an additional one). Two ranges overlap when their network
+  # addresses agree on the shorter prefix (cidrhost masks the host bits of the
+  # address it is given). The keys come from variables only, so the for_each
+  # below is known at plan.
+  hub_pool_cidrs = !contains(var.aws_enabled_regions, var.aws_region) ? [] : concat(
+    compact([lookup(var.regional_cidrs, var.aws_region, "")]),
+    lookup(var.regional_additional_cidrs, var.aws_region, []),
+  )
+  hub_static_cidrs = { inspection = var.inspection_cidr, egress = var.egress_cidr }
+  hub_static_overlapping_pool = {
+    for name, cidr in local.hub_static_cidrs : name => cidr
     if var.ipam_mode_for_new_vpcs_only && !contains(var.ipam_new_vpcs, name) &&
-    cidrhost("${split("/", cidr)[0]}/${min(tonumber(split("/", cidr)[1]), tonumber(split("/", local.hub_regional_cidr)[1]))}", 0) ==
-    cidrhost("${split("/", local.hub_regional_cidr)[0]}/${min(tonumber(split("/", cidr)[1]), tonumber(split("/", local.hub_regional_cidr)[1]))}", 0)
+    anytrue([
+      for p in local.hub_pool_cidrs :
+      cidrhost("${split("/", cidr)[0]}/${min(tonumber(split("/", cidr)[1]), tonumber(split("/", p)[1]))}", 0) ==
+      cidrhost("${split("/", p)[0]}/${min(tonumber(split("/", cidr)[1]), tonumber(split("/", p)[1]))}", 0)
+    ])
   }
 }
 
@@ -154,11 +165,12 @@ resource "aws_vpc_ipam_pool_cidr_allocation" "hub_static" {
 
   lifecycle {
     precondition {
-      condition = (
-        tonumber(split("/", each.value)[1]) >= tonumber(split("/", local.hub_regional_cidr)[1]) &&
-        cidrhost("${split("/", each.value)[0]}/${split("/", local.hub_regional_cidr)[1]}", 0) == cidrhost(local.hub_regional_cidr, 0)
-      )
-      error_message = "The ${each.key} hub VPC CIDR (${each.value}) overlaps the ${var.aws_region} regional IPAM pool (${local.hub_regional_cidr}) but is not inside it, so it cannot be reserved and IPAM can allocate part of it to a spoke. Move ${each.key}_cidr inside the pool CIDR or out of it (aws.network in config/landing-zone.yaml)."
+      condition = anytrue([
+        for p in local.hub_pool_cidrs :
+        tonumber(split("/", each.value)[1]) >= tonumber(split("/", p)[1]) &&
+        cidrhost("${split("/", each.value)[0]}/${split("/", p)[1]}", 0) == cidrhost(p, 0)
+      ])
+      error_message = "The ${each.key} hub VPC CIDR (${each.value}) overlaps the ${var.aws_region} regional IPAM pool (${join(", ", local.hub_pool_cidrs)}) but is not inside one of its CIDRs, so it cannot be reserved and IPAM can allocate part of it to a spoke. Move ${each.key}_cidr inside one pool CIDR or out of all of them (aws.network in config/landing-zone.yaml)."
     }
   }
 }

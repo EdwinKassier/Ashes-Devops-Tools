@@ -1,0 +1,21 @@
+# Test fixture: a second regional pool CIDR that holds a workload (config.tftest.hcl).
+version: 1
+org:
+  regions: {aws: eu-west-2}
+  tfc:
+    organization: cfg-tfc
+    project_name_prefix: lz-
+    aws_project: aws-landing-zone
+    plan: standard
+    vcs_repo:
+      identifier: cfg/landing-zone
+      github_app_installation_id: ghain-123
+aws:
+  enabled: true
+  network:
+    regional_cidrs: {eu-west-2: 10.64.0.0/12}
+    regional_additional_cidrs: {eu-west-2: [10.80.0.0/12]}
+  workload_environments:
+    dev: {account_key: workload_dev, is_production: false, vpc_cidr: 10.72.0.0/16}
+    staging: {account_key: workload_staging, is_production: true, vpc_cidr: 10.81.0.0/16}
+    perf: {account_key: workload_perf, is_production: false, vpc_cidr: 10.96.0.0/16}

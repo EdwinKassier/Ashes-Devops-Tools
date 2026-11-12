@@ -834,6 +834,13 @@ reservations in a real regional pool, a spoke that then requests a hub range is
 rejected by IPAM, and the static hub VPCs keep working (see
 `docs/known-gaps.md`).
 
+#### IPAM pool growth and an OU-scoped pool share are opt-in (aws-network)
+
+Nothing changes unless you set the new keys. The org-wide share keeps its principal and moves in state from `aws_ram_principal_association.org` to `aws_ram_principal_association.org[0]`. A `moved` block does this, so the plan shows one address move and no change in AWS.
+
+- `aws.network.regional_additional_cidrs` adds CIDRs to a region's pool. See [Region pool is full](docs/runbooks/aws-cidr-expansion.md#region-pool-is-full-add-awsnetworkregional_additional_cidrs).
+- `aws.network.ipam_share_ou_keys` shares the pools with the listed OUs only (keys of the `aws-organization` `ou_ids` output). **Before you set it, list the OU of every account that already allocates from a pool, child OUs are covered.** An account outside the listed OUs loses RAM access to the pool, so its next VPC (or a replaced one) fails to allocate. Existing VPCs keep their CIDR. The network account owns the pools and needs no listing. To widen the scope again, add the OU key and apply `aws-network`.
+
 #### AWS availability zones follow the region and AZ IDs (aws-network, aws-workload)
 
 **Breaking: both roots now read the account's availability zones at plan

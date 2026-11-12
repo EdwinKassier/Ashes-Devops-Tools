@@ -5,11 +5,11 @@
 #   - one regional pool per enabled region, sourced from the top pool, that
 #     carves a per-region CIDR (var.regional_cidrs) out of that supernet.
 #
-# The regional pools are shared organization-wide via AWS RAM so member accounts
-# can allocate VPC CIDRs from centrally governed address space. In practice this
-# module is deployed in (and IPAM administration is delegated to) the network
-# account; the RAM principal association targets the organization ARN so every
-# account in the org can consume the shared pools.
+# The regional pools are shared via AWS RAM so member accounts can allocate VPC
+# CIDRs from centrally governed address space. In practice this module is
+# deployed in (and IPAM administration is delegated to) the network account. The
+# RAM principal is the organization ARN by default, so every account in the org
+# can consume the shared pools; share_principal_arns narrows it to named OUs.
 
 resource "aws_vpc_ipam" "this" {
   description = var.description
@@ -60,7 +60,22 @@ resource "aws_vpc_ipam_pool_cidr" "regional" {
   cidr         = each.value
 }
 
-# RAM share the regional pools organization-wide. allow_external_principals is
+# Extra CIDRs per region: capacity growth when a region's first CIDR is full.
+# An allocation lives in the pool, not in one CIDR, so existing allocations are
+# untouched and new VPCs can take space from either block.
+resource "aws_vpc_ipam_pool_cidr" "regional_additional" {
+  for_each = merge([
+    for r, cs in var.regional_additional_cidrs : { for c in cs : "${r}|${c}" => { region = r, cidr = c } }
+  ]...)
+
+  ipam_pool_id = aws_vpc_ipam_pool.regional[each.value.region].id
+  cidr         = each.value.cidr
+
+  depends_on = [aws_vpc_ipam_pool_cidr.top]
+}
+
+# RAM share for the regional pools. The principal is the whole organization by
+# default, or the OUs in share_principal_arns. allow_external_principals is
 # false: sharing is scoped to the organization only, never to external accounts.
 resource "aws_ram_resource_share" "this" {
   name                      = var.share_name
@@ -76,6 +91,20 @@ resource "aws_ram_resource_association" "pools" {
 }
 
 resource "aws_ram_principal_association" "org" {
+  count = var.share_principal_arns == null ? 1 : 0
+
   principal          = var.org_arn
   resource_share_arn = aws_ram_resource_share.this.arn
+}
+
+resource "aws_ram_principal_association" "this" {
+  for_each = toset(var.share_principal_arns == null ? [] : var.share_principal_arns)
+
+  principal          = each.value
+  resource_share_arn = aws_ram_resource_share.this.arn
+}
+
+moved {
+  from = aws_ram_principal_association.org
+  to   = aws_ram_principal_association.org[0]
 }

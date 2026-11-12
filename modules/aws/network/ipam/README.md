@@ -45,13 +45,15 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ram_principal_association.org (modules/aws/network/ipam/main.tf#L78)
-- resource.aws_ram_resource_association.pools (modules/aws/network/ipam/main.tf#L71)
-- resource.aws_ram_resource_share.this (modules/aws/network/ipam/main.tf#L65)
+- resource.aws_ram_principal_association.org (modules/aws/network/ipam/main.tf#L93)
+- resource.aws_ram_principal_association.this (modules/aws/network/ipam/main.tf#L100)
+- resource.aws_ram_resource_association.pools (modules/aws/network/ipam/main.tf#L86)
+- resource.aws_ram_resource_share.this (modules/aws/network/ipam/main.tf#L80)
 - resource.aws_vpc_ipam.this (modules/aws/network/ipam/main.tf#L14)
 - resource.aws_vpc_ipam_pool.regional (modules/aws/network/ipam/main.tf#L44)
 - resource.aws_vpc_ipam_pool.top (modules/aws/network/ipam/main.tf#L29)
 - resource.aws_vpc_ipam_pool_cidr.regional (modules/aws/network/ipam/main.tf#L56)
+- resource.aws_vpc_ipam_pool_cidr.regional_additional (modules/aws/network/ipam/main.tf#L66)
 - resource.aws_vpc_ipam_pool_cidr.top (modules/aws/network/ipam/main.tf#L37)
 
 
@@ -62,8 +64,10 @@ The following resources are created:
 | <a name="input_org_arn"></a> [org\_arn](#input\_org\_arn) | ARN of the AWS organization (arn:aws:organizations::<mgmt-account>:organization/o-xxxx) used as the RAM principal so the shared pools are available org-wide. | `string` | n/a | yes |
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions IPAM operates in. Each becomes an operating region on the IPAM and gets its own regional pool sourced from the top pool. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_description"></a> [description](#input\_description) | Description applied to the IPAM. | `string` | `"SRA landing zone hierarchical IPAM."` | no |
+| <a name="input_regional_additional_cidrs"></a> [regional\_additional\_cidrs](#input\_regional\_additional\_cidrs) | Extra CIDRs per region, provisioned into that region's pool next to regional\_cidrs (capacity growth without touching existing allocations). Each must sit in top\_cidr and overlap nothing. | `map(list(string))` | `{}` | no |
 | <a name="input_regional_cidrs"></a> [regional\_cidrs](#input\_regional\_cidrs) | Map of region to the CIDR each regional pool provisions. Every key should be a region present in aws\_enabled\_regions and every CIDR should fall within top\_cidr. | `map(string)` | <pre>{<br/>  "eu-west-2": "10.0.0.0/12"<br/>}</pre> | no |
 | <a name="input_share_name"></a> [share\_name](#input\_share\_name) | Name of the AWS RAM resource share used to share the regional IPAM pools organization-wide. | `string` | `"ipam-pools"` | no |
+| <a name="input_share_principal_arns"></a> [share\_principal\_arns](#input\_share\_principal\_arns) | RAM principals the regional pools are shared with. Null (default) = the whole organization (org\_arn). Use the Workloads OU ARN(s) so other accounts cannot allocate from the pools. | `list(string)` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 | <a name="input_top_cidr"></a> [top\_cidr](#input\_top\_cidr) | CIDR of the top-level supernet owned by the top IPAM pool. Regional pool CIDRs are carved from within this range. | `string` | `"10.0.0.0/8"` | no |
 
@@ -72,8 +76,10 @@ The following resources are created:
 | Name | Description |
 |------|-------------|
 | <a name="output_ipam_id"></a> [ipam\_id](#output\_ipam\_id) | The ID of the IPAM. |
+| <a name="output_regional_pool_cidrs"></a> [regional\_pool\_cidrs](#output\_regional\_pool\_cidrs) | Map of region to every CIDR provisioned into its regional pool (regional\_cidrs plus regional\_additional\_cidrs). |
 | <a name="output_regional_pool_ids"></a> [regional\_pool\_ids](#output\_regional\_pool\_ids) | Map of region to the ID of its regional IPAM pool. |
-| <a name="output_resource_share_arn"></a> [resource\_share\_arn](#output\_resource\_share\_arn) | ARN of the RAM resource share used to share the regional pools org-wide. |
+| <a name="output_resource_share_arn"></a> [resource\_share\_arn](#output\_resource\_share\_arn) | ARN of the RAM resource share used to share the regional pools. |
+| <a name="output_share_principals"></a> [share\_principals](#output\_share\_principals) | RAM principals the regional pools are shared with: the organization ARN, or the entries of share\_principal\_arns. |
 | <a name="output_top_pool_id"></a> [top\_pool\_id](#output\_top\_pool\_id) | The ID of the top-level IPAM pool that owns the supernet. |
 <!-- END_TF_DOCS -->
 

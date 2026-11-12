@@ -95,6 +95,28 @@ variable "regional_cidrs" {
   }
 }
 
+variable "regional_additional_cidrs" {
+  description = "Map of region to extra CIDRs provisioned into that region's IPAM pool next to regional_cidrs (capacity growth when the first CIDR is full). Each CIDR must sit inside top_cidr and overlap no other pool CIDR. Null = aws.network.regional_additional_cidrs from config/landing-zone.yaml, else none."
+  type        = map(list(string))
+  default     = null
+
+  validation {
+    condition     = var.regional_additional_cidrs == null || alltrue(flatten([for r, cs in coalesce(var.regional_additional_cidrs, {}) : [for c in cs : can(cidrhost(c, 0))]]))
+    error_message = "Every value in regional_additional_cidrs must be a valid IPv4 CIDR block."
+  }
+}
+
+variable "ipam_share_ou_keys" {
+  description = "Keys of the organization contract's ou_ids (OU name => OU ID) whose accounts may allocate from the regional IPAM pools. Null = aws.network.ipam_share_ou_keys from config/landing-zone.yaml, else the whole organization (today's scope). Every account that allocates from a pool must sit in a listed OU (child OUs included), or it loses access to the pool."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.ipam_share_ou_keys == null || length(coalesce(var.ipam_share_ou_keys, ["x"])) > 0
+    error_message = "ipam_share_ou_keys must be null (share with the whole organization) or a non-empty list of OU keys."
+  }
+}
+
 variable "inspection_cidr" {
   description = "IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment. Null = aws.network.inspection_cidr from config/landing-zone.yaml, else 10.64.0.0/16."
   type        = string

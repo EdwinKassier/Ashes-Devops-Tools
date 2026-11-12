@@ -1493,6 +1493,25 @@
                 "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
               }
             },
+            "regional_additional_cidrs": {
+              "type": "object",
+              "description": "Region => extra CIDRs provisioned into that region's IPAM pool next to regional_cidrs (aws-network). Use when the first regional CIDR is full. Each must sit inside top_cidr and overlap no other pool CIDR; a workload vpc_cidr may sit in any pool CIDR of the home region. Default none.",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+                }
+              }
+            },
+            "ipam_share_ou_keys": {
+              "type": "array",
+              "description": "Keys of aws.contracts.organization.ou_ids (OU names) whose accounts may allocate from the regional IPAM pools (aws-network). Unset = the whole organization. Every account that allocates from a pool must sit in a listed OU, or it loses access to the pool for new VPCs; see UPGRADING.md.",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
             "inspection_cidr": {
               "type": "string",
               "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",

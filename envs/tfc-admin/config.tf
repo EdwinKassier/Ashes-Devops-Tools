@@ -246,13 +246,53 @@ locals {
   # range outside the pool, so they cannot conflict there. They stay in the
   # overlap check above.
   cidr_aws_home_region = try(tostring(local.lz.org.regions.aws), "eu-west-2")
-  cidr_aws_pool = local.enable_aws ? try(
-    tostring(local.lz.aws.network.regional_cidrs[local.cidr_aws_home_region]),
-    "10.64.0.0/12",
-  ) : null
-  cidr_outside_aws_pool = local.cidr_aws_pool == null || !can(cidrnetmask(coalesce(local.cidr_aws_pool, "x"))) ? [] : [
-    for k, c in local.cidr_aws_ranges : "${k} (${c}) is outside the ${local.cidr_aws_home_region} regional pool (${local.cidr_aws_pool})"
-    if startswith(k, "aws.workload_environments.") && (tonumber(split("/", c)[1]) < tonumber(split("/", local.cidr_aws_pool)[1]) ||
-    cidrhost("${split("/", c)[0]}/${split("/", local.cidr_aws_pool)[1]}", 0) != cidrhost(local.cidr_aws_pool, 0))
+
+  # Every CIDR provisioned into a regional pool: aws.network.regional_cidrs
+  # (the home region falls back to 10.64.0.0/12) and
+  # aws.network.regional_additional_cidrs. aws-network reserves the static hub
+  # ranges and allocates workload VPCs from these.
+  cidr_pool_ranges = local.enable_aws ? merge(
+    { for r, c in try({ for r, c in local.lz.aws.network.regional_cidrs : r => tostring(c) }, {}) : "aws.network.regional_cidrs.${r}" => c },
+    try(local.lz.aws.network.regional_cidrs[local.cidr_aws_home_region], null) == null ? { "aws.network.regional_cidrs.${local.cidr_aws_home_region}" = "10.64.0.0/12" } : {},
+    merge([
+      for r, cs in try({ for r, cs in local.lz.aws.network.regional_additional_cidrs : r => cs }, {}) :
+      { for i, c in cs : "aws.network.regional_additional_cidrs.${r}[${i}]" => tostring(c) }
+    ]...),
+  ) : {}
+  cidr_pool_valid = { for k, c in local.cidr_pool_ranges : k => c if can(cidrnetmask(c)) }
+  cidr_pool_keys  = sort(keys(local.cidr_pool_valid))
+
+  # The home-region pool CIDRs: the regional CIDR first, then the additional ones.
+  cidr_aws_pools = concat(
+    [for k in local.cidr_pool_keys : local.cidr_pool_valid[k] if k == "aws.network.regional_cidrs.${local.cidr_aws_home_region}"],
+    [for k in local.cidr_pool_keys : local.cidr_pool_valid[k] if startswith(k, "aws.network.regional_additional_cidrs.${local.cidr_aws_home_region}[")],
+  )
+
+  # An additional pool CIDR must sit inside top_cidr and overlap no other pool
+  # CIDR (IPAM rejects an overlapping CIDR in the same scope at apply).
+  cidr_pool_issues = concat(
+    local.cidr_aws_top == null || !can(cidrnetmask(coalesce(local.cidr_aws_top, "x"))) ? [] : [
+      for k in local.cidr_pool_keys : "${k} (${local.cidr_pool_valid[k]}) is outside aws.network.top_cidr (${local.cidr_aws_top})"
+      if startswith(k, "aws.network.regional_additional_cidrs.") && (
+        tonumber(split("/", local.cidr_pool_valid[k])[1]) < tonumber(split("/", local.cidr_aws_top)[1]) ||
+        cidrhost("${split("/", local.cidr_pool_valid[k])[0]}/${split("/", local.cidr_aws_top)[1]}", 0) != cidrhost(local.cidr_aws_top, 0)
+      )
+    ],
+    flatten([
+      for i, a in local.cidr_pool_keys : [
+        for b in slice(local.cidr_pool_keys, i + 1, length(local.cidr_pool_keys)) : "${a} (${local.cidr_pool_valid[a]}) overlaps ${b} (${local.cidr_pool_valid[b]})"
+        if cidrhost("${split("/", local.cidr_pool_valid[a])[0]}/${min(tonumber(split("/", local.cidr_pool_valid[a])[1]), tonumber(split("/", local.cidr_pool_valid[b])[1]))}", 0) ==
+        cidrhost("${split("/", local.cidr_pool_valid[b])[0]}/${min(tonumber(split("/", local.cidr_pool_valid[a])[1]), tonumber(split("/", local.cidr_pool_valid[b])[1]))}", 0)
+      ]
+    ]),
+  )
+
+  cidr_outside_aws_pool = length(local.cidr_aws_pools) == 0 ? [] : [
+    for k, c in local.cidr_aws_ranges : "${k} (${c}) is outside the ${local.cidr_aws_home_region} regional pool (${join(", ", local.cidr_aws_pools)})"
+    if startswith(k, "aws.workload_environments.") && !anytrue([
+      for p in local.cidr_aws_pools :
+      tonumber(split("/", c)[1]) >= tonumber(split("/", p)[1]) &&
+      cidrhost("${split("/", c)[0]}/${split("/", p)[1]}", 0) == cidrhost(p, 0)
+    ])
   ]
 }

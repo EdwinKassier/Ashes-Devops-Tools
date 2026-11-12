@@ -44,6 +44,26 @@ locals {
   # (management account id + org id) so no extra remote-state dependency is
   # needed just to obtain the ARN.
   org_arn = "arn:${local.partition}:organizations::${local.org.management_account_id}:organization/${local.org.organization_id}"
+
+  # RAM principals for the IPAM pools: null = the whole organization; otherwise
+  # the ARNs of the OUs named by key in the organization contract's ou_ids.
+  ipam_share_principal_arns = local.ipam_share_ou_keys == null ? null : [
+    for k in local.ipam_share_ou_keys :
+    "arn:${local.partition}:organizations::${local.org.management_account_id}:ou/${local.org.organization_id}/${lookup(local.org.ou_ids, k, "missing-${k}")}"
+  ]
+}
+
+# Fails the plan when an OU key has no ID in the organization contract, instead
+# of sharing the pools with a nonexistent OU.
+resource "terraform_data" "ipam_share_ou_keys" {
+  input = local.ipam_share_ou_keys
+
+  lifecycle {
+    precondition {
+      condition     = local.ipam_share_ou_keys == null || alltrue([for k in coalesce(local.ipam_share_ou_keys, []) : contains(keys(local.org.ou_ids), k)])
+      error_message = "ipam_share_ou_keys names OUs that are not in the organization contract's ou_ids: ${join(", ", [for k in coalesce(local.ipam_share_ou_keys, []) : k if !contains(keys(local.org.ou_ids), k)])}. Known OU keys: ${join(", ", sort(keys(local.org.ou_ids)))}."
+    }
+  }
 }
 
 module "aws_network_hub" {
@@ -55,12 +75,14 @@ module "aws_network_hub" {
   aws_region          = local.aws_region
   aws_enabled_regions = local.aws_enabled_regions
 
-  top_cidr           = local.top_cidr
-  regional_cidrs     = local.regional_cidrs
-  inspection_cidr    = local.inspection_cidr
-  egress_cidr        = local.egress_cidr
-  availability_zones = local.availability_zones # azs.tf
-  az_count           = var.az_count
+  top_cidr                  = local.top_cidr
+  regional_cidrs            = local.regional_cidrs
+  regional_additional_cidrs = local.regional_additional_cidrs
+  share_principal_arns      = local.ipam_share_principal_arns
+  inspection_cidr           = local.inspection_cidr
+  egress_cidr               = local.egress_cidr
+  availability_zones        = local.availability_zones # azs.tf
+  az_count                  = var.az_count
 
   flow_log_destination_arn = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
   log_bucket_name          = local.log_archive_bucket_name
