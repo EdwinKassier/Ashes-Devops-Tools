@@ -45,8 +45,10 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   through Backup, EC2, RDS, S3, DynamoDB and EFS); and the restore-testing
   plan restores RDS and Aurora without restore metadata overrides. With
   `copy_vault_notification_topic_arn` set, also confirm which failure events
-  reach the topic: copy jobs into the copy vault start in the member account,
-  so a failed copy may be reported on the source vault only. Do this in a
+  reach the topic: that a failed restore-testing restore arrives as
+  `RESTORE_JOB_FAILED`, and whether a failed copy does (copy jobs into the copy
+  vault start in the member account, so it may be reported on the source vault
+  only). Do this in a
   throwaway vault first or within `changeable_for_days`: the lock cannot be
   removed after that window.
 - **The pipeline can still overwrite the copy vault's lock and access policy

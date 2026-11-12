@@ -89,8 +89,8 @@ resource "aws_backup_vault_policy" "copy_in" {
 }
 
 # Failed jobs and changed recovery points publish to the caller's SNS topic.
-# Restore-testing restores run as restore jobs on this vault, so their failures
-# arrive as RESTORE_JOB_FAILED.
+# Restore-testing restores run as restore jobs, so their failures are expected
+# as RESTORE_JOB_FAILED (not yet proven against a real apply: known-gaps).
 resource "aws_backup_vault_notifications" "this" {
   count             = var.notification_topic_arn != null ? 1 : 0
   backup_vault_name = aws_backup_vault.this.name
