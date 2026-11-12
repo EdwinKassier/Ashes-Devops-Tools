@@ -1,10 +1,11 @@
 # MANDATORY (overridable set): deny any plan that destroys (delete or replace)
 # a stateful or control-plane resource: data stores, encryption keys, log and
-# audit storage, secrets, accounts/projects/folders, networks and
-# organisation policies. Losing a KMS key orphans every ciphertext; losing a
-# log bucket breaks the audit trail; replacing a StackSet instance removes the
-# AWS Config recorders org-wide. The set is overridable: the security team
-# overrides an intended destroy on the run.
+# audit storage, secrets, accounts/projects/folders, networks, organisation
+# policies, backup vaults and locks, artefact registries and DNS zones. Losing
+# a KMS key orphans every ciphertext; losing a log bucket breaks the audit
+# trail; replacing a StackSet instance removes the AWS Config recorders
+# org-wide. The set is overridable: the security team overrides an intended
+# destroy on the run.
 package terraform.policies.destroy_guard
 
 import rego.v1
@@ -62,6 +63,20 @@ protected_types := {
 	# Network: destroying the accepter deletes the spoke's TGW attachment.
 	"aws_ec2_transit_gateway_vpc_attachment",
 	"aws_ec2_transit_gateway_vpc_attachment_accepter",
+	# Backups and immutability: deleting a vault or its lock removes the
+	# recovery points or their lock; deleting an Object Lock configuration
+	# lifts WORM on new objects.
+	"aws_backup_vault",
+	"aws_backup_vault_lock_configuration",
+	"aws_s3_bucket_object_lock_configuration",
+	"aws_efs_file_system",
+	# Data and artefact stores.
+	"google_bigquery_dataset",
+	"aws_ecr_repository",
+	"google_artifact_registry_repository",
+	# DNS zones: a delete and re-create changes the delegated name servers.
+	"aws_route53_zone",
+	"google_dns_managed_zone",
 }
 
 action_verb(rc) := "replaces" if lib.creates(rc)

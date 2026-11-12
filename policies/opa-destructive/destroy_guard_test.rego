@@ -173,3 +173,28 @@ test_tgw_attachment_delete_denied if denied_delete("aws_ec2_transit_gateway_vpc_
 test_tgw_attachment_accepter_delete_denied if denied_delete("aws_ec2_transit_gateway_vpc_attachment_accepter")
 
 test_google_tags_tag_value_update_allowed if count(p.deny) == 0 with input as one("google_tags_tag_value", ["update"])
+
+# ── Backups, locks, data and artefact stores, DNS zones ────────────────────
+test_aws_backup_vault_delete_denied if denied_delete("aws_backup_vault")
+
+test_aws_backup_vault_lock_configuration_delete_denied if denied_delete("aws_backup_vault_lock_configuration")
+
+test_aws_s3_bucket_object_lock_configuration_delete_denied if denied_delete("aws_s3_bucket_object_lock_configuration")
+
+test_aws_efs_file_system_delete_denied if denied_delete("aws_efs_file_system")
+
+test_google_bigquery_dataset_delete_denied if denied_delete("google_bigquery_dataset")
+
+test_aws_ecr_repository_delete_denied if denied_delete("aws_ecr_repository")
+
+test_google_artifact_registry_repository_delete_denied if denied_delete("google_artifact_registry_repository")
+
+test_aws_route53_zone_delete_denied if denied_delete("aws_route53_zone")
+
+test_google_dns_managed_zone_delete_denied if denied_delete("google_dns_managed_zone")
+
+test_backup_vault_replace_denied if count(p.deny) == 1 with input as one("aws_backup_vault", ["delete", "create"])
+
+test_dns_zone_create_before_destroy_replace_denied if count(p.deny) == 1 with input as one("aws_route53_zone", ["create", "delete"])
+
+test_backup_vault_update_allowed if count(p.deny) == 0 with input as one("aws_backup_vault", ["update"])

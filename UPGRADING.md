@@ -386,6 +386,21 @@ only log-named buckets. The `<prefix>opa-guardrails` set stays non-overridable.
 skipping it. A single-cloud estate sets the `TFC_DRIFT_WORKSPACES` repository
 variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
+#### destroy_guard covers backups, registries and DNS zones (policies, breaking)
+
+**Breaking: runs that passed before now stop until the security team
+overrides them.** `destroy_guard` (in the overridable
+`<prefix>destructive-change-guard` set) now also denies a delete or replace
+of `aws_backup_vault`, `aws_backup_vault_lock_configuration`,
+`aws_s3_bucket_object_lock_configuration`, `aws_efs_file_system`,
+`google_bigquery_dataset`, `aws_ecr_repository`,
+`google_artifact_registry_repository`, `aws_route53_zone` and
+`google_dns_managed_zone`. A teardown, a removed environment or service, or a
+change that forces a replace (for example a new `bigquery_location` on a flow-log
+dataset, or a renamed DNS zone) now needs a security-team override on the
+run, as the [teardown runbook](docs/runbooks/teardown.md) describes. No
+manual step is needed before the upgrade.
+
 #### Mandatory OPA controls deny unknown values (policies, breaking)
 
 **Breaking: the non-overridable guardrails set now fails runs that passed
