@@ -155,16 +155,23 @@ run "stage_apply_sas_are_least_privilege" {
     error_message = "the per-folder delegation allow-lists must be split: workload roles for env folders, network roles for the shared folder."
   }
 
-  # The workload SAs keep the IAM-controlling roles (gcp-organization grants
-  # them), but projects-apply may never grant them: it could grant them to itself.
+  # The workload SAs keep the IAM-controlling and data-plane IAM roles
+  # (gcp-organization grants them), but projects-apply may never grant them: it
+  # could grant them to itself.
   assert {
     condition = (
       contains(output.workload_folder_roles.apply, "roles/resourcemanager.projectIamAdmin") &&
-      contains(output.workload_folder_roles.apply, "roles/iam.workloadIdentityPoolAdmin") &&
-      length(setintersection(toset(output.delegated_workload_folder_roles), toset(["roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.serviceAccountKeyAdmin", "roles/iam.serviceAccountTokenCreator", "roles/iam.workloadIdentityPoolAdmin"]))) == 0 &&
+      contains(output.workload_folder_roles.apply, "roles/secretmanager.admin") &&
+      length(setintersection(toset(output.delegated_workload_folder_roles), toset([
+        "roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.serviceAccountKeyAdmin",
+        "roles/iam.serviceAccountTokenCreator", "roles/iam.workloadIdentityPoolAdmin", "roles/iam.serviceAccountUser",
+        "roles/secretmanager.admin", "roles/cloudkms.admin", "roles/storage.admin", "roles/run.admin",
+        "roles/bigquery.admin", "roles/pubsub.admin", "roles/artifactregistry.admin", "roles/resourcemanager.projectCreator",
+      ]))) == 0 &&
+      contains(output.delegated_workload_folder_roles, "roles/compute.admin") &&
       length(setintersection(toset(output.delegated_network_folder_roles), toset(["roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.workloadIdentityPoolAdmin"]))) == 0
     )
-    error_message = "the IAM-controlling workload roles must stay out of every delegation allow-list."
+    error_message = "every role that controls IAM, identities, data-plane IAM or project ownership must stay out of the delegation allow-lists: projects-apply could grant it to itself."
   }
 }
 
@@ -184,10 +191,10 @@ run "legacy_org_level_folder_delegation_is_opt_in" {
   }
 
   # IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list.
-  # The default lists are 36 workload roles and 13 network roles (41 distinct),
-  # so the legacy binding must split into ceil(41 / 10) = 5 conditions.
+  # The default lists are 27 workload roles and 13 network roles (32 distinct),
+  # so the legacy binding must split into ceil(32 / 10) = 4 conditions.
   assert {
-    condition     = length(output.delegated_workload_folder_roles) == 36 && length(output.delegated_network_folder_roles) == 13
+    condition     = length(output.delegated_workload_folder_roles) == 27 && length(output.delegated_network_folder_roles) == 13
     error_message = "the default delegated role lists changed size; update this suite and the organization stage suite delegated_grants_split_into_ten_role_conditions."
   }
 
@@ -211,7 +218,7 @@ run "legacy_org_level_folder_delegation_is_opt_in" {
   }
 
   assert {
-    condition     = google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].title == "delegated_folder_role_grants" && google_organization_iam_member.projects_delegated_folder_iam[4].condition[0].title == "delegated_folder_role_grants_4" && strcontains(google_organization_iam_member.projects_delegated_folder_iam[4].condition[0].description, "part 5 of 5")
+    condition     = google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].title == "delegated_folder_role_grants" && google_organization_iam_member.projects_delegated_folder_iam[3].condition[0].title == "delegated_folder_role_grants_3" && strcontains(google_organization_iam_member.projects_delegated_folder_iam[3].condition[0].description, "part 4 of 4")
     error_message = "each legacy chunk needs its own condition title and a description that names the chunk."
   }
 }
@@ -226,7 +233,7 @@ run "legacy_short_delegated_list_keeps_one_unchanged_condition" {
     enable_plan_viewer_role                = false
     workload_folder_roles = {
       plan  = ["roles/compute.viewer"]
-      apply = ["roles/run.admin", "roles/compute.admin"]
+      apply = ["roles/container.admin", "roles/compute.admin"]
     }
     network_folder_roles = {
       plan  = ["roles/dns.reader"]
@@ -237,7 +244,7 @@ run "legacy_short_delegated_list_keeps_one_unchanged_condition" {
   assert {
     condition = (
       length(google_organization_iam_member.projects_delegated_folder_iam) == 1 &&
-      google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.admin', 'roles/compute.networkAdmin', 'roles/compute.viewer', 'roles/dns.peer', 'roles/dns.reader', 'roles/run.admin'])" &&
+      google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.admin', 'roles/compute.networkAdmin', 'roles/compute.viewer', 'roles/container.admin', 'roles/dns.peer', 'roles/dns.reader'])" &&
       google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].title == "delegated_folder_role_grants" &&
       google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].description == "projects-apply may only grant the workload/network folder roles"
     )

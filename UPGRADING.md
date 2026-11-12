@@ -1152,6 +1152,35 @@ gcp-organization now grants them to each workload SA directly.
    Run `terraform state rm '<address>'` for each. The plan must then show no change to `workload_sa_folder_roles`.
 4. Apply gcp-projects.
 
+#### Data-plane admin workload roles are no longer delegable (gcp-bootstrap, gcp-organization, gcp-projects)
+
+projects-apply could grant itself any delegated role on an environment folder, for example `secretmanager.admin` on a production folder, and then read every secret. These roles join the non-delegable list. gcp-organization now grants them to each workload SA directly:
+
+- `iam.serviceAccountUser`
+- `secretmanager.admin`
+- `cloudkms.admin`
+- `storage.admin`
+- `run.admin`
+- `bigquery.admin`
+- `pubsub.admin`
+- `artifactregistry.admin`
+- `resourcemanager.projectCreator`
+
+The workload SAs keep every role. Only the stage that grants them changes. A custom `non_delegable_workload_folder_roles` input on gcp-organization or gcp-projects replaces the default list: add the new roles to it, and keep the two inputs equal.
+
+**Upgrade order.** Do not run a workload apply between the steps:
+
+1. Apply gcp-bootstrap. The `delegated_workload_folder_roles` output loses the nine roles.
+2. Apply gcp-organization. It creates the direct grants. The bindings already exist, so nothing changes in IAM. The delegated `folderIamAdmin` conditions on the environment folders lose the nine roles.
+3. Before you apply gcp-projects, remove its copies of those grants from its state. Otherwise its apply tries to delete bindings that gcp-organization now owns (and projects-apply's condition no longer admits them). List them with:
+
+   ```bash
+   terraform state list | grep 'workload_sa_folder_roles\[' | grep -E 'iam\.serviceAccountUser|secretmanager\.admin|cloudkms\.admin|storage\.admin|run\.admin|bigquery\.admin|pubsub\.admin|artifactregistry\.admin|resourcemanager\.projectCreator'
+   ```
+
+   Run `terraform state rm '<address>'` for each. The plan must then show no change to `workload_sa_folder_roles`.
+4. Apply gcp-projects.
+
 #### Production Cloud SQL is regional by default (gcp-workload)
 
 In an environment with `is_production`, app-service databases are created with REGIONAL availability, unless the entry sets `database.enable_high_availability: false`. An existing zonal production database changes to regional in place, with a short restart. The new option `database.backup_location` keeps backups in another region.

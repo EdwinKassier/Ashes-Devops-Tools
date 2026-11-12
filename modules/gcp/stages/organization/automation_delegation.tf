@@ -22,8 +22,10 @@
 #    (envs/gcp/projects/providers.tf), which would otherwise merge the
 #    google_folder_iam_member changes on one folder into one setIamPolicy call.
 #
-# 3. The workload roles that control IAM or identities on an environment folder
-#    (non_delegable_workload_folder_roles). An IAM condition on a delegated
+# 3. The workload roles that control IAM, identities, data-plane IAM or project
+#    ownership on an environment folder (non_delegable_workload_folder_roles:
+#    for example projectIamAdmin, serviceAccountUser, secretmanager.admin,
+#    storage.admin, resourcemanager.projectCreator). An IAM condition on a delegated
 #    folderIamAdmin can restrict the ROLES a grant names
 #    (iam.googleapis.com/modifiedGrantsByRole) but not the MEMBERS: there is no
 #    member attribute. A delegate allowed to grant projectIamAdmin could grant
@@ -132,7 +134,7 @@ resource "google_folder_iam_member" "projects_delegated_folder_iam" {
   }
 }
 
-# The IAM-controlling workload roles (see 3. above), granted by this stage so
+# The non-delegable workload roles (see 3. above), granted by this stage so
 # that projects-apply never needs them in its allow-list.
 resource "google_folder_iam_member" "workload_non_delegable_folder_roles" {
   for_each = local.non_delegable_workload_grants

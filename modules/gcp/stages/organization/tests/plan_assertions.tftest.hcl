@@ -452,7 +452,7 @@ run "projects_delegation_is_bound_per_folder" {
 
 # IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list, and
 # Google advises against joining hasOnly() calls with && or ||. The lists below
-# are the gcp-bootstrap defaults (delegated_workload_folder_roles: 36 roles,
+# are the gcp-bootstrap defaults (delegated_workload_folder_roles: 27 roles,
 # delegated_network_folder_roles: 13 roles; the bootstrap suite pins those
 # counts). Each folder must get one conditional binding per 10 roles.
 run "delegated_grants_split_into_ten_role_conditions" {
@@ -474,10 +474,7 @@ run "delegated_grants_split_into_ten_role_conditions" {
     projects_apply_service_account = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
     delegated_workload_folder_roles = [
       "organizations/123456789/roles/landingZonePlanViewer",
-      "roles/artifactregistry.admin",
-      "roles/bigquery.admin",
       "roles/bigquery.metadataViewer",
-      "roles/cloudkms.admin",
       "roles/cloudkms.viewer",
       "roles/cloudsql.admin",
       "roles/cloudsql.viewer",
@@ -489,7 +486,6 @@ run "delegated_grants_split_into_ten_role_conditions" {
       "roles/dns.admin",
       "roles/dns.reader",
       "roles/iam.securityReviewer",
-      "roles/iam.serviceAccountUser",
       "roles/iam.serviceAccountViewer",
       "roles/iam.workloadIdentityPoolViewer",
       "roles/logging.admin",
@@ -497,18 +493,13 @@ run "delegated_grants_split_into_ten_role_conditions" {
       "roles/monitoring.viewer",
       "roles/osconfig.patchDeploymentAdmin",
       "roles/osconfig.patchDeploymentViewer",
-      "roles/pubsub.admin",
       "roles/pubsub.viewer",
       "roles/resourcemanager.folderViewer",
-      "roles/resourcemanager.projectCreator",
-      "roles/run.admin",
       "roles/run.viewer",
-      "roles/secretmanager.admin",
       "roles/secretmanager.viewer",
       "roles/servicenetworking.networksAdmin",
       "roles/serviceusage.serviceUsageAdmin",
       "roles/serviceusage.serviceUsageViewer",
-      "roles/storage.admin",
     ]
     delegated_network_folder_roles = [
       "organizations/123456789/roles/landingZonePlanViewer",
@@ -534,8 +525,8 @@ run "delegated_grants_split_into_ten_role_conditions" {
 
   # Chunk 0 keeps the folder key as its address; later chunks are <folder>|<i>.
   assert {
-    condition     = sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) == sort(["dev", "dev|1", "dev|2", "dev|3", "shared", "shared|1"])
-    error_message = "each folder needs one delegated binding per 10 roles: 4 for the 36 workload roles, 2 for the 13 network roles."
+    condition     = sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) == sort(["dev", "dev|1", "dev|2", "shared", "shared|1"])
+    error_message = "each folder needs one delegated binding per 10 roles: 3 for the 27 workload roles, 2 for the 13 network roles."
   }
 
   assert {
@@ -581,8 +572,8 @@ run "delegated_grants_split_into_ten_role_conditions" {
   assert {
     condition = (
       google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].title == "delegated_folder_role_grants" &&
-      google_folder_iam_member.projects_delegated_folder_iam["dev|3"].condition[0].title == "delegated_folder_role_grants_3" &&
-      strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev|3"].condition[0].description, "part 4 of 4") &&
+      google_folder_iam_member.projects_delegated_folder_iam["dev|2"].condition[0].title == "delegated_folder_role_grants_2" &&
+      strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev|2"].condition[0].description, "part 3 of 3") &&
       strcontains(google_folder_iam_member.projects_delegated_folder_iam["shared|1"].condition[0].description, "part 2 of 2")
     )
     error_message = "each chunk needs its own condition title and a description that names the chunk."
@@ -609,7 +600,7 @@ run "short_delegated_list_keeps_one_unchanged_condition" {
       }
     }
     projects_apply_service_account  = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
-    delegated_workload_folder_roles = ["roles/run.admin", "roles/compute.admin"]
+    delegated_workload_folder_roles = ["roles/container.admin", "roles/compute.admin"]
     delegated_network_folder_roles = [
       "roles/compute.networkAdmin",
       "roles/compute.orgFirewallPolicyAdmin",
@@ -636,7 +627,7 @@ run "short_delegated_list_keeps_one_unchanged_condition" {
 
   assert {
     condition = (
-      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.admin', 'roles/run.admin'])" &&
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.admin', 'roles/container.admin'])" &&
       google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].title == "delegated_folder_role_grants" &&
       google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].description == "projects-apply may only grant the workload folder roles on this folder"
     )
@@ -698,14 +689,14 @@ run "iam_controlling_roles_are_not_delegable" {
       !strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "serviceAccountAdmin") &&
       !strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "workloadIdentityPoolAdmin") &&
       strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "'roles/compute.admin'") &&
-      output.delegated_folder_iam_targets["dev"] == tolist(["roles/compute.admin", "roles/run.admin"])
+      output.delegated_folder_iam_targets["dev"] == tolist(["roles/compute.admin"])
     )
     error_message = "projects-apply must never be able to grant the IAM-controlling roles on an environment folder."
   }
 
   assert {
     condition = (
-      sort(keys(google_folder_iam_member.workload_non_delegable_folder_roles)) == sort(["dev|apply|roles/iam.serviceAccountAdmin", "dev|apply|roles/iam.workloadIdentityPoolAdmin", "dev|apply|roles/resourcemanager.projectIamAdmin"]) &&
+      sort(keys(google_folder_iam_member.workload_non_delegable_folder_roles)) == sort(["dev|apply|roles/iam.serviceAccountAdmin", "dev|apply|roles/iam.workloadIdentityPoolAdmin", "dev|apply|roles/resourcemanager.projectIamAdmin", "dev|apply|roles/run.admin"]) &&
       google_folder_iam_member.workload_non_delegable_folder_roles["dev|apply|roles/resourcemanager.projectIamAdmin"].folder == "folders/111111111" &&
       google_folder_iam_member.workload_non_delegable_folder_roles["dev|apply|roles/resourcemanager.projectIamAdmin"].member == "serviceAccount:acme-wl-dev-apply@acme-admin-project.iam.gserviceaccount.com"
     )

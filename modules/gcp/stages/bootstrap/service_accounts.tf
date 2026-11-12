@@ -240,18 +240,31 @@ locals {
   # grants). Admin project sits directly under the org node, not in a folder, so
   # this delegation can never reach the automation project or the org node.
   #
-  # Roles that control IAM or identities are never delegable: a folder IAM
-  # condition limits which roles a grant names, not who receives them, so a
-  # delegate allowed to grant projectIamAdmin could grant it to itself.
-  # gcp-organization grants these to the workload SAs directly (its
-  # non_delegable_workload_folder_roles, same default list) and drops them from
-  # the allow-list it binds, even when an older contract still carries them.
+  # A folder IAM condition limits which roles a grant names, not who receives
+  # them, so a delegate may grant any role on its allow-list to itself. These
+  # roles are never delegable: IAM and identity control, every data-plane admin
+  # role that carries setIamPolicy (it could grant itself read on every
+  # production secret, key, bucket or dataset), actAs, and project creation
+  # (the creator owns the new project). gcp-organization grants these to the
+  # workload SAs directly (its non_delegable_workload_folder_roles, same default
+  # list; scripts/check-consistency.sh keeps the three lists equal) and drops
+  # them from the allow-list it binds, even when an older contract still
+  # carries them.
   non_delegable_folder_roles = [
     "roles/resourcemanager.projectIamAdmin",
     "roles/iam.serviceAccountAdmin",
     "roles/iam.serviceAccountKeyAdmin",
     "roles/iam.serviceAccountTokenCreator",
     "roles/iam.workloadIdentityPoolAdmin",
+    "roles/iam.serviceAccountUser",
+    "roles/secretmanager.admin",
+    "roles/cloudkms.admin",
+    "roles/storage.admin",
+    "roles/run.admin",
+    "roles/bigquery.admin",
+    "roles/pubsub.admin",
+    "roles/artifactregistry.admin",
+    "roles/resourcemanager.projectCreator",
   ]
   delegated_workload_folder_roles = sort(setsubtract(toset(concat(local.effective_workload_folder_roles.plan, local.effective_workload_folder_roles.apply)), toset(local.non_delegable_folder_roles)))
   # roles/dns.peer is not a network-hub role: gcp-projects grants it to each

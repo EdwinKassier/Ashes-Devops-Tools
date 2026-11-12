@@ -203,6 +203,23 @@ echo "==> No plan-time code execution, unlisted providers or endpoint overrides 
 python3 scripts/check-plan-time-exec.py \
   || note "plan/apply-time code execution or credential redirection (see the errors above; exit 2 = python-hcl2 missing or the policy unreadable)"
 
+echo "==> Non-delegable workload folder roles are identical in bootstrap, organization and projects"
+# gcp-bootstrap drops these roles from projects-apply's delegation allow-list,
+# gcp-organization grants them to the workload SAs directly, and gcp-projects
+# skips them. A role missing from one copy is either delegable (projects-apply
+# could grant it to itself) or granted by no stage.
+python3 - <<'PY_ROLES' || note "non-delegable workload folder role lists differ between bootstrap, organization and projects"
+import re, sys
+def roles(path, start):
+    s = open(path, encoding="utf-8").read()
+    i = s.index("[", s.index(start))
+    return sorted(re.findall(r'"(roles/[^"]+)"', s[i:s.index("]", i)]))
+a = roles("modules/gcp/stages/bootstrap/service_accounts.tf", "non_delegable_folder_roles = [")
+b = roles("modules/gcp/stages/organization/variables.tf", 'variable "non_delegable_workload_folder_roles"')
+c = roles("modules/gcp/stages/projects/variables.tf", 'variable "non_delegable_workload_folder_roles"')
+sys.exit(0 if a and a == b == c else 1)
+PY_ROLES
+
 echo "==> Lockfiles: multi-platform and one version per provider (Renovate owns them)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per
 # provider (the host platform). The canonical command writes one per platform:

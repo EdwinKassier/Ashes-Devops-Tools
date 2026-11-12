@@ -439,6 +439,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   grant unless `enable_saas_state_backup = true`. The new `saas_approvers_team_id` confirms saas
   applies instead of the control-plane approvers; a `check` warns while it is unset. See
   `UPGRADING.md`.
+- **projects-apply cannot delegate data-plane IAM roles (SEC-4, breaking).** A folder IAM condition
+  limits the roles a delegate grants, not the members, so projects-apply could grant itself
+  `secretmanager.admin` on a production folder. `iam.serviceAccountUser`, `secretmanager.admin`,
+  `cloudkms.admin`, `storage.admin`, `run.admin`, `bigquery.admin`, `pubsub.admin`,
+  `artifactregistry.admin` and `resourcemanager.projectCreator` join the non-delegable workload folder
+  roles: gcp-organization grants them to the workload SAs directly. `make consistency` checks that the
+  list is the same in gcp-bootstrap, gcp-organization and gcp-projects. See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

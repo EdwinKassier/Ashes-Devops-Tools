@@ -163,6 +163,15 @@ variable "non_delegable_workload_folder_roles" {
     "roles/iam.serviceAccountKeyAdmin",
     "roles/iam.serviceAccountTokenCreator",
     "roles/iam.workloadIdentityPoolAdmin",
+    "roles/iam.serviceAccountUser",
+    "roles/secretmanager.admin",
+    "roles/cloudkms.admin",
+    "roles/storage.admin",
+    "roles/run.admin",
+    "roles/bigquery.admin",
+    "roles/pubsub.admin",
+    "roles/artifactregistry.admin",
+    "roles/resourcemanager.projectCreator",
   ]
   nullable = false
 }

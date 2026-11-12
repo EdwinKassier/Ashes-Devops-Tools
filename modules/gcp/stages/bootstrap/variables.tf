@@ -195,7 +195,7 @@ variable "production_workload_environments" {
 }
 
 variable "workload_folder_roles" {
-  description = "Roles each workload plan/apply SA holds on its OWN environment folder. Also the allow-list (with network_folder_roles) for the projects-apply SA's delegated folder-IAM grant, except the IAM-controlling roles (projectIamAdmin, serviceAccountAdmin, serviceAccountKeyAdmin, serviceAccountTokenCreator, workloadIdentityPoolAdmin): those are never delegable, and gcp-organization grants them directly. Avoid roles/owner: anything else listed here becomes grantable on the environment folders by projects-apply."
+  description = "Roles each workload plan/apply SA holds on its OWN environment folder. Also the allow-list (with network_folder_roles) for the projects-apply SA's delegated folder-IAM grant, except the roles that control IAM, identities, data-plane IAM or project ownership (projectIamAdmin, serviceAccountAdmin, serviceAccountKeyAdmin, serviceAccountTokenCreator, workloadIdentityPoolAdmin, serviceAccountUser, secretmanager.admin, cloudkms.admin, storage.admin, run.admin, bigquery.admin, pubsub.admin, artifactregistry.admin, resourcemanager.projectCreator): those are never delegable, and gcp-organization grants them directly. Avoid roles/owner: anything else listed here becomes grantable on the environment folders by projects-apply."
   type = object({
     plan  = list(string)
     apply = list(string)

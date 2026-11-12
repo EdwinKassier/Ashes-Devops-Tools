@@ -644,7 +644,7 @@ variable "workload_folder_roles" {
 }
 
 variable "non_delegable_workload_folder_roles" {
-  description = "Roles that projects-apply may never grant on an environment folder, whatever delegated_workload_folder_roles says. A folder IAM condition can limit which roles a delegate grants but not to whom, so a delegate that may grant one of these roles can grant it to itself and take over every project in the folder. This stage grants these roles to the workload SAs itself (when workload_folder_roles lists them)."
+  description = "Roles that projects-apply may never grant on an environment folder, whatever delegated_workload_folder_roles says. A folder IAM condition can limit which roles a delegate grants but not to whom, so a delegate that may grant one of these roles can grant it to itself and take over every project, identity or data store in the folder. The default covers IAM and identity control, data-plane admin roles that carry setIamPolicy, actAs and project creation. This stage grants these roles to the workload SAs itself (when workload_folder_roles lists them)."
   type        = list(string)
   default = [
     "roles/resourcemanager.projectIamAdmin",
@@ -652,6 +652,15 @@ variable "non_delegable_workload_folder_roles" {
     "roles/iam.serviceAccountKeyAdmin",
     "roles/iam.serviceAccountTokenCreator",
     "roles/iam.workloadIdentityPoolAdmin",
+    "roles/iam.serviceAccountUser",
+    "roles/secretmanager.admin",
+    "roles/cloudkms.admin",
+    "roles/storage.admin",
+    "roles/run.admin",
+    "roles/bigquery.admin",
+    "roles/pubsub.admin",
+    "roles/artifactregistry.admin",
+    "roles/resourcemanager.projectCreator",
   ]
   nullable = false
 }

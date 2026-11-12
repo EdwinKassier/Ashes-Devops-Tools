@@ -334,8 +334,8 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   (3) the projects-apply `modifiedGrantsByRole` delegated grant works on a
   real folder. IAM accepts at most 10 roles in one `hasOnly()` list, so
   gcp-organization (and the legacy org-level binding in gcp-bootstrap) binds
-  one condition per 10 roles: the default lists give 4 bindings on each
-  environment folder (36 roles) and 2 on the shared folder (13 roles).
+  one condition per 10 roles: the default lists give 3 bindings on each
+  environment folder (27 roles) and 2 on the shared folder (13 roles).
   gcp-projects turns off google provider batching so that each folder IAM
   change is its own `setIamPolicy` call and matches one chunk. Still open:
   a real gcp-organization apply that IAM accepts, and a real gcp-projects
@@ -545,10 +545,6 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   - A no-op folder IAM write passes the `modifiedGrantsByRole` delegation condition.
   - The hub Secure Web Proxy (preview): the PSC endpoint, the FQDN allowlist,
     and a spoke private tier with no Cloud NAT.
-- **gcp-projects delegation still admits data-plane admin roles.** projects-apply
-  can grant itself `storage.admin`, `secretmanager.admin`, `run.admin` and similar
-  on environment folders. The IAM-controlling roles moved to gcp-organization.
-  Moving every workload folder grant there would close this.
 - **No default VPC-SC ingress rule for the TFC workload identities.** Add one
   before you enforce an environment perimeter (`examples/vpc-sc`).
 - **GKE Autopilot still runs in the Shared VPC host project** in production.
@@ -1122,6 +1118,11 @@ side (all mock-tested, secure defaults):
   Terraform workspace. The code behind a module source pinned to this
   repository's release tag (`git::…?ref=vX.Y.Z`) is not scanned either; it
   was checked when that release was cut.
+- **Delegable infrastructure roles (SEC-4 residual).** `compute.admin`,
+  `dns.admin`, `container.admin` and `cloudsql.admin` stay delegable. A
+  projects-apply compromise can grant itself those on an environment folder.
+  None grants data-plane IAM. The roles that control IAM, identities,
+  data-plane IAM or project ownership are granted by gcp-organization.
 
 ## DECISION — needs a human call
 
