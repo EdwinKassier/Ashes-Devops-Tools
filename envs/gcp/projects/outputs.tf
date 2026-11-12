@@ -19,7 +19,10 @@ locals {
         host_project_number = module.projects.project_numbers["${env_key}-host"]
         region              = env.region
         cidr_block          = env.cidr_block
-        labels              = env.labels
+        # The spoke VPC name, derived here only: gcp-workload-<env> creates the
+        # network under this name and gcp-network-hub peers the hub with it.
+        spoke_network_name = "${local.project_prefix}-${env_key}-vpc"
+        labels             = env.labels
         tag_value_ids = {
           environment = try(local.org.tag_values["environment-${env_key}"], null)
         }
@@ -71,6 +74,7 @@ output "contract" {
       is_production           = bool
       vpc_sc_access_policy_id = string
       automation_identities   = list(string)
+      spoke_network_name      = string
     }))
     automation_folder_grants = map(object({ folder = string, role = string }))
   })

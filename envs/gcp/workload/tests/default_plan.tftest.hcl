@@ -6,7 +6,17 @@
 # the real environment stage against mocks so a broken default plan cannot hide
 # again.
 
-mock_provider "google" {}
+# A planned peering's state is unknown, which leaves check.hub_peering_active
+# unknown, and terraform test fails a plan run on an unknown check (a real plan
+# only warns). ACTIVE is what a peered environment reports.
+mock_provider "google" {
+  mock_resource "google_compute_network_peering" {
+    override_during = plan
+    defaults = {
+      state = "ACTIVE"
+    }
+  }
+}
 mock_provider "google-beta" {}
 # tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
 # no run contacts HCP Terraform.
@@ -336,5 +346,50 @@ run "app_service_on_real_host_stage" {
   assert {
     condition     = output.app_services["api"].database_iam_user == "api-run@acme-dev-host-abcd.iam"
     error_message = "the runtime SA must be the Cloud SQL IAM database user."
+  }
+}
+
+# The spoke VPC takes the name gcp-projects publishes (the name gcp-network-hub
+# peers with), not a second derivation in this root (ARC-5).
+run "spoke_network_name_from_projects_contract" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            dev = {
+              folder_id           = "folders/111"
+              folder_name         = "Development"
+              host_project_id     = "acme-dev-host-abcd"
+              host_project_number = "222222222222"
+              is_production       = false
+              region              = "europe-west1"
+              cidr_block          = "10.10.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/1" }
+              spoke_network_name  = "acme-dev-custom-vpc"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = output.network_name == "acme-dev-custom-vpc"
+    error_message = "The spoke VPC must use environment_config.<env>.spoke_network_name from the gcp-projects contract."
+  }
+}
+
+# A gcp-projects state from before spoke_network_name keeps the old name.
+run "spoke_network_name_falls_back_without_contract_key" {
+  command = plan
+
+  assert {
+    condition     = output.network_name == "acme-dev-vpc"
+    error_message = "Without spoke_network_name the spoke VPC stays <project_prefix>-<environment>-vpc."
   }
 }

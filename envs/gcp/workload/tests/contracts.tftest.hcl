@@ -416,3 +416,65 @@ run "egress_proxy_without_hub_proxy_fails" {
 
   expect_failures = [terraform_data.egress_proxy_guard]
 }
+
+# The spoke side of the hub peering stays INACTIVE until gcp-network-hub runs
+# again and creates hub-to-<env>. The check warns and names the runbook step
+# (ARC-5); it does not fail the plan.
+run "inactive_hub_peering_warns" {
+  command = plan
+
+  variables {
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "hub.internal."
+    }
+  }
+
+  override_module {
+    target = module.environment.module.host
+    outputs = {
+      dns_zones            = {}
+      nat_ip               = "34.1.2.3"
+      network_id           = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      network_name         = "acme-dev-vpc"
+      network_self_link    = "https://www.googleapis.com/compute/v1/projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      security_policy_id   = null
+      subnets              = {}
+      vpc_peerings         = { "hub-peering" = { peering_state = "INACTIVE" } }
+      vpc_service_controls = {}
+    }
+  }
+
+  expect_failures = [check.hub_peering_active]
+}
+
+run "active_hub_peering_passes_the_check" {
+  command = plan
+
+  variables {
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "hub.internal."
+    }
+  }
+
+  override_module {
+    target = module.environment.module.host
+    outputs = {
+      dns_zones            = {}
+      nat_ip               = "34.1.2.3"
+      network_id           = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      network_name         = "acme-dev-vpc"
+      network_self_link    = "https://www.googleapis.com/compute/v1/projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      security_policy_id   = null
+      subnets              = {}
+      vpc_peerings         = { "hub-peering" = { peering_state = "ACTIVE" } }
+      vpc_service_controls = {}
+    }
+  }
+
+  assert {
+    condition     = output.hub_peering_state == "ACTIVE"
+    error_message = "An ACTIVE hub peering must pass the hub_peering_active check."
+  }
+}

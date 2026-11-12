@@ -599,6 +599,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   organization. Both are opt-in: unset keeps one CIDR per region and the org-wide share. The org share
   moves from `aws_ram_principal_association.org` to `.org[0]` (a `moved` block, no change to AWS).
   `docs/runbooks/aws-cidr-expansion.md` has the steps; `UPGRADING.md` has the OU warning.
+- **GCP hub peering: one spoke name, a quota guard and an INACTIVE warning (ARC-5).** `gcp-projects`
+  publishes `environment_config.<env>.spoke_network_name`; `gcp-workload-<env>` names its VPC with it
+  and `gcp-network-hub` peers with it, so the name is derived in one place (a contract without the key
+  falls back to `<prefix>-<env>-vpc`). The network-hub stage fails the plan when the environment
+  peerings exceed `hub_peering_limit` (default 24: the `PEERINGS_PER_NETWORK` quota is 25 by default
+  and Private Service Access holds one). A `hub_peering_active` check in `gcp-workload-<env>` warns
+  while the spoke side is `INACTIVE`. The second `gcp-network-hub` run stays manual and is now step 5
+  of `docs/runbooks/add-environment.md`.
 - **Spoke VPCs get the CIDR their subnets use (ARC-1, breaking).** An IPAM-backed VPC now
   requests `cidr_block` explicitly from the pool by default (`ipam_allocation = "explicit_cidr"`
   in `modules/aws/network/vpc`, `ipam_explicit_cidr = true` in aws-workload). Before, it asked

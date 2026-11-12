@@ -65,7 +65,7 @@ module "host" {
   additional_regions  = var.network.additional_regions
 
   network = {
-    name            = "${var.project_prefix}-${var.environment}-vpc"
+    name            = coalesce(var.network.name, "${var.project_prefix}-${var.environment}-vpc")
     cidr_block      = var.host_project.cidr_block
     shared_vpc_host = true
     flow_logs = {

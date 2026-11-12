@@ -99,6 +99,13 @@ run "projects_output_contract" {
     condition     = output.environment_config["dev"].host_project_id == "acme-dev-host-abcd" && output.environment_config["dev"].host_project_number == "333333333333" && output.environment_config["dev"].folder_name == "Development" && output.environment_config["dev"].tag_value_ids.environment == "tagValues/123"
     error_message = "environment_config must combine org folders/tag values with this root's project IDs/numbers (consumed by gcp-workload)."
   }
+
+  # One derivation of the spoke VPC name: gcp-workload creates the network
+  # under it and gcp-network-hub peers with it (ARC-5).
+  assert {
+    condition     = output.contract.environment_config["dev"].spoke_network_name == "acme-dev-vpc"
+    error_message = "environment_config.<env>.spoke_network_name must be <project_prefix>-<env>-vpc, published once for gcp-workload and gcp-network-hub."
+  }
 }
 
 # The explicit production marker and the env's scoped access policy reach

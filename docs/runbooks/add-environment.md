@@ -99,6 +99,7 @@ Confirm them in order, as each queues (the triggers enforce the order):
 | 2 | `gcp-organization` | The environment folder (and its folder-level policies) |
 | 3 | `gcp-projects` | The host project; publishes `environment_config["staging"]` |
 | 4 | `gcp-network-hub` | Adds the new host project to the hub VPC-SC perimeter |
+| 5 | `gcp-network-hub` (second run, step 5) | The hub-side peering `hub-to-<env>` |
 
 A plan with no changes ends as "planned and finished" and needs no action (tfc-admin triggers
 `aws-organization` too, for example).
@@ -121,7 +122,24 @@ start one run on `gcp-workload-staging` by hand.
 > `aws-organization` applies. Re-apply tfc-admin after that apply; follow
 > [aws-add-account.md](aws-add-account.md).
 
-### 5. (Optional) Workload tfvars, in the step-1 PR
+### 5. Run gcp-network-hub again to peer the hub side
+
+The hub side of the peering (`hub-to-<env>`) can only be created once `gcp-workload-<env>` has
+created the spoke network: GCP rejects a peering to a network that does not exist. So the first
+workload apply leaves its spoke side `INACTIVE`, and the workload plan warns with the
+`hub_peering_active` check. Queue a run of `gcp-network-hub` and apply it. Then re-plan
+`gcp-workload-<env>`: its `hub_peering_state` output reads `ACTIVE` and the `hub_peering_active`
+check passes. Skip this step for `connectivity: ncc`.
+
+This run stays manual: a run trigger from `gcp-workload-<env>` back to `gcp-network-hub` would
+close a cycle in the run-trigger graph that tfc-admin builds.
+
+The hub VPC holds at most `hub_peering_limit` environment peerings (default 24: the default
+`PEERINGS_PER_NETWORK` quota is 25, and the hub's Private Service Access connection is one
+peering). Above it the `gcp-network-hub` plan fails. Raise the quota and the limit, or move
+environments to NCC ([gcp-peering-to-ncc-migration.md](gcp-peering-to-ncc-migration.md)).
+
+### 6. (Optional) Workload tfvars, in the step-1 PR
 
 A non-prod workload applies as soon as its upstream does, so put any tfvars file and its
 `-var-file` wiring in the same PR as the config edit, not afterwards.
@@ -143,9 +161,9 @@ git add examples/staging.tfvars
 git commit -m "feat: add staging environment tfvars"
 ```
 
-### 6. Point the workspace at the tfvars file (only if you created one)
+### 7. Point the workspace at the tfvars file (only if you created one)
 
-tfc-admin already sets the `environment` Terraform variable. If you created a tfvars file in step 5, set
+tfc-admin already sets the `environment` Terraform variable. If you created a tfvars file in step 6, set
 this **environment variable** through tfc-admin's `workspace_variables` input (`category = "env"`;
 the committed `config/tfc-workspaces.yaml` rejects `TF_CLI_ARGS*`):
 
@@ -153,7 +171,7 @@ the committed `config/tfc-workspaces.yaml` rejects `TF_CLI_ARGS*`):
 |-----|-------|
 | `TF_CLI_ARGS_plan` | `-var-file=../../../examples/staging.tfvars` |
 
-### 7. Verify
+### 8. Verify
 
 Review the first workload plan or apply log: it should create new resources only (no modifications
 to existing environments and no project creation, since `gcp-projects` created the host project in

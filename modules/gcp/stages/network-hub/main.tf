@@ -143,6 +143,23 @@ module "hub" {
   } : {}
 }
 
+# Peering quota guard. The PEERINGS_PER_NETWORK quota caps the peerings of one
+# VPC network (25 by default; https://docs.cloud.google.com/vpc/docs/quota).
+# The hub VPC also carries its Private Service Access connection, which is a
+# VPC Network Peering connection to the service producer network
+# (https://docs.cloud.google.com/vpc/docs/configure-private-services-access),
+# so the default limit is 24 environments. Fail the plan, not the apply.
+resource "terraform_data" "hub_peering_limit" {
+  input = length(var.spoke_peerings)
+
+  lifecycle {
+    precondition {
+      condition     = length(var.spoke_peerings) <= var.hub_peering_limit
+      error_message = "${length(var.spoke_peerings)} environment peerings exceed hub_peering_limit (${var.hub_peering_limit}). Move environments to NCC (gcp.network.connectivity: ncc, docs/runbooks/gcp-peering-to-ncc-migration.md) or raise the peering quota first."
+    }
+  }
+}
+
 # Hub side of each environment's VPC peering. The hub owns its half: each
 # gcp-workload-<env> root creates only the spoke side, so no workload state
 # holds a resource in the hub project and the workload apply SA needs no right

@@ -1,7 +1,17 @@
 # Presets named in config/landing-zone.yaml (examples/presets/<name>.yaml) and
 # their parity with the -var-file form (examples/presets/<name>.tfvars).
 
-mock_provider "google" {}
+# A planned peering's state is unknown, which leaves check.hub_peering_active
+# unknown, and terraform test fails a plan run on an unknown check (a real plan
+# only warns). ACTIVE is what a peered environment reports.
+mock_provider "google" {
+  mock_resource "google_compute_network_peering" {
+    override_during = plan
+    defaults = {
+      state = "ACTIVE"
+    }
+  }
+}
 mock_provider "google-beta" {}
 # tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
 # no run contacts HCP Terraform.

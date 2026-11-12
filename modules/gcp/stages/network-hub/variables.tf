@@ -328,6 +328,18 @@ variable "spoke_peerings" {
   }
 }
 
+variable "hub_peering_limit" {
+  description = "Most environment peerings the hub VPC may carry. The PEERINGS_PER_NETWORK quota is 25 peerings per network by default; one is kept for the hub's own Private Service Access peering. Raise it only after the quota is raised."
+  type        = number
+  default     = 24
+  nullable    = false
+
+  validation {
+    condition     = var.hub_peering_limit >= 1
+    error_message = "hub_peering_limit must be at least 1."
+  }
+}
+
 variable "secure_web_proxy" {
   description = <<-EOT
     Opt-in central egress control (preview): a Secure Web Proxy in the hub with an FQDN allowlist

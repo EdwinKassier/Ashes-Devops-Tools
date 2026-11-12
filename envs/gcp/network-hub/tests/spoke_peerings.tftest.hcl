@@ -129,3 +129,44 @@ run "spoke_peerings_can_be_turned_off" {
     error_message = "create_spoke_peerings = false lists no spoke networks and creates no hub-side peering."
   }
 }
+
+# The spoke network name comes from the gcp-projects contract (one derivation,
+# in gcp-projects), so a renamed spoke network is still peered.
+run "spoke_network_name_comes_from_the_projects_contract" {
+  command = plan
+
+  variables {
+    projects_contract = {
+      project_ids     = { shared-hub = "p-hub", shared-dns = "p-dns", dev-host = "p-dev", qa-host = "p-qa" }
+      project_numbers = { shared-hub = "1", shared-dns = "2", dev-host = "3", qa-host = "4" }
+      environment_config = {
+        dev = {
+          folder_id = "folders/1", host_project_id = "p-dev", host_project_number = "3"
+          region    = "europe-west2", cidr_block = "10.10.0.0/16", spoke_network_name = "custom-dev-vpc"
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.google_compute_networks.spoke["dev"]
+    values = {
+      networks = ["default", "custom-dev-vpc"]
+    }
+  }
+
+  assert {
+    condition     = local.spoke_peering_candidates["dev"].network_name == "custom-dev-vpc"
+    error_message = "gcp-network-hub must peer with the network name gcp-projects publishes, not a second derivation (ARC-5)."
+  }
+
+  assert {
+    condition     = local.spoke_peering_candidates["qa"].network_name == "acme-qa-vpc"
+    error_message = "A contract without spoke_network_name (gcp-projects state from before the key) falls back to <project_prefix>-<env>-vpc."
+  }
+
+  assert {
+    condition     = toset(keys(output.spoke_peering_states)) == toset(["dev"])
+    error_message = "The hub must peer with the contract's spoke network name once that network exists."
+  }
+}

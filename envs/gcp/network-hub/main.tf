@@ -50,6 +50,7 @@ module "network_hub" {
     }
     if contains(data.google_compute_networks.spoke[env].networks, c.network_name)
   }
+  hub_peering_limit = var.hub_peering_limit
 
   vpn                          = local.vpn
   vpn_shared_secret_wo         = var.vpn_shared_secret_wo

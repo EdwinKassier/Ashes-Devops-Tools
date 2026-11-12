@@ -103,6 +103,7 @@ module "example" {
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | 8.10.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -117,7 +118,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_compute_network_peering.hub_to_spoke (modules/gcp/stages/network-hub/main.tf#L152)
+- resource.google_compute_network_peering.hub_to_spoke (modules/gcp/stages/network-hub/main.tf#L169)
+- resource.terraform_data.hub_peering_limit (modules/gcp/stages/network-hub/main.tf#L152)
 
 
 ## Inputs
@@ -138,6 +140,7 @@ The following resources are created:
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | When true (the default), protects hub and DNS VPC resources from accidental deletion via<br/>terraform destroy. Set to false only during a planned teardown.<br/>IMPORTANT: Set to false and apply before attempting to destroy the hub network stack. | `bool` | `true` | no |
 | <a name="input_enable_ncc_hub"></a> [enable\_ncc\_hub](#input\_enable\_ncc\_hub) | Create a Network Connectivity Center hub in the hub project, with the hub VPC as its center spoke (and a producer spoke for its Private Service Access peering). Environment VPCs join it with connectivity = ncc. False (default) = VPC peering only. | `bool` | `false` | no |
 | <a name="input_hub_additional_regions"></a> [hub\_additional\_regions](#input\_hub\_additional\_regions) | Opt-in extra regions of the hub VPC (gcp.network.additional\_regions in config), keyed by region name: subnet\_cidrs (public, private, database; one regional subnet per tier, no overlap with the primary hub subnets or another region), optional secondary\_ranges for the private subnet, and nat (default true: a Cloud Router and Cloud NAT in the region). The DNS anchor VPC stays single-region. Empty (default) = single-region hub. | <pre>map(object({<br/>    subnet_cidrs = object({<br/>      public   = string<br/>      private  = string<br/>      database = string<br/>    })<br/>    secondary_ranges = optional(list(object({<br/>      range_name    = string<br/>      ip_cidr_range = string<br/>    })), [])<br/>    nat = optional(bool, true)<br/>  }))</pre> | `{}` | no |
+| <a name="input_hub_peering_limit"></a> [hub\_peering\_limit](#input\_hub\_peering\_limit) | Most environment peerings the hub VPC may carry. The PEERINGS\_PER\_NETWORK quota is 25 peerings per network by default; one is kept for the hub's own Private Service Access peering. Raise it only after the quota is raised. | `number` | `24` | no |
 | <a name="input_hub_project_number"></a> [hub\_project\_number](#input\_hub\_project\_number) | Numeric project number of the hub project (var.hub\_project\_id). It and dns\_project\_number are the only projects in the hub VPC-SC perimeter. Required when vpc\_sc\_access\_policy\_name is set. | `string` | `""` | no |
 | <a name="input_interconnects"></a> [interconnects](#input\_interconnects) | Cloud Interconnect VLAN attachments on the hub network (gcp.network.interconnect in config), keyed by attachment name (Dedicated or Partner). | <pre>map(object({<br/>    region            = string<br/>    interconnect_type = optional(string, "PARTNER")<br/>    router_name       = string<br/>    router_asn        = optional(number, 64512)<br/>    create_router     = optional(bool, true)<br/><br/>    # Dedicated interconnect settings<br/>    interconnect_self_link = optional(string)<br/>    vlan_tag               = optional(number)<br/>    bandwidth              = optional(string, "BPS_10G")<br/><br/>    # Partner interconnect settings<br/>    edge_availability_domain = optional(string, "AVAILABILITY_DOMAIN_1")<br/><br/>    # Common settings<br/>    mtu           = optional(number, 1440)<br/>    admin_enabled = optional(bool, true)<br/>    encryption    = optional(string, "NONE")<br/><br/>    # BGP settings<br/>    create_bgp_peer    = optional(bool, true)<br/>    interface_ip_range = optional(string)<br/>    peer_ip_address    = optional(string)<br/>    peer_asn           = optional(number, 65000)<br/>    enable_bfd         = optional(bool, false)<br/><br/>    advertised_ip_ranges = optional(list(object({<br/>      range       = string<br/>      description = optional(string)<br/>    })), [])<br/>  }))</pre> | `{}` | no |
 | <a name="input_internal_domain"></a> [internal\_domain](#input\_internal\_domain) | Internal domain for private DNS zone (e.g., 'mycompany.com') | `string` | `"internal.local"` | no |

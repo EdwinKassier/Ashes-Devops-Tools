@@ -561,3 +561,17 @@ run "spoke_additional_region_router_nat" {
     error_message = "An additional spoke region with nat = true must get its own Cloud Router and NAT."
   }
 }
+
+# gcp-workload passes the spoke VPC name from the gcp-projects contract.
+run "network_name_from_caller" {
+  command = plan
+
+  variables {
+    network = { name = "acme-dev-custom-vpc" }
+  }
+
+  assert {
+    condition     = output.network_name == "acme-dev-custom-vpc" && module.host.additional_region_subnets == {}
+    error_message = "network.name must name the spoke VPC."
+  }
+}

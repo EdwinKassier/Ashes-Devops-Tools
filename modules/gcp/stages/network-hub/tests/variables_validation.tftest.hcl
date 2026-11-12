@@ -447,3 +447,103 @@ run "rejects_prefixed_hub_project_number" {
 
   expect_failures = [var.hub_project_number]
 }
+
+# ── hub_peering_limit ──────────────────────────────────────────────────────────
+# A VPC carries at most 25 peerings by default, and the hub VPC also carries its
+# Private Service Access peering: more environments must move to NCC first.
+
+run "hub_peerings_over_the_limit_rejected" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    hub_peering_limit = 2
+    spoke_peerings = {
+      dev  = { network_self_link = "projects/p-dev/global/networks/mock-dev-vpc" }
+      uat  = { network_self_link = "projects/p-uat/global/networks/mock-uat-vpc" }
+      prod = { network_self_link = "projects/p-prod/global/networks/mock-prod-vpc" }
+    }
+  }
+
+  expect_failures = [terraform_data.hub_peering_limit]
+}
+
+run "hub_peerings_at_the_limit_accepted" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    hub_peering_limit = 2
+    spoke_peerings = {
+      dev = { network_self_link = "projects/p-dev/global/networks/mock-dev-vpc" }
+      uat = { network_self_link = "projects/p-uat/global/networks/mock-uat-vpc" }
+    }
+  }
+
+  assert {
+    condition     = terraform_data.hub_peering_limit.input == 2 && length(google_compute_network_peering.hub_to_spoke) == 2
+    error_message = "Peerings up to hub_peering_limit must plan."
+  }
+}
+
+run "rejects_zero_hub_peering_limit" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    hub_peering_limit = 0
+  }
+
+  expect_failures = [var.hub_peering_limit]
+}

@@ -17,7 +17,7 @@ variable "environment" {
 }
 
 variable "project_prefix" {
-  description = "Landing-zone name prefix (org.prefix). Names the VPC (<prefix>-<environment>-vpc) and the budget."
+  description = "Landing-zone name prefix (org.prefix). Names the VPC (<prefix>-<environment>-vpc, unless network.name is set) and the budget."
   type        = string
 
   validation {
@@ -102,8 +102,9 @@ variable "deletion_protection" {
 # --- Network --------------------------------------------------------------------
 
 variable "network" {
-  description = "Spoke VPC settings: flow_logs (aggregation_interval, sampling 0.0-1.0), flow_logs_retention_days for the BigQuery export, private_service_connect_target (all-apis | vpc-sc; null derives vpc-sc once the perimeter is enforced, else all-apis), and additional_regions: opt-in extra regions of the spoke VPC keyed by region name (subnet_cidrs public/private/database, optional secondary_ranges, nat default true for a Cloud Router and NAT in the region; empty = single-region)."
+  description = "Spoke VPC settings: name: the spoke VPC name (default <project_prefix>-<environment>-vpc; gcp-workload passes the gcp-projects contract value), flow_logs (aggregation_interval, sampling 0.0-1.0), flow_logs_retention_days for the BigQuery export, private_service_connect_target (all-apis | vpc-sc; null derives vpc-sc once the perimeter is enforced, else all-apis), and additional_regions: opt-in extra regions of the spoke VPC keyed by region name (subnet_cidrs public/private/database, optional secondary_ranges, nat default true for a Cloud Router and NAT in the region; empty = single-region)."
   type = object({
+    name = optional(string)
     flow_logs = optional(object({
       aggregation_interval = optional(string, "INTERVAL_5_SEC")
       sampling             = optional(number, 0.1)

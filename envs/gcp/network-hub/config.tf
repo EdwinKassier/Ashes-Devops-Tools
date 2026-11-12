@@ -95,6 +95,7 @@ locals {
           is_production           = try(tobool(e.is_production), null)
           vpc_sc_access_policy_id = try(tostring(e.vpc_sc_access_policy_id), null)
           automation_identities   = [for i in try(e.automation_identities, []) : tostring(i)]
+          spoke_network_name      = try(tostring(e.spoke_network_name), null)
         }
       }
     }

@@ -131,6 +131,7 @@ locals {
     is_production           = null
     vpc_sc_access_policy_id = null
     automation_identities   = []
+    spoke_network_name      = null
   })
 
   labels = merge({ environment = var.environment, managed-by = "terraform" }, local.env_config.labels, var.extra_labels)
@@ -209,6 +210,9 @@ module "environment" {
   }
 
   network = {
+    # The spoke VPC name gcp-projects publishes (gcp-network-hub peers with the
+    # same name). null = the stage's <project_prefix>-<environment>-vpc.
+    name = try(local.env_config.spoke_network_name, null)
     flow_logs = {
       aggregation_interval = var.log_config_aggregation_interval
       sampling             = var.log_config_flow_sampling
@@ -300,6 +304,18 @@ module "environment" {
       cluster_secondary_range_name  = var.gke_cluster_secondary_range_name
       services_secondary_range_name = var.gke_services_secondary_range_name
     }
+  }
+}
+
+# The hub side (hub-to-<env>) is created by gcp-network-hub only once this
+# environment's network exists, so the first apply leaves the spoke side
+# INACTIVE until gcp-network-hub runs again (ARC-5). A run trigger from this
+# workspace back to gcp-network-hub would close a cycle in the tfc-admin run
+# trigger graph, so the second run stays a runbook step and this check warns.
+check "hub_peering_active" {
+  assert {
+    condition     = local.hub_network == null || local.network_connectivity != "peering" || try(module.environment.vpc_peerings["hub-peering"].peering_state, "ACTIVE") != "INACTIVE"
+    error_message = "The hub peering of ${var.environment} is INACTIVE: queue a run of gcp-network-hub (docs/runbooks/add-environment.md step 5), then re-plan this workspace."
   }
 }
 
