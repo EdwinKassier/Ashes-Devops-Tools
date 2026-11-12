@@ -1147,6 +1147,18 @@ side (all mock-tested, secure defaults):
   Terraform workspace. The code behind a module source pinned to this
   repository's release tag (`git::…?ref=vX.Y.Z`) is not scanned either; it
   was checked when that release was cut.
+- **Workload SAs keep `workloadIdentityPoolAdmin` (SEC-10).** app-services
+  needs it to create the app-deploy pool. `custom.wifProviderTenantPinned` pins
+  each GitHub provider condition to the owner. The mandatory OPA policy
+  `gcp_wif_principalset_pinned` denies a principalSet on the whole pool, the
+  owner, a repository name or a bare ref when the run is planned. Two cases
+  are advisory only (`gcp_wif_principalset_repo_wide`): a binding whose member
+  is unknown at plan time (the pool is created in the same run), and a binding
+  on `attribute.repository_id` alone, which trusts every branch and
+  environment of one repository. The policy also acts only on runs that HCP
+  Terraform judges with the policy sets attached; a direct API call with the
+  workload apply SA's credentials is not checked. GitLab bindings on
+  `attribute.project_path` are not checked.
 - **Delegable infrastructure roles (SEC-4 residual).** `compute.admin`,
   `dns.admin`, `container.admin` and `cloudsql.admin` stay delegable. A
   projects-apply compromise can grant itself those on an environment folder.

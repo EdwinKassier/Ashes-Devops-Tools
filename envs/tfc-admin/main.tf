@@ -1377,8 +1377,8 @@ import {
 # ── OPA policy sets (both sourced from this repo via VCS) ──────────────────
 # Two sets, attached to every managed workspace:
 #   - <prefix>opa-guardrails (policies/opa): enforcement per policy in its
-#     policies.hcl, 11 mandatory (public exposure, identity, encryption,
-#     plan-time code execution) + 3 advisory. NOT overridable by default (policy_set_overridable = false), so
+#     policies.hcl, 12 mandatory (public exposure, identity, encryption,
+#     plan-time code execution) + 4 advisory. NOT overridable by default (policy_set_overridable = false), so
 #     a mandatory failure is a hard stop no "Manage Policy Overrides" user can
 #     wave through.
 #   - <prefix>destructive-change-guard (policies/opa-destructive): the

@@ -386,6 +386,32 @@ only log-named buckets. The `<prefix>opa-guardrails` set stays non-overridable.
 skipping it. A single-cloud estate sets the `TFC_DRIFT_WORKSPACES` repository
 variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
+#### Wildcard workload identity bindings are denied (policies, breaking)
+
+**Breaking: the non-overridable guardrails set now fails runs that passed
+before.** The new mandatory policy `gcp_wif_principalset_pinned` denies a
+workload identity member
+`principalSet://iam.googleapis.com/projects/<n>/locations/global/workloadIdentityPools/<pool>/<suffix>`
+when `<suffix>` is `*`, `attribute.repository_owner_id/...`,
+`attribute.repository/...` or `attribute.ref/...`. It checks every
+`google_*_iam_member`, `google_*_iam_binding` and `google_*_iam_policy`, for
+any role. No root in this repo emits one of these members. A fork can emit
+one, for example:
+
+- through `modules/gcp/iam/workload-identity` with a `github_sa_bindings`
+  entry that has no `repository_id` and an empty `github_allowed_refs` (the
+  member is `attribute.repository/<owner>/<repo>`);
+- through `modules/gcp/iam/service-account` `workload_identity_members`, or a
+  hand-written IAM resource.
+
+Before the upgrade, search your plans or code for those member forms. Bind
+`attribute.repo_ref/<repository_id>/<ref>`, `attribute.repo_env/<repository_id>/<environment>`
+or `attribute.repo_ref_env/<repository_id>/<ref>/<environment>` instead. For
+the workload-identity module, set `repository_id` and `github_allowed_refs`.
+A member bound on `attribute.repository_id/<id>` alone, or a member that is
+unknown at plan time, is reported by the advisory
+`gcp_wif_principalset_repo_wide` and does not block the run.
+
 ### AWS
 
 #### The phase-0 management stack: plan-role read deny, admin role trusts only aws-organization (breaking)

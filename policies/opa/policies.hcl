@@ -69,6 +69,13 @@ policy "gcp_cloud_run_no_public_url" {
   enforcement_level = "mandatory"
 }
 
+# A workload identity principalSet must pin one repository and a ref or
+# environment: no whole pool, owner, repository name or bare ref.
+policy "gcp_wif_principalset_pinned" {
+  query             = "data.terraform.policies.gcp_wif_principalset_pinned.deny"
+  enforcement_level = "mandatory"
+}
+
 # ── Mandatory: plan-time code execution ─────────────────────────────────────
 # No provisioners outside envs/saas -> saas_workload -> vault_secrets (exact
 # call chain and sources), no data "external" / data "http", only allowlisted
@@ -87,6 +94,11 @@ policy "aws_s3_bucket_public_access_block_present" {
 
 policy "aws_iam_federated_trust_unknown" {
   query             = "data.terraform.policies.aws_iam_federated_trust_pinned.federated_unknown"
+  enforcement_level = "advisory"
+}
+
+policy "gcp_wif_principalset_repo_wide" {
+  query             = "data.terraform.policies.gcp_wif_principalset_pinned.repo_wide"
   enforcement_level = "advisory"
 }
 
