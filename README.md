@@ -154,7 +154,7 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 | Hub interconnect / transit | [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/), [`network/vpc-peering`](modules/gcp/network/vpc-peering/), [`network/ncc-hub`](modules/gcp/network/ncc-hub/) + [`network/ncc-spoke`](modules/gcp/network/ncc-spoke/) (opt-in), [`network/interconnect`](modules/gcp/network/interconnect/) | [`network/transit-gateway`](modules/aws/network/transit-gateway/) |
 | Private service access | [`network/private-service-connect`](modules/gcp/network/private-service-connect/), [`network/private-service-access`](modules/gcp/network/private-service-access/) | [`network/vpc-endpoints`](modules/aws/network/vpc-endpoints/) |
 | DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/) |
-| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA-VPN; supported in `stages/net-hub`, exposed through `network-hub` and config by a planned follow-up) | [`network/vpn`](modules/aws/network/vpn/) *(library-only)* (Site-to-Site) |
+| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA VPN on the hub; `gcp.network.vpn` + `vpn_shared_secret_wo` on `gcp-network-hub`) | [`network/vpn`](modules/aws/network/vpn/) (Site-to-Site on the Transit Gateway; `aws.network.vpn`) |
 | Egress NAT | [`network/nat`](modules/gcp/network/nat/) | *(native, in `network/vpc`)* |
 | Egress FQDN control | [`network/secure-web-proxy`](modules/gcp/network/secure-web-proxy/) (opt-in preview, hub + PSC) | [`network/network-firewall`](modules/aws/network/network-firewall/) (egress domain allowlist) |
 | Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) *(library-only)* | [`network/load-balancer`](modules/aws/network/load-balancer/) (ALB/NLB) |
@@ -294,7 +294,6 @@ These modules are tested and documented but **no `envs/**` root composes them** 
 | [`gcp/governance/private-ca`](modules/gcp/governance/private-ca/) | Private CA (CAS) is opt-in; no root needs internal certificates by default |
 | [`aws/network/dns-records`](modules/aws/network/dns-records/) | Write records into an existing zone (DNS unification); caller-owned records |
 | [`aws/network/api-gateway`](modules/aws/network/api-gateway/) | Opt-in API edge per workload |
-| [`aws/network/vpn`](modules/aws/network/vpn/) | Site-to-Site VPN needs customer-gateway details; opt-in |
 
 </details>
 

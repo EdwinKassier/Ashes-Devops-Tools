@@ -124,7 +124,7 @@ graph TB
 - **Private connectivity.** Private Service Access and Private Service Connect are **on by default** in the host stage, so managed services and Google APIs are reached privately. GCP uses per-project CIDRs rather than an AWS-style IPAM.
 - **Firewall — two layers.** VPC-level **network firewall** rules enforce tier-to-tier flow (api-gw→public 443/80, public→compute, compute→db, IAP SSH/RDP from `35.235.240.0/20`, health checks from `35.191.0.0/16` + `130.211.0.0/22`, deny-db-egress, and a logged deny-all-ingress backstop). Folder-level **hierarchical firewall** (`policy-hub-shared`) denies inbound 22/3389 from the internet org-wide (use IAP instead).
 - **Edge (opt-in).** Cloud Armor (OWASP / adaptive protection / Log4Shell) is available per host; at the workload-env level it defaults **off** and is enabled per environment.
-- **Hybrid (opt-in, off by default).** HA-VPN, Dedicated/Partner Interconnect, packet mirroring, and internal load balancers are present in the host stage and enabled per environment as needed.
+- **Hybrid (opt-in, off by default).** HA VPN and Dedicated/Partner Interconnect attach to the **hub** VPC through `gcp-network-hub` (`gcp.network.vpn`, `gcp.network.interconnect`; the pre-shared key is the write-only `vpn_shared_secret_wo`). Packet mirroring and internal load balancers are library modules you compose yourself.
 
 ---
 
@@ -171,7 +171,7 @@ Unlike the AWS baseline (which is dominated by always-on Config / Security Lake 
 | Cloud Armor | Per-policy + per-rule + request charges. | `enable_cloud_armor` | Host: `true`; workload env: `false` |
 | Cloud NAT | Per-gateway-hour + per-GB processed. | integral to `enable_networking` | On |
 | Budgets | Free, but define the alerting envelope. | `monthly_budget_limit` / `monthly_budget_amount` (`> 0` to enable) | Workload: `0` (off); org: `1000` |
-| Interconnect / VPN / packet mirroring | Per-hour + per-GB. | `enable_vpn`, `interconnects`, `packet_mirroring` | Off |
+| Interconnect / VPN / packet mirroring | Per-hour + per-GB. | `gcp.network.vpn.enabled`, `gcp.network.interconnect`, `packet_mirroring` (library module) | Off |
 
 Right-sizing guidance: for cost-sensitive non-prod, leave Cloud Armor and hybrid connectivity off (the defaults), keep flow-logs export but shorten `flow_logs_retention_days`, and consider disabling BigQuery audit analytics where the GCS sink suffices. Keep the full set on for prod.
 
@@ -214,7 +214,7 @@ This table maps each Google enterprise-foundations / CIS control to the module a
 - **Cloud Billing → BigQuery export stream** — the dataset + IAM are created by Terraform, but toggling the export in the Billing console is manual.
 - **TFC backend organization** — supplied through the `TF_CLOUD_ORGANIZATION` environment variable (the `cloud` block takes no `-backend-config`).
 
-**Gated / opt-in** (present but default-off, enable per environment): Cloud Armor at the workload root (`enable_cloud_armor`), HA-VPN (`enable_vpn`), Interconnect (`interconnects`), packet mirroring, CDN (`enable_cdn`), API Gateway (`enable_api_gateway`), the dedicated logging project (`logging_project_id`). The dedicated logging project, plus VPC-SC service expansion, are PREVIEW separation-of-duties items — see [`known-gaps.md`](../known-gaps.md).
+**Gated / opt-in** (present but default-off, enable per environment): Cloud Armor at the workload root (`enable_cloud_armor`), HA VPN (`gcp.network.vpn.enabled`), Interconnect (`gcp.network.interconnect`), packet mirroring (library module), CDN (`enable_cdn`), API Gateway (`enable_api_gateway`), the dedicated logging project (`logging_project_id`). The dedicated logging project, plus VPC-SC service expansion, are PREVIEW separation-of-duties items — see [`known-gaps.md`](../known-gaps.md).
 
 ---
 
