@@ -230,7 +230,10 @@ locals {
     cidrhost("${split("/", c)[0]}/${split("/", local.cidr_aws_top)[1]}", 0) != cidrhost(local.cidr_aws_top, 0)
   ]
   # Explicit IPAM allocation (the aws-workload default) fails at apply when the
-  # block is outside the home-region pool, so check it here.
+  # block is outside the home-region pool, so check it here. The static hub
+  # CIDRs (inspection, egress) may sit outside the pool: IPAM cannot allocate a
+  # range outside the pool, so they cannot conflict there. They stay in the
+  # overlap check above.
   cidr_aws_home_region = try(tostring(local.lz.org.regions.aws), "eu-west-2")
   cidr_aws_pool = local.enable_aws ? try(
     tostring(local.lz.aws.network.regional_cidrs[local.cidr_aws_home_region]),
@@ -238,7 +241,7 @@ locals {
   ) : null
   cidr_outside_aws_pool = local.cidr_aws_pool == null || !can(cidrnetmask(coalesce(local.cidr_aws_pool, "x"))) ? [] : [
     for k, c in local.cidr_aws_ranges : "${k} (${c}) is outside the ${local.cidr_aws_home_region} regional pool (${local.cidr_aws_pool})"
-    if tonumber(split("/", c)[1]) < tonumber(split("/", local.cidr_aws_pool)[1]) ||
-    cidrhost("${split("/", c)[0]}/${split("/", local.cidr_aws_pool)[1]}", 0) != cidrhost(local.cidr_aws_pool, 0)
+    if startswith(k, "aws.workload_environments.") && (tonumber(split("/", c)[1]) < tonumber(split("/", local.cidr_aws_pool)[1]) ||
+    cidrhost("${split("/", c)[0]}/${split("/", local.cidr_aws_pool)[1]}", 0) != cidrhost(local.cidr_aws_pool, 0))
   ]
 }

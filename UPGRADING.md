@@ -48,7 +48,7 @@ Manual steps for the next release, grouped by area. A breaking change
 **Breaking: tfc-admin now fails its plan for configs that passed before.** Spoke VPCs request their `vpc_cidr` from the IPAM pool, so two workloads on the same range collide, and a range outside the home-region pool fails at apply. tfc-admin now fails when:
 
 - two `aws.workload_environments` entries share a `vpc_cidr`, or both omit it (an omitted `vpc_cidr` counts as the built-in `10.72.0.0/16`); or
-- a fixed AWS range (a workload `vpc_cidr`, `inspection_cidr` or `egress_cidr`) is outside `aws.network.regional_cidrs.<org.regions.aws>` (default `10.64.0.0/12`).
+- a workload `vpc_cidr` is outside `aws.network.regional_cidrs.<org.regions.aws>` (default `10.64.0.0/12`). The static hub ranges (`inspection_cidr`, `egress_cidr`) may sit outside the pool, but they must not overlap any workload or GCP range.
 
 The error names each config key and the two environments. Before you plan tfc-admin:
 

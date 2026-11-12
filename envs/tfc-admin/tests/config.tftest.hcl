@@ -398,3 +398,39 @@ run "workloads_sharing_the_default_vpc_cidr_fail_the_plan" {
 
   expect_failures = [terraform_data.input_contract]
 }
+
+# A static hub CIDR outside the regional pool cannot conflict with IPAM, so it
+# passes while it overlaps nothing.
+run "hub_cidr_outside_the_pool_passes" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-hub-outside-pool.yaml"
+  }
+
+  assert {
+    condition     = local.cidr_all["aws.network.inspection_cidr"] == "10.100.0.0/16" && length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_outside_aws_pool) == 0
+    error_message = "A hub inspection_cidr outside the pool (inside top_cidr) must be accepted."
+  }
+}
+
+# A hub CIDR outside the pool still fails when it overlaps a workload range.
+run "hub_cidr_outside_the_pool_overlapping_a_workload_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-hub-overlap.yaml"
+  }
+
+  assert {
+    condition     = contains(local.cidr_overlaps, "aws.network.egress_cidr (10.96.0.0/16) overlaps aws.workload_environments.dev.vpc_cidr (10.96.0.0/16)")
+    error_message = "A hub CIDR outside the pool must still be checked against every workload range."
+  }
+
+  assert {
+    condition     = !anytrue([for o in local.cidr_outside_aws_pool : strcontains(o, "aws.network.")])
+    error_message = "Hub CIDRs are not part of the regional pool check."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}

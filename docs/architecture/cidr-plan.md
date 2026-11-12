@@ -71,8 +71,9 @@ tfc-admin reads the whole config file and fails its plan when:
 - two fixed AWS VPC ranges overlap, where a workload without `vpc_cidr` counts as
   `10.72.0.0/16`, so two such workloads overlap;
 - a fixed AWS VPC range is outside `aws.network.top_cidr`; or
-- a fixed AWS VPC range is outside the home-region regional pool
-  (`aws.network.regional_cidrs.<org.regions.aws>`, default `10.64.0.0/12`).
+- an `aws.workload_environments.*.vpc_cidr` is outside the home-region regional pool
+  (`aws.network.regional_cidrs.<org.regions.aws>`, default `10.64.0.0/12`). The static hub
+  ranges may sit outside the pool; they stay in the overlap checks above.
 
 The check reads only the config file. A CIDR set as an explicit TFC variable on a
 network workspace is not checked, so keep CIDRs in the config file.
