@@ -1232,6 +1232,18 @@ In an environment with `is_production`, app-service databases are created with R
 
 In a production environment, every `app_services` entry must set `service_team`, so app principals do not share the Shared VPC host project. To keep a service in the host project, set `enable_host_project_workloads = true` on the workload.
 
+#### The app deploy identity pins the GitHub environment (gcp-workload, breaking)
+
+**Breaking.** A service with `github` but neither `ref` nor `environment` used to trust every branch, tag and environment of its repository. Its deploy SA now trusts only the GitHub environment named after the landing-zone environment key (`gcp.environments.<env>`, the stage's `var.environment`). The binding moves from `attribute.repository_id/<id>` to `attribute.repo_env/<id>/<env>`. This matches AWS app-services.
+
+GitHub adds the `environment` claim to the OIDC token only for a job that declares `environment:`. A deploy job without it maps to `<id>/-` and matches no binding, so `google-github-actions/auth` fails. Before you apply `gcp-workload-<env>`, do one of these for each such service:
+
+1. Add `environment: <env>` to the deploy job (for example `environment: dev` in `gcp-workload-dev`), and create that GitHub environment in the app repository. Move the deploy variables to it if you like.
+2. Or set `github.ref` (for example `refs/heads/main`) on the service entry. The binding is then `attribute.repo_ref/<id>/<ref>`, and the job needs no environment.
+3. Or set `github.environment` to the GitHub environment the job already uses.
+
+The apply replaces the `roles/iam.workloadIdentityUser` binding (`member` is immutable). Do not run a deploy during the apply.
+
 #### Admin containment follows the break-glass group (gcp-organization, gcp-guardrails)
 
 Admin containment is now on when `gcp.break_glass_group` is set, even with no production environment. To keep it off, set `gcp.admin_containment: false`.

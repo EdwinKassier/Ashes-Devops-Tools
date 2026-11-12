@@ -17,7 +17,8 @@
 #   - deploy SA               <service>-deploy@... with run.developer on the
 #     service, artifactregistry.writer on the repo, serviceAccountUser on the
 #     runtime SA only; impersonable only from this repo's numeric repository_id
-#     (and the ref / GitHub environment you declared).
+#     plus the ref and/or GitHub environment you declared. With neither, the
+#     GitHub environment is the landing-zone environment key (<env>).
 #
 # Set these GitHub repository (or environment) VARIABLES from
 #   terraform -chdir=envs/gcp/workload output -json app_github_actions
@@ -29,8 +30,12 @@
 #   CLOUD_RUN_SERVICE  <service>
 #   IMAGE_REPOSITORY   <region>-docker.pkg.dev/<project>/<service>/<service>
 #
-# If the app_services entry sets github.environment, add `environment: <name>`
-# to the job; if it sets github.ref, trigger only from that ref (as below).
+# The job declares `environment: <name>` (below). GitHub puts the environment
+# claim in the OIDC token only for a job that declares one, and the deploy SA is
+# bound to it unless the entry sets only github.ref. <name> is
+# github.environment, or the landing-zone environment key when the entry sets
+# neither ref nor environment. If the entry sets github.ref, trigger only from
+# that ref (as below).
 #
 # Action pinning: every action is pinned to a full commit SHA (the same SHAs as
 # this repo's own workflows); keep them current with Dependabot or Renovate.
@@ -59,7 +64,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # environment: dev # set when app_services.<svc>.github.environment is set
+    # github.environment, or the env key (gcp-workload-dev -> dev) when the
+    # entry sets neither ref nor environment. A job without it is refused.
+    environment: dev
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

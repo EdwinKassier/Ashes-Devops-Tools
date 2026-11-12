@@ -27,7 +27,7 @@ from `gcp-projects`), on the **environment Shared VPC**, not the hub.
 | Cloud Run v2 job (instead, with `runtime = "cloud-run-job"`) | `<svc>` | Run to completion, no URL: `job = { task_count, parallelism, max_retries }`, `timeout` is the task timeout. Same runtime SA, secrets, database and Direct VPC egress as a service; `invoker_members` get `run.invoker` on the job (start executions) and the deploy SA `run.developer`. No request alerts or SLO; `enable_unauthenticated` is rejected. |
 | SLO (optional `slo`) | `<svc>-<availability\|latency>` | `modules/gcp/monitoring/slo` on a basic `CLOUD_RUN` monitored service `cloud-run-<svc>`: `slo = { goal = 0.999 }` (availability) or `slo = { sli_type = "latency", latency_threshold = "0.5s" }`; `enable_burn_rate_alert = true` pages the `app_alert_notification_channel_ids`. Cloud Run services only. |
 | Cloud SQL Postgres (optional `database`) | `<svc>-db` | Private IP only through the env VPC's Private Service Access (the host stage creates it by default: `enable_private_service_access = true`). TLS-only, backups + PITR, IAM database auth. The runtime SA is the IAM database user. Edition `ENTERPRISE` with `db-custom-1-3840`. |
-| Deploy identity (optional `github`) | `<svc>-deploy@<host>.iam.gserviceaccount.com` | Impersonable only through the app-deploy WIF pool, by the GitHub repo's **immutable numeric `repository_id`** (optionally a ref and/or a GitHub environment). Roles: `run.developer` on the service, `artifactregistry.writer` on the repo, `iam.serviceAccountUser` on the runtime SA only. |
+| Deploy identity (optional `github`) | `<svc>-deploy@<host>.iam.gserviceaccount.com` | Impersonable only through the app-deploy WIF pool, by the GitHub repo's **immutable numeric `repository_id`** plus a ref and/or a GitHub environment. With neither `ref` nor `environment`, the GitHub environment is the landing-zone environment key (`dev` below), so the deploy job must declare `environment: dev`. No binding trusts the whole repository. Roles: `run.developer` on the service, `artifactregistry.writer` on the repo, `iam.serviceAccountUser` on the runtime SA only. |
 
 The app-deploy Workload Identity pool (`apps-<env>`, provider `github`) lives in
 the env host project, separate from the infrastructure pool that `gcp-bootstrap`
@@ -76,7 +76,8 @@ gcp:
             repository_id: "987654321"        # immutable numeric ID
             repository: acme/orders-api       # informational only
             ref: refs/heads/main              # optional: only this ref may deploy
-            # environment: dev                # optional: only this GitHub environment
+            # environment: dev                # optional: only this GitHub environment.
+            #   With neither ref nor environment it is the env key (dev).
 ```
 
 The deploy identity also needs two workspace-level settings, which are not
@@ -126,8 +127,10 @@ terraform -chdir=envs/gcp/workload output -json app_github_actions
 ```
 
 Set each key as a GitHub Actions **variable** (not a secret: none of them is
-sensitive) on the app repository, or on the GitHub environment if you declared
-`github.environment`. Then copy
+sensitive) on the app repository, or on the GitHub environment the deploy job
+uses. The deploy job must declare `environment: <name>` unless the entry sets
+only `ref`. `<name>` is `github.environment`, or the landing-zone environment key
+(`dev`) when the entry sets neither `ref` nor `environment`. Then copy
 [`examples/app-delivery/cloud-run-delivery.example.yml`](../../examples/app-delivery/cloud-run-delivery.example.yml)
 to `.github/workflows/deploy.yml` in the app repository. Its core steps are:
 
@@ -240,9 +243,16 @@ These items are verified by mocked plan tests only:
   `ref`/`environment` constraints. The provider condition only pins the owner
   (`assertion.repository_owner_id == "<id>"`); each deploy SA is bound to the
   principalSet of its own `(repository_id, ref, environment)` tuple
-  (`attribute.repo_ref_env`, `repo_ref`, `repo_env` or `repository_id`), so a
-  token reaches only the deploy SA whose constraint it satisfies. A service that
-  declares neither `ref` nor `environment` accepts any ref of the repository.
+  (`attribute.repo_ref_env`, `repo_ref` or `repo_env`), so a token reaches only
+  the deploy SA whose constraint it satisfies. A service that declares neither
+  `ref` nor `environment` is bound to the GitHub environment named after the
+  landing-zone environment (`repo_env/<repository_id>/<env>`). No binding
+  accepts every ref of a repository.
+- **The `environment:` key.** GitHub adds the `environment` claim to the OIDC
+  token only when the job declares `environment:`. A job without it maps to
+  `<repository_id>/-` and matches no `repo_env` or `repo_ref_env` binding, so
+  authentication fails. Only a service that sets `ref` and no `environment`
+  accepts a job without `environment:`.
 - **Pool IDs.** A WIF pool ID stays reserved for 30 days after deletion. Set
   `app_deploy_wif_pool_id` if you need to re-create a pool sooner.
 

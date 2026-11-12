@@ -455,6 +455,11 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   now grants the standing `organizationAdmin` of the org admin groups. gcp-organization checks its
   grants and its org admins against the gcp-bootstrap contract at plan time, and fails when that
   contract is older than this release. See `UPGRADING.md`.
+- **GCP app-deploy WIF is never repository-wide (SEC-5, breaking).** A service with `github` but
+  neither `ref` nor `environment` bound its deploy SA on `attribute.repository_id`, so every
+  branch, tag and environment of the repository could deploy, also in production. It is now bound
+  on `attribute.repo_env/<repository_id>/<var.environment>`, as AWS app-services does. The deploy
+  job must declare `environment: <env>`, or the entry sets `ref`. See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

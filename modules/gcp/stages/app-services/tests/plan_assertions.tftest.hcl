@@ -80,9 +80,11 @@ run "one_service_full_golden_path" {
   }
 
   # WIF binding keys on the IMMUTABLE numeric repository_id, never the name.
+  # With neither ref nor environment it is pinned to the GitHub environment
+  # named after var.environment, never the whole repository.
   assert {
-    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repository_id/123456789"
-    error_message = "the deploy SA WIF binding must use principalSet .../attribute.repository_id/<id>."
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_env/123456789/dev"
+    error_message = "with neither ref nor environment, the deploy SA must be pinned to the GitHub environment named after var.environment (as AWS app-services does), never to the whole repository."
   }
 
   assert {
@@ -213,8 +215,9 @@ run "env_only_service_binds_repo_env" {
   }
 }
 
-# Declares neither -> bound on attribute.repository_id (any ref, any env).
-run "bare_service_binds_repository_id" {
+# Declares neither -> bound on attribute.repo_env with var.environment as the
+# GitHub environment. No binding trusts every ref and environment of a repo.
+run "bare_service_pins_var_environment" {
   command = plan
 
   variables {
@@ -225,8 +228,49 @@ run "bare_service_binds_repository_id" {
   }
 
   assert {
-    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repository_id/123"
-    error_message = "a service declaring neither ref nor environment must bind attribute.repository_id/<repo>."
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_env/123/dev"
+    error_message = "a service declaring neither ref nor environment must bind attribute.repo_env/<repo>/<var.environment>."
+  }
+}
+
+run "no_service_binding_is_repository_wide" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123" } }
+      web = { github = { repository_id = "456", ref = "refs/heads/main" } }
+      ops = { github = { repository_id = "789", environment = "dev-approval" } }
+      job = { github = { repository_id = "321", ref = "refs/heads/main", environment = "prod" } }
+    }
+  }
+
+  assert {
+    condition     = alltrue([for k, m in google_service_account_iam_member.deploy_wif : !strcontains(m.member, "/attribute.repository_id/")])
+    error_message = "no deploy SA may trust every branch and environment of a repository."
+  }
+
+  assert {
+    condition     = endswith(google_service_account_iam_member.deploy_wif["web"].member, "/attribute.repo_ref/456/refs/heads/main")
+    error_message = "a service that sets only ref stays pinned to that ref."
+  }
+
+  # End to end: the attribute each principalSet tests is one the provider
+  # maps from the token, and every binding is checked (4 services, 4 members).
+  assert {
+    condition = length(google_service_account_iam_member.deploy_wif) == 4 && alltrue([
+      for k, m in google_service_account_iam_member.deploy_wif :
+      contains(keys(google_iam_workload_identity_pool_provider.github[0].attribute_mapping), "attribute.${regex("/attribute\\.([a-z_]+)/", m.member)[0]}")
+    ])
+    error_message = "every deploy SA principalSet must test an attribute that the GitHub provider's attribute_mapping produces."
+  }
+
+  # repo_env maps a token without an environment claim to "-", so a job that
+  # does not declare `environment:` never matches a repo_env binding.
+  assert {
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_mapping["attribute.repo_env"] == "assertion.repository_id + '/' + (has(assertion.environment) ? assertion.environment : '-')"
+    error_message = "attribute.repo_env must be <repository_id>/<environment claim>, with '-' when the token has no environment claim."
   }
 }
 

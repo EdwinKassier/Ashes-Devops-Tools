@@ -194,8 +194,12 @@ variable "services" {
                            (Shared VPC subnet access is granted to its Cloud Run
                            service agent). Default: the host project.
       github   = {...}  -> deploy SA `<name>-deploy` bound via WIF to the GitHub
-                           repo's IMMUTABLE numeric repository_id (optionally a
-                           ref and/or GitHub environment). Needs enable_app_deploy_wif.
+                           repo's IMMUTABLE numeric repository_id plus `ref`
+                           and/or GitHub `environment`. With `environment` null
+                           and `ref` null, the GitHub environment is
+                           var.environment: the deploy job must declare
+                           `environment: <var.environment>`. There is no
+                           repository-wide binding. Needs enable_app_deploy_wif.
       secrets  = { ENV_VAR = { secret = "<secret id in the service project, or projects/<p>/secrets/<s>>" } }
                            -> env vars from Secret Manager; the runtime SA gets
                            secretAccessor on exactly those secrets.
@@ -274,6 +278,8 @@ variable "services" {
       enable_deletion_protection = optional(bool)
     }))
 
+    # Deploy identity. Bound on repository_id + ref and/or GitHub environment;
+    # environment null and ref null => environment = var.environment.
     github = optional(object({
       repository_id = string
       repository    = optional(string)

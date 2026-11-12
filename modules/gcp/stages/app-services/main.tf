@@ -7,7 +7,8 @@
  * project: an Artifact Registry docker repo, a least-privilege runtime SA, a Cloud
  * Run v2 service (internal ingress, Direct VPC egress, scale-to-zero, secrets from
  * Secret Manager), an optional private-IP Cloud SQL Postgres with IAM auth, and an
- * optional GitHub deploy identity (WIF, bound on the immutable repository_id),
+ * optional GitHub deploy identity (WIF, bound on the immutable repository_id
+ * plus a ref and/or a GitHub environment, never the whole repository),
  * per-service Cloud Monitoring alert policies (5xx ratio, p99 latency), an
  * optional SLO (availability or latency, with an optional burn-rate alert) and an
  * optional Pub/Sub topic + subscription + dead-letter topic.
@@ -149,15 +150,23 @@ locals {
   # its deploy SA is bound to (local.deploy_wif_member), so a token from
   # another repo, branch or environment of the same owner reaches no SA.
   wif_attribute_condition = "assertion.repository_owner_id == \"${coalesce(var.github_repository_owner_id, "unset")}\""
+  # Neither ref nor environment => the GitHub environment named after
+  # var.environment (the AWS app-services default). A binding on the bare
+  # repository_id would trust every branch, tag and environment of the repo.
+  # GitHub puts the `environment` claim only in tokens of jobs that declare
+  # `environment:`, so such a job must declare `environment: <env>`.
+  deploy_github_environment = {
+    for k, s in local.services_with_github : k => (
+      s.github.environment != null ? s.github.environment : (s.github.ref == null ? var.environment : null)
+    )
+  }
   deploy_wif_member = {
     for k, s in local.services_with_github : k => (
-      s.github.ref != null && s.github.environment != null
-      ? "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repo_ref_env/${s.github.repository_id}/${s.github.ref}/${s.github.environment}"
+      s.github.ref != null && local.deploy_github_environment[k] != null
+      ? "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repo_ref_env/${s.github.repository_id}/${s.github.ref}/${local.deploy_github_environment[k]}"
       : s.github.ref != null
       ? "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repo_ref/${s.github.repository_id}/${s.github.ref}"
-      : s.github.environment != null
-      ? "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repo_env/${s.github.repository_id}/${s.github.environment}"
-      : "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repository_id/${s.github.repository_id}"
+      : "principalSet://iam.googleapis.com/${local.wif_pool_name}/attribute.repo_env/${s.github.repository_id}/${local.deploy_github_environment[k]}"
     )
   }
 
@@ -502,8 +511,9 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   # CKV_GCP_125 only accepts an `assertion.sub == "repo:owner/name:..."` condition,
   # i.e. a MUTABLE repo name. This provider deliberately pins the immutable
   # numeric repository_owner_id in the condition, and each deploy SA is bound to
-  # a principalSet on the immutable repository_id (joined with the declared
-  # ref and/or environment), so only the declared tuple reaches a deploy SA.
+  # a principalSet on the immutable repository_id joined with a ref and/or a
+  # GitHub environment (var.environment when the service declares neither),
+  # so only that tuple reaches a deploy SA.
   # checkov:skip=CKV_GCP_125:Condition pins immutable assertion.repository_owner_id; per-service repository_id/ref/environment pins are the principalSet bindings (stronger than a name-based sub match).
   count = local.create_wif_provider ? 1 : 0
 

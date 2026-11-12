@@ -30,8 +30,9 @@
 #         principalSet://iam.googleapis.com/projects/<host-number>/locations/global/
 #           workloadIdentityPools/apps-<env>/attribute.repo_ref/<repository_id>/refs/heads/main
 #         (one string: join the two lines above with no space)
-#         (repo_env and repo_ref_env also exist; do not bind on attribute.repository_id
-#         alone, which trusts every branch of the repo).
+#         (repo_env and repo_ref_env also exist and need `environment: <name>`
+#         on the job; do not bind on attribute.repository_id alone, which
+#         trusts every branch of the repo).
 #   - Namespaced Kubernetes RBAC for that SA (applied by the platform team, not
 #     by this pipeline): a Role in the app namespace allowing get/list/watch/
 #     patch on deployments and get/list/watch on replicasets and pods, bound
