@@ -29,6 +29,10 @@ locals {
     # the database password stays a sensitive TFC variable).
     stacks   = try({ for k, v in local.lz.saas.stacks : k => v }, {})
     defaults = try(local.lz.saas.defaults, {})
+    # Residency allow list (AWS region names): saas.allowed_regions, else
+    # aws.allowed_regions, else empty (no check). See main.tf.
+    saas_allowed_regions = try([for r in local.lz.saas.allowed_regions : tostring(r)], null)
+    aws_allowed_regions  = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
   }
 
   # The stack this workspace deploys: explicit var.stack (tfc-admin sets it on

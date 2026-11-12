@@ -564,6 +564,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   (`gcp.environments.<env>.backup_vault`); the retention lock is never set by default. The
   workload folder roles gain `roles/backupdr.admin` (non-delegable) and `roles/backupdr.viewer`.
   PREVIEW. See `UPGRADING.md`.
+- **SaaS residency check and third-party register (breaking, CMP-11).** `envs/saas` fails the plan
+  when the Supabase region, or the AWS region behind the Vercel function region, is outside the new
+  `saas.allowed_regions` (else `aws.allowed_regions`). An unknown Vercel code fails closed. The
+  Vercel region lists follow Vercel's published table: `arn1`, `hkg1`, `syd1` and `yul1` are added
+  and `sea1` is removed. New `docs/compliance/third-parties.md` (DPA, BAA, subprocessors, exit plan
+  per provider) and matrix row DP-09. See `UPGRADING.md`.
+- **aws-backup is tagged `DataClassification = restricted`.** The backup account holds copies of
+  every data class, so its default tag moves from `confidential` to the highest class (in-place
+  tag update).
 - **No placeholder SecOps subscriber (breaking, CMP-6).** `aws-security` no longer subscribes
   `secops@example.com`. A production plan (`org.profile = production` or a production AWS workload
   environment) fails until `notifications.emails` or `aws_overrides.notification_subscribers` names

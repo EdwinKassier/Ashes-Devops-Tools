@@ -44,6 +44,13 @@ run "accepts_valid_values" {
     condition     = local.aws_default_tags["CostCenter"] == "cc-42" && local.aws_default_tags["Owner"] == "backup-team" && local.aws_default_tags["DataClass"] == "internal"
     error_message = "valid cost_center / owner / default_tags must reach the provider default_tags."
   }
+
+  # The backup account holds copies of every data class, so it is tagged with
+  # the highest one.
+  assert {
+    condition     = local.aws_default_tags["DataClassification"] == "restricted"
+    error_message = "aws-backup must default its DataClassification tag to restricted."
+  }
 }
 
 run "accepts_govcloud_partition_and_fixed_account_backup_role" {

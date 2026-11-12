@@ -59,9 +59,10 @@ locals {
       Environment = "shared"
       CostCenter  = local.cost_center
       Owner       = local.owner
-      # Org tag policy key (CMP-10): this root holds copies of workload data.
+      # Org tag policy key (CMP-10): this root holds copies of workload data of
+      # every class, so it carries the highest one.
       # Override with default_tags = { DataClassification = "..." }.
-      DataClassification = "confidential"
+      DataClassification = "restricted"
     },
     var.default_tags,
   )

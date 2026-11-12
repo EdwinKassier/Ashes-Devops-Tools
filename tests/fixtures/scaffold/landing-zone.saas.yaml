@@ -524,6 +524,14 @@ saas:
   # Supabase database password or service-role key, then re-apply saas-<name>
   # and each bridging workload. See docs/runbooks/saas-bootstrap.md.
   bridge_rotation: 1
+  # Data residency (CMP-11): AWS region names where Supabase and Vercel
+  # functions may run. The saas plan fails when the Supabase region, or the AWS
+  # region behind the Vercel function region (lhr1 = eu-west-2), is not listed.
+  # An unknown Vercel code fails closed. Absent = aws.allowed_regions; neither =
+  # no check. The Vercel CDN and edge cache are global and are not checked.
+  # See docs/compliance/third-parties.md.
+  # allowed_regions:
+  #   - eu-west-2
   # Per-stack settings for saas-<name> workspaces (stack = <name>): saas.stacks
   # wins over saas.defaults, and an explicit TFC variable wins over both. IDs and
   # names only. The Supabase database password stays a sensitive TFC variable

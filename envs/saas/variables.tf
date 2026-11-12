@@ -90,7 +90,7 @@ variable "supabase_database_password" {
 }
 
 variable "supabase_region" {
-  description = "Supabase deployment region slug (e.g. 'eu-west-2'). Null = saas.stacks.<stack>.supabase.region, else saas.defaults.supabase.region, else eu-west-2."
+  description = "Supabase deployment region slug, an AWS region name (e.g. 'eu-west-2'). Null = saas.stacks.<stack>.supabase.region, else saas.defaults.supabase.region, else eu-west-2. Must be in saas.allowed_regions (else aws.allowed_regions) when either is set."
   type        = string
   default     = null
 }
@@ -209,7 +209,7 @@ variable "vercel_framework" {
 }
 
 variable "vercel_serverless_region" {
-  description = "Vercel serverless function region code."
+  description = "Vercel serverless function region code (https://vercel.com/docs/regions). When saas.allowed_regions (else aws.allowed_regions) is set, the AWS region behind the code must be in it; an unknown code fails the plan."
   type        = string
   default     = "lhr1"
 }

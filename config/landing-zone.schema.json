@@ -1918,6 +1918,13 @@
           "type": "integer",
           "minimum": 1
         },
+        "allowed_regions": {
+          "description": "AWS region names where the saas root may process data (Supabase region, Vercel function region mapped to its AWS region). Absent = aws.allowed_regions; neither = no residency check.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "defaults": {
           "type": "object",
           "properties": {

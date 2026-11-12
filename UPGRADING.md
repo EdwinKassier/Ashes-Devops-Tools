@@ -2119,6 +2119,37 @@ or destroyed.
 
 ### SaaS and cross-cloud
 
+#### SaaS data residency check (saas, breaking, CMP-11)
+
+**Who:** forks that apply a `saas-<name>` workspace and set
+`saas.allowed_regions` or `aws.allowed_regions` in `config/landing-zone.yaml`.
+Without either key nothing changes.
+
+**What changes:** the `envs/saas` plan now fails when the stack would process
+data outside the allow list. The list holds AWS region names. It is
+`saas.allowed_regions` (new key), else `aws.allowed_regions`. The check reads:
+
+- the Supabase region (`supabase_region`), which is an AWS region name; and
+- the AWS region behind the Vercel function region (`vercel_serverless_region`),
+  from the table at <https://vercel.com/docs/regions> (for example `lhr1` is
+  `eu-west-2`). A code with no mapping fails the plan (fail closed).
+
+The Vercel CDN and edge cache are global; the check does not cover them. See
+`docs/compliance/third-parties.md`.
+
+The Vercel region lists in `modules/vercel/project` and the saas stage now
+match Vercel's table: `arn1`, `hkg1`, `syd1` and `yul1` are accepted, and
+`sea1` (not in the table) is rejected.
+
+**Before you plan `saas-<name>`:**
+
+1. If `aws.allowed_regions` is set and your SaaS stack runs in another region on
+   purpose, set `saas.allowed_regions` to the regions the stack may use.
+2. Otherwise move `supabase_region` or `vercel_serverless_region` into the list.
+   For an existing Supabase project, read the plan first: never apply a plan
+   that replaces a project that holds data. Migrate the data instead.
+3. If you use `sea1`, pick a listed region.
+
 #### npm settings must come from .npmrc in vault-secrets (saas, breaking)
 
 The bootstrap and reconcile provisioners now run `npm ci` under `env -i`. npm gets back only these environment variables, each one only when it is set:
@@ -2226,8 +2257,9 @@ Other changes in the same release:
 - **AWS `DataClassification` tag.** Every AWS root adds it to its
   `default_tags`: `aws-workload-<env>` from
   `aws.workload_environments.<env>.data_classification` (variable
-  `data_classification`, default `internal`), `aws-security` and `aws-backup`
-  `confidential`, the other shared roots `internal`. Override a shared root with
+  `data_classification`, default `internal`), `aws-security` `confidential`,
+  `aws-backup` `restricted` (it holds copies of every class), the other shared
+  roots `internal`. Override a shared root with
   `default_tags = { DataClassification = "..." }`. The first plan updates the
   tags of existing resources in place.
 
