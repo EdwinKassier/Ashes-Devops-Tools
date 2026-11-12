@@ -355,6 +355,11 @@ for extra in $(printf '%s\n' "$trigger_map" | awk '$2 !~ /^modules\// { print $2
   [ -d "$extra" ] || note "root_trigger_dirs lists $extra, which is not a directory"
 done
 
+echo "==> Allowlists of any-typed inputs match their stage types (scripts/check-any-allowlists.py)"
+# Each `type = any` input's key allowlist (<owner>/allowed_keys.tf) must equal the
+# attributes of the stage object it is forwarded to (scripts/any-allowlists.json).
+python3 -I scripts/check-any-allowlists.py >/dev/null || note "an any-typed input's allowlist drifted from its stage type (see the errors above)"
+
 echo "==> Example tfvars set no identity or placement inputs (scripts/check-example-tfvars.sh)"
 ./scripts/check-example-tfvars.sh >/dev/null || note "examples/*.tfvars.example sets an input config/landing-zone.yaml owns"
 

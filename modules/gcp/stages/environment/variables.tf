@@ -417,36 +417,22 @@ variable "app_services" {
   validation {
     condition = length([for k in flatten([
       for name, s in var.app_services : concat(
-        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "health_check_path", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
+        [for k in keys(s) : "${name}.${k}" if !contains(local.allowed_keys.app_services.self, k)],
         flatten([
-          for sub, allowed in {
-            artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]
-            database          = ["database_version", "edition", "tier", "databases", "enable_high_availability", "enable_point_in_time_recovery", "backup_location", "encryption_key_name", "enable_deletion_protection"]
-            github            = ["repository_id", "repository", "ref", "environment"]
-            alerts            = ["enabled", "error_ratio_threshold", "p99_latency_ms", "duration"]
-            job               = ["task_count", "parallelism", "max_retries"]
-            slo               = ["sli_type", "goal", "rolling_period_days", "latency_threshold", "enable_burn_rate_alert", "burn_rate_threshold", "burn_rate_lookback"]
-            pubsub            = ["enabled", "ack_deadline_seconds", "max_delivery_attempts", "message_retention_duration"]
-          } : [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+          for sub, allowed in local.allowed_keys.app_services :
+          [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)] if !contains(["self", "secrets"], sub)
         ]),
-        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(["secret", "version"], k)]]),
+        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(local.allowed_keys.app_services.secrets, k)]]),
       )
     ]) : k]) == 0
     error_message = "app_services has keys the services shape does not have (misspelled or unsupported): ${join(", ", [for k in flatten([
       for name, s in var.app_services : concat(
-        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "health_check_path", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
+        [for k in keys(s) : "${name}.${k}" if !contains(local.allowed_keys.app_services.self, k)],
         flatten([
-          for sub, allowed in {
-            artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]
-            database          = ["database_version", "edition", "tier", "databases", "enable_high_availability", "enable_point_in_time_recovery", "backup_location", "encryption_key_name", "enable_deletion_protection"]
-            github            = ["repository_id", "repository", "ref", "environment"]
-            alerts            = ["enabled", "error_ratio_threshold", "p99_latency_ms", "duration"]
-            job               = ["task_count", "parallelism", "max_retries"]
-            slo               = ["sli_type", "goal", "rolling_period_days", "latency_threshold", "enable_burn_rate_alert", "burn_rate_threshold", "burn_rate_lookback"]
-            pubsub            = ["enabled", "ack_deadline_seconds", "max_delivery_attempts", "message_retention_duration"]
-          } : [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+          for sub, allowed in local.allowed_keys.app_services :
+          [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)] if !contains(["self", "secrets"], sub)
         ]),
-        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(["secret", "version"], k)]]),
+        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(local.allowed_keys.app_services.secrets, k)]]),
       )
     ]) : k])}."
   }

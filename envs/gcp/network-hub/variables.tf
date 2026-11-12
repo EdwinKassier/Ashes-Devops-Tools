@@ -125,8 +125,24 @@ variable "ncc_preset_topology" {
 
 variable "vpn" {
   description = "HA VPN from the hub VPC to an on-premises or other-cloud gateway, off by default. Same shape as the net-hub vpn input: enabled, tunnel_count (1 or 2), router_asn, peer_asn, peer_gateway_ips, local_ips, peer_ips, advertised_ip_ranges, advertised_groups, site_to_site_data_transfer. Empty advertised_ip_ranges = the Cloud Router announces every hub subnet (ALL_SUBNETS) plus every environment CIDR (and 35.199.192.0/19 with hybrid_dns forward zones); set advertised_ip_ranges to announce exactly your own list. With enable_ncc_hub the tunnels also join the NCC hub as a hybrid spoke. Null = gcp.network.vpn from config/landing-zone.yaml, else off. The pre-shared key is never config: set vpn_shared_secret_wo."
-  type        = any
-  default     = null
+  # Untyped so this variable and the config-file value (JSON text) share one
+  # decode path, and so a misspelled key stays visible: an object type
+  # constraint would drop it silently. The validation rejects keys outside
+  # allowed_keys.tf in the effective value (this variable or the config file,
+  # decoded as in config.tf); the network-hub stage types and validates the values.
+  type    = any
+  default = null
+
+  validation {
+    condition = length(concat(
+      [for k in try(keys(jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))), []) : k if !contains(local.allowed_keys.vpn.self, k)],
+      flatten([for i, r in try(jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}")).advertised_ip_ranges, []) : [for k in try(keys(r), []) : "advertised_ip_ranges[${i}].${k}" if !contains(local.allowed_keys.vpn.advertised_ip_ranges, k)]]),
+    )) == 0
+    error_message = "vpn (or gcp.network.vpn in config/landing-zone.yaml) has keys the network-hub stage does not accept: ${join(", ", concat(
+      [for k in try(keys(jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))), []) : k if !contains(local.allowed_keys.vpn.self, k)],
+      flatten([for i, r in try(jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}")).advertised_ip_ranges, []) : [for k in try(keys(r), []) : "advertised_ip_ranges[${i}].${k}" if !contains(local.allowed_keys.vpn.advertised_ip_ranges, k)]]),
+    ))}."
+  }
 }
 
 variable "vpn_shared_secret_wo" {
@@ -158,14 +174,56 @@ variable "hybrid_dns" {
 
 variable "interconnects" {
   description = "Cloud Interconnect VLAN attachments on the hub VPC, keyed by attachment name (same shape as the net-hub interconnects input; region and router_name required). Null = gcp.network.interconnect from config/landing-zone.yaml, else none."
-  type        = any
-  default     = null
+  # Untyped so this variable and the config-file value (JSON text) share one
+  # decode path, and so a misspelled key stays visible: an object type
+  # constraint would drop it silently. The validation rejects keys outside
+  # allowed_keys.tf in the effective value (this variable or the config file,
+  # decoded as in config.tf); the network-hub stage types and validates the values.
+  type    = any
+  default = null
+
+  validation {
+    condition = length(flatten([
+      for name, ic in try(jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}")), {}) : concat(
+        [for k in try(keys(ic), []) : "${name}.${k}" if !contains(local.allowed_keys.interconnects.self, k)],
+        flatten([for i, r in try(ic.advertised_ip_ranges, []) : [for k in try(keys(r), []) : "${name}.advertised_ip_ranges[${i}].${k}" if !contains(local.allowed_keys.interconnects.advertised_ip_ranges, k)]]),
+      )
+    ])) == 0
+    error_message = "interconnects (or gcp.network.interconnect in config/landing-zone.yaml) has keys the network-hub stage does not accept: ${join(", ", flatten([
+      for name, ic in try(jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}")), {}) : concat(
+        [for k in try(keys(ic), []) : "${name}.${k}" if !contains(local.allowed_keys.interconnects.self, k)],
+        flatten([for i, r in try(ic.advertised_ip_ranges, []) : [for k in try(keys(r), []) : "${name}.advertised_ip_ranges[${i}].${k}" if !contains(local.allowed_keys.interconnects.advertised_ip_ranges, k)]]),
+      )
+    ]))}."
+  }
 }
 
 variable "hub_additional_regions" {
   description = "Opt-in extra regions of the hub VPC, keyed by region name (same shape as the network-hub stage hub_additional_regions input): subnet_cidrs (public, private, database), optional secondary_ranges and nat (default true: a Cloud Router and Cloud NAT in the region). CIDRs must not overlap the primary hub subnets or each other. Null = gcp.network.additional_regions from config/landing-zone.yaml, else none (single-region hub)."
-  type        = any
-  default     = null
+  # Untyped so this variable and the config-file value (JSON text) share one
+  # decode path, and so a misspelled key stays visible: an object type
+  # constraint would drop it silently. The validation rejects keys outside
+  # allowed_keys.tf in the effective value (this variable or the config file,
+  # decoded as in config.tf); the network-hub stage types and validates the values.
+  type    = any
+  default = null
+
+  validation {
+    condition = length(flatten([
+      for region, r in try(jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}")), {}) : concat(
+        [for k in try(keys(r), []) : "${region}.${k}" if !contains(local.allowed_keys.hub_additional_regions.self, k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(local.allowed_keys.hub_additional_regions.subnet_cidrs, k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(local.allowed_keys.hub_additional_regions.secondary_ranges, k)]]),
+      )
+    ])) == 0
+    error_message = "hub_additional_regions (or gcp.network.additional_regions in config/landing-zone.yaml) has keys the network-hub stage does not accept: ${join(", ", flatten([
+      for region, r in try(jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}")), {}) : concat(
+        [for k in try(keys(r), []) : "${region}.${k}" if !contains(local.allowed_keys.hub_additional_regions.self, k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(local.allowed_keys.hub_additional_regions.subnet_cidrs, k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(local.allowed_keys.hub_additional_regions.secondary_ranges, k)]]),
+      )
+    ]))}."
+  }
 }
 
 variable "vpc_sc_access_policy_name" {

@@ -651,6 +651,16 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Fixed
 
+- **Key allowlists of untyped inputs live in one place and are checked against the stage types
+  (IAC-4).** The `type = any` inputs keep a misspelled key visible, and a validation rejects keys
+  outside an allowlist. Each allowlist now lives in the owner's `allowed_keys.tf` (gcp-workload,
+  gcp-network-hub, aws-network and `modules/gcp/stages/environment`), and
+  `scripts/check-any-allowlists.py` (`make consistency`) fails when a list differs from the
+  attributes of the stage object it is forwarded to (`scripts/any-allowlists.json`), or when a
+  new `type = any` input has no allowlist. Every existing list matched its stage type. gcp-network-hub
+  `vpn`, `interconnects` and `hub_additional_regions` had no allowlist: a misspelled key in the
+  variable or in `gcp.network.vpn`, `interconnect` or `additional_regions` was dropped silently.
+  The plan now fails and names the key.
 - **Organization policies are checked against the real AWS size quotas (ARC-18).** The tests
   held the RCP to 10,240 characters, but AWS caps an RCP at 5,120 (an SCP at 10,240).
   `modules/aws/governance/organization-policy` now fails the plan when a rendered policy is over

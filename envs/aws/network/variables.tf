@@ -383,8 +383,8 @@ variable "vpn" {
   default = null
 
   validation {
-    condition     = length([for k in try(keys(var.vpn), []) : k if !contains(["customer_gateway_ip", "customer_gateway_bgp_asn", "static_routes_only", "onprem_cidrs", "tunnel_inside_cidrs", "enable_acceleration", "preshared_key_storage"], k)]) == 0
-    error_message = "vpn has keys the network-hub stage does not accept: ${join(", ", [for k in try(keys(var.vpn), []) : k if !contains(["customer_gateway_ip", "customer_gateway_bgp_asn", "static_routes_only", "onprem_cidrs", "tunnel_inside_cidrs", "enable_acceleration", "preshared_key_storage"], k)])}."
+    condition     = length([for k in try(keys(var.vpn), []) : k if !contains(local.allowed_keys.vpn.self, k)]) == 0
+    error_message = "vpn has keys the network-hub stage does not accept: ${join(", ", [for k in try(keys(var.vpn), []) : k if !contains(local.allowed_keys.vpn.self, k)])}."
   }
 }
 

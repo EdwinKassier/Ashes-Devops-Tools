@@ -203,3 +203,79 @@ run "hybrid_dns_variable_wins" {
     error_message = "An explicit hybrid_dns variable must win over the config file."
   }
 }
+
+# The vpn, interconnects and hub_additional_regions inputs are untyped (so a
+# misspelled key stays visible), and a validation rejects every key outside
+# allowed_keys.tf: the stage's object types would drop it silently. The
+# variable runs use nested typos; config_unknown_keys_fail uses top-level ones.
+run "vpn_unknown_key_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    vpn                      = { enabled = true, tunnel_count = 2, advertised_ip_ranges = [{ range = "10.0.0.0/16", desc = "hub" }] }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "interconnects_unknown_key_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    interconnects            = { "hub-partner-1" = { region = "europe-west1", router_name = "hub-ic-router", advertised_ip_ranges = [{ range = "10.0.0.0/16", descripton = "hub" }] } }
+  }
+
+  expect_failures = [var.interconnects]
+}
+
+run "hub_additional_regions_unknown_key_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    hub_additional_regions = {
+      "europe-west4" = {
+        subnet_cidrs     = { public = "10.2.0.0/24", privat = "10.2.16.0/24", database = "10.2.32.0/24" }
+        secondary_ranges = [{ range_name = "pods", ip_cidr_rang = "10.3.0.0/20" }]
+      }
+    }
+  }
+
+  expect_failures = [var.hub_additional_regions]
+}
+
+# The same check covers the config file (gcp.network.vpn, interconnect and
+# additional_regions), not only the variables.
+run "config_unknown_keys_fail" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../config/tests/gcp_network_unknown_keys.yaml"
+  }
+
+  expect_failures = [var.vpn, var.interconnects, var.hub_additional_regions]
+}
+
+run "known_keys_pass" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    vpn                      = { enabled = false, tunnel_count = 2, advertised_ip_ranges = [{ range = "10.0.0.0/16", description = "hub" }] }
+    interconnects            = { "hub-partner-1" = { region = "europe-west1", router_name = "hub-ic-router", vlan_tag = 100 } }
+    hub_additional_regions = {
+      "europe-west4" = {
+        subnet_cidrs     = { public = "10.2.0.0/24", private = "10.2.16.0/24", database = "10.2.32.0/24" }
+        secondary_ranges = [{ range_name = "pods", ip_cidr_range = "10.3.0.0/20" }]
+        nat              = false
+      }
+    }
+  }
+
+  assert {
+    condition     = local.interconnects["hub-partner-1"].vlan_tag == 100 && local.hub_additional_regions["europe-west4"].nat == false
+    error_message = "Inputs that use only the stage's keys must plan."
+  }
+}

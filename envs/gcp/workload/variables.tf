@@ -170,16 +170,16 @@ variable "additional_regions" {
   validation {
     condition = length([for k in flatten([
       for region, r in coalesce(var.additional_regions, {}) : concat(
-        [for k in keys(r) : "${region}.${k}" if !contains(["subnet_cidrs", "secondary_ranges", "nat"], k)],
-        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(["public", "private", "database"], k)],
-        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(["range_name", "ip_cidr_range"], k)]]),
+        [for k in keys(r) : "${region}.${k}" if !contains(local.allowed_keys.additional_regions.self, k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(local.allowed_keys.additional_regions.subnet_cidrs, k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(local.allowed_keys.additional_regions.secondary_ranges, k)]]),
       )
     ]) : k]) == 0
     error_message = "additional_regions has keys the stage does not accept: ${join(", ", [for k in flatten([
       for region, r in coalesce(var.additional_regions, {}) : concat(
-        [for k in keys(r) : "${region}.${k}" if !contains(["subnet_cidrs", "secondary_ranges", "nat"], k)],
-        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(["public", "private", "database"], k)],
-        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(["range_name", "ip_cidr_range"], k)]]),
+        [for k in keys(r) : "${region}.${k}" if !contains(local.allowed_keys.additional_regions.self, k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(local.allowed_keys.additional_regions.subnet_cidrs, k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(local.allowed_keys.additional_regions.secondary_ranges, k)]]),
       )
     ]) : k])}."
   }
@@ -699,29 +699,19 @@ variable "vm_backup_schedules" {
   validation {
     condition = length([for k in flatten([
       for name, sch in coalesce(var.vm_backup_schedules, {}) : concat(
-        [for k in keys(sch) : "${name}.${k}" if !contains(["daily_schedule", "weekly_schedule", "hourly_schedule", "retention_policy", "snapshot_properties"], k)],
+        [for k in keys(sch) : "${name}.${k}" if !contains(local.allowed_keys.vm_backup_schedules.self, k)],
         flatten([
-          for sub, allowed in {
-            daily_schedule      = ["days_in_cycle", "start_time"]
-            weekly_schedule     = ["day_of_weeks"]
-            hourly_schedule     = ["hours_in_cycle", "start_time"]
-            retention_policy    = ["max_retention_days", "on_source_disk_delete"]
-            snapshot_properties = ["labels", "storage_locations", "guest_flush"]
-          } : [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+          for sub, allowed in local.allowed_keys.vm_backup_schedules :
+          [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)] if sub != "self"
         ]),
       )
     ]) : k]) == 0
     error_message = "vm_backup_schedules has keys modules/gcp/backup/backup-plan does not accept: ${join(", ", [for k in flatten([
       for name, sch in coalesce(var.vm_backup_schedules, {}) : concat(
-        [for k in keys(sch) : "${name}.${k}" if !contains(["daily_schedule", "weekly_schedule", "hourly_schedule", "retention_policy", "snapshot_properties"], k)],
+        [for k in keys(sch) : "${name}.${k}" if !contains(local.allowed_keys.vm_backup_schedules.self, k)],
         flatten([
-          for sub, allowed in {
-            daily_schedule      = ["days_in_cycle", "start_time"]
-            weekly_schedule     = ["day_of_weeks"]
-            hourly_schedule     = ["hours_in_cycle", "start_time"]
-            retention_policy    = ["max_retention_days", "on_source_disk_delete"]
-            snapshot_properties = ["labels", "storage_locations", "guest_flush"]
-          } : [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+          for sub, allowed in local.allowed_keys.vm_backup_schedules :
+          [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)] if sub != "self"
         ]),
       )
     ]) : k])}."
@@ -742,8 +732,8 @@ variable "os_patch_deployments" {
   default = null
 
   validation {
-    condition     = length(flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(["all_instances", "instance_labels", "reboot_config", "day_of_week", "start_time", "time_zone", "description"], k)]])) == 0
-    error_message = "os_patch_deployments has keys modules/gcp/ops/os-config does not accept: ${join(", ", flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(["all_instances", "instance_labels", "reboot_config", "day_of_week", "start_time", "time_zone", "description"], k)]]))}."
+    condition     = length(flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(local.allowed_keys.os_patch_deployments.self, k)]])) == 0
+    error_message = "os_patch_deployments has keys modules/gcp/ops/os-config does not accept: ${join(", ", flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(local.allowed_keys.os_patch_deployments.self, k)]]))}."
   }
 }
 

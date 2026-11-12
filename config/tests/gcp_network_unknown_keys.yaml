@@ -1,0 +1,27 @@
+# Expected to FAIL schema validation: gcp.network.vpn, interconnect and
+# additional_regions each hold a misspelled key. envs/gcp/network-hub
+# tests/hybrid.tftest.hcl reads this file to prove the root validations reject
+# the same keys in the config file.
+version: 1
+org:
+  prefix: acme
+  regions:
+    gcp: europe-west1
+gcp:
+  network:
+    hub_cidr_block: 10.0.0.0/16
+    dns_hub_cidr_block: 10.1.0.0/16
+    vpn:
+      enabled: true
+      tunel_count: 2
+    interconnect:
+      hub-partner-1:
+        region: europe-west1
+        router_name: hub-ic-router
+        vlan_tagg: 100
+    additional_regions:
+      europe-west4:
+        subnet_cidrs:
+          public: 10.2.0.0/24
+          privat: 10.2.16.0/24
+          database: 10.2.32.0/24
