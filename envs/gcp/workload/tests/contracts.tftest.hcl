@@ -82,6 +82,25 @@ run "contracts_replace_remote_state" {
   }
 }
 
+# gcp-network-hub names its internal zone from gcp.network.internal_domain and
+# publishes it as hub_network.dns_domain; the spoke peering zone must carry
+# that value, not a built-in.
+run "peering_zone_follows_the_hub_internal_domain" {
+  command = plan
+
+  variables {
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "corp.example.com."
+    }
+  }
+
+  assert {
+    condition     = local.hub_dns_zones["internal-peering"].dns_name == "corp.example.com." && local.hub_dns_zones["internal-peering"].peering_network == "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+    error_message = "the internal-peering zone must take its dns_name from the network_hub contract dns_domain"
+  }
+}
+
 # A supplied projects_contract carries the pipeline identities too.
 run "projects_contract_carries_pipeline_identities" {
   command = plan

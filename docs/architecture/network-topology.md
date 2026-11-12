@@ -21,7 +21,7 @@ graph TB
 
         subgraph dns_proj["DNS Project (gcp-network-hub)"]
             dns_vpc["DNS VPC\ndns-vpc-core"]
-            dns_zone["Private DNS Zone\n*.internal.example.com"]
+            dns_zone["Private DNS Zone\n*.<internal_domain>"]
         end
 
         subgraph spoke_dev["Spoke Project — dev"]
@@ -185,7 +185,7 @@ All subnets have VPC Flow Logs enabled and export to BigQuery via the Cloud Audi
 
 ```mermaid
 graph LR
-    vm["VM in spoke VPC\n(resolves *.internal.example.com)"]
+    vm["VM in spoke VPC\n(resolves *.<internal_domain>)"]
     cloud_dns["Cloud DNS in the spoke VPC\n(metadata server 169.254.169.254)"]
     peering["internal-peering zone\n(gcp-workload-&lt;env&gt;)\ntarget: hub VPC"]
     root_zone["internal-root private zone\n(DNS project, gcp-network-hub)\nbound to dns-vpc-core and hub-vpc-core"]
@@ -196,7 +196,7 @@ graph LR
     root_zone -->|"A record"| vm
 ```
 
-Each `gcp-workload-<env>` creates a private DNS peering zone, `internal-peering`, for the internal domain. Its target is the hub VPC (`hub_network.vpc_self_link` from `gcp-network-hub`). A peering zone answers from the name resolution order of its target network, so the hub VPC must see the zone that holds the records. `gcp-network-hub` therefore binds the `internal-root` zone in the DNS project to two networks: the DNS anchor VPC (`dns-vpc-core`), which owns the zone, and the hub VPC (`hub-vpc-core`), which every spoke peering zone targets.
+Each `gcp-workload-<env>` creates a private DNS peering zone, `internal-peering`, for the internal domain (`gcp.network.internal_domain`, default `internal.local`; the hub publishes it as `hub_network.dns_domain`, so the peering zone follows it). Its target is the hub VPC (`hub_network.vpc_self_link` from `gcp-network-hub`). A peering zone answers from the name resolution order of its target network, so the hub VPC must see the zone that holds the records. `gcp-network-hub` therefore binds the `internal-root` zone in the DNS project to two networks: the DNS anchor VPC (`dns-vpc-core`), which owns the zone, and the hub VPC (`hub-vpc-core`), which every spoke peering zone targets.
 
 Creating a peering zone needs `dns.networks.targetWithPeeringZone` on the project of the target network. `gcp-projects` grants `roles/dns.peer`, which holds only that permission, to each workload apply SA on the shared folder. The hub project is in that folder. The plan SAs get no role there.
 

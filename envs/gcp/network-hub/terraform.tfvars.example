@@ -12,6 +12,11 @@ tfc_organization = "your-tfc-org-name"
 hub_vpc_cidr_block     = "10.0.0.0/16"
 dns_hub_vpc_cidr_block = "10.1.0.0/16"
 
+# Private root DNS zone name. Normally omitted: gcp.network.internal_domain in
+# config/landing-zone.yaml, else internal.local. Set it before the first apply:
+# changing it later replaces the zone and drops its records (UPGRADING.md).
+# internal_domain = "corp.example.com"
+
 # Set after the first gcp-bootstrap apply:
 # terraform_admin_email = "terraform-admin@<admin-project-id>.iam.gserviceaccount.com"
 

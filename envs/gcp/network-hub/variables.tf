@@ -92,6 +92,20 @@ variable "dns_hub_vpc_cidr_block" {
   }
 }
 
+variable "internal_domain" {
+  description = "Name of the organization's private root DNS zone (internal-root, served from the DNS project and bound to the hub VPC), for example 'corp.example.com': lowercase letters, digits and hyphens, at least two labels, no trailing dot. Every environment's internal-peering zone follows it through the hub_network.dns_domain contract output. Null = gcp.network.internal_domain from config/landing-zone.yaml, else internal.local. Changing it on an existing estate replaces the zone (dns_name is immutable), which drops every record in it: it needs a destroy_guard override and the records created again; see UPGRADING.md."
+  type        = string
+  default     = null
+
+  validation {
+    condition = (
+      can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", coalesce(var.internal_domain, local.cfg.internal_domain, "internal.local"))) &&
+      length(coalesce(var.internal_domain, local.cfg.internal_domain, "internal.local")) <= 253
+    )
+    error_message = "internal_domain (or gcp.network.internal_domain in config/landing-zone.yaml) must be a lowercase DNS name of at least two labels without a trailing dot, for example corp.example.com."
+  }
+}
+
 variable "enable_ncc_hub" {
   description = "Create a Network Connectivity Center hub (hub VPC as its center spoke) that environment VPCs can join instead of peering (gcp-workload network_connectivity = ncc). Null = gcp.network.ncc_hub.enabled from config/landing-zone.yaml, else false. See docs/runbooks/gcp-peering-to-ncc-migration.md."
   type        = bool

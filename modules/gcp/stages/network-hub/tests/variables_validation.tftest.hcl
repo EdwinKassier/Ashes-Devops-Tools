@@ -547,3 +547,115 @@ run "rejects_zero_hub_peering_limit" {
 
   expect_failures = [var.hub_peering_limit]
 }
+
+run "rejects_internal_domain_trailing_dot" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    internal_domain = "corp.example.com."
+  }
+
+  expect_failures = [var.internal_domain]
+}
+
+run "rejects_internal_domain_uppercase" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    internal_domain = "Corp.Example.com"
+  }
+
+  expect_failures = [var.internal_domain]
+}
+
+run "rejects_internal_domain_single_label" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    internal_domain = "corp"
+  }
+
+  expect_failures = [var.internal_domain]
+}
+
+run "rejects_internal_domain_underscore" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    internal_domain = "corp_x.example.com"
+  }
+
+  expect_failures = [var.internal_domain]
+}

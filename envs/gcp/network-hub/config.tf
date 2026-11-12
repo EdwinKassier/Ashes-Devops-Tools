@@ -33,6 +33,7 @@ locals {
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     vpc_sc_access_policy      = try(tostring(local.lz.gcp.network.vpc_sc_access_policy), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    internal_domain           = try(tostring(local.lz.gcp.network.internal_domain), null)
     enable_ncc_hub            = try(tobool(local.lz.gcp.network.ncc_hub.enabled), null)
     ncc_preset_topology       = try(tostring(local.lz.gcp.network.ncc_hub.preset_topology), null)
     # Hybrid connectivity as JSON text (so the explicit-variable fallback can
@@ -113,8 +114,10 @@ locals {
   # Org Access Context Manager policy for the hub perimeter (numeric ID).
   vpc_sc_access_policy_name = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : local.cfg.vpc_sc_access_policy
   dns_hub_vpc_cidr_block    = coalesce(var.dns_hub_vpc_cidr_block, local.cfg.dns_hub_vpc_cidr_block, "0.0.0.0/32")
-  tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
-  create_spoke_peerings     = coalesce(var.create_spoke_peerings, true)
+  # Private root DNS zone name. internal.local keeps an existing estate's zone.
+  internal_domain       = coalesce(var.internal_domain, local.cfg.internal_domain, "internal.local")
+  tfc_organization      = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  create_spoke_peerings = coalesce(var.create_spoke_peerings, true)
   # Opt-in NCC hub (default off: environment VPCs peer with the hub VPC).
   enable_ncc_hub      = coalesce(var.enable_ncc_hub, local.cfg.enable_ncc_hub, false)
   ncc_preset_topology = coalesce(var.ncc_preset_topology, local.cfg.ncc_preset_topology, "STAR")

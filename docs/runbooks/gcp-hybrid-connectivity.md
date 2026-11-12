@@ -44,7 +44,7 @@ the network the VPN and Interconnect land in, and inbound entry points are not
 reachable across VPC peering
 ([server policies](https://docs.cloud.google.com/dns/docs/server-policies-overview)).
 The hub VPC sees the internal zone, so on-premises resolvers can forward the
-internal domain to the entry points. List their addresses (one per hub subnet;
+internal domain (`gcp.network.internal_domain`, default `internal.local`) to the entry points. List their addresses (one per hub subnet;
 use one in the region of the VPN or Interconnect):
 
 ```bash

@@ -141,6 +141,11 @@ gcp:
   network:
     hub_cidr_block: 10.0.0.0/16
     dns_hub_cidr_block: 10.1.0.0/16
+    # Name of the private root DNS zone (gcp-network-hub internal-root); every
+    # environment peers to it. Default internal.local. Set it before the first
+    # apply of gcp-network-hub: the zone name cannot change in place, so a later
+    # change replaces the zone and drops its records (UPGRADING.md).
+    # internal_domain: corp.example.com
     # Numeric ID of the org Access Context Manager policy for the hub VPC-SC
     # perimeter (gcloud access-context-manager policies list --organization=ID).
     # Unset, no hub perimeter is created and a production environment warns.

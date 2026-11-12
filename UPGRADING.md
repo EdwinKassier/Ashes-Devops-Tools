@@ -1411,6 +1411,16 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Internal DNS domain from config (gcp-network-hub)
+
+Nothing changes for an existing estate: the default stays `internal.local`, so the first plan shows no change. Before, `envs/gcp/network-hub` never passed `internal_domain` to the stage and no config key existed, so every estate's private root zone (`internal-root`) was named `internal.local.`. Now `gcp.network.internal_domain` in `config/landing-zone.yaml` (or the `internal_domain` variable) names it, for example `corp.example.com`. The value must be a lowercase DNS name of at least two labels, without a trailing dot. Every `gcp-workload-<env>` `internal-peering` zone follows it through `hub_network.dns_domain`.
+
+Set it before the first apply of `gcp-network-hub`. **Do not change it on an existing estate without a plan for the records.** The `dns_name` of a `google_dns_managed_zone` cannot change in place ([provider schema, `ForceNew`](https://github.com/hashicorp/terraform-provider-google/blob/v8.0.0/google/services/dns/resource_dns_managed_zone.go)), so a new value replaces the zone and drops every record in it. `google_dns_managed_zone` is protected by `destroy_guard`, so the run stops until the security team overrides it. To change the domain:
+
+1. List the records in the `internal-root` zone (`gcloud dns record-sets list --zone internal-root --project <dns project>`) and save them.
+2. Change `gcp.network.internal_domain`, apply `gcp-network-hub` with the `destroy_guard` override, then apply every `gcp-workload-<env>` so each peering zone takes the new domain.
+3. Create the records again under the new domain and move clients to the new names.
+
 #### Hub routes announced on-premises and hybrid DNS (gcp-network-hub, breaking)
 
 **Breaking: this changes what on-premises learns over BGP.** It applies to an estate with the hub HA VPN (`gcp.network.vpn.enabled: true`) or a Cloud Interconnect attachment (`gcp.network.interconnect`) whose `advertised_ip_ranges` is empty.

@@ -196,3 +196,31 @@ run "no_spoke_peerings_by_default" {
     error_message = "without spoke_peerings the hub creates no peering."
   }
 }
+
+# internal_domain names the internal-root zone, and a hub without it keeps the
+# built-in internal.local, so an existing estate's zone does not change.
+run "internal_root_zone_defaults_to_internal_local" {
+  command = plan
+
+  variables {
+    internal_domain = "internal.local"
+  }
+
+  assert {
+    condition     = module.dns_anchor.dns_zones["internal-root"].zone.dns_name == "internal.local." && output.hub_dns_domain == "internal.local."
+    error_message = "internal_domain internal.local must plan the internal-root zone as internal.local. and the contract domain with it."
+  }
+}
+
+run "internal_root_zone_follows_internal_domain" {
+  command = plan
+
+  variables {
+    internal_domain = "corp.example.com"
+  }
+
+  assert {
+    condition     = module.dns_anchor.dns_zones["internal-root"].zone.dns_name == "corp.example.com." && output.hub_dns_domain == "corp.example.com."
+    error_message = "internal_domain must name the internal-root zone (with the trailing dot) and the hub_dns_domain output."
+  }
+}

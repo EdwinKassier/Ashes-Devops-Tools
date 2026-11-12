@@ -106,9 +106,14 @@ variable "folders" {
 }
 
 variable "internal_domain" {
-  description = "Internal domain for private DNS zone (e.g., 'mycompany.com')"
+  description = "Name of the private root DNS zone (internal-root), for example 'corp.example.com': lowercase letters, digits and hyphens, at least two labels, no trailing dot. The zone's dns_name is immutable, so changing it on an existing hub replaces the zone and drops every record in it (it needs a destroy_guard override and the records created again)."
   type        = string
   default     = "internal.local"
+
+  validation {
+    condition     = can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.internal_domain)) && length(var.internal_domain) <= 253
+    error_message = "internal_domain must be a lowercase DNS name of at least two labels without a trailing dot, for example corp.example.com."
+  }
 }
 
 variable "vpc_sc_access_policy_name" {

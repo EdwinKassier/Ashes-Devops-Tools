@@ -40,6 +40,8 @@ module "network_hub" {
   hub_vpc_cidr_block     = local.hub_vpc_cidr_block
   dns_hub_vpc_cidr_block = local.dns_hub_vpc_cidr_block
 
+  internal_domain = local.internal_domain
+
   enable_ncc_hub      = local.enable_ncc_hub
   ncc_preset_topology = local.ncc_preset_topology
 
