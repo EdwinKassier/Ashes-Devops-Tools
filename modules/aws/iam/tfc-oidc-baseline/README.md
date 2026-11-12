@@ -29,12 +29,22 @@ Each targeted member account receives:
 - IAM group and user grants: `iam:CreateGroup`, group and user policies, `iam:AddUserToGroup` and `iam:UpdateLoginProfile`;
 - new versions (`iam:CreatePolicyVersion`, `iam:SetDefaultPolicyVersion`) of customer-managed policies outside the `/tfc-managed/` path;
 - `iam:UpdateAssumeRolePolicy` on every role (`enable_apply_trust_update_lock`, default on). IAM does not evaluate `iam:PermissionsBoundary` for this action, so the lock covers all roles. New roles are unaffected, because `CreateRole` sets the trust. Change the trust of an existing role as break-glass, or replace the role;
-- creating or granting to a role that does not carry the same boundary, or removing a boundary (`enable_apply_boundary_propagation`, default on).
+- creating or granting to a role that does not carry the same boundary, or removing a boundary (`enable_apply_boundary_propagation`, default on);
+- writing to the `StackSet-*` stacks that StackSets create in the account: `cloudformation:*Stack` (create, update, delete, cancel, roll back), every change-set and stack-refactor action, stack policies, termination protection and `ContinueUpdateRollback`.
+
+**Boundary size.** IAM caps a managed policy at 6,144 characters. A
+precondition on the StackSet measures the boundary after `Fn::Sub`
+substitution (longest partition, 12-digit account) and fails the plan above
+the quota. On 2026-11-12 it measured 5,423 characters with the defaults
+(721 to spare) and 5,779 with the long names in the tests (365 to spare).
+Each `protected_role_names` entry adds its length plus about 41 characters
+(one role ARN); each `protected_backup_vault_names` entry adds its length plus
+about 53.
 
 Creating and updating detective controls is still allowed, so the security and
 workload layers can apply normally. To use your own boundary, supply
 `apply_permissions_boundary_arn`; the list above then does not apply (only the
-tamper deny on the TFC roles is attached inline). The
+tamper deny on the TFC roles and the StackSet stack deny are attached inline). The
 boundary is a guardrail, not a full privilege-escalation barrier: the apply
 role keeps `AdministratorAccess` inside it, so the org deny-tamper SCP remains
 the primary control.
@@ -131,10 +141,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudformation_stack_set.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L834)
-- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L711)
-- resource.aws_cloudformation_stack_set_instance.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L870)
-- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L757)
+- resource.aws_cloudformation_stack_set.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L857)
+- resource.aws_cloudformation_stack_set.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L727)
+- resource.aws_cloudformation_stack_set_instance.break_glass (modules/aws/iam/tfc-oidc-baseline/main.tf#L893)
+- resource.aws_cloudformation_stack_set_instance.this (modules/aws/iam/tfc-oidc-baseline/main.tf#L780)
 
 
 ## Inputs

@@ -57,11 +57,14 @@ role-name patterns (`arn:aws:iam::*:role/<name>`), not account-qualified ARNs:
     changes, deletion and tagging; same exemptions as the roles.
   - `DenyStackSetStackTampering` protects the stacks that StackSets create in
     member accounts (`arn:<partition>:cloudformation:*:*:stack/StackSet-*`)
-    from `UpdateStack`, `DeleteStack`, change sets, stack policies,
-    termination protection and rollback control; same exemptions as the roles.
+    from create, update, delete, rollback, change sets, stack refactors,
+    stack policies, termination protection and rollback control; same
+    exemptions as the roles, plus `stackset_stack_writer_role_names`.
     CloudFormation does not report a direct update of such a stack as StackSet
-    drift. A self-managed StackSet or AWS Quick Setup writes its stacks as its
-    own execution role: add that role name to `stackset_execution_role_names`.
+    drift. AWS Control Tower (`AWSControlTowerExecution`), a self-managed
+    StackSet or AWS Quick Setup writes its stacks as its own role: list that
+    role in `stackset_stack_writer_role_names`, which exempts it from this
+    statement only.
 
 ### Region-restriction SCP
 
@@ -121,8 +124,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L345)
-- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L362)
+- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L354)
+- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L371)
 
 
 ## Inputs
@@ -151,9 +154,10 @@ The following resources are created:
 | <a name="input_policies"></a> [policies](#input\_policies) | Override map of policies to create, keyed by policy name. When empty (default), the module computes the built-in guardrail set from the templated JSON files. Content is a raw Organizations policy JSON string. | <pre>map(object({<br/>    type    = string<br/>    content = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_policy_overrides"></a> [policy\_overrides](#input\_policy\_overrides) | Policies merged OVER the built-in set, keyed by policy name: an existing key (e.g. scp-region-restriction) replaces that policy's content, a new key adds a policy. Attach additions through attachments. Content is raw Organizations policy JSON. | <pre>map(object({<br/>    type    = string<br/>    content = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_sandbox_allowed_instance_types"></a> [sandbox\_allowed\_instance\_types](#input\_sandbox\_allowed\_instance\_types) | ec2:InstanceType patterns (StringNotLike) the Sandbox OU may launch; ec2:RunInstances for any other type is denied by scp-sandbox-guard (break-glass exempt). | `list(string)` | <pre>[<br/>  "t3.micro",<br/>  "t3.small",<br/>  "t3.medium",<br/>  "t3.large",<br/>  "t4g.micro",<br/>  "t4g.small",<br/>  "t4g.medium",<br/>  "t4g.large"<br/>]</pre> | no |
-| <a name="input_stackset_execution_role_names"></a> [stackset\_execution\_role\_names](#input\_stackset\_execution\_role\_names) | Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering, DenyStackSetPolicyTampering and DenyStackSetStackTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles, the StackSet policies and the StackSet stacks); themselves protected break-glass-only by DenyPrivilegedRoleTampering. A self-managed StackSet or AWS Quick Setup writes its StackSet stacks as its own execution role: add that role name here, or those stack updates are denied. | `list(string)` | <pre>[<br/>  "stacksets-exec-*"<br/>]</pre> | no |
+| <a name="input_stackset_execution_role_names"></a> [stackset\_execution\_role\_names](#input\_stackset\_execution\_role\_names) | Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering, DenyStackSetPolicyTampering and DenyStackSetStackTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles, the StackSet policies and the StackSet stacks); themselves protected break-glass-only by DenyPrivilegedRoleTampering. A role that only writes StackSet stacks (AWS Control Tower, a self-managed StackSet, Quick Setup) belongs in stackset\_stack\_writer\_role\_names instead. | `list(string)` | <pre>[<br/>  "stacksets-exec-*"<br/>]</pre> | no |
 | <a name="input_stackset_managed_policy_names"></a> [stackset\_managed\_policy\_names](#input\_stackset\_managed\_policy\_names) | Member-account customer-managed policy names (optionally path-prefixed) that a service-managed StackSet owns, by default the tfc-oidc-baseline tfc-apply permissions boundary and the tfc-plan read-deny policy. DenyStackSetPolicyTampering stops everyone except break-glass and stackset\_execution\_role\_names from creating, versioning, deleting or tagging them. Empty omits the statement. | `list(string)` | <pre>[<br/>  "tfc-apply-boundary",<br/>  "tfc-plan-data-read-deny"<br/>]</pre> | no |
 | <a name="input_stackset_managed_role_names"></a> [stackset\_managed\_role\_names](#input\_stackset\_managed\_role\_names) | Member-account role names (optionally path-prefixed) that a service-managed StackSet owns — by default the tfc-oidc-baseline tfc-plan / tfc-apply roles. Together with the break-glass role name they are protected by DenyStackSetRoleTampering, whose only exemptions are break-glass and stackset\_execution\_role\_names. Every other pipeline\_role\_names entry (OrganizationAccountAccessRole, stacksets-exec-*) is protected break-glass-only. The pipeline roles are never exempt from either statement. | `list(string)` | <pre>[<br/>  "tfc-plan",<br/>  "tfc-apply"<br/>]</pre> | no |
+| <a name="input_stackset_stack_writer_role_names"></a> [stackset\_stack\_writer\_role\_names](#input\_stackset\_stack\_writer\_role\_names) | Member-account role names (or name patterns) that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own. Exempt from DenyStackSetStackTampering ONLY: not exempt from any other statement and not added to the break-glass-only role protection. An AWS Control Tower estate adds AWSControlTowerExecution (it writes StackSet-AWSControlTowerBP-* stacks); a self-managed StackSet adds its execution role (for example AWSCloudFormationStackSetExecutionRole); AWS Quick Setup adds its local execution role. Default empty. | `list(string)` | `[]` | no |
 | <a name="input_tag_policy_required_resource_types"></a> [tag\_policy\_required\_resource\_types](#input\_tag\_policy\_required\_resource\_types) | Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL\_SUPPORTED) for which the tag policy reports CostCenter, Environment, Owner and DataClassification as required (report\_required\_tag\_for). Empty (default) = no key is required. The AWS provider fails or warns at plan on a listed resource that lacks a key when the workspace sets TF\_AWS\_TAG\_POLICY\_COMPLIANCE to error or warning; the plan role then needs tag:ListRequiredTags. | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 

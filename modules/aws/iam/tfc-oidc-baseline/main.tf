@@ -379,6 +379,19 @@ locals {
     )
   }
 
+  # Size of the boundary as IAM stores it: CloudFormation resolves each
+  # {"Fn::Sub": "..."} to its string, with the longest partition name
+  # (aws-us-gov) and a 12-digit account ID. IAM counts a managed policy
+  # without whitespace, and jsonencode adds none. Checked by a precondition on
+  # the StackSet, so a long protected_role_names entry fails the plan instead
+  # of the StackSet rollout.
+  apply_boundary_policy_measured = replace(replace(replace(
+    jsonencode(local.apply_boundary_document),
+    "/\\{\"Fn::Sub\":(\"[^\"]*\")\\}/", "$1"),
+    "$${AWS::Partition}", "aws-us-gov"),
+  "$${AWS::AccountId}", "123456789012")
+  apply_boundary_policy_size = length(local.apply_boundary_policy_measured)
+
   apply_boundary_resource = local.create_apply_boundary ? {
     TfcApplyBoundary = {
       Type = "AWS::IAM::ManagedPolicy"
@@ -555,8 +568,10 @@ locals {
   # drift." A direct UpdateStack or change set on such a stack could rewrite
   # this baseline (roles, boundary, plan deny) unseen, so the apply identity
   # may not write to them. The wildcards cover CreateStack (name squatting),
-  # UpdateStack, DeleteStack, CancelUpdateStack, RollbackStack and every
-  # change-set action; reads stay allowed. "arn:*" (any partition) instead of
+  # UpdateStack, DeleteStack, CancelUpdateStack, RollbackStack, every
+  # change-set action and Create/ExecuteStackRefactor (stack resource type in
+  # the Service Authorization Reference, checked 2026-11-12); reads stay
+  # allowed. "arn:*" (any partition) instead of
   # an Fn::Sub keeps the boundary under its 6,144-character quota. Mirrors the
   # org SCP DenyStackSetStackTampering. Lives with the tamper deny: in the
   # embedded boundary, or inline on the apply role with an external boundary.
@@ -566,6 +581,7 @@ locals {
     Action = [
       "cloudformation:*Stack",
       "cloudformation:*ChangeSet",
+      "cloudformation:*StackRefactor",
       "cloudformation:SetStackPolicy",
       "cloudformation:UpdateTerminationProtection",
       "cloudformation:ContinueUpdateRollback",
@@ -742,6 +758,13 @@ resource "aws_cloudformation_stack_set" "this" {
       # would be required.
       condition     = length(local.template_body) <= 51200
       error_message = "The generated StackSet template exceeds CloudFormation's 51,200-byte inline limit — reduce account_bindings or split the baseline."
+    }
+
+    precondition {
+      # IAM managed-policy size quota: 6,144 characters, whitespace excluded,
+      # measured after Fn::Sub substitution (apply_boundary_policy_size).
+      condition     = !local.create_apply_boundary || local.apply_boundary_policy_size <= 6144
+      error_message = "The tfc-apply boundary renders to ${local.apply_boundary_policy_size} characters after substitution, over the 6,144-character managed-policy quota. Shorten protected_role_names, break_glass_role_name, protected_backup_vault_names or kms_protection_tag_key (use name patterns)."
     }
 
     precondition {

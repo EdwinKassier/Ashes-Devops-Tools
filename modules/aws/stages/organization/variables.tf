@@ -112,6 +112,13 @@ variable "data_perimeter_trusted_account_ids" {
   default     = []
 }
 
+variable "stackset_stack_writer_role_names" {
+  description = "Member-account role names that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own, exempt from the deny-tamper SCP statement DenyStackSetStackTampering only. An AWS Control Tower estate sets [\"AWSControlTowerExecution\"]; a self-managed StackSet or AWS Quick Setup adds its execution role. Default empty."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "allow_vpc_bpa_exclusions" {
   description = "Whether member accounts may create VPC Block Public Access exclusions under the declarative EC2 policy. Default false."
   type        = bool

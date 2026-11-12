@@ -72,6 +72,10 @@ module "aws_organization" {
   # app_ingress_mode = "public_alb" (internet-facing ALB). Off by default.
   allow_vpc_bpa_exclusions = var.allow_vpc_bpa_exclusions
 
+  # StackSet stack writers outside this repo (AWS Control Tower estates:
+  # AWSControlTowerExecution). Exempt from DenyStackSetStackTampering only.
+  stackset_stack_writer_role_names = var.stackset_stack_writer_role_names
+
   ec2_allowed_images = var.ec2_allowed_images
 
   # Required-tag reporting on the root tag policy (aws.tagging.required_for).

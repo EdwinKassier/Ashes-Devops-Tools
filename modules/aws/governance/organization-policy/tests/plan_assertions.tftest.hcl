@@ -959,6 +959,7 @@ run "policies_fit_aws_size_quotas_worst_case" {
     enable_config_recorder_scp         = true
     config_recorder_pipeline_role_arns = ["arn:aws:iam::222222222222:role/landing-zone/tfc-apply-member-account-pipeline-role"]
     kms_protection_tag_key             = "landing-zone:protected"
+    stackset_stack_writer_role_names   = ["AWSControlTowerExecution", "AWSCloudFormationStackSetExecutionRole"]
     data_perimeter_trusted_account_ids = ["444444444444", "555555555555", "666666666666"]
     federation_tenant_pins = {
       tfc_organization = "acme-corporation-platform-engineering"
@@ -1090,6 +1091,7 @@ run "stackset_stacks_protected" {
       toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Action) == toset([
         "cloudformation:UpdateStack", "cloudformation:DeleteStack", "cloudformation:CreateChangeSet", "cloudformation:ExecuteChangeSet",
         "cloudformation:SetStackPolicy", "cloudformation:UpdateTerminationProtection", "cloudformation:ContinueUpdateRollback", "cloudformation:CancelUpdateStack",
+        "cloudformation:CreateStack", "cloudformation:RollbackStack", "cloudformation:CreateStackRefactor", "cloudformation:ExecuteStackRefactor",
       ])
     )
     error_message = "the deny-tamper SCP must deny stack writes on stack/StackSet-* (UpdateStack, DeleteStack, change sets, stack policy, termination protection, rollback control)"
@@ -1120,4 +1122,43 @@ run "stackset_stacks_follow_the_partition" {
     condition     = one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Resource == "arn:aws-us-gov:cloudformation:*:*:stack/StackSet-*"
     error_message = "the StackSet stack deny must use the configured partition"
   }
+}
+
+# AWS Control Tower writes its member stacks (StackSet-AWSControlTowerBP-*) as
+# AWSControlTowerExecution. stackset_stack_writer_role_names exempts such a
+# role from the StackSet stack deny ONLY: it is not exempt from the role and
+# policy tamper statements, and not made break-glass-only.
+run "stackset_stack_writer_roles_exempt_from_stack_deny_only" {
+  command = plan
+
+  variables {
+    stackset_stack_writer_role_names = ["AWSControlTowerExecution"]
+  }
+
+  assert {
+    condition = toset(one([for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Condition.ArnNotLike["aws:PrincipalArn"]) == toset([
+      "arn:aws:iam::*:role/break-glass", "arn:aws:iam::*:role/stacksets-exec-*", "arn:aws:iam::*:role/AWSControlTowerExecution",
+    ])
+    error_message = "a stack writer role must be exempt from DenyStackSetStackTampering"
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_organizations_policy.policy["scp-deny-tamper"].content).Statement :
+      !contains(flatten([try(s.Condition.ArnNotLike["aws:PrincipalArn"], [])]), "arn:aws:iam::*:role/AWSControlTowerExecution") &&
+      !contains(flatten([try(s.Resource, [])]), "arn:aws:iam::*:role/AWSControlTowerExecution")
+      if s.Sid != "DenyStackSetStackTampering"
+    ])
+    error_message = "a stack writer role must not be exempt from, or protected by, any other deny-tamper statement"
+  }
+}
+
+run "stackset_stack_writer_role_names_reject_wildcard_only" {
+  command = plan
+
+  variables {
+    stackset_stack_writer_role_names = ["*"]
+  }
+
+  expect_failures = [var.stackset_stack_writer_role_names]
 }

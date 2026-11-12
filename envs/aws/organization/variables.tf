@@ -445,6 +445,13 @@ variable "member_break_glass_require_mfa" {
   default     = true
 }
 
+variable "stackset_stack_writer_role_names" {
+  description = "Member-account role names that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own, exempt from the deny-tamper SCP statement DenyStackSetStackTampering only. An AWS Control Tower estate sets [\"AWSControlTowerExecution\"]; a self-managed StackSet or AWS Quick Setup adds its execution role. Default empty. See docs/runbooks/aws-brownfield-adoption.md."
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "allow_vpc_bpa_exclusions" {
   description = "Allow member accounts to create VPC Block Public Access exclusions under the org declarative EC2 policy. Default false (no VPC can bypass the org-wide internet-gateway ingress block). Set true only if an aws-workload environment uses app_ingress_mode = \"public_alb\"; that root then excludes only its own spoke VPC. cloudfront_vpc_origin needs no exclusion."
   type        = bool

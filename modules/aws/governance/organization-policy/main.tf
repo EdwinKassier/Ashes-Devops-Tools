@@ -114,9 +114,17 @@ locals {
   # aren't considered drift", so a direct UpdateStack or change set on one of
   # these stacks could rewrite the StackSet-owned roles and boundary unseen.
   # Only break-glass and stackset_execution_role_names may write to them. A
-  # SELF_MANAGED StackSet (or AWS Quick Setup) runs as its own execution role
-  # name in the target account: list that name in stackset_execution_role_names,
-  # or its stack updates are denied.
+  # SELF_MANAGED StackSet, AWS Quick Setup or AWS Control Tower
+  # (AWSControlTowerExecution writes StackSet-AWSControlTowerBP-*) runs as its
+  # own role in the target account: list that name in
+  # stackset_stack_writer_role_names, which exempts it from this statement
+  # only. CreateStackRefactor and ExecuteStackRefactor take the stack resource
+  # type (Service Authorization Reference, AWS CloudFormation, checked
+  # 2026-11-12), so a refactor that touches a StackSet-* stack is denied too.
+  stackset_stack_exempt_arns = distinct(concat(
+    local.stackset_exempt_arns,
+    [for n in var.stackset_stack_writer_role_names : "arn:${var.partition}:iam::*:role/${n}"],
+  ))
   policy_tamper_actions = [
     "iam:CreatePolicy",
     "iam:CreatePolicyVersion",
@@ -145,17 +153,18 @@ locals {
     scp-deny-tamper = {
       type = "SERVICE_CONTROL_POLICY"
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-deny-tamper.json.tftpl", {
-        partition               = var.partition
-        break_glass_arns        = jsonencode(local.break_glass_principal_arns)
-        privileged_arns         = jsonencode(local.privileged_principal_arns)
-        admin_role_arns         = local.admin_role_arns
-        stackset_role_arns      = local.stackset_role_arns
-        stackset_exempt_arns    = local.stackset_exempt_arns
-        role_tamper_actions     = jsonencode(local.role_tamper_actions)
-        stackset_policy_arns    = local.stackset_policy_arns
-        policy_tamper_actions   = jsonencode(local.policy_tamper_actions)
-        log_archive_bucket_name = var.log_archive_bucket_name
-        kms_protection_tag_key  = var.kms_protection_tag_key
+        partition                  = var.partition
+        break_glass_arns           = jsonencode(local.break_glass_principal_arns)
+        privileged_arns            = jsonencode(local.privileged_principal_arns)
+        admin_role_arns            = local.admin_role_arns
+        stackset_role_arns         = local.stackset_role_arns
+        stackset_exempt_arns       = local.stackset_exempt_arns
+        stackset_stack_exempt_arns = local.stackset_stack_exempt_arns
+        role_tamper_actions        = jsonencode(local.role_tamper_actions)
+        stackset_policy_arns       = local.stackset_policy_arns
+        policy_tamper_actions      = jsonencode(local.policy_tamper_actions)
+        log_archive_bucket_name    = var.log_archive_bucket_name
+        kms_protection_tag_key     = var.kms_protection_tag_key
         # Recorder actions: DenyWeakenSecurityServices (pipeline-wide exemption)
         # until the migration, then DenyConfigRecorderChanges.
         enable_config_recorder_scp  = var.enable_config_recorder_scp

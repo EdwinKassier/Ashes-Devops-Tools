@@ -288,3 +288,23 @@ run "recorders_need_a_security_tooling_account" {
 
   expect_failures = [var.enable_org_config_recorders]
 }
+
+# (Here because this file makes the policy content plan-known.)
+# AWS Control Tower estates: AWSControlTowerExecution writes the
+# StackSet-AWSControlTowerBP-* stacks. The stage passes the writer roles to the
+# deny-tamper SCP, which exempts them from the StackSet stack deny only.
+run "stackset_stack_writer_roles_reach_the_scp" {
+  command = plan
+
+  variables {
+    stackset_stack_writer_role_names = ["AWSControlTowerExecution"]
+  }
+
+  assert {
+    condition = contains(
+      one([for s in jsondecode(module.policies.policy_contents["scp-deny-tamper"]).Statement : s if s.Sid == "DenyStackSetStackTampering"]).Condition.ArnNotLike["aws:PrincipalArn"],
+      "arn:aws:iam::*:role/AWSControlTowerExecution"
+    )
+    error_message = "stackset_stack_writer_role_names must reach DenyStackSetStackTampering"
+  }
+}

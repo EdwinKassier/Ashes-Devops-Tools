@@ -384,9 +384,15 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 - **StackSet stack deny is mock-tested only (SEC-2).** The deny-tamper SCP
   (`DenyStackSetStackTampering`) and the `tfc-apply` boundary deny writes to
   `stack/StackSet-*` in member accounts. The name pattern comes from AWS
-  examples (the StackSets drift-detection guide and the managed policy
-  `AWSQuickSetupSSMDeploymentRolePolicy`, checked 2026-11-12), not from a
-  stated naming rule. **Validate in the sandbox:** (1) the service-managed
+  examples (the StackSets drift-detection guide, the managed policy
+  `AWSQuickSetupSSMDeploymentRolePolicy`, and the Control Tower stack
+  `StackSet-AWSControlTowerBP-BASELINE-ROLES` in the Control Tower guide,
+  checked 2026-11-12), not from a stated naming rule. `CreateStackRefactor`
+  and `ExecuteStackRefactor` take the `stack` resource type, so a refactor
+  that names a `StackSet-*` stack is denied too. A Control Tower estate needs
+  `stackset_stack_writer_role_names = ["AWSControlTowerExecution"]`; that
+  Control Tower writes its stacks as this role is inferred from the Control
+  Tower guide and its mandatory controls, not stated. **Validate in the sandbox:** (1) the service-managed
   stack in a member account is named `StackSet-<stack set name>-<id>`; (2) an
   `aws-organization` apply that changes the `tfc-oidc-baseline` template
   still updates every stack instance (the caller there is `stacksets-exec-*`);

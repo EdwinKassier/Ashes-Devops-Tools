@@ -725,25 +725,34 @@ principal could rewrite the StackSet-owned roles and the `tfc-apply` boundary th
 `aws-organization` apply changes two things:
 
 - The deny-tamper SCP gets `DenyStackSetStackTampering`. In every member account it denies
-  `cloudformation:UpdateStack`, `DeleteStack`, `CreateChangeSet`, `ExecuteChangeSet`,
+  `cloudformation:CreateStack`, `UpdateStack`, `DeleteStack`, `RollbackStack`,
+  `CreateChangeSet`, `ExecuteChangeSet`, `CreateStackRefactor`, `ExecuteStackRefactor`,
   `SetStackPolicy`, `UpdateTerminationProtection`, `ContinueUpdateRollback` and
-  `CancelUpdateStack` on `arn:<partition>:cloudformation:*:*:stack/StackSet-*`. Only break-glass
-  and the roles in `stackset_execution_role_names` (default `stacksets-exec-*`) are exempt.
+  `CancelUpdateStack` on `arn:<partition>:cloudformation:*:*:stack/StackSet-*`. Only break-glass,
+  the roles in `stackset_execution_role_names` (default `stacksets-exec-*`) and the roles in the
+  new `stackset_stack_writer_role_names` (default empty) are exempt.
 - The `tfc-apply` boundary gets `DenyStackSetStackTampering`, which denies `cloudformation:*Stack`,
-  `*ChangeSet`, `SetStackPolicy`, `UpdateTerminationProtection` and `ContinueUpdateRollback` on
-  `arn:*:cloudformation:*:*:stack/StackSet-*`. With `apply_permissions_boundary_arn` set, the
-  deny is inline on the apply role. The StackSet updates the boundary in every member account.
+  `*ChangeSet`, `*StackRefactor`, `SetStackPolicy`, `UpdateTerminationProtection` and
+  `ContinueUpdateRollback` on `arn:*:cloudformation:*:*:stack/StackSet-*`. With
+  `apply_permissions_boundary_arn` set, the deny is inline on the apply role. The StackSet updates
+  the boundary in every member account. A new precondition fails the `aws-organization` plan when
+  the boundary is over the 6,144-character quota after `Fn::Sub` substitution.
 
 What to do before the apply:
 
 1. Find stack writes that are not made by a service-managed StackSet. In each member account,
    search CloudTrail for `UpdateStack`, `DeleteStack` and `ExecuteChangeSet` on `StackSet-*`
    stacks whose caller is not `stacksets-exec-*`.
-2. If you use a self-managed StackSet or AWS Systems Manager Quick Setup, its stacks are also named
-   `StackSet-*` and are written by its own execution role (for example
-   `AWSCloudFormationStackSetExecutionRole`). Add that role name to `stackset_execution_role_names`
-   on the organization-policy module. That name is then also protected break-glass-only by
-   `DenyPrivilegedRoleTampering`.
+2. **AWS Control Tower estates must act before the apply.** Control Tower deploys its own stacks
+   into enrolled accounts, named `StackSet-AWSControlTower*` (for example
+   `StackSet-AWSControlTowerBP-BASELINE-ROLES`), and manages accounts through the
+   `AWSControlTowerExecution` role. Set `stackset_stack_writer_role_names =
+   ["AWSControlTowerExecution"]` on `aws-organization` (a Terraform variable on the workspace),
+   or Control Tower updates, repairs and enrollments fail on those stacks. The same applies to a
+   self-managed StackSet (add its execution role, for example
+   `AWSCloudFormationStackSetExecutionRole`) and to AWS Systems Manager Quick Setup (add its local
+   execution role). A writer role is exempt from `DenyStackSetStackTampering` only. It is not
+   exempt from any other deny-tamper statement, and it is not made break-glass-only.
 3. Do not fix a stuck StackSet stack by hand in the member account. Retry the StackSet operation
    from the management account, or use break-glass.
 

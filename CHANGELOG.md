@@ -592,16 +592,18 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   runs need a security-team override (dynamic-credential wiring, `TF_CLI_ARGS_plan`). See
   `UPGRADING.md`.
 - **Member accounts cannot write to StackSet stacks (SEC-2, breaking).** The deny-tamper SCP has a
-  new statement `DenyStackSetStackTampering`. It denies `UpdateStack`, `DeleteStack`, change sets,
-  stack policies, termination protection and rollback control on
+  new statement `DenyStackSetStackTampering`. It denies stack create, update, delete and rollback,
+  change sets, stack refactors, stack policies, termination protection and rollback control on
   `arn:<partition>:cloudformation:*:*:stack/StackSet-*` to every member principal except
-  break-glass and `stackset_execution_role_names`. The `tfc-apply` boundary denies the same writes
-  (and `CreateStack` on that name), inline on the apply role when an external boundary is used.
+  break-glass, `stackset_execution_role_names` and the new `stackset_stack_writer_role_names`
+  (AWS Control Tower estates set `AWSControlTowerExecution`). The `tfc-apply` boundary denies the
+  same writes, inline on the apply role when an external boundary is used, and a precondition
+  fails the plan when the boundary is over its quota after `Fn::Sub` substitution.
   CloudFormation does not report a direct update of a StackSet stack as drift, so `tfc-apply`
   could have rewritten its own StackSet-owned roles and boundary that way. Rendered size: the
-  deny-tamper SCP grows from 4,412 to 4,933 characters with the defaults (7,087 with the longest
-  test inputs; quota 10,240). The boundary grows from 5,367 to 5,655 characters (6,059 with long
-  names; quota 6,144). See `UPGRADING.md`.
+  deny-tamper SCP grows from 4,412 to 5,068 characters with the defaults (7,330 with the longest
+  test inputs and two writer roles; quota 10,240). The substituted boundary is 5,423 characters
+  with the defaults and 5,779 with long names (quota 6,144). See `UPGRADING.md`.
 - **The phase-0 management roles cannot edit themselves or pivot into member accounts (SEC-4,
   breaking).** `templates/aws/bootstrap/phase0-management.yaml` gives `tfc-mgmt-plan` and
   `tfc-mgmt-apply` an inline `deny-self-tampering` policy. It denies changes to the trust,

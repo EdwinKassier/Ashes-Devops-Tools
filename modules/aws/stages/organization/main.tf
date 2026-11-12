@@ -102,7 +102,10 @@ module "policies" {
   break_glass_role_names             = var.break_glass_role_names
   data_perimeter_trusted_account_ids = var.data_perimeter_trusted_account_ids
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
-  ec2_allowed_images                 = var.ec2_allowed_images
+  # Roles that write StackSet-* stacks for StackSets this repo does not own
+  # (AWS Control Tower: AWSControlTowerExecution).
+  stackset_stack_writer_role_names = var.stackset_stack_writer_role_names
+  ec2_allowed_images               = var.ec2_allowed_images
 
   # Required-tag reporting on the root tag policy (CMP-10, ARC-17).
   tag_policy_required_resource_types = var.tag_policy_required_resource_types

@@ -111,13 +111,25 @@ variable "stackset_managed_policy_names" {
 }
 
 variable "stackset_execution_role_names" {
-  description = "Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering, DenyStackSetPolicyTampering and DenyStackSetStackTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles, the StackSet policies and the StackSet stacks); themselves protected break-glass-only by DenyPrivilegedRoleTampering. A self-managed StackSet or AWS Quick Setup writes its StackSet stacks as its own execution role: add that role name here, or those stack updates are denied."
+  description = "Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering, DenyStackSetPolicyTampering and DenyStackSetStackTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles, the StackSet policies and the StackSet stacks); themselves protected break-glass-only by DenyPrivilegedRoleTampering. A role that only writes StackSet stacks (AWS Control Tower, a self-managed StackSet, Quick Setup) belongs in stackset_stack_writer_role_names instead."
   type        = list(string)
   default     = ["stacksets-exec-*"]
 
   validation {
     condition     = length(var.stackset_execution_role_names) > 0 && alltrue([for n in var.stackset_execution_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
     error_message = "stackset_execution_role_names must be a non-empty list of IAM role names or name patterns; a bare \"*\" is not allowed."
+  }
+}
+
+variable "stackset_stack_writer_role_names" {
+  description = "Member-account role names (or name patterns) that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own. Exempt from DenyStackSetStackTampering ONLY: not exempt from any other statement and not added to the break-glass-only role protection. An AWS Control Tower estate adds AWSControlTowerExecution (it writes StackSet-AWSControlTowerBP-* stacks); a self-managed StackSet adds its execution role (for example AWSCloudFormationStackSetExecutionRole); AWS Quick Setup adds its local execution role. Default empty."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for n in var.stackset_stack_writer_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
+    error_message = "stackset_stack_writer_role_names entries must be IAM role names or name patterns; a bare \"*\" is not allowed."
   }
 }
 

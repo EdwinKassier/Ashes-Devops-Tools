@@ -816,9 +816,9 @@ run "boundary_denies_copy_vault_unlock" {
 
 run "boundary_fits_quota_with_long_names" {
   # Long role, tag and vault names must keep the embedded boundary under the
-  # 6,144-character managed-policy quota (measured 6,059 on 2026-11-12, with
-  # the brownfield escalation denies, the trust-update lock and the StackSet
-  # stack deny).
+  # 6,144-character managed-policy quota: 5,779 characters after Fn::Sub
+  # substitution (6,091 with the wrappers) on 2026-11-12, with the brownfield
+  # escalation denies, the trust-update lock and the StackSet stack deny.
   command = plan
 
   variables {
@@ -829,7 +829,7 @@ run "boundary_fits_quota_with_long_names" {
   }
 
   assert {
-    condition     = length(jsonencode(jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument)) < 6144
+    condition     = local.apply_boundary_policy_size < 6144
     error_message = "the embedded boundary must stay under the 6,144-character managed-policy quota with long names"
   }
 
@@ -946,7 +946,7 @@ run "boundary_denies_stackset_stack_writes" {
       s.Sid == "DenyStackSetStackTampering" && s.Effect == "Deny" &&
       s.Resource == "arn:*:cloudformation:*:*:stack/StackSet-*" &&
       toset(s.Action) == toset([
-        "cloudformation:*Stack", "cloudformation:*ChangeSet", "cloudformation:SetStackPolicy",
+        "cloudformation:*Stack", "cloudformation:*ChangeSet", "cloudformation:*StackRefactor", "cloudformation:SetStackPolicy",
         "cloudformation:UpdateTerminationProtection", "cloudformation:ContinueUpdateRollback",
       ])
     ])
@@ -971,4 +971,32 @@ run "external_boundary_mode_denies_stackset_stack_writes_inline" {
     ])
     error_message = "with an external boundary the StackSet stack deny must be inline on every apply role."
   }
+}
+
+# The embedded boundary must fit the 6,144-character managed-policy quota after
+# CloudFormation substitutes Fn::Sub (longest partition, 12-digit account).
+# Without the plan-time guard a long protected_role_names entry would only
+# fail during the StackSet rollout.
+run "boundary_size_guard_reports_the_substituted_size" {
+  command = plan
+
+  assert {
+    condition     = local.apply_boundary_policy_size > 4000 && local.apply_boundary_policy_size < 6144
+    error_message = "the measured boundary size must be the substituted policy, under the quota with defaults"
+  }
+
+  assert {
+    condition     = !strcontains(local.apply_boundary_policy_measured, "Fn::Sub")
+    error_message = "the measured boundary must have the Fn::Sub wrappers resolved"
+  }
+}
+
+run "oversized_boundary_fails_at_plan" {
+  command = plan
+
+  variables {
+    protected_role_names = [for i in range(20) : "landing-zone/very-long-protected-role-name-number-${i}-for-the-size-guard"]
+  }
+
+  expect_failures = [aws_cloudformation_stack_set.this]
 }
