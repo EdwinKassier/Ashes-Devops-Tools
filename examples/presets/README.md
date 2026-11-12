@@ -29,6 +29,7 @@ commented, deliberate opt-in. See [`docs/runbooks/production-hardening.md`](../.
 | `prod-gcp-organization.tfvars` | `envs/gcp/organization` | `gcp_overrides`: `enable_cmek_org_policy`; WORM lock left commented |
 | `prod-gcp-network-hub.tfvars` | `envs/gcp/network-hub` | VPC-SC enforced (`vpc_sc_enable_dry_run = false`) |
 | `prod-gcp-workload.tfvars` | `envs/gcp/workload` | Environment VPC-SC enforced, Cloud Armor + OWASP rules |
+| `regulated-gcp-workload.tfvars` | `envs/gcp/workload` | Applied automatically to a `compliance_class: regulated` environment: VPC-SC enforced, Cloud Armor + OWASP rules, every flow logged, 365-day flow-log retention ([Regulated environments](../../docs/architecture/regulated-environments.md)) |
 | `prod-aws-security.tfvars` | `envs/aws/security` | `aws_overrides`: CloudWatch Logs + CIS alarms, full Config/GuardDuty |
 
 ```bash
@@ -61,6 +62,7 @@ other roots ignore it. A preset name with no `.yaml` twin fails the plan.
 | YAML twin | Honoured by |
 |---|---|
 | `prod-gcp-workload.yaml` | `envs/gcp/workload` (top-level `presets` or `gcp.workload.presets_by_environment`) |
+| `regulated-gcp-workload.yaml` | `envs/gcp/workload`, applied last to every environment with `gcp.environments.<env>.compliance_class: regulated` (you do not list it) |
 
 The other presets have no YAML twin yet. `envs/gcp/network-hub` and the other
 plain-variable roots still take them with `-var-file`. For `envs/gcp/organization`

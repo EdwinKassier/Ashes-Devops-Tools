@@ -31,6 +31,8 @@ locals {
     egress_domain_allowlist  = try([for d in local.lz.aws.network.egress_domain_allowlist : tostring(d)], null)
     stateful_default_actions = try([for a in local.lz.aws.network.stateful_default_actions : tostring(a)], null)
     egress_alert_only_waived = try(tobool(local.lz.aws.network.egress_alert_only_waived), null)
+    # aws.network.vpc_endpoint_policy_mode: the hub endpoint policy (PREVIEW).
+    vpc_endpoint_policy_mode = try(tostring(local.lz.aws.network.vpc_endpoint_policy_mode), null)
     # aws.network addressing (docs/architecture/cidr-plan.md: AWS owns
     # 10.64.0.0/10). tfc-admin fails its plan when these overlap a GCP range.
     top_cidr       = try(tostring(local.lz.aws.network.top_cidr), null)
@@ -70,6 +72,16 @@ locals {
       for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
       if try(tobool(e.is_production), null) == null
     ])
+    # aws.workload_environments.<env>.compliance_class: standard (default) or
+    # regulated (CMP-7). Any regulated environment hardens the shared hub.
+    workload_regulated = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tostring(e.compliance_class), "standard") == "regulated"
+    ])
+    workload_invalid_compliance_class = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if !contains(["standard", "regulated"], try(tostring(e.compliance_class), "standard"))
+    ])
     # aws.contracts.organization: stage contract override (same type as
     # var.organization_contract, identical in every aws root). Present => the
     # aws-organization read is skipped.
@@ -95,15 +107,23 @@ locals {
 
   # Profile-driven defaults (explicit variable > profile). starter drops the
   # Network Firewall endpoints (~$577/month idle at 2 AZs).
+  # A regulated workload environment needs the firewall on any profile; the
+  # enable_network_firewall validation refuses an explicit false.
   profile                 = coalesce(var.profile, local.cfg.profile, "production")
-  enable_network_firewall = coalesce(var.enable_network_firewall, local.profile == "production")
+  enable_network_firewall = coalesce(var.enable_network_firewall, local.profile == "production" || length(local.cfg.workload_regulated) > 0)
 
-  # Production egress fails closed: on when the profile is production AND an
-  # AWS workload environment is production (explicit variable wins).
-  enforce_egress_allowlist                  = coalesce(var.enforce_egress_allowlist, local.profile == "production" && length(local.cfg.workload_production) > 0)
+  # Egress fails closed: on when the profile is production AND an AWS workload
+  # environment is production, or when any AWS workload environment is
+  # regulated (explicit variable wins; its validation refuses false for a
+  # regulated estate).
+  enforce_egress_allowlist                  = coalesce(var.enforce_egress_allowlist, length(local.cfg.workload_regulated) > 0 || (local.profile == "production" && length(local.cfg.workload_production) > 0))
   network_firewall_egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist != null ? var.network_firewall_egress_domain_allowlist : coalesce(local.cfg.egress_domain_allowlist, [])
   network_firewall_stateful_default_actions = var.network_firewall_stateful_default_actions != null ? var.network_firewall_stateful_default_actions : coalesce(local.cfg.stateful_default_actions, ["aws:alert_established"])
   egress_alert_only_waived                  = coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false)
+  # Hub interface endpoint policy (PREVIEW, docs/known-gaps.md). Not derived
+  # from compliance_class until a sandbox proves it: main.tf warns when a
+  # regulated estate keeps the principal-only policy.
+  vpc_endpoint_policy_mode = coalesce(var.vpc_endpoint_policy_mode, local.cfg.vpc_endpoint_policy_mode, "org_principals")
   # Opt-in hybrid connectivity (default off: no VPN).
   # Addressing: explicit variable > aws.network.* in config > the CIDR plan's
   # AWS block (10.64.0.0/10), clear of the GCP block 10.0.0.0/12.

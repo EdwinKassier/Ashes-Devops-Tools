@@ -153,6 +153,7 @@ Point-in-time reviews; later audits supersede earlier "resolved" claims. Only th
 - [AWS Landing Zone](architecture/aws-landing-zone.md): multi-account SRA model, layer map, and network/security topology
 - [Cross-Cloud Comparison](architecture/cross-cloud-comparison.md): where each capability lives per provider, side by side
 - [Landing-Zone Conformance](architecture/landing-zone-conformance.md): 2026 best-practice adherence review and gap register for both clouds
+- [Regulated Environments](architecture/regulated-environments.md): the opt-in `compliance_class: regulated` environment class on both clouds
 - [Provider Selection](architecture/provider-selection.md): per-cloud-root model and any-combination matrix
 - [Adding a Cloud](architecture/adding-a-cloud.md): per-cloud-root contract for extending the platform
 

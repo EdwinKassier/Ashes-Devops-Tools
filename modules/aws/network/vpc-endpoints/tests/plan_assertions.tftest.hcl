@@ -146,3 +146,54 @@ run "private_dns_stays_on_by_default" {
     error_message = "Caller security groups must be used as given, with no module-owned group."
   }
 }
+
+# endpoint_policy_mode = org_principals_and_resources adds aws:ResourceOrgID
+# to every endpoint except the exempt services (their resources are AWS-owned).
+run "resource_org_condition" {
+  command = plan
+
+  variables {
+    vpc_id               = "vpc-0123456789abcdef0"
+    region               = "eu-west-2"
+    org_id               = "o-abcde12345"
+    endpoint_policy_mode = "org_principals_and_resources"
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_vpc_endpoint.interface["kms"].policy).Statement[0].Condition.StringEquals["aws:ResourceOrgID"] == "o-abcde12345" &&
+      jsondecode(aws_vpc_endpoint.interface["kms"].policy).Statement[0].Condition.StringEquals["aws:PrincipalOrgID"] == "o-abcde12345"
+    )
+    error_message = "org_principals_and_resources must require both an org principal and an org-owned resource."
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(aws_vpc_endpoint.interface["ssm"].policy).Statement[0].Condition.StringEquals), "aws:ResourceOrgID")
+    error_message = "An exempt service (ssm) must keep the principal-only policy."
+  }
+
+  assert {
+    condition     = join(",", output.resource_org_scoped_services) == "kms"
+    error_message = "Of the default services only kms is outside the exempt list."
+  }
+}
+
+run "principal_only_by_default" {
+  command = plan
+
+  variables {
+    vpc_id = "vpc-0123456789abcdef0"
+    region = "eu-west-2"
+    org_id = "o-abcde12345"
+  }
+
+  assert {
+    condition     = alltrue([for e in aws_vpc_endpoint.interface : keys(jsondecode(e.policy).Statement[0].Condition.StringEquals) == ["aws:PrincipalOrgID"]])
+    error_message = "The default endpoint policy must stay aws:PrincipalOrgID only."
+  }
+
+  assert {
+    condition     = length(output.resource_org_scoped_services) == 0
+    error_message = "No service may carry aws:ResourceOrgID by default."
+  }
+}

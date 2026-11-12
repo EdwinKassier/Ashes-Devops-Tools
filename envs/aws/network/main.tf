@@ -101,4 +101,16 @@ module "aws_network_hub" {
   egress_alert_only_waived                  = local.egress_alert_only_waived
   network_firewall_egress_domain_allowlist  = local.network_firewall_egress_domain_allowlist
   network_firewall_stateful_default_actions = local.network_firewall_stateful_default_actions
+
+  vpc_endpoint_policy_mode = local.vpc_endpoint_policy_mode
+}
+
+# The aws:ResourceOrgID endpoint policy is not yet sandbox-proven, so a
+# regulated estate does not get it by default. Warn (never fail) until the
+# owner opts in after a sandbox test (docs/known-gaps.md).
+check "regulated_endpoint_policy" {
+  assert {
+    condition     = length(local.cfg.workload_regulated) == 0 || local.vpc_endpoint_policy_mode == "org_principals_and_resources"
+    error_message = "Regulated AWS workload environments (${join(", ", local.cfg.workload_regulated)}) use hub interface endpoints that check only the caller (aws:PrincipalOrgID). Prove aws.network.vpc_endpoint_policy_mode: org_principals_and_resources in a sandbox, then set it (docs/architecture/regulated-environments.md)."
+  }
 }

@@ -215,9 +215,9 @@ module "environment" {
     name = try(local.env_config.spoke_network_name, null)
     flow_logs = {
       aggregation_interval = var.log_config_aggregation_interval
-      sampling             = var.log_config_flow_sampling
+      sampling             = local.flow_log_sampling
     }
-    flow_logs_retention_days       = var.vpc_flow_logs_retention_days
+    flow_logs_retention_days       = local.flow_logs_retention_days
     private_service_connect_target = var.private_service_connect_target
     additional_regions             = local.additional_regions
   }
@@ -336,6 +336,50 @@ resource "terraform_data" "production_vpc_sc_enforced" {
     precondition {
       condition     = local.vpc_sc_prod_enforced || (local.vpc_sc_waiver_until != null && timecmp(plantimestamp(), coalesce(local.vpc_sc_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
       error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}${local.vpc_sc_waiver_until == null ? "" : ", and production_vpc_sc_dry_run_waiver expired on ${try(var.production_vpc_sc_dry_run_waiver.expires, "")}"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false. For a first rollout only, set production_vpc_sc_dry_run_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
+    }
+  }
+}
+
+# compliance_class: regulated (CMP-7). The regulated-gcp-workload preset sets
+# the values (config.tf); these guards fail the plan when an explicit variable
+# or a missing perimeter leaves the environment weaker. They change no resource,
+# and a standard environment's plan does not contain them. The perimeter admits
+# the environment's own pipeline SAs (automation_identities from gcp-projects),
+# so enforcing it does not block the apply.
+resource "terraform_data" "compliance_class_guard" {
+  count = local.compliance_class != "standard" ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    precondition {
+      condition     = contains(["standard", "regulated"], local.compliance_class)
+      error_message = "gcp.environments.${var.environment}.compliance_class is \"${local.compliance_class}\": use standard or regulated."
+    }
+  }
+}
+
+resource "terraform_data" "regulated_perimeter_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    # Dry-run gives no exfiltration protection. production_vpc_sc_dry_run_waiver
+    # is a rollout aid for production; a regulated environment refuses it.
+    precondition {
+      condition     = local.vpc_sc_prod_enforced && var.production_vpc_sc_dry_run_waiver == null
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so its VPC-SC perimeter must be enforced with no waiver. ${local.vpc_sc_access_policy == null ? "There is NO perimeter: no scoped access policy in environment_config and vpc_sc_access_policy_name is null. Apply gcp-organization (enable_scoped_access_policies) and gcp-projects first." : (local.vpc_sc_enable_dry_run ? "The perimeter is in DRY-RUN: remove the vpc_sc_enable_dry_run = true override (the regulated preset sets false)." : "The perimeter is enforced.")}${var.production_vpc_sc_dry_run_waiver == null ? "" : " Remove production_vpc_sc_dry_run_waiver: a regulated environment does not accept it."} Read the dry-run violation logs before you mark an environment regulated."
+    }
+  }
+}
+
+resource "terraform_data" "regulated_flow_logs_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    precondition {
+      condition     = local.flow_log_sampling == 1 && local.flow_logs_retention_days >= 365
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so VPC flow logs must sample every flow (log_config_flow_sampling = 1, now ${local.flow_log_sampling}) and keep the export at least 365 days (vpc_flow_logs_retention_days, now ${local.flow_logs_retention_days}). Remove the overriding variable: the regulated preset sets both."
     }
   }
 }

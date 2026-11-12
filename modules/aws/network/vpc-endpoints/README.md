@@ -66,9 +66,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_route53_record.endpoint (modules/aws/network/vpc-endpoints/main.tf#L114)
-- resource.aws_route53_zone.endpoint (modules/aws/network/vpc-endpoints/main.tf#L99)
-- resource.aws_route53_zone.shared (modules/aws/network/vpc-endpoints/main.tf#L80)
+- resource.aws_route53_record.endpoint (modules/aws/network/vpc-endpoints/main.tf#L118)
+- resource.aws_route53_zone.endpoint (modules/aws/network/vpc-endpoints/main.tf#L103)
+- resource.aws_route53_zone.shared (modules/aws/network/vpc-endpoints/main.tf#L84)
 - resource.aws_security_group.endpoints (modules/aws/network/vpc-endpoints/main.tf#L20)
 - resource.aws_vpc_endpoint.interface (modules/aws/network/vpc-endpoints/main.tf#L46)
 
@@ -83,8 +83,10 @@ The following resources are created:
 | <a name="input_allowed_cidrs"></a> [allowed\_cidrs](#input\_allowed\_cidrs) | CIDRs that may reach the interface endpoints on 443 when security\_group\_ids is empty (the module then owns the group). Use the org supernet for centralized endpoints. Empty with no security\_group\_ids = the VPC default security group. | `list(string)` | `[]` | no |
 | <a name="input_enable_shared_private_dns"></a> [enable\_shared\_private\_dns](#input\_enable\_shared\_private\_dns) | Serve each endpoint's regional name (<service>.<region>.amazonaws.com) from a private hosted zone with an alias record, instead of the endpoint's own private DNS, so other VPCs (through a Route 53 Profile) resolve the central endpoint. Only for services whose private DNS name is <service>.<region>.amazonaws.com. Default false. | `bool` | `false` | no |
 | <a name="input_endpoint_policy_json"></a> [endpoint\_policy\_json](#input\_endpoint\_policy\_json) | Optional override for the interface-endpoint policy (a JSON document). When null (default), the module applies an org-scoped allow-all policy gated by aws:PrincipalOrgID and relies on IAM for authorization. Supply a scoped policy to enforce per-service least privilege on the shared endpoints. | `string` | `null` | no |
+| <a name="input_endpoint_policy_mode"></a> [endpoint\_policy\_mode](#input\_endpoint\_policy\_mode) | Default endpoint policy when endpoint\_policy\_json is null. org\_principals (default): the caller must be in the organization (aws:PrincipalOrgID). org\_principals\_and\_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on the services in resource\_org\_exempt\_services. PREVIEW: not yet proven in a sandbox. AWS-owned resources (public AMIs, AWS-managed repositories) are not in your organization, so calls to them through a non-exempt endpoint are denied. | `string` | `"org_principals"` | no |
 | <a name="input_interface_services"></a> [interface\_services](#input\_interface\_services) | AWS services to create centralized Interface VPC endpoints for. Service names are built as com.amazonaws.<region>.<service>. | `list(string)` | <pre>[<br/>  "ec2",<br/>  "ssm",<br/>  "ssmmessages",<br/>  "ec2messages",<br/>  "kms",<br/>  "logs",<br/>  "sts"<br/>]</pre> | no |
 | <a name="input_private_hosted_zone_name"></a> [private\_hosted\_zone\_name](#input\_private\_hosted\_zone\_name) | Name of the shared Route 53 private hosted zone for split-horizon DNS. Empty string skips creating the zone. | `string` | `""` | no |
+| <a name="input_resource_org_exempt_services"></a> [resource\_org\_exempt\_services](#input\_resource\_org\_exempt\_services) | Interface services that keep the principal-only policy when endpoint\_policy\_mode is org\_principals\_and\_resources, because their calls reach AWS-owned resources or no resource at all (for example ec2 RunInstances with a public AMI, sts GetCallerIdentity). | `list(string)` | <pre>[<br/>  "ec2",<br/>  "ec2messages",<br/>  "ecr.api",<br/>  "ecr.dkr",<br/>  "logs",<br/>  "monitoring",<br/>  "ssm",<br/>  "ssmmessages",<br/>  "sts"<br/>]</pre> | no |
 | <a name="input_security_group_ids"></a> [security\_group\_ids](#input\_security\_group\_ids) | Security group IDs to associate with the interface endpoint ENIs. Empty (default) = a module-owned group that admits HTTPS from allowed\_cidrs (when allowed\_cidrs is set). | `list(string)` | `[]` | no |
 | <a name="input_subnet_ids"></a> [subnet\_ids](#input\_subnet\_ids) | Subnet IDs (one per AZ, in the hub VPC) to place the interface endpoint ENIs in. | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
@@ -95,6 +97,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_endpoint_ids"></a> [endpoint\_ids](#output\_endpoint\_ids) | Map of interface service name to the created VPC endpoint ID. |
 | <a name="output_phz_id"></a> [phz\_id](#output\_phz\_id) | Zone ID of the shared private hosted zone, or null when no zone was created. |
+| <a name="output_resource_org_scoped_services"></a> [resource\_org\_scoped\_services](#output\_resource\_org\_scoped\_services) | Interface services whose module-built endpoint policy also requires an org-owned resource (aws:ResourceOrgID). Empty in the default org\_principals mode or with endpoint\_policy\_json. |
 | <a name="output_shared_dns_zone_arns"></a> [shared\_dns\_zone\_arns](#output\_shared\_dns\_zone\_arns) | Map of interface service to the ARN of its private hosted zone (enable\_shared\_private\_dns), empty otherwise. Add these to a Route 53 Profile so spoke VPCs resolve the central endpoints. |
 <!-- END_TF_DOCS -->
 

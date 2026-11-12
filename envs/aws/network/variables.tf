@@ -201,9 +201,14 @@ variable "private_hosted_zone_name" {
 }
 
 variable "enable_network_firewall" {
-  description = "Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed. Null (default) follows profile: on for production, off for starter."
+  description = "Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed. Null (default) follows profile: on for production, off for starter; on for any profile when an aws.workload_environments entry is compliance_class: regulated (false then fails the plan)."
   type        = bool
   default     = null
+
+  validation {
+    condition     = var.enable_network_firewall != false || length(local.cfg.workload_regulated) == 0
+    error_message = "enable_network_firewall = false is not allowed: ${join(", ", local.cfg.workload_regulated)} ${length(local.cfg.workload_regulated) == 1 ? "is" : "are"} regulated (aws.workload_environments.<env>.compliance_class: regulated in config/landing-zone.yaml), and regulated egress must be inspected and fail closed."
+  }
 }
 
 variable "enable_network_access_analyzer" {
@@ -299,13 +304,25 @@ variable "profile" {
 }
 
 variable "enforce_egress_allowlist" {
-  description = "Fail the plan unless the firewall drops unmatched egress and carries a domain allowlist (or the waiver is set). Null = on when the profile is production and an aws.workload_environments entry is_production (required on every entry; the environment name is not read)."
+  description = "Fail the plan unless the firewall drops unmatched egress and carries a domain allowlist (or the waiver is set). Null = on when the profile is production and an aws.workload_environments entry is_production (required on every entry; the environment name is not read), or when any aws.workload_environments entry is compliance_class: regulated (false then fails the plan)."
   type        = bool
   default     = null
 
   validation {
     condition     = var.enforce_egress_allowlist != null || length(local.cfg.workload_missing_is_production) == 0
     error_message = "Every aws.workload_environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.workload_missing_is_production)}."
+  }
+
+  validation {
+    condition     = var.enforce_egress_allowlist != false || length(local.cfg.workload_regulated) == 0
+    error_message = "enforce_egress_allowlist = false is not allowed: ${join(", ", local.cfg.workload_regulated)} ${length(local.cfg.workload_regulated) == 1 ? "is" : "are"} regulated (aws.workload_environments.<env>.compliance_class: regulated in config/landing-zone.yaml), and regulated egress must fail closed."
+  }
+
+  validation {
+    # Hosted here: a validation on landing_zone_config_path would cycle. The
+    # var reference is a no-op.
+    condition     = (var.enforce_egress_allowlist == null || var.enforce_egress_allowlist != null) && length(local.cfg.workload_invalid_compliance_class) == 0
+    error_message = "aws.workload_environments.<env>.compliance_class must be standard or regulated. Invalid: ${join(", ", local.cfg.workload_invalid_compliance_class)}."
   }
 }
 
@@ -322,9 +339,25 @@ variable "network_firewall_stateful_default_actions" {
 }
 
 variable "egress_alert_only_waived" {
-  description = "Explicitly waive the production fail-closed egress gate (alert-only inspection). Null = aws.network.egress_alert_only_waived from config, else false."
+  description = "Explicitly waive the production fail-closed egress gate (alert-only inspection). Null = aws.network.egress_alert_only_waived from config, else false. Refused (the plan fails) when any aws.workload_environments entry is compliance_class: regulated."
   type        = bool
   default     = null
+
+  validation {
+    condition     = !(coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false) && length(local.cfg.workload_regulated) > 0)
+    error_message = "The alert-only egress waiver (egress_alert_only_waived / aws.network.egress_alert_only_waived) is not allowed: ${join(", ", local.cfg.workload_regulated)} ${length(local.cfg.workload_regulated) == 1 ? "is" : "are"} regulated (aws.workload_environments.<env>.compliance_class: regulated in config/landing-zone.yaml). Set aws.network.stateful_default_actions to include aws:drop_established and list the allowed domains in aws.network.egress_domain_allowlist."
+  }
+}
+
+variable "vpc_endpoint_policy_mode" {
+  description = "Policy of the central interface endpoints. org_principals: the caller must be in the organization (aws:PrincipalOrgID). org_principals_and_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on services whose resources are AWS-owned. PREVIEW: not yet proven in a sandbox, so a regulated estate does not turn it on by itself (docs/known-gaps.md). Null = aws.network.vpc_endpoint_policy_mode from config/landing-zone.yaml, else org_principals."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.vpc_endpoint_policy_mode == null || contains(["org_principals", "org_principals_and_resources"], coalesce(var.vpc_endpoint_policy_mode, "org_principals"))
+    error_message = "vpc_endpoint_policy_mode must be org_principals or org_principals_and_resources."
+  }
 }
 
 variable "enable_vpn" {

@@ -1,0 +1,14 @@
+# Test fixture: a compliance_class the root does not know (presets.tftest.hcl).
+# Not named landing-zone*.yaml: the schema rejects it (make config-check), and
+# the root must reject it too.
+version: 1
+org:
+  prefix: acme
+  tfc:
+    organization: acme-tfc
+gcp:
+  environments:
+    prod:
+      cidr_block: 10.30.0.0/16
+      is_production: false
+      compliance_class: pci

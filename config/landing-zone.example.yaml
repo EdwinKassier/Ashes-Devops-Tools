@@ -270,6 +270,11 @@ gcp:
       cidr_block: 10.12.0.0/16
       budget_monthly_limit: 2000
       is_production: true
+      # Opt-in regulated class (docs/architecture/regulated-environments.md):
+      # enforced VPC-SC with no waiver, Cloud Armor and OWASP rules, every flow
+      # logged and kept 365 days. gcp-organization then needs a hardened audit
+      # store (logging_project_id and enable_audit_bucket_lock above).
+      # compliance_class: regulated
       iam_group_role_bindings: {}
 
   # Application golden path (gcp-workload-<env>). All optional.
@@ -363,6 +368,10 @@ aws:
       account_key: workload_prod
       vpc_cidr: 10.73.0.0/16
       is_production: true
+      # Opt-in regulated class (docs/architecture/regulated-environments.md).
+      # One regulated environment hardens the shared aws-network hub: Network
+      # Firewall on and egress fail-closed on every profile, no alert-only waiver.
+      # compliance_class: regulated
 
   # IAM Identity Center access by name (aws-identity): Identity Store group
   # DISPLAY NAME => list of {permission_set, accounts}. Accounts are keys of the
@@ -414,7 +423,13 @@ aws:
       - .terraform.io
     # Explicit waiver to run production alert-only (log-but-pass) while allow
     # rules are being built. Reviewable; remove once the allowlist is complete.
+    # A regulated workload environment refuses it.
     # egress_alert_only_waived: true
+    # Hub interface endpoint policy. org_principals (default) checks the caller
+    # only. org_principals_and_resources also requires an organization-owned
+    # resource (aws:ResourceOrgID) on services whose resources you own. PREVIEW:
+    # prove it in a sandbox before you set it (docs/known-gaps.md).
+    # vpc_endpoint_policy_mode: org_principals
     # Opt-in Site-to-Site VPN from the transit gateway to an on-premises device
     # (aws-network). The tunnel pre-shared keys are not config: AWS keeps them in
     # a Secrets Manager secret (preshared_key_storage: SecretsManager, default;

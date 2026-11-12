@@ -2163,6 +2163,26 @@ Applies to workloads with `enable_saas_secret_bridge = true`.
 
 ### All clouds
 
+#### `compliance_class: regulated` (CMP-7, opt-in)
+
+**Who:** forks that mark an environment as holding regulated data. Nothing
+changes for an estate without `compliance_class: regulated`; the flow-log
+variables of `gcp-workload` now default to null with the same effective values
+(10% sampling, 30 days). Setting `compliance_class: regulated` on a
+`gcp.environments` entry makes its `gcp-workload-<env>` plan apply the
+`regulated-gcp-workload` preset (enforced VPC-SC, Cloud Armor with OWASP rules,
+every flow sampled, 365-day flow-log retention) and fail on a dry-run or absent
+perimeter, on `production_vpc_sc_dry_run_waiver`, or on a variable that lowers
+the flow-log values. Full sampling raises the Cloud Logging cost. Setting it on
+an `aws.workload_environments` entry turns on the shared hub's Network Firewall
+and egress gate in `aws-network` on every profile, and refuses
+`egress_alert_only_waived`, `enforce_egress_allowlist = false` and
+`enable_network_firewall = false`. **Before you set it:** read the VPC-SC
+dry-run violation logs (GCP) and complete `aws.network.egress_domain_allowlist`
+(AWS). `aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`
+(`aws:ResourceOrgID` on the hub endpoints) is a separate PREVIEW opt-in. See
+[`docs/architecture/regulated-environments.md`](docs/architecture/regulated-environments.md).
+
 #### `config/landing-zone.yaml` is now schema-validated (`make config-check`, CI, pre-commit)
 
 **Who:** every fork that commits `config/landing-zone.yaml`. **Before the

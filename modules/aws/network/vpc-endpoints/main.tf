@@ -57,6 +57,9 @@ resource "aws_vpc_endpoint" "interface" {
   # (aws:PrincipalOrgID). Action="*" here relies on IAM for per-service authz and
   # keeps this shared hub endpoint service-agnostic; callers who want tighter,
   # per-service least-privilege pass a scoped policy via var.endpoint_policy_json.
+  # endpoint_policy_mode = org_principals_and_resources also requires the
+  # resource to belong to the organization (aws:ResourceOrgID), except on the
+  # services in resource_org_exempt_services.
   policy = var.endpoint_policy_json != null ? var.endpoint_policy_json : jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -65,9 +68,10 @@ resource "aws_vpc_endpoint" "interface" {
       Action    = "*"
       Resource  = "*"
       Condition = {
-        StringEquals = {
-          "aws:PrincipalOrgID" = var.org_id
-        }
+        StringEquals = merge(
+          { "aws:PrincipalOrgID" = var.org_id },
+          var.endpoint_policy_mode == "org_principals_and_resources" && !contains(var.resource_org_exempt_services, each.value) ? { "aws:ResourceOrgID" = var.org_id } : {},
+        )
       }
     }]
   })

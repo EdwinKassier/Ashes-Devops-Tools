@@ -184,9 +184,21 @@ variable "network_firewall_egress_domain_allowlist" {
 }
 
 variable "enforce_egress_allowlist" {
-  description = "Production egress gate. When true (and egress_alert_only_waived is false) the plan fails unless network_firewall_stateful_default_actions contains aws:drop_established and network_firewall_egress_domain_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is_production."
+  description = "Production egress gate. When true (and egress_alert_only_waived is false) the plan fails unless network_firewall_stateful_default_actions contains aws:drop_established and network_firewall_egress_domain_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is_production, or when any AWS workload environment is compliance_class: regulated."
   type        = bool
   default     = false
+}
+
+variable "vpc_endpoint_policy_mode" {
+  description = "Policy of the central interface endpoints. org_principals (default): the caller must be in the organization (aws:PrincipalOrgID). org_principals_and_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on the vpc-endpoints module's resource_org_exempt_services. PREVIEW: not yet proven in a sandbox (docs/known-gaps.md)."
+  type        = string
+  default     = "org_principals"
+  nullable    = false
+
+  validation {
+    condition     = contains(["org_principals", "org_principals_and_resources"], var.vpc_endpoint_policy_mode)
+    error_message = "vpc_endpoint_policy_mode must be org_principals or org_principals_and_resources."
+  }
 }
 
 variable "egress_alert_only_waived" {

@@ -59,3 +59,37 @@ run "rejects_static_routing_without_onprem_cidrs" {
 
   expect_failures = [var.vpn]
 }
+
+# This file does not override module.vpc_endpoints, so the mode reaches the
+# real endpoint policies.
+run "resource_org_endpoint_policy_reaches_the_endpoints" {
+  command = plan
+
+  variables {
+    vpc_endpoint_policy_mode = "org_principals_and_resources"
+  }
+
+  assert {
+    condition     = join(",", module.vpc_endpoints.resource_org_scoped_services) == "kms"
+    error_message = "vpc_endpoint_policy_mode must reach the hub endpoints (kms is the only default service outside the exempt list)."
+  }
+}
+
+run "endpoint_policy_stays_principal_only_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(module.vpc_endpoints.resource_org_scoped_services) == 0
+    error_message = "The hub endpoint policy must stay aws:PrincipalOrgID only by default."
+  }
+}
+
+run "rejects_unknown_vpc_endpoint_policy_mode" {
+  command = plan
+
+  variables {
+    vpc_endpoint_policy_mode = "resources_only"
+  }
+
+  expect_failures = [var.vpc_endpoint_policy_mode]
+}

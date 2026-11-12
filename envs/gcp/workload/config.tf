@@ -186,22 +186,35 @@ locals {
 # of <name>.tfvars, kept in step by tests/presets.tftest.hcl). A listed preset is
 # applied only by the root its `root:` names; every other root ignores it. This
 # root also applies gcp.workload.presets_by_environment[<environment>] (so a
-# prod-only preset does not harden dev). Precedence: explicit variable > preset
-# > config file > built-in default. Supported keys: local.preset_supported_keys.
+# prod-only preset does not harden dev), and regulated-gcp-workload last when
+# gcp.environments.<environment>.compliance_class is regulated. Precedence:
+# explicit variable > preset > config file > built-in default. Supported keys:
+# local.preset_supported_keys. The regulated guards in main.tf fail the plan
+# when an explicit variable weakens a regulated value.
 locals {
+  # gcp.environments.<environment>.compliance_class: standard (default) or
+  # regulated (CMP-7). main.tf (compliance_class_guard) rejects other values.
+  compliance_class = try(tostring(local.lz.gcp.environments[var.environment].compliance_class), "standard")
+  regulated        = local.compliance_class == "regulated"
+
   preset_root = "envs/gcp/workload"
   preset_names = distinct(concat(
     try([for n in local.lz.presets : tostring(n)], []),
     try([for n in local.lz.gcp.workload.presets_by_environment[var.environment] : tostring(n)], []),
+    local.regulated ? ["regulated-gcp-workload"] : [],
   ))
   preset_documents = [for n in local.preset_names : yamldecode(file("${path.root}/../../../examples/presets/${n}.yaml"))]
   preset = merge([
     for d in local.preset_documents : { for k, v in try(d.values, {}) : k => v } if try(d.root, "") == local.preset_root
   ]...)
-  preset_supported_keys = ["vpc_sc_enable_dry_run", "enable_cloud_armor", "enable_owasp_rules"]
+  preset_supported_keys = ["vpc_sc_enable_dry_run", "enable_cloud_armor", "enable_owasp_rules", "log_config_flow_sampling", "vpc_flow_logs_retention_days"]
 
   # Effective preset-backed values.
   vpc_sc_enable_dry_run = var.vpc_sc_enable_dry_run != null ? var.vpc_sc_enable_dry_run : tobool(lookup(local.preset, "vpc_sc_enable_dry_run", true))
   enable_cloud_armor    = var.enable_cloud_armor != null ? var.enable_cloud_armor : tobool(lookup(local.preset, "enable_cloud_armor", false))
   enable_owasp_rules    = var.enable_owasp_rules != null ? var.enable_owasp_rules : tobool(lookup(local.preset, "enable_owasp_rules", false))
+  # VPC flow logs: 10% sampling and a 30-day export unless a preset
+  # (regulated-gcp-workload: 1 = every flow, 365 days) or a variable says otherwise.
+  flow_log_sampling        = var.log_config_flow_sampling != null ? var.log_config_flow_sampling : tonumber(lookup(local.preset, "log_config_flow_sampling", 0.1))
+  flow_logs_retention_days = var.vpc_flow_logs_retention_days != null ? var.vpc_flow_logs_retention_days : tonumber(lookup(local.preset, "vpc_flow_logs_retention_days", 30))
 }

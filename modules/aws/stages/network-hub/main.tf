@@ -498,7 +498,9 @@ module "network_firewall" {
 }
 
 # Production egress fails closed: an enforced estate must drop unmatched
-# established traffic and carry a domain allowlist, or carry the waiver.
+# established traffic and carry a domain allowlist, or carry the waiver. The
+# aws-network root turns the gate on for a production estate or any regulated
+# workload environment, and refuses the waiver for a regulated one.
 resource "terraform_data" "production_egress_enforced" {
   input = var.enforce_egress_allowlist
 
@@ -509,7 +511,7 @@ resource "terraform_data" "production_egress_enforced" {
         (contains(var.network_firewall_stateful_default_actions, "aws:drop_established") &&
         length(var.network_firewall_egress_domain_allowlist) > 0)
       )
-      error_message = "Production egress must fail closed: set network_firewall_stateful_default_actions to include aws:drop_established AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
+      error_message = "Production and regulated egress must fail closed: set network_firewall_stateful_default_actions to include aws:drop_established AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
     }
   }
 }
@@ -566,6 +568,9 @@ module "vpc_endpoints" {
   private_hosted_zone_name  = var.private_hosted_zone_name
   allowed_cidrs             = local.endpoint_allowed_cidrs
   enable_shared_private_dns = true
+  # PREVIEW (default org_principals): org_principals_and_resources adds
+  # aws:ResourceOrgID for the non-exempt services.
+  endpoint_policy_mode = var.vpc_endpoint_policy_mode
 
   tags = var.tags
 }

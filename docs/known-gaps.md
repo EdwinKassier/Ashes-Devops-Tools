@@ -864,6 +864,22 @@ GCP:
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.
 
+- **Resource-organization policy on the hub interface endpoints**
+  (`aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`,
+  `modules/aws/network/vpc-endpoints` `endpoint_policy_mode`, CMP-7 D8). It adds
+  `aws:ResourceOrgID` to the endpoint policy of every service outside
+  `resource_org_exempt_services` (of the default services, only `kms`). It is
+  off for every estate, including one with a `compliance_class: regulated`
+  environment: `aws-network` only warns (a `check`) when a regulated estate
+  keeps the principal-only policy. Mock-tested only. To prove in a sandbox
+  before it becomes the regulated default:
+  - Calls that reach AWS-owned resources or no resource at all through a
+    non-exempt endpoint are denied. Confirm the exempt list covers every such
+    call your workloads make (for example a vendor's KMS key in another
+    organization, or a KMS call that names no key).
+  - Instance bootstrap (SSM agent, package repositories, ECR pulls) still works
+    from a spoke through the central endpoints.
+
 - **Organization trail managed by the CloudTrail delegated administrator**
   (`aws.enable_cloudtrail_delegated_admin`, ADR 0012,
   [runbook](runbooks/aws-cloudtrail-delegated-admin-migration.md)). Mock-tested

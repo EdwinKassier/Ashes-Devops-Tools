@@ -84,6 +84,25 @@ variable "endpoint_policy_json" {
   default     = null
 }
 
+variable "endpoint_policy_mode" {
+  description = "Default endpoint policy when endpoint_policy_json is null. org_principals (default): the caller must be in the organization (aws:PrincipalOrgID). org_principals_and_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on the services in resource_org_exempt_services. PREVIEW: not yet proven in a sandbox. AWS-owned resources (public AMIs, AWS-managed repositories) are not in your organization, so calls to them through a non-exempt endpoint are denied."
+  type        = string
+  default     = "org_principals"
+  nullable    = false
+
+  validation {
+    condition     = contains(["org_principals", "org_principals_and_resources"], var.endpoint_policy_mode)
+    error_message = "endpoint_policy_mode must be org_principals or org_principals_and_resources."
+  }
+}
+
+variable "resource_org_exempt_services" {
+  description = "Interface services that keep the principal-only policy when endpoint_policy_mode is org_principals_and_resources, because their calls reach AWS-owned resources or no resource at all (for example ec2 RunInstances with a public AMI, sts GetCallerIdentity)."
+  type        = list(string)
+  default     = ["ec2", "ec2messages", "ecr.api", "ecr.dkr", "logs", "monitoring", "ssm", "ssmmessages", "sts"]
+  nullable    = false
+}
+
 variable "tags" {
   description = "Tags applied to every taggable resource this module creates (merged after provider default_tags; resource-specific tags such as Name win)."
   type        = map(string)

@@ -544,6 +544,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   set, or `gcp.audit_store_waived: true`. The three keys are new in the config file. The production
   profile warns when an `is_production` environment exists without them, and the plan warns when the
   logging project sits in a folder. See `UPGRADING.md`.
+- **Opt-in regulated environment class (CMP-7).** `compliance_class: regulated` on a
+  `gcp.environments` entry applies the new `regulated-gcp-workload` preset to that
+  `gcp-workload-<env>` (enforced VPC-SC, Cloud Armor with OWASP rules, full flow-log sampling,
+  365-day flow-log retention) and fails the plan on a dry-run perimeter, the production waiver or
+  weaker flow-log variables. On an `aws.workload_environments` entry it forces the `aws-network`
+  Network Firewall and egress gate on every profile and refuses the alert-only waiver.
+  `aws.network.vpc_endpoint_policy_mode` adds `aws:ResourceOrgID` to the hub endpoint policy
+  (PREVIEW, off by default). See `docs/architecture/regulated-environments.md`.
 - **No placeholder SecOps subscriber (breaking, CMP-6).** `aws-security` no longer subscribes
   `secops@example.com`. A production plan (`org.profile = production` or a production AWS workload
   environment) fails until `notifications.emails` or `aws_overrides.notification_subscribers` names

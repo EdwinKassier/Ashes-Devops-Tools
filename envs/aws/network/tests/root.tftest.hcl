@@ -207,6 +207,11 @@ run "starter_profile_unaffected" {
     condition     = local.enforce_egress_allowlist == false
     error_message = "the starter profile must not enforce the egress gate."
   }
+
+  assert {
+    condition     = local.vpc_endpoint_policy_mode == "org_principals" && length(local.cfg.workload_regulated) == 0
+    error_message = "without a regulated environment or the config key, the endpoint policy must stay principal-only."
+  }
 }
 
 run "waiver_plans" {
@@ -220,4 +225,80 @@ run "waiver_plans" {
     condition     = local.enforce_egress_allowlist == true && local.egress_alert_only_waived == true
     error_message = "the waiver must plan with the gate still on."
   }
+}
+
+# compliance_class: regulated (CMP-7). One regulated AWS workload environment
+# forces the egress gate and the Network Firewall for the shared hub, on any
+# profile, and refuses the alert-only waiver and the opt-outs.
+run "regulated_workload_forces_egress_gate" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+  }
+
+  assert {
+    condition     = join(",", local.cfg.workload_regulated) == "pci" && local.enforce_egress_allowlist == true && local.enable_network_firewall == true
+    error_message = "a regulated AWS workload env must force the egress gate and the Network Firewall, even on the starter profile."
+  }
+
+  assert {
+    condition     = local.vpc_endpoint_policy_mode == "org_principals_and_resources"
+    error_message = "aws.network.vpc_endpoint_policy_mode from the config file must reach the root."
+  }
+}
+
+# A regulated estate on the principal-only endpoint policy plans with a
+# warning (the resource-org policy is PREVIEW), never a failure.
+run "regulated_estate_warns_on_principal_only_endpoints" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    vpc_endpoint_policy_mode = "org_principals"
+  }
+
+  expect_failures = [check.regulated_endpoint_policy]
+}
+
+run "regulated_refuses_waiver" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated-waived.yaml"
+  }
+
+  expect_failures = [var.egress_alert_only_waived]
+}
+
+run "regulated_refuses_disabled_egress_gate" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    enforce_egress_allowlist = false
+  }
+
+  expect_failures = [var.enforce_egress_allowlist]
+}
+
+run "regulated_refuses_disabled_network_firewall" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    enable_network_firewall  = false
+  }
+
+  expect_failures = [var.enable_network_firewall]
+}
+
+run "unknown_compliance_class_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/schema-invalid-compliance-class.yaml"
+  }
+
+  expect_failures = [var.enforce_egress_allowlist]
 }

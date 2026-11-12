@@ -270,12 +270,12 @@ variable "owasp_sensitivity" {
 }
 
 variable "log_config_flow_sampling" {
-  description = "VPC Flow Logs packet-sampling rate (0.0–1.0). 0.1 = 10% of packets sampled. Recommended: 0.5 for dev/staging, 0.1 for prod (reduce Logging cost). Set to 0.0 to disable flow log collection while keeping the log bucket."
+  description = "VPC Flow Logs packet-sampling rate (0.0–1.0). 0.1 = 10% of packets sampled. Recommended: 0.5 for dev/staging, 0.1 for prod (reduce Logging cost). Set to 0.0 to disable flow log collection while keeping the log bucket. Null = a configured preset (regulated-gcp-workload sets 1), else 0.1. A regulated environment (gcp.environments.<env>.compliance_class: regulated) fails the plan below 1."
   type        = number
-  default     = 0.1
+  default     = null
 
   validation {
-    condition     = var.log_config_flow_sampling >= 0.0 && var.log_config_flow_sampling <= 1.0
+    condition     = var.log_config_flow_sampling == null || try(var.log_config_flow_sampling >= 0.0 && var.log_config_flow_sampling <= 1.0, false)
     error_message = "log_config_flow_sampling must be between 0.0 and 1.0."
   }
 }
@@ -287,9 +287,14 @@ variable "log_config_aggregation_interval" {
 }
 
 variable "vpc_flow_logs_retention_days" {
-  description = "Retention period for exported VPC flow logs"
+  description = "Retention period, in days, for exported VPC flow logs. Null = a configured preset (regulated-gcp-workload sets 365), else 30. A regulated environment (gcp.environments.<env>.compliance_class: regulated) fails the plan below 365."
   type        = number
-  default     = 30
+  default     = null
+
+  validation {
+    condition     = var.vpc_flow_logs_retention_days == null || try(var.vpc_flow_logs_retention_days >= 1, false)
+    error_message = "vpc_flow_logs_retention_days must be at least 1."
+  }
 }
 
 variable "extra_labels" {
@@ -334,7 +339,7 @@ variable "vpc_sc_enable_dry_run" {
     # Guards the preset loader (config.tf). Hosted here because a validation on
     # landing_zone_config_path would cycle; the var reference is a no-op.
     condition     = (var.vpc_sc_enable_dry_run == null || var.vpc_sc_enable_dry_run != null) && length(setsubtract(keys(local.preset), local.preset_supported_keys)) == 0
-    error_message = "A preset for envs/gcp/workload sets a key this root cannot take from a preset (supported: vpc_sc_enable_dry_run, enable_cloud_armor, enable_owasp_rules). Set it as a variable instead."
+    error_message = "A preset for envs/gcp/workload sets a key this root cannot take from a preset (supported: vpc_sc_enable_dry_run, enable_cloud_armor, enable_owasp_rules, log_config_flow_sampling, vpc_flow_logs_retention_days). Set it as a variable instead."
   }
 }
 

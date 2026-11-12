@@ -937,7 +937,7 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "standard (default) or regulated. gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or gcp.audit_store_waived is true.",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or gcp.audit_store_waived is true. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), flow-log sampling is 1 and flow-log retention is at least 365 days.",
                 "enum": [
                   "standard",
                   "regulated"
@@ -1529,7 +1529,7 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "Reserved: no root reads this key yet.",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). Any regulated entry hardens the shared aws-network hub: the Network Firewall is on and the egress gate fails closed on every profile, and aws.network.egress_alert_only_waived is refused.",
                 "enum": [
                   "standard",
                   "regulated"
@@ -1617,7 +1617,16 @@
               }
             },
             "egress_alert_only_waived": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Waive the production egress gate (alert-only inspection). Refused when any aws.workload_environments entry is compliance_class: regulated."
+            },
+            "vpc_endpoint_policy_mode": {
+              "type": "string",
+              "description": "Policy of the hub interface endpoints (aws-network). org_principals (default): the caller must be in the organization. org_principals_and_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on services whose resources are AWS-owned. PREVIEW: prove it in a sandbox first.",
+              "enum": [
+                "org_principals",
+                "org_principals_and_resources"
+              ]
             },
             "spoke_attachments": {
               "type": "object",
