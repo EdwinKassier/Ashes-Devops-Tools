@@ -107,6 +107,13 @@ resource "aws_vpc" "this" {
     # cidr_block matches and only this create-time argument would differ. It
     # also means a later netmask_length change does not replace the VPC.
     ignore_changes = [ipv4_netmask_length]
+
+    # A zone from another region fails every subnet at apply with
+    # InvalidParameterValue. Fail the plan instead.
+    precondition {
+      condition     = alltrue([for az in local.azs : startswith(az, var.region)])
+      error_message = "availability_zones ${jsonencode(local.azs)} are not all in region ${var.region}. Pass the region's zones (envs/aws/network and envs/aws/workload resolve them from aws.network.availability_zone_ids or the region)."
+    }
   }
 }
 

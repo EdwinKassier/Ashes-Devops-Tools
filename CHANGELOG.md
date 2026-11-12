@@ -505,6 +505,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   legacy org-level binding in gcp-bootstrap does the same. gcp-projects turns off google provider
   batching, which would merge the folder IAM changes on one folder into a single request that spans
   two conditions. See `UPGRADING.md`.
+- **AZs from another region fail at plan (ARC-3).** `modules/aws/network/vpc` now fails the plan
+  when an availability zone name does not start with `region`. Before, the default
+  `eu-west-2a`/`eu-west-2b` zones reached every subnet in another region and the apply failed with
+  `InvalidParameterValue`. New output `availability_zones` lists the zones the subnets use.
 - `docs/guides/BRANCH_PROTECTION.md` listed `Terraform Tests` (a sharded matrix that only reports
   `Terraform Tests (shard N)`) as a required context, which would block every PR. `Validation Summary` is
   now the only required context.

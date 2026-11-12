@@ -54,3 +54,30 @@ run "route_for_unknown_tier_rejected" {
 
   expect_failures = [var.routes]
 }
+
+run "availability_zones_from_another_region_rejected" {
+  command = plan
+
+  variables {
+    region                   = "us-east-1"
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+  }
+
+  # The default availability_zones are eu-west-2a/b/c.
+  expect_failures = [aws_vpc.this]
+}
+
+run "availability_zones_in_region_accepted" {
+  command = plan
+
+  variables {
+    region                   = "us-east-1"
+    availability_zones       = ["us-east-1a", "us-east-1b"]
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+  }
+
+  assert {
+    condition     = output.availability_zones == tolist(["us-east-1a", "us-east-1b"])
+    error_message = "The module must expose the availability zones it placed subnets in."
+  }
+}

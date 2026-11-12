@@ -51,17 +51,17 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_default_security_group.this (modules/aws/network/vpc/main.tf#L143)
-- resource.aws_flow_log.this (modules/aws/network/vpc/main.tf#L150)
-- resource.aws_internet_gateway.this (modules/aws/network/vpc/main.tf#L201)
-- resource.aws_route.public_internet (modules/aws/network/vpc/main.tf#L209)
-- resource.aws_route.this (modules/aws/network/vpc/main.tf#L220)
-- resource.aws_route_table.this (modules/aws/network/vpc/main.tf#L181)
-- resource.aws_route_table_association.this (modules/aws/network/vpc/main.tf#L192)
-- resource.aws_subnet.this (modules/aws/network/vpc/main.tf#L123)
+- resource.aws_default_security_group.this (modules/aws/network/vpc/main.tf#L150)
+- resource.aws_flow_log.this (modules/aws/network/vpc/main.tf#L157)
+- resource.aws_internet_gateway.this (modules/aws/network/vpc/main.tf#L208)
+- resource.aws_route.public_internet (modules/aws/network/vpc/main.tf#L216)
+- resource.aws_route.this (modules/aws/network/vpc/main.tf#L227)
+- resource.aws_route_table.this (modules/aws/network/vpc/main.tf#L188)
+- resource.aws_route_table_association.this (modules/aws/network/vpc/main.tf#L199)
+- resource.aws_subnet.this (modules/aws/network/vpc/main.tf#L130)
 - resource.aws_vpc.this (modules/aws/network/vpc/main.tf#L85)
-- resource.aws_vpc_endpoint.gateway (modules/aws/network/vpc/main.tf#L160)
-- resource.aws_vpc_endpoint_route_table_association.gateway (modules/aws/network/vpc/main.tf#L170)
+- resource.aws_vpc_endpoint.gateway (modules/aws/network/vpc/main.tf#L167)
+- resource.aws_vpc_endpoint_route_table_association.gateway (modules/aws/network/vpc/main.tf#L177)
 
 
 ## Inputs
@@ -89,6 +89,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_availability_zones"></a> [availability\_zones](#output\_availability\_zones) | Availability zone names the subnets are placed in (the first az\_count entries of availability\_zones), index-aligned with every per-tier list output. |
 | <a name="output_gateway_endpoint_ids"></a> [gateway\_endpoint\_ids](#output\_gateway\_endpoint\_ids) | Map of gateway endpoint service name (e.g. s3, dynamodb) to its VPC endpoint ID. |
 | <a name="output_internet_gateway_id"></a> [internet\_gateway\_id](#output\_internet\_gateway\_id) | ID of the internet gateway, or null when create\_internet\_gateway is false. |
 | <a name="output_route_table_ids_by_tier"></a> [route\_table\_ids\_by\_tier](#output\_route\_table\_ids\_by\_tier) | Map of subnet tier name to the list of route table IDs for that tier (one per AZ). Element order matches subnet\_ids\_by\_tier, so index i of both lists is the same AZ. |

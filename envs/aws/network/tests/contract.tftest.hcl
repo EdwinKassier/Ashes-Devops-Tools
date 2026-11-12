@@ -117,6 +117,8 @@ run "variable_contract_beats_config_contract" {
     landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
     profile                  = "production"
     aws_enabled_regions      = ["eu-west-2"]
+    # The fixture's org.regions.aws is eu-west-1.
+    availability_zones = ["eu-west-1a", "eu-west-1b"]
     organization_contract = {
       organization_id       = "o-varsvarsva"
       management_account_id = "999999999999"
