@@ -68,8 +68,21 @@ locals {
 #   - --no-audit --no-fund: no extra calls to the registry's audit endpoint and
 #     no noise in the apply log.
 #   - `&&` stops before node when the install fails.
+#   - `env -i`: npm runs with a cleared environment. The provisioner
+#     environment (POSTGRES_URL, VAULT_DESIRED_JSON, SUPABASE_SSL_CERT) and the
+#     workspace's own variables (SUPABASE_ACCESS_TOKEN) reach node only, never
+#     npm, its config files or its registry. npm gets back only the variables
+#     in npm_env_passthrough, each one only when it is set (POSIX
+#     ${VAR:+"VAR=${VAR}"}), so an unset HOME stays unset.
 locals {
-  npm_install_command = "npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts"
+  npm_env_passthrough = [
+    "PATH", "HOME", "TMPDIR",
+    "npm_config_cache", "NPM_CONFIG_CACHE",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+    "NODE_EXTRA_CA_CERTS",
+  ]
+  npm_env             = join(" ", [for v in local.npm_env_passthrough : "$${${v}:+\"${v}=$${${v}}\"}"])
+  npm_install_command = "env -i ${local.npm_env} npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts"
   bootstrap_command   = "${local.npm_install_command} && node ${path.module}/scripts/bootstrap.mjs"
   reconcile_command   = "${local.npm_install_command} && node ${path.module}/scripts/reconcile.mjs"
 }

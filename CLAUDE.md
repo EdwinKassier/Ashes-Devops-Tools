@@ -219,7 +219,7 @@ Vercel executes `ignore_command` in `/bin/sh`, not bash. Use POSIX sh syntax:
 
 ### vault-secrets Node.js dependency
 
-`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: the bootstrap and reconcile provisioners (which `import { Pool } from "pg"`) each run `npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts` in the same command, before `node`, so a fresh runner works on every apply. No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --ignore-scripts --prefix modules/supabase/vault-secrets/scripts`. The vault RPCs live in the unexposed `iac_vault` schema (never in `public`).
+`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: the bootstrap and reconcile provisioners (which `import { Pool } from "pg"`) each run `npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts` in the same command, before `node`, so a fresh runner works on every apply. npm runs under `env -i` and sees no secret environment: only `PATH`, `HOME`, `TMPDIR`, the npm cache variables, the proxy variables and `NODE_EXTRA_CA_CERTS` (each when set) reach it. `POSTGRES_URL`, `VAULT_DESIRED_JSON`, `SUPABASE_SSL_CERT` and `SUPABASE_ACCESS_TOKEN` reach `node` only. No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --ignore-scripts --prefix modules/supabase/vault-secrets/scripts`. The vault RPCs live in the unexposed `iac_vault` schema (never in `public`).
 
 ### AWS modules
 
