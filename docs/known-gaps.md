@@ -11,6 +11,17 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **Single-region estate; recovery objectives are design targets.** Both clouds
+  deploy to one primary region by default. There is no warm standby, no
+  multi-region failover, no Aurora Global Database and no Cloud SQL
+  cross-region replica. Cross-account and cross-region backup copies are
+  opt-in (`compliance.backup`) and the GCP Backup and DR vault is opt-in
+  outside regulated environments. The RPO and RTO in
+  [`disaster-recovery.md`](runbooks/disaster-recovery.md) come from the backup
+  schedules in the code. No restore has measured them. Run a restore drill in a
+  sandbox and replace the targets with measurements. The `dr_region` input is
+  documented to differ from the home region and to be in `aws.allowed_regions`,
+  but no plan check enforces that.
 - **GCP Cloud NAT egress route is mock-tested only.** `net-hub` / `net-spoke`
   now add a `0.0.0.0/0` route to the default internet gateway when NAT is on
   (`tiered-vpc` deletes the default route at creation). Confirm in the sandbox
