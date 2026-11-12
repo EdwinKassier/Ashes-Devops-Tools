@@ -1120,7 +1120,7 @@ resource "terraform_data" "input_contract" {
     }
     precondition {
       condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_outside_aws_pool) == 0
-      error_message = "config/landing-zone.yaml address plan conflicts (docs/architecture/cidr-plan.md: GCP 10.0.0.0/12, AWS 10.64.0.0/10, one regional pool per region): ${join("; ", concat(local.cidr_overlaps, local.cidr_outside_aws_top, local.cidr_outside_aws_pool))}. Give every aws.workload_environments entry its own vpc_cidr inside aws.network.regional_cidrs.<org.regions.aws>."
+      error_message = "config/landing-zone.yaml address plan conflicts (docs/architecture/cidr-plan.md: GCP 10.0.0.0/12, AWS 10.64.0.0/10, one regional pool per region): ${join("; ", concat(local.cidr_overlaps, local.cidr_outside_aws_top, local.cidr_outside_aws_pool))}. Give every aws.workload_environments entry its own vpc_cidr inside aws.network.regional_cidrs.<org.regions.aws>, and keep aws.network.vpn.onprem_cidrs clear of every cloud range."
     }
     precondition {
       condition     = length(local.file_bad_categories) == 0

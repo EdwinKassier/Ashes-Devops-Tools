@@ -270,12 +270,12 @@ run "bgp_vpn_routes_the_listed_onprem_prefixes" {
     enable_vpn = true
     vpn = {
       customer_gateway_ip = "203.0.113.10"
-      onprem_cidrs        = ["10.200.0.0/24"]
+      onprem_cidrs        = ["172.16.0.0/24"]
     }
   }
 
   assert {
-    condition     = aws_route.hub_to_tgw["egress-onprem-0-10.200.0.0/24"].route_table_id == "rtb-egr-prv-a" && output.tgw_inspection_routes["shared:onprem:10.200.0.0/24"].attachment == "inspection" && length(aws_ec2_transit_gateway_route.vpn_onprem) == 0
+    condition     = aws_route.hub_to_tgw["egress-onprem-0-172.16.0.0/24"].route_table_id == "rtb-egr-prv-a" && output.tgw_inspection_routes["shared:onprem:172.16.0.0/24"].attachment == "inspection" && length(aws_ec2_transit_gateway_route.vpn_onprem) == 0
     error_message = "With BGP the listed on-premises prefixes must still be routed from the egress VPC (BGP propagates only into the inspection table)."
   }
 }
@@ -308,4 +308,76 @@ run "bgp_vpn_without_onprem_cidrs_warns" {
   }
 
   expect_failures = [check.resolver_endpoints_reach_onprem]
+}
+
+# On-premises prefixes must not overlap an AWS range: the egress VPC and the
+# shared table would route that range to the VPN (or the apply would fail on a
+# duplicate route).
+run "onprem_prefix_overlapping_top_cidr_fails" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16", "10.200.0.0/16"] }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "onprem_prefix_overlapping_a_hub_vpc_fails" {
+  command = plan
+
+  variables {
+    top_cidr        = "10.64.0.0/10"
+    regional_cidrs  = { "eu-west-2" = "10.64.0.0/12" }
+    inspection_cidr = "10.0.0.0/16"
+    enable_vpn      = true
+    vpn             = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["10.0.5.0/24"] }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "onprem_prefix_overlapping_a_spoke_fails" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["100.64.0.0/12"] }
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "100.70.0.0/16" }
+    }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "onprem_prefixes_outside_aws_ranges_pass" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16", "172.16.0.0/12", "100.64.0.0/16"] }
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.72.0.0/16" }
+    }
+  }
+
+  assert {
+    condition     = length(local.onprem_route_cidrs) == 3
+    error_message = "Prefixes that overlap no AWS range must be accepted and routed."
+  }
+}
+
+run "overlap_is_not_checked_without_the_vpn" {
+  command = plan
+
+  variables {
+    vpn = { onprem_cidrs = ["10.200.0.0/16"] }
+  }
+
+  assert {
+    condition     = length(local.onprem_route_cidrs) == 0
+    error_message = "Without the VPN onprem_cidrs is not routed, so it is not checked for overlap."
+  }
 }

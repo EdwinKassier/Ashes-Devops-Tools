@@ -1132,6 +1132,12 @@ reach only the TGW `inspection` table, not VPC route tables. List at least the
 on-premises resolver ranges there. A `check` warns when the VPN and the
 Resolver endpoints are on and the list is empty.
 
+With the VPN on, the aws-network plan now fails when a `vpn.onprem_cidrs`
+prefix overlaps `top_cidr`, `inspection_cidr`, `egress_cidr` or a spoke
+`cidr`, and the tfc-admin plan fails when it overlaps any AWS or GCP range in
+`config/landing-zone.yaml`. Such a prefix would send AWS traffic to the VPN.
+Before you upgrade, remove or narrow any overlapping prefix.
+
 #### Access Analyzer in every enabled region (aws-security)
 
 The external analyzer now exists in every `aws.enabled_regions` entry (the home

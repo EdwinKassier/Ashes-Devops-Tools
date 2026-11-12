@@ -203,11 +203,21 @@ locals {
     ) : k => c if c != null && can(cidrnetmask(c))
   } : {}
 
+  # With the AWS VPN on, aws-network routes each on-premises prefix from the
+  # egress VPC and the shared TGW table to the VPN, so none may overlap an AWS
+  # (or GCP) range. They may overlap each other, and they are not held to
+  # top_cidr or the pool. aws-network fails its own plan on an AWS overlap too.
+  cidr_onprem_ranges = local.enable_aws && try(tobool(local.lz.aws.network.vpn.enabled), false) ? {
+    for i, c in try(local.lz.aws.network.vpn.onprem_cidrs, []) : "aws.network.vpn.onprem_cidrs[${i}]" => tostring(c)
+    if can(cidrnetmask(tostring(c)))
+  } : {}
+
   # Two ranges overlap when their network addresses agree on the shorter prefix
   # (cidrhost masks the host bits of the address it is given).
   cidr_all = merge(
     local.cidr_gcp_ranges,
     local.cidr_aws_ranges,
+    local.cidr_onprem_ranges,
     local.cidr_aws_top == null || !can(cidrnetmask(coalesce(local.cidr_aws_top, "x"))) ? {} : { "aws.network.top_cidr" = local.cidr_aws_top },
   )
   cidr_keys = sort(keys(local.cidr_all))
@@ -218,6 +228,7 @@ locals {
       # still checked pairwise.
       if !(contains(["aws.network.top_cidr"], a) && contains(keys(local.cidr_aws_ranges), b)) &&
       !(contains(["aws.network.top_cidr"], b) && contains(keys(local.cidr_aws_ranges), a)) &&
+      !(contains(keys(local.cidr_onprem_ranges), a) && contains(keys(local.cidr_onprem_ranges), b)) &&
       cidrhost("${split("/", local.cidr_all[a])[0]}/${min(tonumber(split("/", local.cidr_all[a])[1]), tonumber(split("/", local.cidr_all[b])[1]))}", 0) ==
       cidrhost("${split("/", local.cidr_all[b])[0]}/${min(tonumber(split("/", local.cidr_all[a])[1]), tonumber(split("/", local.cidr_all[b])[1]))}", 0)
     ]

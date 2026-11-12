@@ -434,3 +434,38 @@ run "hub_cidr_outside_the_pool_overlapping_a_workload_fails" {
 
   expect_failures = [terraform_data.input_contract]
 }
+
+# With the AWS VPN on, each on-premises prefix is checked against the AWS and
+# GCP ranges. Prefixes on the on-premises side may overlap each other.
+run "onprem_prefix_overlapping_aws_ranges_fails_the_plan" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-onprem-overlap.yaml"
+  }
+
+  assert {
+    condition = (
+      contains(local.cidr_overlaps, "aws.network.inspection_cidr (10.64.0.0/16) overlaps aws.network.vpn.onprem_cidrs[0] (10.64.5.0/24)") &&
+      contains(local.cidr_overlaps, "aws.network.top_cidr (10.64.0.0/10) overlaps aws.network.vpn.onprem_cidrs[0] (10.64.5.0/24)") &&
+      contains(local.cidr_overlaps, "aws.network.vpn.onprem_cidrs[1] (10.72.0.0/12) overlaps aws.workload_environments.dev.vpc_cidr (10.72.0.0/16)") &&
+      !anytrue([for o in local.cidr_overlaps : strcontains(o, "192.168.")])
+    )
+    error_message = "On-premises prefixes that overlap AWS ranges (top_cidr included) must be reported; on-premises prefixes overlapping each other must not."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "onprem_prefixes_clear_of_aws_ranges_pass" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-onprem-clean.yaml"
+  }
+
+  assert {
+    condition     = local.cidr_all["aws.network.vpn.onprem_cidrs[2]"] == "172.16.0.0/12" && length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_outside_aws_pool) == 0
+    error_message = "On-premises prefixes clear of every AWS and GCP range must pass, and they are not held to top_cidr or the pool."
+  }
+}

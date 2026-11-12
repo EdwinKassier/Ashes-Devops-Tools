@@ -662,8 +662,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `vpn.onprem_cidrs` prefix now routes from the egress private tier to the TGW and from the `shared`
   table to inspection, and the egress attachment propagates into the `inspection` table, so both
   directions cross the firewall. A `check` warns when the VPN and the endpoints are on and
-  `onprem_cidrs` is empty. The aws-network `vpn` variable no longer fails its key check when it
-  sets `onprem_cidrs`. See `UPGRADING.md`.
+  `onprem_cidrs` is empty. With the VPN on, an `onprem_cidrs` prefix that overlaps `top_cidr`, the
+  hub VPCs or a spoke `cidr` fails the aws-network plan, and tfc-admin reports it against every AWS
+  and GCP range in the config file. The aws-network `vpn` variable no longer fails its key check
+  when it sets `onprem_cidrs`. See `UPGRADING.md`.
 - **Starter spokes get NAT egress; starter rejects the VPN (ARC-10, breaking).** Without the
   Network Firewall (the `starter` profile) the inspection VPC forwards nothing, so aws-network
   rejected `spoke_attachments` and spokes had no egress. The `prod` and `nonprod` default routes now

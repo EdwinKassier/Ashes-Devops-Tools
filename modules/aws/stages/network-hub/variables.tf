@@ -229,7 +229,7 @@ variable "enable_resolver_endpoints" {
 
 variable "vpn" {
   description = <<-EOT
-    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN (not the transit gateway's 64512). static_routes_only = true uses static routing: then onprem_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate into the inspection route table. In both modes each onprem_cidrs prefix is also routed from the egress VPC private tier to the transit gateway and from the shared route table to inspection, so the Resolver endpoints reach on-premises through the firewall, and it is admitted to the inbound Resolver endpoint. With BGP list at least the on-premises resolver ranges there. tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared_key_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state).
+    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN (not the transit gateway's 64512). static_routes_only = true uses static routing: then onprem_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate into the inspection route table. In both modes each onprem_cidrs prefix is also routed from the egress VPC private tier to the transit gateway and from the shared route table to inspection, so the Resolver endpoints reach on-premises through the firewall, and it is admitted to the inbound Resolver endpoint. With BGP list at least the on-premises resolver ranges there. With the VPN on, no onprem_cidrs prefix may overlap top_cidr, inspection_cidr, egress_cidr or a spoke_attachments cidr (the plan fails). tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared_key_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state).
   EOT
   type = object({
     customer_gateway_ip      = optional(string)
@@ -261,6 +261,34 @@ variable "vpn" {
   validation {
     condition     = alltrue([for c in var.vpn.onprem_cidrs : can(cidrnetmask(c))])
     error_message = "vpn.onprem_cidrs entries must be IPv4 CIDR blocks."
+  }
+
+  # With the VPN, each on-premises prefix is routed from the egress VPC and the
+  # shared TGW table to the VPN, so it must not overlap an AWS range. Two ranges
+  # overlap when their network addresses agree on the shorter prefix.
+  validation {
+    condition = !var.enable_vpn || length([
+      for p in setproduct(var.vpn.onprem_cidrs, concat(
+        ["top_cidr ${var.top_cidr}", "inspection_cidr ${var.inspection_cidr}", "egress_cidr ${var.egress_cidr}"],
+        [for k, sp in var.spoke_attachments : "spoke_attachments.${k}.cidr ${sp.cidr}" if sp.cidr != null],
+      )) : "${p[0]} overlaps ${p[1]}"
+      if try(
+        cidrhost("${split("/", p[0])[0]}/${min(tonumber(split("/", p[0])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0) ==
+        cidrhost("${split("/", split(" ", p[1])[1])[0]}/${min(tonumber(split("/", p[0])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0),
+        false
+      )
+    ]) == 0
+    error_message = "vpn.onprem_cidrs must not overlap the AWS ranges (aws.network.vpn.onprem_cidrs): ${join("; ", [
+      for p in setproduct(var.vpn.onprem_cidrs, concat(
+        ["top_cidr ${var.top_cidr}", "inspection_cidr ${var.inspection_cidr}", "egress_cidr ${var.egress_cidr}"],
+        [for k, sp in var.spoke_attachments : "spoke_attachments.${k}.cidr ${sp.cidr}" if sp.cidr != null],
+      )) : "${p[0]} overlaps ${p[1]}"
+      if try(
+        cidrhost("${split("/", p[0])[0]}/${min(tonumber(split("/", p[0])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0) ==
+        cidrhost("${split("/", split(" ", p[1])[1])[0]}/${min(tonumber(split("/", p[0])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0),
+        false
+      )
+    ])}."
   }
 
   validation {
