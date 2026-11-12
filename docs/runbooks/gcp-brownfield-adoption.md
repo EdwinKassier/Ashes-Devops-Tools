@@ -56,19 +56,12 @@ import {
 }
 ```
 
-Org IAM members (optional), one entry per `org_admin_members` / `billing_admin_members` value:
+Billing admin members (optional), one entry per `billing_admin_members` value:
 
 ```hcl
 locals {
   adopt_org_id         = "123456789012"
-  adopt_org_admins     = ["group:gcp-org-admins@example.com"]
   adopt_billing_admins = ["group:gcp-billing-admins@example.com"]
-}
-
-import {
-  for_each = toset(local.adopt_org_admins)
-  to       = module.organization.module.organization.google_organization_iam_member.org_admins[each.key]
-  id       = "${local.adopt_org_id} roles/resourcemanager.organizationAdmin ${each.key}"
 }
 
 import {
@@ -77,6 +70,11 @@ import {
   id       = "${local.adopt_org_id} roles/billing.admin ${each.key}"
 }
 ```
+
+The standing `roles/resourcemanager.organizationAdmin` of the org admin groups
+belongs to `envs/gcp/bootstrap` (`module.bootstrap.google_organization_iam_member.org_admins`),
+not to this root: organization-apply may not grant `organizationAdmin`. It needs
+no import. Creating a member that already holds the role changes nothing in IAM.
 
 The stage address assumes the call sites at the time of writing (`envs/gcp/organization/main.tf`
 `module "organization"`, `modules/gcp/stages/organization/main.tf` `module "organization"`). Confirm

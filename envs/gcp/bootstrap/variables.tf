@@ -268,3 +268,9 @@ variable "phase0_admin_impersonation_expires_at" {
   type        = string
   default     = null
 }
+
+variable "organization_admin_members" {
+  description = "Members (group:... or user:...) granted the standing roles/resourcemanager.organizationAdmin by this root. Null = one group: member per gcp.organization_admin_groups in config/landing-zone.yaml. Set it explicitly to add the admin users that gcp-organization expects with gcp_overrides.allow_user_principals_for_break_glass (user:<admin_email>, user:<break_glass_user>): gcp-organization fails its plan when an org admin it expects is missing here."
+  type        = list(string)
+  default     = null
+}

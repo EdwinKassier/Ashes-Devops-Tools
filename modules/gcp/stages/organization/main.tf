@@ -21,15 +21,25 @@ locals {
   ))
 
   production_environment_keys = sort([for k, e in var.environments : k if e.is_production])
+
+  # This stage grants no organizationAdmin (see module "organization").
+  organization_module_admin_members = []
 }
 
+# The standing organizationAdmin of local.org_admin_members is granted by
+# gcp-bootstrap (organization_admin_members), not here: organization-apply's
+# org iam.securityAdmin is role-conditioned and may not grant
+# organizationAdmin, which would restore unconditional setIamPolicy on the org
+# node. local.org_admin_members stays the source for PAM and the containment
+# checks, and for the plan-time check against the gcp-bootstrap list
+# (organization_admin_grants.tf).
 module "organization" {
   source = "../../iam/organization"
 
   domain     = var.domain
   project_id = var.admin_project_id
 
-  org_admin_members     = local.org_admin_members
+  org_admin_members     = local.organization_module_admin_members
   billing_admin_members = local.billing_admin_members
 
   # Organizational Units (excluding projects, they are created later)

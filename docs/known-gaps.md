@@ -341,8 +341,9 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   a real gcp-organization apply that IAM accepts, and a real gcp-projects
   apply that grants roles from every chunk; (4) brownfield
   projects created by `terraform-admin` may need a one-off owner grant to
-  projects-apply. Residual: bootstrap-apply and organization-apply still hold org
-  `iam.securityAdmin` (inherent to managing org IAM); network-hub-apply's org
+  projects-apply. Residual: bootstrap-apply still holds an unconditional org
+  `iam.securityAdmin` (inherent to managing org IAM), and organization-apply a
+  role-conditioned one (see the SEC-3 items in the WS3 section); network-hub-apply's org
   `accesscontextmanager.policyAdmin` inherits onto the per-environment scoped
   policies; `envs/gcp/organization` still grants `terraform-admin` env-folder
   roles (`terraform_admin_folder_roles`) when the legacy flag is on.
@@ -386,10 +387,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   accepts the `resource.matchTagId('tagKeys/<n>', 'tagValues/<n>')` condition.
   The PAM-gated `guardrail_owner_members` path (gcloud with
   `deny_policy_specs`) stays for emergencies. Moving an existing policy into the
-  new root needs a `terraform import` (UPGRADING.md). Residuals:
-  `iam.securityAdmin` on the organization apply SA can still grant itself
-  `denyAdmin`; alert-only (`guardrail_role_grant`,
-  `guardrail_identity_change`). And **tfc-admin can still repoint
+  new root needs a `terraform import` (UPGRADING.md). The organization apply
+  SA can no longer grant itself `denyAdmin`: its org `iam.securityAdmin` is
+  role-conditioned and it holds no `folderAdmin` (remaining paths: the SEC-3
+  items in the WS3 section; `guardrail_role_grant` and
+  `guardrail_identity_change` alert as defence in depth). And **tfc-admin can still repoint
   `gcp-guardrails`** (working directory, VCS branch, team access, variables):
   whoever can apply tfc-admin can undo the security-team-only boundary, so the
   separation of duties also rests on CODEOWNERS for `envs/tfc-admin/**` and
@@ -1123,6 +1125,47 @@ side (all mock-tested, secure defaults):
   projects-apply compromise can grant itself those on an environment folder.
   None grants data-plane IAM. The roles that control IAM, identities,
   data-plane IAM or project ownership are granted by gcp-organization.
+- **organization-apply's paths to a guardrail-owner role (SEC-3 residuals).**
+  organization-apply holds `folderCreator`, `folderEditor` and `folderIamAdmin`
+  at the org node (no `folderAdmin`, which carries
+  `resourcemanager.projects.setIamPolicy` on every project), and a
+  role-conditioned `iam.securityAdmin`
+  (`modifiedGrantsByRole.hasOnly(organization_apply_grantable_roles)`; the
+  gcp-bootstrap validation rejects every role that controls IAM, identities,
+  projects or PAM). It can no longer grant itself `denyAdmin`, or a role that
+  leads to the guardrails SA, on the org node or the admin project. These paths
+  remain:
+  - **PAM** (`enable_pam`). organization-apply holds
+    `privilegedaccessmanager.admin` and can edit the JIT entitlement's eligible
+    principals, approvers and roles. The PAM service agent, not
+    organization-apply's `setIamPolicy`, makes the grant. Alert
+    `pam_entitlement_change`. Owner: security team (move PAM ownership to
+    `gcp-guardrails`).
+  - **Principal access boundary** (`enable_principal_access_boundary`).
+    organization-apply holds `projectIamAdmin` on the admin project (for the
+    policy binding). It can grant itself `serviceAccountTokenCreator` on the
+    `<prefix>-guardrails-apply` SA there. Owner: security team (find a role
+    with only `resourcemanager.projects.createPolicyBinding`, or apply the
+    binding from `gcp-guardrails`).
+  - **Alert deletion.** organization-apply holds `monitoring.editor` on the
+    admin (audit) project, where the guardrail alerts live. Deleting them no
+    longer opens an escalation, so they are defence in depth. Owner: platform
+    team.
+  - **Folder self-grants.** `folderIamAdmin` at the org node lets
+    organization-apply grant itself any role on any folder, for example owner
+    of every workload or shared project. That is data plane, not the guardrails:
+    the admin project and every automation SA sit directly under the org node.
+    Keep the separate logging project (`gcp.logging_project_id`) outside any
+    folder, or this path reaches it. Owner: platform team.
+  - **Allow-list data roles.** organization-apply can grant itself
+    `storage.objectCreator` or `cloudkms.cryptoKeyEncrypterDecrypter` (on its
+    default allow-list for the logging project) on any bucket or key that the
+    tag-scoped containment rule does not cover. Owner: platform team.
+  - **Not validated on a real org.** That IAM accepts the condition on an
+    org-node `iam.securityAdmin` binding, that a `setIamPolicy` call with only
+    audit-config changes passes it, and that `folderCreator` + `folderEditor` +
+    `folderIamAdmin` cover a real gcp-organization apply. Owner: platform team
+    (sandbox apply).
 
 ## DECISION — needs a human call
 

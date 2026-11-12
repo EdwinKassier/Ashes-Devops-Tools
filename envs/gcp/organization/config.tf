@@ -66,6 +66,10 @@ locals {
       delegated_workload_folder_roles = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_workload_folder_roles, []) : tostring(r)]
       delegated_network_folder_roles  = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_network_folder_roles, []) : tostring(r)]
       guardrail_owner_mode            = tostring(try(local.lz.gcp.contracts.bootstrap.guardrail_owner_mode, "separate"))
+      # Optional: copied from the gcp-bootstrap contract output. Omitted = null
+      # (no plan-time check; a check warns).
+      organization_apply_grantable_roles = try([for r in local.lz.gcp.contracts.bootstrap.organization_apply_grantable_roles : tostring(r)], null)
+      organization_admin_members         = try([for m in local.lz.gcp.contracts.bootstrap.organization_admin_members : tostring(m)], null)
     }
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by

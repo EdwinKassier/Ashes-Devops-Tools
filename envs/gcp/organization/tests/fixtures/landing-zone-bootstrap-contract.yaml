@@ -6,3 +6,11 @@ gcp:
       admin_project_number: "210987654321"
       terraform_admin_email: terraform-admin@acme-admin-cfg1.iam.gserviceaccount.com
       guardrail_owner_mode: separate
+      organization_apply_grantable_roles:
+        - roles/billing.admin
+        - roles/cloudkms.cryptoKeyEncrypterDecrypter
+        - roles/logging.bucketWriter
+        - roles/logging.logWriter
+        - roles/storage.objectCreator
+      organization_admin_members:
+        - group:gcp-org-admins@acme.io

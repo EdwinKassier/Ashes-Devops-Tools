@@ -446,6 +446,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `artifactregistry.admin` and `resourcemanager.projectCreator` join the non-delegable workload folder
   roles: gcp-organization grants them to the workload SAs directly. `make consistency` checks that the
   list is the same in gcp-bootstrap, gcp-organization and gcp-projects. See `UPGRADING.md`.
+- **organization-apply cannot reach a guardrail-owner role (SEC-3, breaking).** organization-apply
+  held an unconditional org `iam.securityAdmin` (it could grant itself `roles/iam.denyAdmin`) and
+  `folderAdmin`, whose `resourcemanager.projects.setIamPolicy` reached the admin project and the
+  guardrails SA. It now holds `folderCreator` + `folderEditor` + `folderIamAdmin`, and its
+  `iam.securityAdmin` carries `modifiedGrantsByRole.hasOnly(<organization_apply_grantable_roles>)`
+  (default: billing admin and log-writer roles; IAM-controlling roles are rejected). gcp-bootstrap
+  now grants the standing `organizationAdmin` of the org admin groups. gcp-organization checks its
+  grants and its org admins against the gcp-bootstrap contract at plan time, and fails when that
+  contract is older than this release. See `UPGRADING.md`.
 - **Secret-bearing workspaces are derived, not listed (SEC-1, breaking).** tfc-admin marks every
   workspace that holds a sensitive or secret-named variable or runs the SaaS bridge, including
   non-production workloads. There the platform team drops to `runs = read`, the workspace runs no

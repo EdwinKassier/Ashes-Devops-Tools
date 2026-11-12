@@ -58,6 +58,10 @@ module "bootstrap" {
   # Principal access boundary for the automation SAs (gcp-organization).
   enable_principal_access_boundary = local.enable_principal_access_boundary
 
+  # Standing org admins: granted by bootstrap-apply, because organization-apply's
+  # role-conditioned securityAdmin may not grant organizationAdmin.
+  organization_admin_members = local.organization_admin_members
+
   # GitHub WIF — off by default (unused); see variables.tf.
   enable_github_wif          = var.enable_github_wif
   github_org                 = var.github_org

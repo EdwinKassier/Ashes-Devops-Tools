@@ -1181,6 +1181,49 @@ The workload SAs keep every role. Only the stage that grants them changes. A cus
    Run `terraform state rm '<address>'` for each. The plan must then show no change to `workload_sa_folder_roles`.
 4. Apply gcp-projects.
 
+#### organization-apply cannot reach a guardrail-owner role (gcp-bootstrap, gcp-organization, breaking)
+
+organization-apply held an unconditional org `iam.securityAdmin`, so it could grant itself `roles/iam.denyAdmin` and delete the containment deny policy. It also held org `folderAdmin`, whose `resourcemanager.projects.setIamPolicy` reaches every project, including the admin project and the `<prefix>-guardrails-apply` SA in it. Now:
+
+- organization-apply holds `folderCreator`, `folderEditor` and `folderIamAdmin` at the org node instead of `folderAdmin`. These cover what gcp-organization does on folders (create, rename, delete, folder IAM). Folder tag bindings use its `tagUser`, and folder org policies its `orgpolicy.policyAdmin`.
+- Its org `iam.securityAdmin` carries `modifiedGrantsByRole.hasOnly(<organization_apply_grantable_roles>)`. The default list (gcp-bootstrap) is `billing.admin`, `logging.bucketWriter`, `logging.logWriter`, `storage.objectCreator` and `cloudkms.cryptoKeyEncrypterDecrypter`. The plan rejects any role that controls IAM, identities, projects or PAM, and more than 10 roles.
+- gcp-bootstrap grants the standing `organizationAdmin` of the org admin groups (`gcp.organization_admin_groups`, or its new variable `organization_admin_members`). gcp-organization grants it to nobody, and fails its plan when an org admin it expects is missing from the gcp-bootstrap contract, or when this stage would grant a role the condition does not admit.
+- The gcp-bootstrap contract has two new keys, `organization_apply_grantable_roles` and `organization_admin_members`. A hand-supplied `bootstrap_contract` (or `gcp.contracts.bootstrap`) should copy both. Without them the plan warns and cannot check.
+
+**Upgrade order.** Apply this change before the gcp-projects steps of the data-plane roles entry above: gcp-bootstrap, then gcp-organization (both entries), then gcp-projects.
+
+1. **Apply `gcp-bootstrap`.** It takes over the standing
+   `roles/resourcemanager.organizationAdmin` of the org admin groups
+   (`module.bootstrap.google_organization_iam_member.org_admins`). The members
+   already hold the role, so nothing changes in IAM. It also replaces
+   organization-apply's org `folderAdmin` with `folderCreator`, `folderEditor`
+   and `folderIamAdmin`, and adds the `modifiedGrantsByRole` condition to its
+   `iam.securityAdmin`. If gcp-organization runs with
+   `gcp_overrides.allow_user_principals_for_break_glass = true`, first set the
+   gcp-bootstrap variable `organization_admin_members` to the groups plus
+   `user:<admin_email>` and `user:<break_glass_user>`.
+2. **Remove the org-admin grants from the `gcp-organization` state** without
+   deleting them:
+
+   ```bash
+   make state-rm-gcp-organization ADDR='module.organization.module.organization.google_organization_iam_member.org_admins'
+   ```
+
+3. **Plan `gcp-organization`.** The plan must show no destroy of
+   `org_admins`. It fails with a named role or member when the gcp-bootstrap
+   contract does not cover what this root grants: fix the gcp-bootstrap input
+   (`organization_apply_grantable_roles` or `organization_admin_members`),
+   re-apply gcp-bootstrap, and plan again.
+4. **Apply `gcp-organization`.**
+
+Run no other `gcp-organization` apply between steps 1 and 4. The guards: a
+`gcp-organization` plan against a gcp-bootstrap state from before step 1 fails
+(`terraform_data.bootstrap_grants_org_admins`). If you skip step 2, the plan
+shows the `org_admins` bindings as destroyed: stop and run step 2. (The
+conditional `securityAdmin` should refuse that removal with 403, but this is
+not validated on a real organization.) Break-glass and the org admin groups
+keep `organizationAdmin` throughout.
+
 #### Production Cloud SQL is regional by default (gcp-workload)
 
 In an environment with `is_production`, app-service databases are created with REGIONAL availability, unless the entry sets `database.enable_high_availability: false`. An existing zonal production database changes to regional in place, with a short restart. The new option `database.backup_location` keeps backups in another region.

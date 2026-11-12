@@ -82,6 +82,12 @@ module "organization" {
   delegated_workload_folder_roles = try(local.bootstrap.delegated_workload_folder_roles, [])
   delegated_network_folder_roles  = try(local.bootstrap.delegated_network_folder_roles, [])
 
+  # organization-apply's org securityAdmin is role-conditioned by gcp-bootstrap,
+  # which also grants the standing organizationAdmin. The stage checks its
+  # grants and its expected org admins against both lists at plan time.
+  organization_apply_grantable_roles   = try(local.bootstrap.organization_apply_grantable_roles, null)
+  bootstrap_organization_admin_members = try(local.bootstrap.organization_admin_members, null)
+
   default_region               = local.default_region
   audit_log_retention_days     = local.audit_log_retention_days
   monthly_budget_amount        = local.monthly_budget_amount
@@ -115,5 +121,35 @@ resource "terraform_data" "starter_requires_budget" {
       condition     = local.monthly_budget_amount > 0
       error_message = "org.profile is starter but no monthly budget resolves: set org.monthly_budget_usd in config/landing-zone.yaml (or var.monthly_budget_amount) to a value above 0."
     }
+  }
+}
+
+# Apply order guard. This root no longer grants organizationAdmin to the org
+# admin groups: gcp-bootstrap does. A gcp-bootstrap state from before that
+# change has no organization_apply_grantable_roles / organization_admin_members
+# in its contract. Applying this root then would delete the standing
+# organizationAdmin bindings (organization-apply still holds an unconditional
+# securityAdmin until gcp-bootstrap is applied), so the plan fails instead.
+locals {
+  bootstrap_contract_is_current = try(local.bootstrap.organization_apply_grantable_roles, null) != null && try(local.bootstrap.organization_admin_members, null) != null
+}
+
+resource "terraform_data" "bootstrap_grants_org_admins" {
+  count = local.bootstrap_contract == null ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.bootstrap_contract_is_current
+      error_message = "The gcp-bootstrap contract has no organization_apply_grantable_roles / organization_admin_members: gcp-bootstrap has not been applied with this release. Apply gcp-bootstrap first (it takes over the standing organizationAdmin grant and conditions organization-apply's securityAdmin), then follow UPGRADING.md (remove module.organization.module.organization.google_organization_iam_member.org_admins from this root's state) before you apply this root."
+    }
+  }
+}
+
+# A hand-supplied contract (bootstrap_contract or gcp.contracts.bootstrap) may
+# omit the two lists; the plan then cannot check them.
+check "supplied_bootstrap_contract_is_current" {
+  assert {
+    condition     = local.bootstrap_contract == null || local.bootstrap_contract_is_current
+    error_message = "The supplied bootstrap contract has no organization_apply_grantable_roles / organization_admin_members. This root grants no organizationAdmin and cannot check its grants against organization-apply's role condition. Make sure gcp-bootstrap was applied with this release and copy both lists from its contract output."
   }
 }

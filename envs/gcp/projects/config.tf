@@ -70,6 +70,9 @@ locals {
       delegated_workload_folder_roles = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_workload_folder_roles, []) : tostring(r)]
       delegated_network_folder_roles  = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_network_folder_roles, []) : tostring(r)]
       guardrail_owner_mode            = tostring(try(local.lz.gcp.contracts.bootstrap.guardrail_owner_mode, "separate"))
+      # Read by gcp-organization only; kept so the type matches the variable.
+      organization_apply_grantable_roles = try([for r in local.lz.gcp.contracts.bootstrap.organization_apply_grantable_roles : tostring(r)], null)
+      organization_admin_members         = try([for m in local.lz.gcp.contracts.bootstrap.organization_admin_members : tostring(m)], null)
       workload_service_accounts = {
         for k, sa in try({ for k, sa in local.lz.gcp.contracts.bootstrap.workload_service_accounts : k => sa }, {}) : k => { plan = tostring(sa.plan), apply = tostring(sa.apply) }
       }

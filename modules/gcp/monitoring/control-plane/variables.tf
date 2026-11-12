@@ -113,9 +113,9 @@ variable "watches" {
       severity     = "ERROR"
     }
     guardrail_role_grant = {
-      # The organization apply SA holds iam.securityAdmin, so it could grant
-      # itself roles/iam.denyAdmin (or PAB admin) and then remove the deny policy
-      # that contains it. Deny cannot condition on the role granted, so detect.
+      # The organization apply SA's iam.securityAdmin is role-conditioned
+      # (gcp-bootstrap), so it cannot grant these roles. This alert is defence
+      # in depth for a grant by a human, break-glass or another identity.
       display_name  = "Guardrail-owner role granted at the organization or a folder"
       filter        = "protoPayload.methodName=\"SetIamPolicy\" AND (resource.type=\"organization\" OR resource.type=\"folder\") AND protoPayload.serviceData.policyDelta.bindingDeltas.role=(\"roles/iam.denyAdmin\" OR \"roles/iam.principalAccessBoundaryAdmin\" OR \"roles/iam.securityAdmin\" OR \"roles/resourcemanager.organizationAdmin\")"
       severity      = "CRITICAL"

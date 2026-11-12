@@ -62,6 +62,11 @@ override_data {
         }
         delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
         delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
+        organization_apply_grantable_roles = [
+          "roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter",
+          "roles/logging.logWriter", "roles/storage.objectCreator",
+        ]
+        organization_admin_members = ["group:gcp-org-admins@acme.io"]
       }
     }
   }
@@ -314,6 +319,10 @@ run "bootstrap_contract_skips_remote_state" {
       containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
     })
   }
+
+  # A hand-supplied contract without the gcp-bootstrap allow-list and org-admin
+  # list cannot be checked: the plan warns.
+  expect_failures = [check.supplied_bootstrap_contract_is_current]
 
   assert {
     condition     = length(data.terraform_remote_state.gcp_bootstrap) == 0 && output.admin_project_number == "999988887777"
@@ -757,4 +766,35 @@ run "config_environment_without_is_production_fails" {
   }
 
   expect_failures = [var.environments]
+}
+
+# Apply order: a gcp-bootstrap state from before the organizationAdmin move has
+# neither list in its contract. Applying this root then would delete the
+# standing organizationAdmin bindings, so the plan fails.
+run "stale_bootstrap_contract_fails_the_plan" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.gcp_bootstrap
+    values = {
+      outputs = {
+        contract = {
+          admin_project_id      = "acme-admin-abcd"
+          admin_project_number  = "123456789012"
+          terraform_admin_email = "terraform-admin@acme-admin-abcd.iam.gserviceaccount.com"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.bootstrap_grants_org_admins]
+}
+
+run "current_bootstrap_contract_plans" {
+  command = plan
+
+  assert {
+    condition     = length(terraform_data.bootstrap_grants_org_admins) == 1 && local.bootstrap_contract_is_current
+    error_message = "a gcp-bootstrap contract with both lists must pass the apply-order guard."
+  }
 }

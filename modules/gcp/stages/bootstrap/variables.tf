@@ -493,3 +493,47 @@ variable "phase0_admin_impersonation_expires_at" {
   type        = string
   default     = null
 }
+
+variable "organization_apply_grantable_roles" {
+  description = "Roles the gcp-organization apply SA may add or remove through its org-level iam.securityAdmin, anywhere in the organization: the grant carries the condition modifiedGrantsByRole.hasOnly(<this list>). The default is every role the organization stage grants that way: billing.admin (billing admin groups on the org), logging.bucketWriter and logging.logWriter (log-sink writer identities on the audit project), and storage.objectCreator and cloudkms.cryptoKeyEncrypterDecrypter (sink writers and service agents on the audit buckets and keys of a separate logging project). Folder IAM goes through folderIamAdmin and needs no entry. At most 10 roles. Roles that control IAM, identities, projects or PAM are rejected: organization-apply could grant one to itself and reach roles/iam.denyAdmin."
+  type        = list(string)
+  default = [
+    "roles/billing.admin",
+    "roles/logging.bucketWriter",
+    "roles/logging.logWriter",
+    "roles/storage.objectCreator",
+    "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+  ]
+  nullable = false
+
+  validation {
+    condition     = length(distinct(var.organization_apply_grantable_roles)) >= 1 && length(distinct(var.organization_apply_grantable_roles)) <= 10
+    error_message = "organization_apply_grantable_roles must list 1 to 10 roles: IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list."
+  }
+
+  validation {
+    condition = alltrue([
+      for r in var.organization_apply_grantable_roles :
+      can(regex("^roles/[a-zA-Z0-9.]+$", r)) &&
+      !contains(["roles/owner", "roles/editor"], r) &&
+      !startswith(r, "roles/iam.") &&
+      !startswith(r, "roles/resourcemanager.") &&
+      !startswith(r, "roles/privilegedaccessmanager.") &&
+      !endswith(r, "IamAdmin") &&
+      !endswith(lower(r), "securityadmin")
+    ])
+    error_message = "organization_apply_grantable_roles must hold only predefined roles (roles/...) that control no IAM, identity, project or PAM entitlement: no roles/owner, roles/editor, roles/iam.* (denyAdmin, securityAdmin, serviceAccount*, workloadIdentityPool*, ...), roles/resourcemanager.* (organizationAdmin, folderAdmin, projectIamAdmin, ...), roles/privilegedaccessmanager.*, *IamAdmin or *securityAdmin role, and no custom role. organization-apply could grant such a role to itself and reach roles/iam.denyAdmin."
+  }
+}
+
+variable "organization_admin_members" {
+  description = "Members (group:... or user:...) that hold the standing roles/resourcemanager.organizationAdmin. Granted here by bootstrap-apply, not by gcp-organization: organization-apply may not grant organizationAdmin. gcp-organization fails its plan when a member it expects (gcp.organization_admin_groups, plus the admin users with allow_user_principals_for_break_glass) is missing here. Default [] = none."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for m in var.organization_admin_members : can(regex("^(group|user):[^@]+@[^@]+$", m))])
+    error_message = "organization_admin_members entries must be group:<email> or user:<email>."
+  }
+}

@@ -1353,3 +1353,72 @@ run "disable_default_sink_true_is_honoured" {
     error_message = "gcp.disable_default_sink = true must disable the default sink."
   }
 }
+
+# ── organization-apply's role-conditioned securityAdmin ─────────────────────
+# gcp-bootstrap conditions organization-apply's org iam.securityAdmin on a short
+# allow-list. Every role this stage grants through that securityAdmin (org and
+# project IAM, and the logging-project resources) must be on it, or the apply
+# fails with 403: the plan fails first and names the role.
+run "grants_outside_bootstrap_allowlist_fail_the_plan" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles = ["roles/logging.bucketWriter", "roles/logging.logWriter"]
+  }
+
+  expect_failures = [terraform_data.organization_apply_grants_allowed]
+}
+
+run "default_allowlist_admits_every_grant" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles   = ["roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter", "roles/logging.logWriter", "roles/storage.objectCreator"]
+    bootstrap_organization_admin_members = ["group:org-admins@acme.io"]
+  }
+
+  assert {
+    condition     = length(local.organization_apply_missing_roles) == 0 && contains(local.organization_apply_granted_roles, "roles/billing.admin") && contains(local.organization_apply_granted_roles, "roles/logging.bucketWriter")
+    error_message = "the default gcp-bootstrap allow-list must admit every role this stage grants through organization-apply's org securityAdmin."
+  }
+}
+
+run "logging_project_grants_need_the_service_agent_roles" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      logging_project_id     = "acme-logging"
+      logging_project_number = "210987654321"
+    })
+    organization_apply_grantable_roles = ["roles/billing.admin", "roles/logging.bucketWriter", "roles/logging.logWriter"]
+  }
+
+  expect_failures = [terraform_data.organization_apply_grants_allowed]
+}
+
+# The standing organizationAdmin grant of the admin groups is gcp-bootstrap's:
+# organization-apply may not grant organizationAdmin (it would restore
+# unconditional setIamPolicy on the org node).
+run "organization_stage_grants_no_org_admin" {
+  command = plan
+
+  variables {
+    bootstrap_organization_admin_members = ["group:org-admins@acme.io"]
+  }
+
+  assert {
+    condition     = length(local.organization_module_admin_members) == 0 && !contains(local.organization_apply_granted_roles, "roles/resourcemanager.organizationAdmin")
+    error_message = "gcp-organization must not grant roles/resourcemanager.organizationAdmin."
+  }
+}
+
+run "org_admins_missing_from_bootstrap_fail_the_plan" {
+  command = plan
+
+  variables {
+    bootstrap_organization_admin_members = ["group:someone-else@acme.io"]
+  }
+
+  expect_failures = [terraform_data.organization_admins_granted_by_bootstrap]
+}

@@ -722,3 +722,17 @@ variable "wif_tenant_pins" {
     error_message = "wif_tenant_pins.tfc_organization must be a literal TFC organization name and github_owner_ids numeric GitHub owner IDs."
   }
 }
+
+# --- organization-apply's role-conditioned securityAdmin (gcp-bootstrap) ---
+
+variable "organization_apply_grantable_roles" {
+  description = "gcp-bootstrap contract organization_apply_grantable_roles: the roles organization-apply's org iam.securityAdmin condition admits. A precondition fails the plan when this stage would grant any other role through it (the apply would get 403). Null = no check (older bootstrap contract)."
+  type        = list(string)
+  default     = null
+}
+
+variable "bootstrap_organization_admin_members" {
+  description = "gcp-bootstrap contract organization_admin_members: the members gcp-bootstrap grants roles/resourcemanager.organizationAdmin. This stage grants it to nobody; a precondition fails the plan when an org admin it expects (gcp.organization_admin_groups, plus the admin users with allow_user_principals_for_break_glass) is missing from this list. Null = no check (older bootstrap contract)."
+  type        = list(string)
+  default     = null
+}

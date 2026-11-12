@@ -69,3 +69,33 @@ run "scaffold_gcp_aws_saas_plans" {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
   }
 }
+
+# gcp-bootstrap owns the standing organizationAdmin of the config's org admin
+# groups (module.bootstrap is overridden here; the stage suite covers the grant
+# and the contract keys).
+run "org_admin_groups_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
+  }
+
+  assert {
+    condition     = local.organization_admin_members == tolist(["group:gcp-organization-admins@acme.example"])
+    error_message = "gcp-bootstrap must grant organizationAdmin to every gcp.organization_admin_groups entry."
+  }
+}
+
+run "org_admin_members_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path   = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
+    organization_admin_members = ["group:gcp-organization-admins@acme.example", "user:admin@acme.example"]
+  }
+
+  assert {
+    condition     = local.organization_admin_members == tolist(["group:gcp-organization-admins@acme.example", "user:admin@acme.example"])
+    error_message = "an explicit organization_admin_members must replace the config-derived list (the user break-glass escape needs it)."
+  }
+}

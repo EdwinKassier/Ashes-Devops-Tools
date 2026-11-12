@@ -1045,6 +1045,18 @@
                 },
                 "guardrail_owner_mode": {
                   "type": "string"
+                },
+                "organization_apply_grantable_roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "organization_admin_members": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "additionalProperties": false

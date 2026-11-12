@@ -77,4 +77,6 @@ locals {
   tfc_organization                      = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   phase0_admin_impersonation_expires_at = try(coalesce(var.phase0_admin_impersonation_expires_at, local.cfg.phase0_admin_impersonation_expires_at), null)
   enable_network_connectivity_center    = coalesce(var.enable_network_connectivity_center, local.cfg.enable_network_connectivity_center)
+  # The standing organizationAdmin members (granted here, not by gcp-organization).
+  organization_admin_members = var.organization_admin_members != null ? var.organization_admin_members : [for g in coalesce(local.cfg.organization_admin_groups, []) : "group:${g}"]
 }

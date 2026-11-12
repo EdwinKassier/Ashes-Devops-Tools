@@ -226,6 +226,9 @@ variable "bootstrap_contract" {
     delegated_workload_folder_roles = optional(list(string), [])
     delegated_network_folder_roles  = optional(list(string), [])
     guardrail_owner_mode            = optional(string, "separate")
+    # gcp-organization's plan-time checks read these (omitted = null, no check).
+    organization_apply_grantable_roles = optional(list(string))
+    organization_admin_members         = optional(list(string))
   })
   default = null
 

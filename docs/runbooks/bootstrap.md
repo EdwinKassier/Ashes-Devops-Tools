@@ -177,7 +177,7 @@ stages and what each creates:
   | SA | TFC binding | Rights |
   |---|---|---|
   | `<prefix>-bootstrap-plan` | `gcp-bootstrap:plan` | read-only (browser, org viewer, security reviewer, SA/WIF/serviceusage viewer, billing viewer) |
-  | `<prefix>-organization-plan` / `-apply` | `gcp-organization:plan` / `:apply` | plan: org read-only + policy/logging/SCC/tag/deny/contacts viewers; apply: folderAdmin, iam.securityAdmin, orgpolicy.policyAdmin, logging.configWriter, SCC notificationConfigEditor, tagAdmin/tagUser, denyAdmin, essentialcontacts.admin; KMS/GCS/PubSub/BQ/monitoring on the admin project; billing costsManager |
+  | `<prefix>-organization-plan` / `-apply` | `gcp-organization:plan` / `:apply` | plan: org read-only + policy/logging/SCC/tag/deny/contacts viewers; apply: folderCreator + folderEditor + folderIamAdmin (no folderAdmin), a **role-conditioned** iam.securityAdmin (`modifiedGrantsByRole.hasOnly(organization_apply_grantable_roles)`: billing.admin and log-writer roles only), orgpolicy.policyAdmin, logging.configWriter, SCC notificationConfigEditor, tagAdmin/tagUser, essentialcontacts.admin (denyAdmin only in the legacy `guardrail_owner_mode = "organization"`); KMS/GCS/PubSub/BQ/monitoring on the admin project; billing costsManager |
   | `<prefix>-projects-plan` / `-apply` | `gcp-projects:plan` / `:apply` | apply: projectCreator, billing.projectManager + billing.user, metrics-scope admin, and a **conditional** `folderIamAdmin` that gcp-organization binds per folder: on each environment folder (workload roles) and on the shared folder (network roles plus `roles/dns.peer`), with one binding per 10 roles because IAM allows at most 10 roles in one `hasOnly()` condition. The org-level binding exists only with `enable_org_level_folder_iam_delegation` |
   | `<prefix>-network-hub-plan` / `-apply` | `gcp-network-hub:plan` / `:apply` | apply: org ACM policyAdmin; network roles on the `shared` folder (granted by gcp-projects) |
   | `<prefix>-wl-<env>-plan` / `-apply` | `gcp-workload-<env>:plan` / `:apply` | **no org-level role**: env-folder roles granted by gcp-projects (the apply SA also gets `roles/dns.peer` on the shared folder), billing budget roles, and ACM rights on **its own env folder-scoped access policy** only (created by gcp-organization, `enable_scoped_access_policies`, default `true`: apply `policyEditor`, plan `policyReader`); the org-wide policy grant (`vpc_sc_access_policy_id`) applies only with the opt-in `enable_legacy_org_access_policy_grants` |
@@ -293,6 +293,45 @@ Existing estates bound every workspace to `terraform-admin`. Re-applying gcp-boo
 5. `tfc_workspace_ids` is set automatically. `tfc-admin` writes it onto the gcp-bootstrap workspace (`set_gcp_bootstrap_workspace_ids`), so remote runs bind WIF by immutable ID. Optionally also set `tfc_project_ids` and `tfc_organization_id`.
 
 The unused GitHub pool is **destroyed** by default (`enable_github_wif = false`). GCP soft-deletes pools for 30 days; to re-enable within that window set a new `github_wif_pool_id`.
+
+## Moving the org-admin grant to gcp-bootstrap (role-conditioned organization-apply)
+
+An estate applied before organization-apply's `iam.securityAdmin` became
+role-conditioned has the org admin groups' `organizationAdmin` in the
+`gcp-organization` state. Move it without a gap (details in
+[UPGRADING.md](../../UPGRADING.md)):
+
+1. **Apply `gcp-bootstrap`.** It takes over the standing
+   `roles/resourcemanager.organizationAdmin` of the org admin groups
+   (`module.bootstrap.google_organization_iam_member.org_admins`). The members
+   already hold the role, so nothing changes in IAM. It also replaces
+   organization-apply's org `folderAdmin` with `folderCreator`, `folderEditor`
+   and `folderIamAdmin`, and adds the `modifiedGrantsByRole` condition to its
+   `iam.securityAdmin`. If gcp-organization runs with
+   `gcp_overrides.allow_user_principals_for_break_glass = true`, first set the
+   gcp-bootstrap variable `organization_admin_members` to the groups plus
+   `user:<admin_email>` and `user:<break_glass_user>`.
+2. **Remove the org-admin grants from the `gcp-organization` state** without
+   deleting them:
+
+   ```bash
+   make state-rm-gcp-organization ADDR='module.organization.module.organization.google_organization_iam_member.org_admins'
+   ```
+
+3. **Plan `gcp-organization`.** The plan must show no destroy of
+   `org_admins`. It fails with a named role or member when the gcp-bootstrap
+   contract does not cover what this root grants: fix the gcp-bootstrap input
+   (`organization_apply_grantable_roles` or `organization_admin_members`),
+   re-apply gcp-bootstrap, and plan again.
+4. **Apply `gcp-organization`.**
+
+Run no other `gcp-organization` apply between steps 1 and 4. The guards: a
+`gcp-organization` plan against a gcp-bootstrap state from before step 1 fails
+(`terraform_data.bootstrap_grants_org_admins`). If you skip step 2, the plan
+shows the `org_admins` bindings as destroyed: stop and run step 2. (The
+conditional `securityAdmin` should refuse that removal with 403, but this is
+not validated on a real organization.) Break-glass and the org admin groups
+keep `organizationAdmin` throughout.
 
 ---
 

@@ -838,3 +838,82 @@ run "projects_apply_may_delegate_dns_peer_on_the_shared_folder" {
     error_message = "gcp-projects grants roles/dns.peer to workload apply SAs on the shared folder, so the shared-folder delegated allow-list (and only it) must admit it."
   }
 }
+
+# organization-apply cannot reach a guardrail-owner role in any number of
+# steps: no org-level folderAdmin (it holds resourcemanager.projects.setIamPolicy,
+# which reaches the admin project and the guardrails SA), and its org
+# iam.securityAdmin may add or remove only a short allow-list of roles that
+# control no IAM, identity or project.
+run "organization_apply_reaches_no_guardrail_owner_role" {
+  command = plan
+
+  assert {
+    condition = (
+      !contains(output.org_role_grants["organization-apply"], "roles/resourcemanager.folderAdmin") &&
+      contains(output.org_role_grants["organization-apply"], "roles/resourcemanager.folderCreator") &&
+      contains(output.org_role_grants["organization-apply"], "roles/resourcemanager.folderEditor") &&
+      contains(output.org_role_grants["organization-apply"], "roles/resourcemanager.folderIamAdmin")
+    )
+    error_message = "organization-apply must hold folderCreator + folderEditor + folderIamAdmin at the org node, never folderAdmin (it includes resourcemanager.projects.setIamPolicy on every project, the admin project included)."
+  }
+
+  assert {
+    condition = (
+      length(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition) == 1 &&
+      startswith(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression, "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([") &&
+      endswith(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression, "])") &&
+      !strcontains(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression, "&&") &&
+      !strcontains(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression, "||")
+    )
+    error_message = "organization-apply's org iam.securityAdmin must carry exactly one modifiedGrantsByRole hasOnly() condition."
+  }
+
+  # Every listed role: 1 to 10 of them (the IAM hasOnly limit), each a predefined
+  # role that controls no IAM, identity or project.
+  assert {
+    condition = (
+      length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression)[0])) >= 1 &&
+      length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression)[0])) <= 10 &&
+      alltrue([
+        for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression)[0]) :
+        startswith(r[0], "roles/") && !startswith(r[0], "roles/iam.") && !startswith(r[0], "roles/resourcemanager.") && !startswith(r[0], "roles/privilegedaccessmanager.") &&
+        !contains(["roles/owner", "roles/editor"], r[0]) && !endswith(r[0], "IamAdmin") && !endswith(lower(r[0]), "securityadmin")
+      ]) &&
+      tolist([for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression)[0]) : r[0]]) == output.organization_apply_grantable_roles
+    )
+    error_message = "the organization-apply allow-list must list 1 to 10 roles, none of which controls IAM, identities, projects or PAM, and must equal the published allow-list."
+  }
+
+  assert {
+    condition     = output.organization_apply_grantable_roles == sort(["roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter", "roles/logging.logWriter", "roles/storage.objectCreator"])
+    error_message = "the default allow-list is the roles the organization stage grants through its org securityAdmin: billing admins, the two log-sink writer roles, and the logging-project service-agent roles."
+  }
+
+  assert {
+    condition     = length(google_organization_iam_member.stage_org_security_admin["bootstrap-apply|roles/iam.securityAdmin"].condition) == 0
+    error_message = "bootstrap-apply keeps unconditional securityAdmin: it owns the org-admin grants and can always repair the allow-list."
+  }
+
+  assert {
+    condition     = length(google_organization_iam_member.org_admins) == 0
+    error_message = "no organizationAdmin grant without organization_admin_members."
+  }
+}
+
+run "org_admin_groups_granted_by_bootstrap" {
+  command = plan
+
+  variables {
+    organization_admin_members = ["group:gcp-org-admins@example.com"]
+  }
+
+  assert {
+    condition = (
+      google_organization_iam_member.org_admins["group:gcp-org-admins@example.com"].role == "roles/resourcemanager.organizationAdmin" &&
+      google_organization_iam_member.org_admins["group:gcp-org-admins@example.com"].org_id == "123456789" &&
+      length(google_organization_iam_member.org_admins["group:gcp-org-admins@example.com"].condition) == 0 &&
+      output.organization_admin_members == tolist(["group:gcp-org-admins@example.com"])
+    )
+    error_message = "gcp-bootstrap must own the standing organizationAdmin grant of the org-admin groups and publish the members."
+  }
+}

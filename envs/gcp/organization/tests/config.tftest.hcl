@@ -30,6 +30,11 @@ override_data {
         }
         delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
         delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
+        organization_apply_grantable_roles = [
+          "roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter",
+          "roles/logging.logWriter", "roles/storage.objectCreator",
+        ]
+        organization_admin_members = ["group:gcp-org-admins@acme.io", "group:gcp-organization-admins@acme.example"]
       }
     }
   }
