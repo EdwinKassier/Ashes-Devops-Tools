@@ -385,8 +385,10 @@ aws:
     # the Network Firewall (profile production; starter fails the plan). With
     # static_routes_only, onprem_cidrs lists the on-premises prefixes (BGP learns
     # them otherwise). With BGP too, list the on-premises resolver ranges in
-    # onprem_cidrs: they are admitted to the inbound Resolver endpoint. The BGP
-    # ASN must differ from the transit gateway's 64512.
+    # onprem_cidrs: they are admitted to the inbound Resolver endpoint, and the
+    # egress VPC routes them through the firewall to the VPN (BGP routes do not
+    # reach VPC route tables). The BGP ASN must differ from the transit
+    # gateway's 64512.
     # vpn:
     #   enabled: false
     #   customer_gateway_ip: 203.0.113.10

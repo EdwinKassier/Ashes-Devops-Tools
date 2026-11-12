@@ -649,6 +649,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `aws.contracts.network.resolver_profile_id`). The spoke inherits the DNS Firewall, the resolver
   forward rules and the central interface endpoint zones. Standalone spokes and a network state
   without the key associate nothing.
+- **The egress VPC routes on-premises prefixes to the VPN.** The egress VPC private route tables
+  sent only `top_cidr` to the transit gateway, and the `shared` TGW table had no on-premises route,
+  so Resolver endpoint replies and forwards to on-premises went to NAT. With the VPN on, each
+  `vpn.onprem_cidrs` prefix now routes from the egress private tier to the TGW and from the `shared`
+  table to inspection, and the egress attachment propagates into the `inspection` table, so both
+  directions cross the firewall. A `check` warns when the VPN and the endpoints are on and
+  `onprem_cidrs` is empty. The aws-network `vpn` variable no longer fails its key check when it
+  sets `onprem_cidrs`. See `UPGRADING.md`.
 - **Starter spokes get NAT egress; starter rejects the VPN (ARC-10, breaking).** Without the
   Network Firewall (the `starter` profile) the inspection VPC forwards nothing, so aws-network
   rejected `spoke_attachments` and spokes had no egress. The `prod` and `nonprod` default routes now

@@ -48,11 +48,17 @@ locals {
   # egress/east-west traffic is forced through the firewall. Extracted to a
   # local so the wiring is assertable independently of the (override_module'd)
   # transit_gateway child.
-  tgw_propagations = {
-    "inspection->prod"    = { attachment = "inspection", route_table = "prod" }
-    "inspection->nonprod" = { attachment = "inspection", route_table = "nonprod" }
-    "egress->shared"      = { attachment = "egress", route_table = "shared" }
-  }
+  tgw_propagations = merge(
+    {
+      "inspection->prod"    = { attachment = "inspection", route_table = "prod" }
+      "inspection->nonprod" = { attachment = "inspection", route_table = "nonprod" }
+      "egress->shared"      = { attachment = "egress", route_table = "shared" }
+    },
+    # With the VPN, the inspection table learns the egress VPC, so inspected
+    # on-premises traffic reaches the resolver endpoints even when no spoke
+    # (and so no inspection 0.0.0.0/0 -> egress route) exists.
+    var.enable_vpn ? { "egress->inspection" = { attachment = "egress", route_table = "inspection" } } : {},
+  )
 
   # Spoke segments default-route to inspection when the firewall exists, else
   # straight to the egress attachment (starter: NAT egress, not inspected; D4).
@@ -66,8 +72,15 @@ locals {
     # On-premises traffic is default-routed to inspection (hybrid table). The
     # VPN needs the firewall (terraform_data.hybrid_needs_inspection).
     var.enable_vpn ? { "hybrid:default" = { route_table = "hybrid", cidr = "0.0.0.0/0", attachment = "inspection" } } : {},
+    # Traffic from the egress VPC (resolver endpoint replies and forwards) to
+    # on-premises goes through inspection too, the same path as the request,
+    # so the stateful firewall sees both directions.
+    { for c in local.onprem_route_cidrs : "shared:onprem:${c}" => { route_table = "shared", cidr = c, attachment = "inspection" } },
     local.spoke_hub_routes,
   )
+
+  # On-premises prefixes routed from the egress VPC to the VPN (plan-known).
+  onprem_route_cidrs = var.enable_vpn ? toset(var.vpn.onprem_cidrs) : toset([])
 
   # Hub routes the inspected spokes need (spokes.tf); only with the firewall and
   # at least one spoke, so an estate without spokes plans no change.
@@ -219,6 +232,8 @@ locals {
   # Return / hand-off routes into the transit gateway, keyed "<vpc>-<tier>-<i>":
   #   - egress public + private tiers -> top_cidr via TGW (return path to spokes
   #     for NAT'd flows, interface endpoints and resolver endpoints).
+  #   - egress private tier -> each vpn.onprem_cidrs prefix via TGW (VPN only;
+  #     keyed "egress-onprem-<i>-<cidr>").
   #   - inspection firewall tier -> 0.0.0.0/0 via TGW (inspected traffic goes back
   #     to the TGW, whose inspection route table forwards it on).
   hub_tgw_routes = merge(
@@ -227,6 +242,15 @@ locals {
       "egress-${pair[0]}-${pair[1]}" => {
         route_table_id = module.egress_vpc.route_table_ids_by_tier[pair[0]][pair[1]]
         destination    = var.top_cidr
+      }
+    },
+    # egress private tier (resolver endpoints) -> each on-premises prefix via
+    # TGW, so replies and forwards to on-premises reach the VPN, not NAT.
+    {
+      for pair in setproduct(local.nat_az_indexes, local.onprem_route_cidrs) :
+      "egress-onprem-${pair[0]}-${pair[1]}" => {
+        route_table_id = module.egress_vpc.route_table_ids_by_tier["private"][pair[0]]
+        destination    = pair[1]
       }
     },
     {
@@ -387,6 +411,12 @@ module "transit_gateway" {
 #     route, is inspected, and the inspection VPC's attachment (inspection table)
 #     forwards it to the VPN. No on-premises prefix is more specific than the
 #     spoke default, so inspection cannot be bypassed.
+#   - The egress VPC (resolver endpoints) reaches on-premises the same way: its
+#     private tier routes each vpn.onprem_cidrs prefix to the TGW, the shared
+#     table (egress attachment) sends it to inspection, and the inspection
+#     table learns the egress VPC (egress->inspection propagation) for the
+#     traffic that comes back. Both directions cross the same firewall endpoint
+#     (appliance mode).
 # ---------------------------------------------------------------------------
 
 module "vpn" {
@@ -482,6 +512,15 @@ resource "terraform_data" "hybrid_needs_inspection" {
       condition     = !var.enable_vpn || var.enable_network_firewall
       error_message = "enable_vpn needs enable_network_firewall = true (profile production): on-premises traffic is routed through the inspection VPC, which forwards nothing without the firewall."
     }
+  }
+}
+
+# The egress VPC can route to on-premises only the prefixes in onprem_cidrs:
+# BGP propagates into the TGW inspection table, not into VPC route tables.
+check "resolver_endpoints_reach_onprem" {
+  assert {
+    condition     = !var.enable_vpn || !local.enable_resolver_endpoints || length(var.vpn.onprem_cidrs) > 0
+    error_message = "The VPN and the Resolver endpoints are on but vpn.onprem_cidrs is empty, so the egress VPC has no route to on-premises: inbound endpoint replies and outbound forwards go to NAT. List the on-premises resolver ranges in aws.network.vpn.onprem_cidrs."
   }
 }
 

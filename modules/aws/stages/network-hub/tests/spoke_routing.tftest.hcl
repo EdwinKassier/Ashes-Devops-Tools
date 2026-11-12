@@ -259,7 +259,7 @@ run "starter_with_vpn_is_rejected" {
   variables {
     enable_network_firewall = false
     enable_vpn              = true
-    vpn                     = { customer_gateway_ip = "203.0.113.10" }
+    vpn                     = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
   }
 
   expect_failures = [terraform_data.hybrid_needs_inspection]

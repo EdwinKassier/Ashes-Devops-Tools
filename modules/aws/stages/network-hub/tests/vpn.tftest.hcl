@@ -110,7 +110,7 @@ run "aws_vpn_attaches_to_tgw" {
 
   variables {
     enable_vpn = true
-    vpn        = { customer_gateway_ip = "203.0.113.10" }
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
   }
 
   # module.vpn is planned for real (not overridden): the stage hands it the hub
@@ -164,7 +164,7 @@ run "spoke_routes_stay_default_to_inspection" {
 
   variables {
     enable_vpn = true
-    vpn        = { customer_gateway_ip = "203.0.113.10" }
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
   }
 
   assert {
@@ -213,4 +213,99 @@ run "resolver_endpoints_explicit_override" {
     condition     = !local.enable_resolver_endpoints
     error_message = "An explicit enable_resolver_endpoints = false must win over the VPN default."
   }
+}
+
+# On-premises return path from the egress VPC (resolver endpoints). Each
+# on-premises prefix leaves the egress private tier through the TGW, the shared
+# table (egress attachment) sends it to inspection, and the inspection table
+# learns the egress VPC, so both directions cross the same firewall endpoint.
+run "egress_vpc_routes_onprem_prefixes_through_inspection" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn = {
+      customer_gateway_ip = "203.0.113.10"
+      static_routes_only  = true
+      onprem_cidrs        = ["192.168.0.0/16", "172.20.0.0/14"]
+    }
+  }
+
+  assert {
+    condition = (
+      aws_route.hub_to_tgw["egress-onprem-0-192.168.0.0/16"].route_table_id == "rtb-egr-prv-a" &&
+      aws_route.hub_to_tgw["egress-onprem-1-192.168.0.0/16"].route_table_id == "rtb-egr-prv-b" &&
+      aws_route.hub_to_tgw["egress-onprem-1-172.20.0.0/14"].destination_cidr_block == "172.20.0.0/14" &&
+      aws_route.hub_to_tgw["egress-onprem-0-172.20.0.0/14"].transit_gateway_id == "tgw-000000000000abcd" &&
+      length([for k, r in aws_route.hub_to_tgw : k if startswith(k, "egress-onprem-")]) == 4
+    )
+    error_message = "Every egress private route table must send each on-premises prefix to the TGW, or resolver replies and forwards go to NAT."
+  }
+
+  assert {
+    condition     = length([for k, r in aws_route.hub_to_tgw : k if startswith(k, "egress-onprem-") && !contains(["rtb-egr-prv-a", "rtb-egr-prv-b"], r.route_table_id)]) == 0
+    error_message = "Only the egress private tier (the resolver endpoints) routes on-premises prefixes; the public tier (NAT) must not."
+  }
+
+  assert {
+    condition = (
+      output.tgw_inspection_routes["shared:onprem:192.168.0.0/16"].route_table == "shared" &&
+      output.tgw_inspection_routes["shared:onprem:192.168.0.0/16"].attachment == "inspection" &&
+      output.tgw_inspection_routes["shared:onprem:172.20.0.0/14"].cidr == "172.20.0.0/14" &&
+      output.tgw_inspection_routes["shared:onprem:172.20.0.0/14"].attachment == "inspection"
+    )
+    error_message = "The shared table (egress attachment) must send on-premises prefixes to inspection, so the return path crosses the firewall like the request."
+  }
+
+  assert {
+    condition     = local.tgw_propagations["egress->inspection"].attachment == "egress" && local.tgw_propagations["egress->inspection"].route_table == "inspection"
+    error_message = "The inspection table must learn the egress VPC, or inspected on-premises traffic cannot reach the resolver endpoints when no spoke is wired."
+  }
+}
+
+run "bgp_vpn_routes_the_listed_onprem_prefixes" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn = {
+      customer_gateway_ip = "203.0.113.10"
+      onprem_cidrs        = ["10.200.0.0/24"]
+    }
+  }
+
+  assert {
+    condition     = aws_route.hub_to_tgw["egress-onprem-0-10.200.0.0/24"].route_table_id == "rtb-egr-prv-a" && output.tgw_inspection_routes["shared:onprem:10.200.0.0/24"].attachment == "inspection" && length(aws_ec2_transit_gateway_route.vpn_onprem) == 0
+    error_message = "With BGP the listed on-premises prefixes must still be routed from the egress VPC (BGP propagates only into the inspection table)."
+  }
+}
+
+run "no_onprem_routes_without_the_vpn" {
+  command = apply
+
+  variables {
+    vpn = { onprem_cidrs = ["192.168.0.0/16"] }
+  }
+
+  assert {
+    condition = (
+      length([for k, r in aws_route.hub_to_tgw : k if startswith(k, "egress-onprem-")]) == 0 &&
+      length([for k in keys(output.tgw_inspection_routes) : k if startswith(k, "shared:onprem:")]) == 0 &&
+      !contains(keys(local.tgw_propagations), "egress->inspection")
+    )
+    error_message = "Without the VPN no on-premises route and no egress propagation into inspection may be planned."
+  }
+}
+
+# BGP learns the on-premises prefixes only in the TGW inspection table. The
+# egress VPC routes only vpn.onprem_cidrs, so an empty list warns.
+run "bgp_vpn_without_onprem_cidrs_warns" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10" }
+  }
+
+  expect_failures = [check.resolver_endpoints_reach_onprem]
 }

@@ -29,7 +29,7 @@ output "interface_endpoint_phz_id" {
 }
 
 output "tgw_inspection_routes" {
-  description = "The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall, plus (with spoke_attachments) inspection 0.0.0.0/0 to egress and shared top_cidr to inspection."
+  description = "The static routes fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall (without the firewall: at the egress attachment), plus (with the firewall and spoke_attachments) inspection 0.0.0.0/0 to egress and shared top_cidr to inspection, and (with the VPN) hybrid 0.0.0.0/0 and shared <onprem prefix> to inspection."
   value       = local.tgw_routes
 }
 

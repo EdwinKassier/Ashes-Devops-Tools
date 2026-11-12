@@ -39,14 +39,17 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `NXDOMAIN` from the spoke. A spoke VPC can hold two profile associations; the
   provider (v6.72.0) has no `priority` argument, so this one takes the default
   priority 100.
-- **On-premises DNS through the AWS Resolver endpoints has no return route.**
-  The egress VPC `private` route tables send only `top_cidr` to the transit
-  gateway, and the egress attachment's `shared` route table has no on-premises
-  routes. Replies from the inbound endpoint to an on-premises resolver, and
-  queries from the outbound endpoint to a forward target on-premises, follow
-  `0.0.0.0/0` to NAT instead of the VPN. Until the hub routes the on-premises
-  prefixes from the egress VPC to the VPN, the endpoints serve only sources in
-  `top_cidr`.
+- **On-premises DNS through the AWS Resolver endpoints is mock-tested only.**
+  Mock plans prove the routes: each `vpn.onprem_cidrs` prefix from the egress
+  VPC `private` route tables to the transit gateway, `shared <prefix> →
+  inspection`, and the egress attachment propagated into the `inspection`
+  table. Confirm in the sandbox with the VPN up: from an on-premises host,
+  `dig @<inbound endpoint IP> ssm.<region>.amazonaws.com` (the IPs are the
+  aws-network output `resolver_inbound_endpoint_ips`) answers; a forward rule
+  to an on-premises resolver answers from a spoke; and the Network Firewall
+  flow logs show both directions of each query on the same firewall endpoint.
+  With BGP, only the prefixes listed in `vpn.onprem_cidrs` are routed from the
+  egress VPC.
 - **IAP through the hub hierarchical policy is mock-tested only.** Confirm in
   the sandbox that `gcloud compute ssh --tunnel-through-iap` reaches a
   private-tier VM, and that SSH from any other source is still denied.

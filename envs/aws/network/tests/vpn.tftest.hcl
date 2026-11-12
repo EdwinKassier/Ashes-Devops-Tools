@@ -95,7 +95,7 @@ run "explicit_vpn_variable_reaches_stage" {
 
   variables {
     enable_vpn = true
-    vpn        = { customer_gateway_ip = "203.0.113.20", customer_gateway_bgp_asn = 65020 }
+    vpn        = { customer_gateway_ip = "203.0.113.20", customer_gateway_bgp_asn = 65020, onprem_cidrs = ["10.200.0.0/24"] }
   }
 
   assert {

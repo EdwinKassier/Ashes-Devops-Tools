@@ -1070,6 +1070,33 @@ propagation from `shared` to `inspection` (replaced) and adds the two
 inspection hub routes. Spoke traffic drops while the propagations are
 replaced. Do it in a change window.
 
+#### The egress VPC routes on-premises prefixes to the VPN (aws-network)
+
+With the VPN on, aws-network now routes the on-premises prefixes from the
+egress VPC, so the Resolver endpoints can answer and forward to on-premises.
+Before, these replies and forwards went to NAT.
+
+What the plan shows on an existing estate with the VPN (only added routes,
+nothing removed or replaced):
+
+- One `aws_route.hub_to_tgw["egress-onprem-<az>-<prefix>"]` per AZ and per
+  `vpn.onprem_cidrs` prefix in the egress VPC private route tables, to the
+  transit gateway.
+- One TGW route `shared:onprem:<prefix>` per prefix in the `shared` table, to
+  the inspection attachment.
+- A propagation of the egress attachment into the `inspection` table.
+
+No working flow is interrupted: traffic from the egress VPC private tier to
+these prefixes went to NAT and could not reach on-premises. If a prefix in
+`vpn.onprem_cidrs` is reachable over the internet today (a public range), the
+egress VPC now sends it to the VPN instead. Estates without the VPN plan no
+change.
+
+With BGP, `vpn.onprem_cidrs` now also sets these routes, because BGP routes
+reach only the TGW `inspection` table, not VPC route tables. List at least the
+on-premises resolver ranges there. A `check` warns when the VPN and the
+Resolver endpoints are on and the list is empty.
+
 #### Access Analyzer in every enabled region (aws-security)
 
 The external analyzer now exists in every `aws.enabled_regions` entry (the home
