@@ -17,7 +17,7 @@ The AWS landing zone is a **two-phase bootstrap**:
 
 > **Credential model.** Management-account credentials are used only by `aws-organization` and by the management-account *default* provider of `aws-security` and `aws-backup`. Those two roots own org-level resources: the org CloudTrail, delegated-admin registrations and the org backup policy. No other workspace receives a management-account principal. A speculative PR plan runs with the read-only `tfc-plan` role of its own member account.
 
-But phase-1 itself cannot bootstrap the very things it needs to run: an AWS org to operate in, a TFC workspace to hold its state, and a run identity to authenticate with. Those are **phase-0** — created out-of-band, by hand, exactly once.
+But phase-1 itself cannot bootstrap the very things it needs to run: a management account to operate in, a TFC workspace to hold its state, and a run identity to authenticate with. Those are **phase-0**: created out-of-band, by hand, exactly once. The organization itself is not phase-0. Phase-1 creates it, or imports an existing one (see Step 1).
 
 > **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Cross-layer ordering is enforced entirely by **apply order** (this runbook) plus the fact that each downstream root reads the org remote state and will fail at plan time with a "no outputs" / "workspace has no state" error if `aws-organization` has not been applied yet.
 
@@ -28,7 +28,7 @@ But phase-1 itself cannot bootstrap the very things it needs to run: an AWS org 
 These three things must exist before you touch Terraform. None of them can be created by this repo:
 
 - [ ] **An AWS management (payer) account** — either a brand-new account, or an existing standalone account you are willing to promote into the organization management account. This account becomes the org root; treat it as high-value and never run workloads in it.
-- [ ] **A human/SSO administrator** with full access to that management account (root user for the very first steps, then an IAM admin or IAM Identity Center admin). AWS requires a human to accept the organization creation and to enable Identity Center — these are console actions, not API-only.
+- [ ] **A human/SSO administrator** with full access to that management account (root user for the very first steps, then an IAM admin or IAM Identity Center admin). Enabling IAM Identity Center is a console action that this repo does not automate ([gate](#full-first-time-stand-up-order), step 3).
 - [ ] **Terraform Cloud organization access** — an account in a TFC organization with permission to create workspaces and set workspace variables. You will need the TFC org name (it is supplied to every root as `var.tfc_organization` / the `cloud` backend `organization`).
 
 One more check applies once the management account exists:
@@ -51,7 +51,9 @@ Either:
 - **Create a new AWS account** to be the management account (recommended for a clean landing zone), or
 - **Use an existing standalone account** that will become the org management account. If it already has resources, understand that the region-restriction SCP and other guardrails will apply org-wide once phase-1 runs.
 
-Sign in as the account root user (or an admin) and confirm you can reach the AWS Organizations console. Do **not** create the organization by hand — `envs/aws/organization` does that. You only need the account to exist.
+Sign in as the account root user (or an admin) and confirm you can reach the AWS Organizations console. Do **not** create the organization by hand: `envs/aws/organization` does that. You only need the account to exist.
+
+**Existing organization (brownfield).** If the account already manages an organization, do not create a new one. Declare it, and any existing OUs and accounts, under `aws.adopt` in `config/landing-zone.yaml`. The first `aws-organization` plan then imports them ([`envs/aws/organization/adopt.tf`](../../envs/aws/organization/adopt.tf); [AWS brownfield adoption](aws-brownfield-adoption.md)).
 
 ### Step 2 — Create a bootstrap identity for run #1
 
@@ -110,7 +112,7 @@ The two management-account ARNs `aws-organization` requires are both phase-0 inp
 | `aws-organization` input | What to pass |
 |---|---|
 | `terraform_run_role_arn` | The **apply** role above, e.g. `arn:aws:iam::<mgmt-account-id>:role/tfc-mgmt-apply`. Also set it as tfc-admin `aws_management_apply_role_arn` (and the plan role as `aws_management_plan_role_arn`). |
-| `break_glass_role_arn` | Either a break-glass role you hand-create now (MFA-required trust, no standing permissions), **or** the ARN the role will have when `aws-security` creates it with `create_break_glass = true`: `arn:aws:iam::<mgmt-account-id>:role/OrganizationBreakGlass` (`break_glass_role_name`). An SCP carve-out may name a role that does not exist yet. |
+| `break_glass_role_arn` | The phase-0 stack output `BreakGlassRoleArn`: `arn:aws:iam::<mgmt-account-id>:role/OrganizationBreakGlass` (Option B). With Option A, a break-glass role you create by hand now (MFA-required trust, no standing permissions). The scaffolder and `config/landing-zone.example.yaml` write the `OrganizationBreakGlass` name; replace the value if your role has another name. An SCP carve-out may name a role that does not exist yet. |
 
 Every other operator role is created in code (no hand-made role ARN needed):
 
@@ -272,7 +274,9 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
    > **StackSets trusted access.** The organization module enables `member.org.stacksets.cloudformation.amazonaws.com` trusted access. If the StackSet create fails with an organizations-access error, run `aws cloudformation activate-organizations-access` once in the management account and re-apply. It is idempotent, and it is the AWS-recommended way to enable StackSets trusted access.
 
-3. **MANUAL GATE — IAM Identity Center.** In the **management account**, enable IAM Identity Center (console action — cannot be created by Terraform here), then **delegate administration to the Shared Services account**. The `aws-identity` root manages permission sets and assignments *after* this delegation exists; it cannot enable Identity Center for you.
+3. **MANUAL GATE — enable IAM Identity Center.** The step 2 apply already did two things for Identity Center. It enabled trusted access for `sso.amazonaws.com` (`aws_service_access_principals` in `modules/aws/governance/organization`). It also registered the `shared_services` account as the Identity Center delegated administrator ([`identity_center_delegation.tf`](../../modules/aws/stages/organization/identity_center_delegation.tf)). Do **not** register the delegated administrator by hand: a second registration fails. What is left is a console action that Terraform here does not do: in the **management account**, open the IAM Identity Center console in your home Region and choose **Enable** to create the organization instance. Then open **Settings → Management** and check that the Shared Services account is the delegated administrator. The `aws-identity` root manages permission sets and assignments in that instance from the Shared Services account. It cannot enable Identity Center for you.
+
+   **Why this order.** AWS Organizations accepts a delegated administrator registration only after trusted access for the service is enabled. `RegisterDelegatedAdministrator` otherwise fails with `SERVICE_ACCESS_NOT_ENABLED` ("You attempted to register a delegated administrator before you enabled service access", [API reference](https://docs.aws.amazon.com/organizations/latest/APIReference/API_RegisterDelegatedAdministrator.html), checked 2026-11-12). The `aws-organization` apply enables trusted access before it registers, so it meets this rule. Only the management account can register ([IAM Identity Center user guide](https://docs.aws.amazon.com/singlesignon/latest/userguide/delegated-admin-how-to-register.html)), which is why `aws-organization` owns this step. On a greenfield estate the organization does not exist before step 2, so Identity Center cannot be enabled first. AWS recommends that you enable trusted access from the Identity Center console so it can create the resources it needs ([Organizations user guide](https://docs.aws.amazon.com/organizations/latest/userguide/services-that-can-integrate-sso.html)). Enabling Identity Center in step 3, after the registration, is not yet proven on a real organization: see [known gaps](../known-gaps.md). If an organization already has Identity Center enabled (brownfield), enable nothing: step 2 only registers the delegated administrator.
 
 4. **tfc-admin pass 2 — downstream credentials.** The workspaces already exist (Step 3). Set `aws_organization_outputs_from_tfc = true` on tfc-admin and re-apply it. It reads `tfc_plan_role_arns` / `tfc_apply_role_arns` / `tfc_workspace_bindings` from `aws-organization` and writes `TFC_AWS_PROVIDER_AUTH` / `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` on every single-account workspace, plus the management default and the `TFC_AWS_*_<alias>` sets on `aws-security` / `aws-backup` (see [Member-account credentials](#member-account-credentials-tfc-oidc-baseline)). The role trust is already in place from step 2, provided the workspace name is in `tfc_workspace_bindings` and `tfc_project` matches the workspace project.
 
@@ -282,7 +286,7 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 7. **Apply `aws-network`** (skip if `network` is not in `aws.layers`). Shared networking (TGW, resolver, shared VPC constructs) in the network account.
 
-8. **Apply `aws-identity`** (skip if `identity` is not in `aws.layers`). Permission sets and account assignments, now that Identity Center is delegated (gate in step 3).
+8. **Apply `aws-identity`** (skip if `identity` is not in `aws.layers`). Permission sets and account assignments, now that Identity Center is enabled (gate in step 3) and delegated (step 2).
 
 9. **Apply `aws-shared-services`** *(optional / gated; skip if `shared-services` is not in `aws.layers`).* Shared platform services; apply only if you need them.
 

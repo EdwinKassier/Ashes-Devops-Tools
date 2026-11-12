@@ -75,10 +75,10 @@ Each layer is one root = one Terraform Cloud workspace (see [provider-selection]
 
 | Order | Root | Workspace | Deploys | Stage module |
 |---|---|---|---|---|
-| 1 | `envs/aws/organization` | `aws-organization` | Org, SRA OU tree, foundational accounts, guardrails (SCP/RCP/declarative/tag/backup). Publishes `account_ids`, `account_role_arns`. | `modules/aws/stages/organization` |
+| 1 | `envs/aws/organization` | `aws-organization` | Org, SRA OU tree, foundational accounts, guardrails (SCP/RCP/declarative/tag/backup), IAM Identity Center delegated administrator. Publishes `account_ids`, `account_role_arns`. | `modules/aws/stages/organization` |
 | 2 | `envs/aws/security` | `aws-security` | Log archive (WORM), org CloudTrail, Config aggregator, GuardDuty, Security Hub CSPM, Access Analyzer, Security Lake, delegated-admin wiring, incident-response. | `modules/aws/stages/security` |
 | 3 | `envs/aws/network` | `aws-network` | TGW hub, inspection VPC + Network Firewall, centralized egress (NAT), IPAM, centralized VPC endpoints, Route 53 resolver/DNS firewall. | `modules/aws/stages/network-hub` |
-| 4 | `envs/aws/identity` | `aws-identity` | IAM Identity Center permission sets and account assignments (after Identity Center is delegated to Shared Services). | — |
+| 4 | `envs/aws/identity` | `aws-identity` | IAM Identity Center permission sets and account assignments (after Identity Center is enabled; `aws-organization` delegates it to Shared Services). | — |
 | 5 | `envs/aws/shared-services` | `aws-shared-services` | Shared platform services (optional / gated). | `modules/aws/stages/shared-services` |
 | 6 | `envs/aws/backup` | `aws-backup` | Centralized backup vaults (Vault Lock) and org backup plan. | `modules/aws/stages/backup` |
 | 7 | `envs/aws/workload` | `aws-workload-<env>` | Per-env spoke VPC, workload roles, per-account baseline. One workspace per env via the `aws-workload-` prefix. | `modules/aws/stages/workload` |
@@ -248,7 +248,7 @@ This table maps each AWS Security Reference Architecture (or associated best-pra
 
 **Out-of-band prerequisites** (must exist before or alongside Terraform, not modelled as `aws` resources in this repo):
 
-- **IAM Identity Center instance enablement** — `modules/aws/iam/iam-identity-center` configures permission sets/assignments/ABAC *within* an already-enabled instance; enabling the instance and delegating it to Shared Services is a manual gate between the `aws-organization` and `aws-identity` applies (see the layer map and [`aws-bootstrap.md`](../runbooks/aws-bootstrap.md)).
+- **IAM Identity Center instance enablement** — `modules/aws/iam/iam-identity-center` configures permission sets/assignments/ABAC *within* an already-enabled instance. The `aws-organization` apply enables trusted access for `sso.amazonaws.com` and registers Shared Services as the delegated administrator (`modules/aws/stages/organization/identity_center_delegation.tf`). Enabling the instance in the IAM Identity Center console is the manual gate between the `aws-organization` and `aws-identity` applies (see the layer map and [`aws-bootstrap.md`](../runbooks/aws-bootstrap.md#full-first-time-stand-up-order), step 3).
 - **Management-account root hardening** — the payer account is never SCP-restricted, so hardware-MFA-on-root / no-root-access-keys is enforced out-of-band (see [`aws-break-glass.md`](../runbooks/aws-break-glass.md)).
 - **Default-VPC-deletion StackSet** — a single root cannot fan out to every account and Region, so default-VPC deletion is an org-wide auto-deploying CloudFormation StackSet (bootstrap phase-0.5), not Terraform in this repo.
 - **CloudWatch-primary analytics via `awscc`** — the [June-2026 SRA update](https://docs.aws.amazon.com/prescriptive-guidance/latest/security-reference-architecture/doc-history.html) names the **CloudWatch Unified Data Store** the preferred analytics *primary* (Security Lake secondary). This zone deliberately keeps the **S3 Log Archive bucket as the immutable WORM sink** and treats CloudWatch-primary routing as an `awscc`/out-of-band enhancement (see A4). Re-plumbing the analytics primary is tracked in [known-gaps A6](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review).

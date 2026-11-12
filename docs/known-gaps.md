@@ -33,6 +33,22 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `tag:ListRequiredTags`. Confirm in the sandbox that the `tfc-plan` and
   `tfc-apply` roles may call it before a workspace sets the variable to
   `error`. The AWS tag policy itself never blocks an untagged resource.
+- **IAM Identity Center delegation before enablement is unproven (ADO-08).**
+  On a greenfield estate the first `aws-organization` apply enables trusted
+  access for `sso.amazonaws.com` and registers the `shared_services` account
+  as the Identity Center delegated administrator before anyone has enabled
+  the Identity Center instance. AWS Organizations accepts that order (trusted
+  access first, then the registration), and AWS recommends enabling trusted
+  access from the Identity Center console. No real organization has run it.
+  Confirm in the sandbox that enabling Identity Center afterwards keeps the
+  registration and that `aws-identity` then plans from Shared Services. An
+  organization that already has an Identity Center delegated administrator
+  has no `aws.adopt` key for it: the first apply fails with
+  `AccountAlreadyRegisteredException` (same account) or
+  `DELEGATED_ADMINISTRATOR_EXISTS_FOR_THIS_SERVICE` (another account). Add an
+  `import` block for
+  `module.aws_organization.aws_organizations_delegated_administrator.identity_center[0]`
+  with the ID `<account-id>/sso.amazonaws.com` before that apply.
 - **GCP Private Service Connect endpoint for Google APIs is mock-tested only
   (ARC-1).** `net-hub` and `net-spoke` name the endpoint by Google's rule
   (1-20 lower-case letters and numbers, starting with a letter) and reserve an
