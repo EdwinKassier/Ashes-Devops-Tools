@@ -16,8 +16,15 @@
 #     (east-west, egress replies, on-premises via the hybrid table) can reach it.
 #     prod and nonprod never learn each other's routes directly.
 #
-# Hub routes the spokes need (spoke_hub_routes in main.tf, only when at least
-# one spoke is wired, so an estate without spokes plans no change):
+# Without the Network Firewall (the starter profile) the inspection VPC
+# forwards nothing, so the segment tables default-route to the egress
+# attachment instead and each spoke propagates into the shared table, which
+# the egress attachment uses for the NAT replies. Starter egress is NAT only,
+# not inspected (D4).
+#
+# Hub routes the inspected spokes need (spoke_hub_routes in main.tf, only with
+# the firewall and at least one spoke wired, so an estate without spokes plans
+# no change):
 #   - inspection 0.0.0.0/0 -> egress attachment: inspected internet-bound
 #     traffic reaches the NAT gateways;
 #   - shared top_cidr -> inspection attachment: NAT replies (egress is in the
@@ -52,7 +59,7 @@ resource "aws_ec2_transit_gateway_route_table_propagation" "spoke" {
   for_each = var.spoke_attachments
 
   transit_gateway_attachment_id  = each.value.attachment_id
-  transit_gateway_route_table_id = module.transit_gateway.route_table_ids["inspection"]
+  transit_gateway_route_table_id = module.transit_gateway.route_table_ids[local.spoke_return_route_table]
 
   depends_on = [aws_ec2_transit_gateway_vpc_attachment_accepter.spoke]
 }

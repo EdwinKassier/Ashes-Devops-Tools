@@ -16,7 +16,8 @@
 #                            public subnet and the per-AZ NAT / TGW routes into
 #                            the module-owned route tables.
 #   - transit_gateway      — segmented TGW; prod/nonprod default routes point at
-#                            the inspection attachment so traffic is inspected.
+#                            the inspection attachment so traffic is inspected
+#                            (without the firewall: at the egress attachment).
 #   - network_firewall     — stateful inspection in the inspection VPC.
 #   - vpc_endpoints        — centralized interface endpoints in the egress VPC.
 #   - route53_resolver     — inbound/outbound resolver + DNS firewall + Profile.
@@ -53,25 +54,34 @@ locals {
     "egress->shared"      = { attachment = "egress", route_table = "shared" }
   }
 
+  # Spoke segments default-route to inspection when the firewall exists, else
+  # straight to the egress attachment (starter: NAT egress, not inspected; D4).
+  spoke_default_attachment = var.enable_network_firewall ? "inspection" : "egress"
+
   tgw_routes = merge(
     {
-      "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = "inspection" }
-      "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = "inspection" }
+      "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = local.spoke_default_attachment }
+      "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = local.spoke_default_attachment }
     },
-    # On-premises traffic is default-routed to inspection too (hybrid table).
+    # On-premises traffic is default-routed to inspection (hybrid table). The
+    # VPN needs the firewall (terraform_data.hybrid_needs_inspection).
     var.enable_vpn ? { "hybrid:default" = { route_table = "hybrid", cidr = "0.0.0.0/0", attachment = "inspection" } } : {},
     local.spoke_hub_routes,
   )
 
-  # Hub routes the workload spokes need (spokes.tf); added only once a spoke is
-  # wired so an estate without spoke_attachments plans no change.
-  spoke_hub_routes = length(var.spoke_attachments) > 0 ? {
+  # Hub routes the inspected spokes need (spokes.tf); only with the firewall and
+  # at least one spoke, so an estate without spokes plans no change.
+  spoke_hub_routes = length(var.spoke_attachments) > 0 && var.enable_network_firewall ? {
     # Inspected internet-bound traffic leaves through the egress VPC (NAT).
     "inspection:default" = { route_table = "inspection", cidr = "0.0.0.0/0", attachment = "egress" }
     # NAT replies to the spokes (egress sits in the shared segment) go back
     # through inspection, so egress is inspected in both directions.
     "shared:spokes" = { route_table = "shared", cidr = var.top_cidr, attachment = "inspection" }
   } : {}
+
+  # Where spoke CIDRs propagate: the inspection table (inspected path), or the
+  # shared table that the egress attachment uses for NAT replies (starter).
+  spoke_return_route_table = var.enable_network_firewall ? "inspection" : "shared"
 }
 
 # ---------------------------------------------------------------------------
@@ -458,6 +468,19 @@ resource "terraform_data" "production_egress_enforced" {
         length(var.network_firewall_egress_domain_allowlist) > 0)
       )
       error_message = "Production egress must fail closed: set network_firewall_stateful_default_actions to include aws:drop_established AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
+    }
+  }
+}
+
+# The hybrid table sends on-premises traffic to inspection, which forwards
+# nothing without the firewall. Starter estates cannot run the VPN.
+resource "terraform_data" "hybrid_needs_inspection" {
+  input = var.enable_vpn
+
+  lifecycle {
+    precondition {
+      condition     = !var.enable_vpn || var.enable_network_firewall
+      error_message = "enable_vpn needs enable_network_firewall = true (profile production): on-premises traffic is routed through the inspection VPC, which forwards nothing without the firewall."
     }
   }
 }

@@ -649,6 +649,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `aws.contracts.network.resolver_profile_id`). The spoke inherits the DNS Firewall, the resolver
   forward rules and the central interface endpoint zones. Standalone spokes and a network state
   without the key associate nothing.
+- **Starter spokes get NAT egress; starter rejects the VPN (ARC-10, breaking).** Without the
+  Network Firewall (the `starter` profile) the inspection VPC forwards nothing, so aws-network
+  rejected `spoke_attachments` and spokes had no egress. The `prod` and `nonprod` default routes now
+  go to the egress attachment when the firewall is off, and each spoke propagates into the `shared`
+  table, so starter spokes reach the internet through NAT. This egress is not inspected. With the
+  firewall on, nothing changes. A starter estate with `aws.network.vpn.enabled: true` now fails the
+  plan (`terraform_data.hybrid_needs_inspection`): on-premises traffic goes to the inspection VPC,
+  which forwarded nothing. See `UPGRADING.md`.
 - **AZs from another region fail at plan (ARC-3).** `modules/aws/network/vpc` now fails the plan
   when an availability zone name does not start with `region`. Before, the default
   `eu-west-2a`/`eu-west-2b` zones reached every subnet in another region and the apply failed with

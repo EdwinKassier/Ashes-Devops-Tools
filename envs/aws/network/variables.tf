@@ -306,7 +306,7 @@ variable "egress_alert_only_waived" {
 }
 
 variable "enable_vpn" {
-  description = "Attach an on-premises Site-to-Site VPN to the transit gateway. Null = aws.network.vpn.enabled from config/landing-zone.yaml, else false. Needs vpn.customer_gateway_ip."
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway. Null = aws.network.vpn.enabled from config/landing-zone.yaml, else false. Needs vpn.customer_gateway_ip and the Network Firewall (profile production or enable_network_firewall = true): the plan fails without it."
   type        = bool
   default     = null
 }
@@ -334,7 +334,7 @@ variable "vpn" {
 }
 
 variable "spoke_attachments" {
-  description = "Workload spoke attachments the hub accepts, associates with their segment table (prod or nonprod) and propagates into the inspection table: map of name to {attachment_id, segment, accept (default true)}. attachment_id is the aws-workload-<env> output tgw_attachment_id. Null = aws.network.spoke_attachments from config/landing-zone.yaml, else none. See docs/architecture/aws-landing-zone.md."
+  description = "Workload spoke attachments the hub accepts, associates with their segment table (prod or nonprod) and propagates into the inspection table (without the Network Firewall, the starter profile: the shared table, and egress is NAT only, not inspected): map of name to {attachment_id, segment, accept (default true)}. attachment_id is the aws-workload-<env> output tgw_attachment_id. Null = aws.network.spoke_attachments from config/landing-zone.yaml, else none. See docs/architecture/aws-landing-zone.md."
   type = map(object({
     attachment_id = string
     segment       = string

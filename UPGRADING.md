@@ -1038,6 +1038,38 @@ To hold back one environment, set its `network_contract` workspace variable
 with `tgw_id` and `ipam_pool_ids` and no `resolver_profile_id`. The root then
 plans no association. Remove the variable once the checks pass.
 
+#### Starter spokes egress through NAT; starter rejects the VPN (aws-network, breaking)
+
+**Breaking for a starter estate with the VPN.** A starter estate
+(`org.profile: starter`, or `enable_network_firewall = false`) with
+`aws.network.vpn.enabled: true` now fails the plan
+(`terraform_data.hybrid_needs_inspection`). That combination never forwarded
+traffic: the hybrid table sends on-premises traffic to the inspection VPC,
+which has no forwarding route without the firewall. Turn the VPN off, or set
+`enable_network_firewall = true` (or the `production` profile) and apply.
+
+Starter estates may now list `aws.network.spoke_attachments`. Before, the plan
+rejected them. Their spokes egress through NAT **without inspection**: the
+`prod` and `nonprod` tables route `0.0.0.0/0` to the egress attachment, and
+each spoke propagates into the `shared` table, which the egress attachment
+uses for the NAT replies. Accept this before you list spokes on starter.
+
+What the plan shows on an existing starter estate:
+
+- The two TGW routes `prod:default` and `nonprod:default` are replaced: their
+  target moves from the inspection attachment to the egress attachment. No
+  spoke could be wired on starter before, so no traffic is interrupted.
+- Nothing else changes until you list spokes. Each listed spoke then adds an
+  accepter (with `accept`), an association and a propagation into `shared`.
+
+Production estates (Network Firewall on) plan no change.
+
+If you later turn the firewall on for a starter estate with spokes, the same
+apply moves the segment defaults back to inspection, moves each spoke
+propagation from `shared` to `inspection` (replaced) and adds the two
+inspection hub routes. Spoke traffic drops while the propagations are
+replaced. Do it in a change window.
+
 #### Access Analyzer in every enabled region (aws-security)
 
 The external analyzer now exists in every `aws.enabled_regions` entry (the home
@@ -1231,8 +1263,8 @@ aws:
 
 A new spoke needs the same step after its first workload apply
 (`docs/runbooks/aws-add-account.md`). With `enable_network_firewall = false`
-(the `starter` profile) the inspection VPC has no forwarding route, so wired
-spokes still have no egress; see `docs/known-gaps.md`.
+(the `starter` profile) spokes egress through NAT without inspection; see
+"Starter spokes egress through NAT; starter rejects the VPN".
 
 #### AWS org trail managed by the CloudTrail delegated administrator (opt-in)
 

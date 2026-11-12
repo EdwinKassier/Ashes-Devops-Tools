@@ -201,19 +201,20 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
     `tgw_attachment_id` into the config and apply aws-network. A spoke not
     listed has no routing (no run trigger or discovery closes the loop; the TGW
     owner cannot read tags the workload account set on its attachment);
-  - **with `enable_network_firewall = false` (the `starter` profile) wired
-    spokes still have no egress:** prod/nonprod default to the inspection
-    attachment, and without the firewall the inspection VPC's tgw tier has no
-    forwarding route. Route those segments to egress (or keep the firewall) is a
-    design decision not yet made;
+  - **with `enable_network_firewall = false` (the `starter` profile) spoke
+    egress is not inspected (D4, accepted).** The segment tables route
+    `0.0.0.0/0` straight to the egress attachment and spokes propagate into the
+    `shared` table, so starter spokes reach the internet through NAT only. Use
+    the `production` profile when egress must be inspected;
   - prod↔nonprod flows are routable *through* inspection (the inspection
     table knows every spoke); only the Network Firewall policy separates the
     segments. Alert-only mode passes them. Separate per-segment inspection
     tables would enforce it at the routing layer;
   - **validate in the sandbox:** the accepter on a `pendingAcceptance`
     attachment, the association of a cross-account attachment, end-to-end
-    egress and reply through the firewall (appliance mode), and on-premises →
-    spoke over the VPN.
+    egress and reply through the firewall (appliance mode), on-premises →
+    spoke over the VPN, and on a starter estate `curl -sI https://aws.amazon.com`
+    from a spoke with VPC flow logs showing the NAT gateway as the path.
 
 - **Org-wide Config recorders are mock-tested only.** The
   `org-config-recorders` StackSet (`modules/aws/security/config-recorder-stackset`)

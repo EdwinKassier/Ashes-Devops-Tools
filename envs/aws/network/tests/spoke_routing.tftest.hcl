@@ -17,8 +17,6 @@ variables {
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "ashes-org-log-archive"
   default_tags             = { CostCenter = "networking" }
-  # Spokes need the inspection firewall (the stage rejects spokes without it).
-  enable_network_firewall = true
 }
 
 override_data {
@@ -63,6 +61,13 @@ run "spokes_reach_network_hub_from_config" {
   assert {
     condition     = local.spoke_attachments.dev.segment == "nonprod" && local.spoke_attachments.prod.accept == false
     error_message = "segment and accept must pass through from the config file."
+  }
+
+  # The fixture is a starter estate (no Network Firewall): its spokes egress
+  # through NAT, not through the inspection VPC (ARC-10).
+  assert {
+    condition     = !local.enable_network_firewall && module.aws_network_hub.tgw_inspection_routes["nonprod:default"].attachment == "egress"
+    error_message = "A starter estate must plan its spokes with the segment defaults on the egress attachment."
   }
 }
 

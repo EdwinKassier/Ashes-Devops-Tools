@@ -381,7 +381,8 @@ aws:
     # (aws-network). The tunnel pre-shared keys are not config: AWS keeps them in
     # a Secrets Manager secret (preshared_key_storage: SecretsManager, default;
     # the aws-network output vpn_preshared_key_arn names it). On-premises traffic
-    # is inspected: it default-routes to the inspection VPC. With
+    # is inspected: it default-routes to the inspection VPC, so the VPN needs
+    # the Network Firewall (profile production; starter fails the plan). With
     # static_routes_only, onprem_cidrs lists the on-premises prefixes (BGP learns
     # them otherwise). With BGP too, list the on-premises resolver ranges in
     # onprem_cidrs: they are admitted to the inbound Resolver endpoint. The BGP
@@ -399,7 +400,8 @@ aws:
     #   enabled: false
     # Workload spokes wired into the hub (aws-network): accepted, associated with
     # their segment table (prod | nonprod; 0.0.0.0/0 goes to inspection) and
-    # propagated into the inspection table. Until a spoke is listed it has NO
+    # propagated into the inspection table (starter: the shared table; egress is
+    # NAT only, not inspected). Until a spoke is listed it has NO
     # routing. After an aws-workload-<env> first apply, copy its output
     # tgw_attachment_id here and apply aws-network. accept: false for an
     # attachment someone already accepted.

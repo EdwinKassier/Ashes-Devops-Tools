@@ -215,7 +215,7 @@ variable "ipam_new_vpcs" {
 }
 
 variable "enable_vpn" {
-  description = "Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer_gateway_ip. Traffic from on-premises is default-routed to the inspection VPC (a dedicated hybrid TGW route table), and the on-premises routes propagate only into the inspection route table, so spoke return traffic is inspected too. See docs/architecture/aws-landing-zone.md."
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer_gateway_ip and enable_network_firewall = true. Traffic from on-premises is default-routed to the inspection VPC (a dedicated hybrid TGW route table), and the on-premises routes propagate only into the inspection route table, so spoke return traffic is inspected too. See docs/architecture/aws-landing-zone.md."
   type        = bool
   default     = false
   nullable    = false
@@ -271,7 +271,7 @@ variable "vpn" {
 
 variable "spoke_attachments" {
   description = <<-EOT
-    Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment_id is the aws-workload-<env> output tgw_attachment_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. A non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change.
+    Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment_id is the aws-workload-<env> output tgw_attachment_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. Without the firewall (enable_network_firewall = false, the starter profile) the segment tables route 0.0.0.0/0 to the egress attachment instead and the spoke propagates into the shared route table: egress is NAT only, not inspected. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. With the firewall, a non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change.
   EOT
   type = map(object({
     attachment_id = string
@@ -294,10 +294,5 @@ variable "spoke_attachments" {
   validation {
     condition     = length(distinct([for s in values(var.spoke_attachments) : s.attachment_id])) == length(var.spoke_attachments)
     error_message = "spoke_attachments must not list the same attachment_id twice (an attachment associates with exactly one route table)."
-  }
-
-  validation {
-    condition     = length(var.spoke_attachments) == 0 || var.enable_network_firewall
-    error_message = "spoke_attachments (config: aws.network.spoke_attachments) needs enable_network_firewall = true: spokes route 0.0.0.0/0 through the inspection VPC, which has no forwarding path without the firewall, so the spokes would have no egress."
   }
 }

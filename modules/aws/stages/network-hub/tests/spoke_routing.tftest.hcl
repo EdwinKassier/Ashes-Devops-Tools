@@ -219,3 +219,48 @@ run "spoke_attachment_ids_unique" {
 
   expect_failures = [var.spoke_attachments]
 }
+
+# Starter (no Network Firewall): the segment defaults go straight to the egress
+# attachment, so spokes get NAT egress without inspection (ARC-10, D4).
+run "starter_spokes_egress_through_nat" {
+  command = apply
+
+  variables {
+    enable_network_firewall = false
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod" }
+    }
+  }
+
+  assert {
+    condition     = output.tgw_inspection_routes["nonprod:default"].attachment == "egress" && output.tgw_inspection_routes["prod:default"].attachment == "egress"
+    error_message = "Without the firewall the segment defaults must go to the egress attachment, or spokes have no egress (ARC-10)."
+  }
+
+  assert {
+    condition     = aws_ec2_transit_gateway_route_table_propagation.spoke["dev"].transit_gateway_route_table_id == "tgw-rtb-shared000000"
+    error_message = "NAT replies leave the egress VPC through the shared table, so the spoke must propagate there."
+  }
+
+  assert {
+    condition     = !contains(keys(output.tgw_inspection_routes), "shared:spokes") && !contains(keys(output.tgw_inspection_routes), "inspection:default")
+    error_message = "No route may point at the inspection attachment when there is no firewall to forward it."
+  }
+
+  assert {
+    condition     = alltrue([for r in values(output.tgw_inspection_routes) : r.attachment != "inspection"])
+    error_message = "Without the firewall no TGW route may point at the inspection attachment."
+  }
+}
+
+run "starter_with_vpn_is_rejected" {
+  command = plan
+
+  variables {
+    enable_network_firewall = false
+    enable_vpn              = true
+    vpn                     = { customer_gateway_ip = "203.0.113.10" }
+  }
+
+  expect_failures = [terraform_data.hybrid_needs_inspection]
+}
