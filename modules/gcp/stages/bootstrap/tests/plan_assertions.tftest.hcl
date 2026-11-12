@@ -755,3 +755,15 @@ run "ncc_roles_are_folder_scoped_when_enabled" {
     error_message = "Plan SAs must get only the NCC viewer role."
   }
 }
+
+# gcp-projects grants roles/dns.peer to each workload apply SA on the shared
+# folder (the spoke DNS peering zone targets the hub VPC there), so the
+# shared-folder allow-list must admit it. Environment folders do not need it.
+run "projects_apply_may_delegate_dns_peer_on_the_shared_folder" {
+  command = plan
+
+  assert {
+    condition     = contains(output.delegated_network_folder_roles, "roles/dns.peer") && !contains(output.delegated_workload_folder_roles, "roles/dns.peer")
+    error_message = "gcp-projects grants roles/dns.peer to workload apply SAs on the shared folder, so the shared-folder delegated allow-list (and only it) must admit it."
+  }
+}

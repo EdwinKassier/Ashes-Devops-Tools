@@ -891,6 +891,21 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Spokes resolve the internal zone through the hub VPC (gcp-bootstrap, gcp-organization, gcp-projects, gcp-network-hub)
+
+**Breaking: apply the GCP layers in order.** Each `gcp-workload-<env>` peering zone `internal-peering` targets the hub VPC. The `internal-root` zone was bound only to the DNS anchor VPC (`dns-vpc-core`), so the hub VPC had no zone for the internal domain and every lookup from a spoke returned NXDOMAIN. Creating that peering zone also needs `roles/dns.peer` on the hub project, which the workload apply SAs did not hold.
+
+What changes:
+
+- gcp-bootstrap adds `roles/dns.peer` to the `delegated_network_folder_roles` output.
+- gcp-organization adds it to the condition of the projects-apply delegated folder IAM grant on the shared folder.
+- gcp-projects grants `roles/dns.peer` to each workload apply SA on the shared folder (`google_folder_iam_member.workload_dns_peer`, output key `workload-dns-peer|<env>`). The role holds only `dns.networks.targetWithPeeringZone`.
+- gcp-network-hub binds `internal-root` to the hub VPC as well. The provider updates `private_visibility_config` in place, so the zone and its records stay.
+
+Apply order for this release: `gcp-bootstrap`, `gcp-organization`, `gcp-projects`, then `gcp-network-hub`, then each `gcp-workload-<env>`. If gcp-projects runs before gcp-organization, its new grant fails with a permission error; apply gcp-organization and run gcp-projects again.
+
+If you supply the bootstrap contract in `config/landing-zone.yaml` (`gcp.contracts.bootstrap`), add `roles/dns.peer` to its `delegated_network_folder_roles` list. If you supply a `network_hub` contract for a hub that gcp-network-hub does not manage, bind the internal zone to that hub VPC and grant `roles/dns.peer` on its project yourself.
+
 #### No US defaults in the network stages (net-hub, net-spoke, dns-anchor)
 
 `modules/gcp/stages/net-hub`, `net-spoke` and `dns-anchor` now require `region`. Before, it defaulted to `us-central1`. In `net-spoke`, `flow_logs_export.bigquery_location` and `storage_location` now default to the spoke's region, not `US`. The roots and the `environment` and `network-hub` stages already pass these values, so only direct callers of the three stages change. An existing flow-log dataset created in `US` would be replaced if its location changes: set `bigquery_location = "US"` to keep it.

@@ -146,9 +146,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_folder_iam_member.network_sa_env_viewer (modules/gcp/stages/projects/main.tf#L138)
-- resource.google_folder_iam_member.network_sa_folder_roles (modules/gcp/stages/projects/main.tf#L130)
-- resource.google_folder_iam_member.workload_sa_folder_roles (modules/gcp/stages/projects/main.tf#L121)
+- resource.google_folder_iam_member.network_sa_env_viewer (modules/gcp/stages/projects/main.tf#L151)
+- resource.google_folder_iam_member.network_sa_folder_roles (modules/gcp/stages/projects/main.tf#L143)
+- resource.google_folder_iam_member.workload_dns_peer (modules/gcp/stages/projects/main.tf#L159)
+- resource.google_folder_iam_member.workload_sa_folder_roles (modules/gcp/stages/projects/main.tf#L134)
 - resource.google_monitoring_monitored_project.projects (modules/gcp/stages/projects/main.tf#L66)
 
 
@@ -176,7 +177,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_automation_folder_grants"></a> [automation\_folder\_grants](#output\_automation\_folder\_grants) | Folder IAM grants made to the workload / network-hub automation SAs, keyed "<env>\|<phase>\|<role>" (workload), "network\|<phase>\|<role>" (network-hub on the shared folder) and "network-env\|<env>\|<phase>" (network-hub compute.viewer on each environment folder). |
+| <a name="output_automation_folder_grants"></a> [automation\_folder\_grants](#output\_automation\_folder\_grants) | Folder IAM grants made to the workload / network-hub automation SAs, keyed "<env>\|<phase>\|<role>" (workload), "network\|<phase>\|<role>" (network-hub on the shared folder), "network-env\|<env>\|<phase>" (network-hub compute.viewer on each environment folder) and "workload-dns-peer\|<env>" (the workload apply SA's roles/dns.peer on the shared folder). |
 | <a name="output_project_ids"></a> [project\_ids](#output\_project\_ids) | Map of Project IDs |
 | <a name="output_project_numbers"></a> [project\_numbers](#output\_project\_numbers) | Map of Project Numbers |
 | <a name="output_projects"></a> [projects](#output\_projects) | Map of created projects, keyed "<env>-<project>": { id, project\_id, number, name, parent, labels, billing\_account }. |

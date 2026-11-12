@@ -75,9 +75,11 @@ resource "google_monitoring_monitored_project" "projects" {
 # The per-environment workload SAs created by gcp-bootstrap hold NO org-level
 # role. Their rights live here, scoped to their OWN environment folder (FAST
 # stage-3 pattern): the apply SA gets the write roles, the plan SA read-only
-# roles. The network-hub SAs likewise get their network roles on the `shared`
-# folder only. These grants are made by the projects-apply SA through a
-# conditional (delegated) folderIamAdmin grant that only admits these role lists.
+# roles. The one exception is roles/dns.peer on the shared folder for each
+# workload apply SA (its DNS peering zone targets the hub VPC). The network-hub
+# SAs likewise get their network roles on the `shared` folder only. These
+# grants are made by the projects-apply SA through a conditional (delegated)
+# folderIamAdmin grant that only admits these role lists.
 
 locals {
   # Roles in non_delegable_workload_folder_roles are granted by gcp-organization
@@ -116,6 +118,17 @@ locals {
       }
     } if env != var.network_folder_key
   ]...)
+
+  # Each gcp-workload-<env> DNS peering zone targets the hub VPC in the shared
+  # folder. Creating a peering zone needs dns.networks.targetWithPeeringZone on
+  # the TARGET network's project, which roles/dns.peer holds (and nothing else).
+  # Only the apply SA creates the zone, so the plan SAs get nothing here.
+  workload_dns_peer_grants = contains(keys(var.folders), var.network_folder_key) ? {
+    for env, sas in var.workload_service_accounts : env => {
+      folder = var.folders[var.network_folder_key].id
+      member = "serviceAccount:${sas.apply}"
+    } if env != var.network_folder_key
+  } : {}
 }
 
 resource "google_folder_iam_member" "workload_sa_folder_roles" {
@@ -140,5 +153,13 @@ resource "google_folder_iam_member" "network_sa_env_viewer" {
 
   folder = each.value.folder
   role   = "roles/compute.viewer"
+  member = each.value.member
+}
+
+resource "google_folder_iam_member" "workload_dns_peer" {
+  for_each = local.workload_dns_peer_grants
+
+  folder = each.value.folder
+  role   = "roles/dns.peer"
   member = each.value.member
 }

@@ -66,11 +66,13 @@ run "dns_zone_binds_to_dns_anchor_network_self_link" {
   }
 
   assert {
-    condition = length(module.dns_anchor.dns_zones["internal-root"].zone.private_visibility_config[0].networks) == 1 && alltrue([
-      for n in module.dns_anchor.dns_zones["internal-root"].zone.private_visibility_config[0].networks :
-      n.network_url == "projects/mock-dns-project/global/networks/dns-vpc-core"
+    condition = toset([
+      for n in module.dns_anchor.dns_zones["internal-root"].zone.private_visibility_config[0].networks : n.network_url
+      ]) == toset([
+      "projects/mock-dns-project/global/networks/dns-vpc-core",
+      "projects/mock-hub-project/global/networks/hub-vpc-core",
     ])
-    error_message = "The private DNS zone must bind to the DNS anchor's own VPC self_link, not the shared-vpc hub network."
+    error_message = "internal-root must be visible to the DNS anchor VPC and to the hub VPC: spoke peering zones target the hub VPC, and a peering zone answers from the zones bound to its target network (ARC-2)."
   }
 
   assert {

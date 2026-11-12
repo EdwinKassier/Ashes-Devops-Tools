@@ -490,6 +490,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   built-in `10.72.0.0/16`, reports overlaps among workloads, and reports a fixed AWS range outside
   `aws.network.regional_cidrs.<org.regions.aws>`. Give every workload its own `vpc_cidr`; see
   `UPGRADING.md`.
+- **Spoke DNS peering resolves the internal root zone (ARC-2, breaking).** Each workload peering
+  zone (`internal-peering`) targets the hub VPC, but the `internal-root` zone was bound only to the
+  DNS anchor VPC, so every internal lookup from a spoke returned NXDOMAIN. `gcp-network-hub` now
+  also binds the zone to the hub VPC (an in-place zone update). `gcp-projects` grants each workload
+  apply SA `roles/dns.peer` on the shared folder, which creating a peering zone that targets the
+  hub VPC needs, and gcp-bootstrap adds `roles/dns.peer` to `delegated_network_folder_roles`. Apply
+  in order; see `UPGRADING.md`.
 - `docs/guides/BRANCH_PROTECTION.md` listed `Terraform Tests` (a sharded matrix that only reports
   `Terraform Tests (shard N)`) as a required context, which would block every PR. `Validation Summary` is
   now the only required context.

@@ -179,18 +179,24 @@ All subnets have VPC Flow Logs enabled and export to BigQuery via the Cloud Audi
 
 ```mermaid
 graph LR
-    vm["VM in Spoke\n(resolves *.internal.example.com)"]
-    private_dns["Private DNS Zone\n(hub project)"]
-    peering["DNS Peering\n(hub → spoke)"]
-    cloud_dns["Cloud DNS\nResolver 169.254.169.254"]
+    vm["VM in spoke VPC\n(resolves *.internal.example.com)"]
+    cloud_dns["Cloud DNS in the spoke VPC\n(metadata server 169.254.169.254)"]
+    peering["internal-peering zone\n(gcp-workload-&lt;env&gt;)\ntarget: hub VPC"]
+    root_zone["internal-root private zone\n(DNS project, gcp-network-hub)\nbound to dns-vpc-core and hub-vpc-core"]
 
     vm --> cloud_dns
     cloud_dns --> peering
-    peering --> private_dns
-    private_dns -->|"A record"| vm
+    peering -->|"resolved in the hub VPC"| root_zone
+    root_zone -->|"A record"| vm
 ```
 
-Spoke projects use DNS peering to resolve records from the hub's private zone. No split-horizon or on-premises DNS forwarder configuration is included by default; add forwarding targets to `var.forwarding_targets` in the dns module if needed.
+Each `gcp-workload-<env>` creates a private DNS peering zone, `internal-peering`, for the internal domain. Its target is the hub VPC (`hub_network.vpc_self_link` from `gcp-network-hub`). A peering zone answers from the name resolution order of its target network, so the hub VPC must see the zone that holds the records. `gcp-network-hub` therefore binds the `internal-root` zone in the DNS project to two networks: the DNS anchor VPC (`dns-vpc-core`), which owns the zone, and the hub VPC (`hub-vpc-core`), which every spoke peering zone targets.
+
+Creating a peering zone needs `dns.networks.targetWithPeeringZone` on the project of the target network. `gcp-projects` grants `roles/dns.peer`, which holds only that permission, to each workload apply SA on the shared folder. The hub project is in that folder. The plan SAs get no role there.
+
+A workload with `enable_network_hub = false` has no hub and no peering zone. If you supply the `network_hub` contract for a hub that `gcp-network-hub` does not manage, bind the zone to that hub VPC and grant `roles/dns.peer` on its project yourself.
+
+No split-horizon or on-premises DNS forwarder configuration is included by default; add forwarding targets to `var.forwarding_targets` in the dns module if needed.
 
 ---
 

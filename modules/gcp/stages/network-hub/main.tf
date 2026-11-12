@@ -179,9 +179,10 @@ module "hub_cloud_armor" {
 }
 
 # DNS hub (name resolution): dns-anchor composition on the 'dns-hub' project.
-# A workload-free VPC anchoring the organization's root private zone; spokes
-# resolve it through DNS peering. Formerly module.dns_hub_network (stages/host)
-# plus module.dns_hub_zone; see moved.tf.
+# A workload-free VPC anchoring the organization's root private zone. The zone
+# is also bound to the hub VPC, which each spoke's DNS peering zone targets.
+# Formerly module.dns_hub_network (stages/host) plus module.dns_hub_zone; see
+# moved.tf.
 module "dns_anchor" {
   source = "../dns-anchor"
 
@@ -199,6 +200,12 @@ module "dns_anchor" {
       dns_name       = "${var.internal_domain}."
       description    = "Root Internal Zone for Organization"
       dnssec_enabled = true
+      # Each spoke peering zone (gcp-workload-<env> internal-peering) targets
+      # the hub VPC, and a peering zone answers from the zones bound to its
+      # target network. The hub VPC must therefore see this zone, or every
+      # spoke lookup returns NXDOMAIN (ARC-2). The anchor VPC stays bound.
+      # Adding a network updates the zone in place.
+      additional_visibility_networks = [module.hub.network_self_link]
     }
   }
 }

@@ -254,8 +254,11 @@ locals {
     "roles/iam.workloadIdentityPoolAdmin",
   ]
   delegated_workload_folder_roles = sort(setsubtract(toset(concat(local.effective_workload_folder_roles.plan, local.effective_workload_folder_roles.apply)), toset(local.non_delegable_folder_roles)))
-  delegated_network_folder_roles  = sort(setsubtract(toset(concat(local.effective_network_folder_roles.plan, local.effective_network_folder_roles.apply)), toset(local.non_delegable_folder_roles)))
-  delegated_folder_roles          = sort(distinct(concat(local.delegated_workload_folder_roles, local.delegated_network_folder_roles)))
+  # roles/dns.peer is not a network-hub role: gcp-projects grants it to each
+  # workload apply SA on the shared folder, so the workload DNS peering zone
+  # can target the hub VPC. It holds only dns.networks.targetWithPeeringZone.
+  delegated_network_folder_roles = sort(setsubtract(toset(concat(local.effective_network_folder_roles.plan, local.effective_network_folder_roles.apply, ["roles/dns.peer"])), toset(local.non_delegable_folder_roles)))
+  delegated_folder_roles         = sort(distinct(concat(local.delegated_workload_folder_roles, local.delegated_network_folder_roles)))
 }
 
 resource "google_service_account" "stage" {

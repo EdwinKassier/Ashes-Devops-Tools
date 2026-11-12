@@ -42,6 +42,16 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `hashicorp/aws` 6.72.0 data source lists pool allocations; that conflict
   fails the apply of the reservation (recovery in `UPGRADING.md`).
 
+- **Spoke resolution of the internal zone needs the sandbox proof (ARC-2).**
+  `gcp-network-hub` binds the `internal-root` zone to the hub VPC as well as
+  `dns-vpc-core`, and `gcp-projects` grants each workload apply SA
+  `roles/dns.peer` on the shared folder. Mock tests prove the planned binding
+  and grants only; they cannot prove resolution. Still to confirm: the
+  `gcp-workload-dev` apply creates `internal-peering` without a permission
+  error, and a VM in the dev spoke resolves a record in `internal-root` (for
+  example `dig +short <name>.<internal domain>` returns its A record, not
+  NXDOMAIN).
+
 - **Vercel `resource_config` first apply is unproven.** `modules/vercel/project` now sets
   `resource_config.function_default_regions` instead of the deprecated
   `serverless_function_region`. Confirm in the sandbox that the update is in place and that the
