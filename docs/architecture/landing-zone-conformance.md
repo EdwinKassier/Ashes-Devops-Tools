@@ -41,7 +41,7 @@ Severity H/M/L. Class: **DOC** (fixed in this review) · **CONFIG** (default-off
 
 | ID | Gap | Sev | Class |
 |:---|:----|:----|:------|
-| [A5](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Single-region backups. No `copy_actions`: member-account vaults are unlocked (AWS-managed key) and nothing copies recovery points to the locked central vault or a second region. Planned in WS4 Tasks 1 to 3 (control matrix BCK-01 to BCK-03) | M | BEHAVIOR |
+| [A5](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Cross-account copy to a CMK-encrypted, Compliance-locked vault and a DR-region copy are opt-in (`compliance.backup`; the production scaffold turns the copy on). The default is still a single vault with the AWS-managed key. Copy jobs are unproven (known-gaps A5). Control matrix BCK-01 to BCK-03 | M | BEHAVIOR |
 | [A6](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | June-2026 SRA makes CloudWatch Unified Data Store the analytics *primary*; zone keeps S3 WORM as immutable sink, CloudWatch out-of-band | M | DOC / BEHAVIOR |
 | [A7](../known-gaps.md#modernization--latest-best-practice-gaps-2026-review) | Config conformance packs are an empty bring-your-own hook (no bundled pack) | M | DOC / CONFIG |
 | — | Security Hub CIS standard was pinned to v1.4.0 | L | **CONFIG — fixed** (now CIS v3.0.0) |

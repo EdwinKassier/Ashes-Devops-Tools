@@ -15,9 +15,13 @@ graph TB
             hub_vpc["Hub VPC\n10.0.0.0/16"]
             shared_vpc["Shared VPC Host"]
             cloud_nat["Cloud NAT\n(egress)"]
-            dns_zone["Private DNS Zone\n*.internal.example.com"]
             vpn["HA-VPN\n(optional)"]
             interconnect["Interconnect\n(optional)"]
+        end
+
+        subgraph dns_proj["DNS Project (gcp-network-hub)"]
+            dns_vpc["DNS VPC\ndns-vpc-core"]
+            dns_zone["Private DNS Zone\n*.internal.example.com"]
         end
 
         subgraph spoke_dev["Spoke Project — dev"]
@@ -40,7 +44,9 @@ graph TB
         hub_vpc -->|"VPC Peering"| spoke_dev
         hub_vpc -->|"VPC Peering"| spoke_staging
         hub_vpc --> cloud_nat
-        hub_vpc --> dns_zone
+        dns_vpc --> dns_zone
+        hub_vpc -.->|"zone also bound"| dns_zone
+        spoke_dev -.->|"DNS peering zone to hub VPC"| hub_vpc
         hub_vpc -.->|"optional"| vpn
         hub_vpc -.->|"optional"| interconnect
     end

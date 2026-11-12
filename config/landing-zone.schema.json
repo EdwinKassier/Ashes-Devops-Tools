@@ -865,6 +865,7 @@
               },
               "compliance_class": {
                 "type": "string",
+                "description": "Reserved: no root reads this key yet.",
                 "enum": [
                   "standard",
                   "regulated"
@@ -872,6 +873,7 @@
               },
               "data_classification": {
                 "type": "string",
+                "description": "Reserved: no root reads this key yet.",
                 "enum": [
                   "public",
                   "internal",
@@ -1443,6 +1445,7 @@
               },
               "compliance_class": {
                 "type": "string",
+                "description": "Reserved: no root reads this key yet.",
                 "enum": [
                   "standard",
                   "regulated"
@@ -1450,6 +1453,7 @@
               },
               "data_classification": {
                 "type": "string",
+                "description": "Reserved: no root reads this key yet.",
                 "enum": [
                   "public",
                   "internal",
@@ -1901,6 +1905,7 @@
         },
         "breach_notification_contacts": {
           "type": "array",
+          "description": "Reserved: no root reads this key yet.",
           "items": {
             "type": "string"
           }

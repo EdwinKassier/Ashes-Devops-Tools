@@ -604,6 +604,13 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `us-central1`. Narrowing it is a breaking change (the location policy would deny the
   dropped regions for callers that rely on the default), so it is deferred out of Phase 0.
   The deployable root reads `gcp.allowed_regions` from `config/landing-zone.yaml`.
+- **The AWS stage defaults for `availability_zones` still name `eu-west-2`.**
+  The `availability_zones` defaults in `modules/aws/network/vpc`,
+  `modules/aws/stages/network-hub` and `modules/aws/stages/workload` are
+  `eu-west-2a` and `eu-west-2b` (the VPC module also has `eu-west-2c`). The
+  deployable roots always pass resolved zones. A direct stage or module caller
+  in another region must set `availability_zones`, or the plan fails at the VPC
+  precondition (`availability_zones` must start with the VPC region).
 
 ## OPEN — operator actions and items carried from archived audits
 
@@ -1090,9 +1097,11 @@ side (all mock-tested, secure defaults):
   request's head. One pull request can widen an allowlist (or weaken the
   script) and use the wider list in the same change. The intended control is
   CODEOWNERS review on `/policies/`, `/scripts/check-plan-time-exec.py` and
-  `/.github/requirements/`. Today `.github/CODEOWNERS` covers `/policies/`
-  only, and its teams are placeholders until a fork sets its own
-  (`scripts/init-landing-zone.sh --codeowners`).
+  `/.github/requirements/`. `.github/CODEOWNERS` gives the security team
+  `/policies/`, `/.github/` (which includes `.github/requirements/`),
+  `/scripts/check-plan-time-exec.py` and `/scripts/check-consistency.sh`. Other
+  files in `/scripts/` have the platform team only. The teams are placeholders
+  until a fork sets its own (`scripts/init-landing-zone.sh --codeowners`).
 - **What the plan-time execution gate does not scan.** It parses tracked
   `*.tf` and `*.tf.json` files only. `*.tftest.hcl` and `*.tfmock.hcl` files
   are not scanned: `terraform test` runs them in CI with mock providers and in

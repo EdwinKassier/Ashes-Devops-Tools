@@ -277,7 +277,7 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 9. **Apply `aws-shared-services`** *(optional / gated).* Shared platform services; apply only if you need them.
 
-10. **Apply `aws-backup`.** Centralized AWS Backup vaults and plans.
+10. **Apply `aws-backup`.** Centralized AWS Backup vaults and plans. A production scaffold turns on the locked central copy. Its Compliance-mode Vault Lock becomes irreversible after `changeable_for_days` (default 3). Read [UPGRADING.md](../../UPGRADING.md#central-backup-copy-to-a-locked-vault-opt-in-irreversible-lock-aws-backup) before you apply.
 
 11. **Apply `aws-workload-<env>`** *(per environment).* Select the env with `TF_WORKSPACE=aws-workload-<env>`. Each apply stands up that env's spoke VPC, workload roles, and per-account baseline. Repeat per environment.
 

@@ -410,7 +410,7 @@ What you cannot undo:
 
 - The copy vault lock is in Compliance mode. `changeable_for_days` (default 3) is your window to back out: during those days after the apply you can still delete the lock (`aws backup delete-backup-vault-lock-configuration --backup-vault-name org-backup-copy-vault` in the backup account, as break-glass: the `tfc-apply` boundary denies it, see below) and then delete the vault's recovery points and the vault. After that window nobody can remove the lock or delete the vault while it holds recovery points, including the root user and AWS, and recovery points in it cannot be deleted before `min_retention_days`.
 - Turning `copy_to_central_vault` off again stops the copies, but the plan stops at the copy vault key's deletion guard (`prevent_destroy`). Keep the key, or remove the guard from state first as the kms-key module describes.
-- Check `min_retention_days` (default 7), `max_retention_days` (default 3650) and `copy_retention_days` before the apply. `copy_retention_days` must lie between the two, or every copy job fails. After the window you cannot lower `max_retention_days` or raise `min_retention_days` beyond what the lock allows.
+- Check `min_retention_days` (default 7), `max_retention_days` (default 3650) and `copy_retention_days` before the apply. `copy_retention_days` must lie between the two. Otherwise the plan fails first, on the validation in `modules/aws/stages/backup/variables.tf`. After the window you cannot lower `max_retention_days` or raise `min_retention_days` beyond what the lock allows.
 - The copy vault key is tagged `protected = true`. Only break-glass can disable it, schedule its deletion or change its key policy. Its key policy names the backup account's `break-glass` role (`copy_vault_key_policy_admin_role_name`), which must exist before the apply (aws-organization `enable_member_break_glass_role`, default on). Later changes to the key policy fail as the pipeline; apply them as break-glass.
 
 What cross-account copy also needs:
@@ -647,12 +647,18 @@ the sandbox: a plan of `aws-workload-dev` against its real state after the
 upgrade shows no VPC change, and a real explicit-CIDR allocation from an IPAM
 pool (see `docs/known-gaps.md`).
 
-#### IPAM explicit-CIDR allocation for hub VPCs is opt-in (aws-network)
+#### IPAM explicit-CIDR allocation for hub VPCs is opt-in (network-hub stage)
 
 Hub VPCs that allocate from IPAM pass `ipam_allocation = "explicit_cidr"`.
 `ipam_new_vpcs` (default `[]`) lists hub VPCs to create from the pool, and
 `ipam_mode_for_new_vpcs_only` (default `true`) guards the rest. Adding a pool
 to an existing static VPC replaces it. No manual step on upgrade.
+
+Release race: listing a static hub VPC in `ipam_new_vpcs` also removes its
+`hub_static` reservation in the same apply. Terraform does not order that
+release before the new VPC's allocation, and IPAM releases asynchronously, so
+the VPC create can fail with an overlapping-allocation error. Wait a few
+minutes and apply again.
 
 #### The static hub VPC ranges are reserved in the IPAM pool (aws-network)
 

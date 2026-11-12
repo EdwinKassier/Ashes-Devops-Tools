@@ -338,7 +338,8 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
     /modules/gcp/stages/organization/ /modules/gcp/stages/bootstrap/ /modules/gcp/stages/guardrails/ \
     /modules/aws/stages/organization/ /modules/aws/stages/security/ /modules/aws/stages/backup/ \
     /config/tfc-workspaces.yaml \
-    /envs/tfc-admin/ /envs/gcp/guardrails/ /policies/ /.github/; do
+    /envs/tfc-admin/ /envs/gcp/guardrails/ /policies/ /.github/ \
+    /scripts/check-plan-time-exec.py /scripts/check-consistency.sh; do
     assert_line "${co}" "^${path} +@acme-gh/platform-team @acme-gh/sec\$" "${path} needs platform + security"
   done
   assert_no_line "${co}" '\$\{|your-org' "no unrendered variables or placeholders"

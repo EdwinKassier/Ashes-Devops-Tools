@@ -203,7 +203,7 @@ variable "ipam_mode_for_new_vpcs_only" {
 }
 
 variable "ipam_new_vpcs" {
-  description = "Hub VPCs to create from the regional IPAM pool while ipam_mode_for_new_vpcs_only is true. Allowed: inspection, egress. List a VPC only when it is being created; listing an existing static VPC replaces it."
+  description = "Hub VPCs to create from the regional IPAM pool while ipam_mode_for_new_vpcs_only is true. Allowed: inspection, egress. List a VPC only when it is being created; listing an existing static VPC replaces it. Listing a static hub VPC in `ipam_new_vpcs` also removes its `hub_static` reservation in the same apply. Terraform does not order that release before the new VPC's allocation, and IPAM releases asynchronously, so the VPC create can fail with an overlapping-allocation error. Wait a few minutes and apply again."
   type        = set(string)
   default     = []
   nullable    = false

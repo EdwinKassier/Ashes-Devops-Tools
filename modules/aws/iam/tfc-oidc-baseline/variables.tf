@@ -313,7 +313,7 @@ variable "kms_protection_tag_key" {
 }
 
 variable "protected_backup_vault_names" {
-  description = "AWS Backup vault names (any region of each member account) whose Vault Lock configuration, access policy and the vault itself the tfc-apply boundary forbids the apply identity to delete (DeleteBackupVaultLockConfiguration, DeleteBackupVaultAccessPolicy, DeleteBackupVault). Creating or replacing them (Put*) stays allowed, so the first aws-backup apply can create the lock and the policy. Default: the aws-backup central copy vault. Empty omits the statement."
+  description = "AWS Backup vault names (any region of each member account) whose Vault Lock configuration, access policy and the vault itself the tfc-apply boundary forbids the apply identity to delete (DeleteBackupVaultLockConfiguration, DeleteBackupVaultAccessPolicy, DeleteBackupVault). Creating or replacing them (Put*) stays allowed, so the first aws-backup apply can create the lock and the policy. The default matches the default copy_vault_name of the aws-backup stage (org-backup-copy-vault); a direct stage caller that sets another copy_vault_name must set this to the same name. Empty omits the statement."
   type        = list(string)
   default     = ["org-backup-copy-vault"]
   nullable    = false

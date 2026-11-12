@@ -96,6 +96,8 @@ CHANGELOG.md   @your-org/platform-team
 # The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root;
 # tfc-workspaces.yaml sets per-workspace variables (credential env vars included).
 /policies/                   @your-org/platform-team @your-org/security-team
+/scripts/check-plan-time-exec.py  @your-org/platform-team @your-org/security-team
+/scripts/check-consistency.sh     @your-org/platform-team @your-org/security-team
 /config/landing-zone.yaml    @your-org/platform-team @your-org/security-team
 /config/tfc-workspaces.yaml  @your-org/platform-team @your-org/security-team
 /config/sandbox/             @your-org/platform-team @your-org/security-team

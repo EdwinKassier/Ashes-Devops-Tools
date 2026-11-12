@@ -123,7 +123,7 @@ resource "aws_vpc" "this" {
 check "ipam_allocation_matches_subnet_math" {
   assert {
     condition     = var.ipam_pool_id == "" || aws_vpc.this.cidr_block == var.cidr_block
-    error_message = "VPC ${var.name} holds ${aws_vpc.this.cidr_block} from IPAM, but its subnets are cut from cidr_block ${var.cidr_block}. Set cidr_block (vpc_cidr) to the allocated block; see UPGRADING.md (IPAM explicit-CIDR default)."
+    error_message = "VPC ${var.name} holds ${aws_vpc.this.cidr_block} from IPAM, but its subnets are cut from cidr_block ${var.cidr_block}. Set cidr_block (vpc_cidr) to the allocated block; see UPGRADING.md, \"Spoke VPCs request their CIDR explicitly from IPAM (aws-workload)\"."
   }
 }
 
