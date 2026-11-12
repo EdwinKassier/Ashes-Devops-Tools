@@ -279,7 +279,18 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 10. **Apply `aws-backup`.** Centralized AWS Backup vaults and plans. A production scaffold turns on the locked central copy. Its Compliance-mode Vault Lock becomes irreversible after `changeable_for_days` (default 3). Read [UPGRADING.md](../../UPGRADING.md#central-backup-copy-to-a-locked-vault-opt-in-irreversible-lock-aws-backup) before you apply.
 
-11. **Apply `aws-workload-<env>`** *(per environment).* Select the env with `TF_WORKSPACE=aws-workload-<env>`. Each apply stands up that env's spoke VPC, workload roles, and per-account baseline. Repeat per environment.
+11. **Apply `aws-workload-<env>`** *(per environment).* Select the env with `TF_WORKSPACE=aws-workload-<env>`. Each apply stands up that env's spoke VPC, workload roles and per-account baseline. It also creates a Transit Gateway attachment that waits in `pendingAcceptance`. Repeat per environment.
+
+    **MANUAL HAND-OFF: wire each spoke into the hub.** Until this step the spoke has **no routing**. Only the network account (the Transit Gateway owner) can accept the attachment. Copy each workspace's `tgw_attachment_id` output into `config/landing-zone.yaml`, commit it, and apply `aws-network` again:
+
+    ```yaml
+    aws:
+      network:
+        spoke_attachments:
+          dev: {attachment_id: tgw-attach-0123456789abcdef0, segment: nonprod}   # segment: prod | nonprod
+    ```
+
+    Use the environment name (the `aws.workload_environments` key) as the key. aws-network then copies that environment's `vpc_cidr` as the spoke `cidr`, so prod and nonprod spokes cannot reach each other. aws-network accepts the attachment, associates it with the `prod` or `nonprod` route table and propagates the spoke CIDR into the inspection table (the shared table in the `starter` profile, which has no firewall). See [add an account, Step 4](aws-add-account.md#step-4--apply-the-layer). Verify in the network account: `aws ec2 describe-transit-gateway-attachments --filters Name=state,Values=available` lists the spoke.
 
 12. **Apply `saas`** *(optional).* Supabase and/or Vercel only, gated by `enable_supabase` / `enable_vercel`. Configures no AWS provider.
 
