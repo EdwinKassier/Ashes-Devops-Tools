@@ -478,6 +478,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   for any `/16` while its subnets were cut from `vpc_cidr`, so subnet creation could fail with
   `InvalidSubnet.Range`. `ignore_changes = [ipv4_netmask_length]` keeps existing VPCs in place,
   and a `check` warns when the allocated block differs from `cidr_block`. See `UPGRADING.md`.
+- **The static hub VPC ranges are reserved in the IPAM pool (ARC-1, breaking).** The inspection and
+  egress VPCs are not IPAM allocations, so the regional pool could allocate their range to a spoke.
+  `modules/aws/stages/network-hub` now adds one `aws_vpc_ipam_pool_cidr_allocation` per static hub VPC
+  inside the home-region pool (new output `hub_static_ipam_allocations`). A hub VPC that only partly
+  overlaps the pool fails the plan. Check that no spoke holds a hub range before you apply aws-network;
+  see `UPGRADING.md`.
 - `docs/guides/BRANCH_PROTECTION.md` listed `Terraform Tests` (a sharded matrix that only reports
   `Terraform Tests (shard N)`) as a required context, which would block every PR. `Validation Summary` is
   now the only required context.

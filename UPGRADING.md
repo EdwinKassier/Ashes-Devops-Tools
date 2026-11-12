@@ -534,6 +534,9 @@ For each existing `aws-workload-<env>` that allocates from IPAM:
    `aws.workload_environments.<env>.vpc_cidr` to that block before you apply.
    The subnets could not be created in that VPC, so this only fixes the subnet
    math. The upgrade plan also prints the check warning for this VPC.
+   If that block is the inspection or egress VPC range, do not adopt it: the
+   VPC overlaps a hub VPC. Follow the recovery in
+   [The static hub VPC ranges are reserved in the IPAM pool](#the-static-hub-vpc-ranges-are-reserved-in-the-ipam-pool-aws-network).
 3. If you must keep the old shape, set `ipam_explicit_cidr = false`
    (aws-workload) or `ipam_allocation = "netmask"` (direct module callers).
 
@@ -551,6 +554,63 @@ Hub VPCs that allocate from IPAM pass `ipam_allocation = "explicit_cidr"`.
 `ipam_new_vpcs` (default `[]`) lists hub VPCs to create from the pool, and
 `ipam_mode_for_new_vpcs_only` (default `true`) guards the rest. Adding a pool
 to an existing static VPC replaces it. No manual step on upgrade.
+
+#### The static hub VPC ranges are reserved in the IPAM pool (aws-network)
+
+**Breaking: the aws-network plan adds resources, and the apply fails if a spoke
+already holds a hub range.** The inspection and egress VPCs keep their static
+CIDRs, so they are not IPAM allocations. IPAM did not know those ranges were in
+use and could allocate them to a spoke. With the defaults, the regional pool
+(`10.64.0.0/12`) starts at the inspection VPC (`10.64.0.0/16`), so the first
+legacy netmask-shape spoke could receive it.
+
+aws-network now plans one `aws_vpc_ipam_pool_cidr_allocation.hub_static` per
+static hub VPC whose CIDR is inside the home-region pool (`aws_region` in
+`regional_cidrs`). The allocation only reserves address space; it does not
+change the VPC. A hub VPC that allocates from the pool (`ipam_new_vpcs`, or
+`ipam_mode_for_new_vpcs_only = false`) needs no reservation. A hub VPC outside
+the pool CIDR is not reserved. A hub VPC that only partly overlaps the pool
+fails the plan: move `inspection_cidr` or `egress_cidr` inside the pool CIDR or
+out of it. Every argument of the allocation forces replacement (checked against
+`hashicorp/aws` 6.72.0), so the reservation is released and taken again if a
+hub CIDR or the pool changes.
+
+The aws-network plan cannot see a conflict. No `hashicorp/aws` 6.72.0 data
+source lists the allocations in a pool. A conflict shows up at apply, when the
+allocation is created: that one resource fails, the VPCs are not changed, and
+the rest of the run still applies. tfc-admin already fails its plan when a `vpc_cidr` in
+`config/landing-zone.yaml` overlaps a hub CIDR, so the risk is a spoke with no `vpc_cidr`
+match: an IPAM-backed VPC created in the legacy netmask shape.
+
+Before you apply aws-network:
+
+1. In the network account, list the regional pool's allocations:
+   `aws ec2 get-ipam-pool-allocations --ipam-pool-id <regional pool id>`
+   (the pool id is in the aws-network output `ipam_pool_ids`).
+2. If no allocation overlaps `inspection_cidr` or `egress_cidr`, apply. Nothing
+   else is needed.
+3. If a spoke VPC holds a hub range, move that spoke first. Set
+   `aws.workload_environments.<env>.vpc_cidr` to a free block inside the
+   regional pool and apply its `aws-workload-<env>`. This replaces the spoke VPC
+   (the destroy guard asks for an override), and the old allocation is released
+   with it. IPAM can take some minutes to release it. Then apply aws-network;
+   if the reservation still fails, wait and run it again.
+4. If the aws-network apply already failed on `hub_static`, do steps 1 to 3 and
+   queue a new aws-network run. The allocation is created on that run.
+
+A failed allocation leaves no partial state to import. The resource supports
+import (`<allocation id>_<pool id>`) if you ever need to adopt a reservation
+that was created by hand.
+
+What is proven: mock tests prove which hub VPCs are reserved, the pool id and
+CIDR wiring, and the plan failure for a hub that only partly overlaps the pool.
+A real `hashicorp/aws` 6.72.0 plan with a hand-made state (no AWS API calls)
+showed that a change to `cidr`, `ipam_pool_id` or `description` forces
+replacement, and that an import block for this resource type reaches the read
+call. What still needs the sandbox: an aws-network apply creates both
+reservations in a real regional pool, a spoke that then requests a hub range is
+rejected by IPAM, and the static hub VPCs keep working (see
+`docs/known-gaps.md`).
 
 #### Access Analyzer in every enabled region (aws-security)
 

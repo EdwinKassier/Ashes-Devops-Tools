@@ -62,3 +62,8 @@ output "spoke_attachment_route_tables" {
   description = "Map of spoke_attachments key to the TGW route table its attachment is associated with (prod or nonprod segment); every listed spoke also propagates into the inspection route table."
   value       = { for k, s in var.spoke_attachments : k => module.transit_gateway.route_table_ids[s.segment] }
 }
+
+output "hub_static_ipam_allocations" {
+  description = "Map of static hub VPC name (inspection, egress) to the CIDR reserved for it in the home-region IPAM pool, so IPAM never allocates that range to a spoke. Empty for hub VPCs created from the pool and for hub VPCs outside the pool CIDR."
+  value       = { for k, a in aws_vpc_ipam_pool_cidr_allocation.hub_static : k => a.cidr }
+}

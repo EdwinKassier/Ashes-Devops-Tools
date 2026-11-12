@@ -103,19 +103,20 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_ec2_transit_gateway_route.vpn_onprem (modules/aws/stages/network-hub/main.tf#L375)
+- resource.aws_ec2_transit_gateway_route.vpn_onprem (modules/aws/stages/network-hub/main.tf#L414)
 - resource.aws_ec2_transit_gateway_route_table_association.spoke (modules/aws/stages/network-hub/spokes.tf#L42)
-- resource.aws_ec2_transit_gateway_route_table_association.vpn (modules/aws/stages/network-hub/main.tf#L359)
+- resource.aws_ec2_transit_gateway_route_table_association.vpn (modules/aws/stages/network-hub/main.tf#L398)
 - resource.aws_ec2_transit_gateway_route_table_propagation.spoke (modules/aws/stages/network-hub/spokes.tf#L51)
-- resource.aws_ec2_transit_gateway_route_table_propagation.vpn (modules/aws/stages/network-hub/main.tf#L367)
+- resource.aws_ec2_transit_gateway_route_table_propagation.vpn (modules/aws/stages/network-hub/main.tf#L406)
 - resource.aws_ec2_transit_gateway_vpc_attachment_accepter.spoke (modules/aws/stages/network-hub/spokes.tf#L30)
-- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L193)
-- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L201)
-- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L216)
-- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L226)
-- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L248)
-- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L240)
-- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L411)
+- resource.aws_eip.nat (modules/aws/stages/network-hub/main.tf#L232)
+- resource.aws_nat_gateway.this (modules/aws/stages/network-hub/main.tf#L240)
+- resource.aws_route.egress_default (modules/aws/stages/network-hub/main.tf#L255)
+- resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L265)
+- resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L287)
+- resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L279)
+- resource.aws_vpc_ipam_pool_cidr_allocation.hub_static (modules/aws/stages/network-hub/main.tf#L122)
+- resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L450)
 
 
 ## Inputs
@@ -156,6 +157,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_egress_route_table_ids_by_tier"></a> [egress\_route\_table\_ids\_by\_tier](#output\_egress\_route\_table\_ids\_by\_tier) | Map of egress VPC subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_egress_vpc_id"></a> [egress\_vpc\_id](#output\_egress\_vpc\_id) | The ID of the centralized egress VPC that hosts NAT, interface endpoints, and resolver endpoints. |
+| <a name="output_hub_static_ipam_allocations"></a> [hub\_static\_ipam\_allocations](#output\_hub\_static\_ipam\_allocations) | Map of static hub VPC name (inspection, egress) to the CIDR reserved for it in the home-region IPAM pool, so IPAM never allocates that range to a spoke. Empty for hub VPCs created from the pool and for hub VPCs outside the pool CIDR. |
 | <a name="output_inspection_route_table_ids_by_tier"></a> [inspection\_route\_table\_ids\_by\_tier](#output\_inspection\_route\_table\_ids\_by\_tier) | Map of inspection VPC subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_inspection_vpc_id"></a> [inspection\_vpc\_id](#output\_inspection\_vpc\_id) | The ID of the inspection VPC that hosts the Network Firewall. |
 | <a name="output_interface_endpoint_phz_id"></a> [interface\_endpoint\_phz\_id](#output\_interface\_endpoint\_phz\_id) | Zone ID of the shared private hosted zone fronting the interface endpoints, or null when no zone was created. |

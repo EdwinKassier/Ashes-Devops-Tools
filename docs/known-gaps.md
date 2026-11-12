@@ -32,6 +32,16 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   upgrade shows no VPC change, and an e2e apply allocates the requested block
   from a real IPAM pool and creates a subnet inside it.
 
+- **The hub VPC IPAM reservations need the sandbox proof (ARC-1).**
+  `modules/aws/stages/network-hub` reserves each static hub VPC range in the
+  regional IPAM pool (`aws_vpc_ipam_pool_cidr_allocation.hub_static`). Mock
+  tests prove the planned reservations only. Still to confirm: an aws-network
+  apply creates both reservations in a real pool, IPAM then refuses a spoke
+  that requests a hub range, and the hub VPCs are unaffected. The aws-network
+  plan cannot detect a spoke that already holds a hub range, because no
+  `hashicorp/aws` 6.72.0 data source lists pool allocations; that conflict
+  fails the apply of the reservation (recovery in `UPGRADING.md`).
+
 - **Vercel `resource_config` first apply is unproven.** `modules/vercel/project` now sets
   `resource_config.function_default_regions` instead of the deprecated
   `serverless_function_region`. Confirm in the sandbox that the update is in place and that the

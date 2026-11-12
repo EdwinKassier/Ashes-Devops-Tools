@@ -292,3 +292,79 @@ run "all_hub_vpcs_use_pool_when_new_only_disabled" {
     error_message = "disabling the new-only gate moves both hub VPCs to the pool"
   }
 }
+
+# A static hub VPC is not an IPAM allocation, so without a manual allocation the
+# regional pool could hand its range to a spoke. Each static hub VPC inside the
+# home-region pool is reserved there.
+run "static_hub_vpcs_are_reserved_in_the_pool" {
+  command = plan
+
+  assert {
+    condition = (
+      length(aws_vpc_ipam_pool_cidr_allocation.hub_static) == 2 &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["inspection"].cidr == var.inspection_cidr &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"].cidr == var.egress_cidr &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["inspection"].ipam_pool_id == "ipam-pool-eu-west-2-0" &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"].ipam_pool_id == "ipam-pool-eu-west-2-0"
+    )
+    error_message = "Static hub VPCs must hold a manual allocation in the regional pool so IPAM never hands their range to a spoke."
+  }
+
+  assert {
+    condition     = output.hub_static_ipam_allocations == { inspection = var.inspection_cidr, egress = var.egress_cidr }
+    error_message = "hub_static_ipam_allocations must map each reserved hub VPC to its CIDR."
+  }
+}
+
+run "pool_allocated_hub_vpc_needs_no_reservation" {
+  command = plan
+
+  variables {
+    ipam_new_vpcs = ["egress"]
+  }
+
+  assert {
+    condition     = keys(aws_vpc_ipam_pool_cidr_allocation.hub_static) == ["inspection"]
+    error_message = "A hub VPC that allocates from the pool is its own allocation; only static hubs are reserved."
+  }
+}
+
+run "no_reservation_when_both_hub_vpcs_use_the_pool" {
+  command = plan
+
+  variables {
+    ipam_mode_for_new_vpcs_only = false
+  }
+
+  assert {
+    condition     = length(aws_vpc_ipam_pool_cidr_allocation.hub_static) == 0
+    error_message = "With ipam_mode_for_new_vpcs_only = false both hub VPCs allocate from the pool, so nothing is reserved."
+  }
+}
+
+# A hub VPC outside the home-region pool cannot be handed to a spoke from that
+# pool, and IPAM rejects an allocation outside the pool CIDR.
+run "hub_vpc_outside_the_regional_pool_is_not_reserved" {
+  command = plan
+
+  variables {
+    egress_cidr = "10.32.0.0/16"
+  }
+
+  assert {
+    condition     = keys(aws_vpc_ipam_pool_cidr_allocation.hub_static) == ["inspection"]
+    error_message = "Only hub VPCs inside the regional pool CIDR are reserved there."
+  }
+}
+
+# A hub VPC that only partly overlaps the regional pool cannot be reserved, and
+# a spoke can still get part of its range: fail the plan.
+run "hub_vpc_straddling_the_regional_pool_fails" {
+  command = plan
+
+  variables {
+    inspection_cidr = "10.0.0.0/11"
+  }
+
+  expect_failures = [aws_vpc_ipam_pool_cidr_allocation.hub_static["inspection"]]
+}

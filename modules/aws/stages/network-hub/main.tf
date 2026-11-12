@@ -99,6 +99,45 @@ locals {
     for name in ["inspection", "egress"] :
     name => (!var.ipam_mode_for_new_vpcs_only || contains(var.ipam_new_vpcs, name)) ? local.hub_regional_pool_id : ""
   }
+
+  # Static hub VPCs (no pool) whose range overlaps the home-region pool CIDR.
+  # Two ranges overlap when their network addresses agree on the shorter prefix
+  # (cidrhost masks the host bits of the address it is given). The keys come
+  # from variables only, so the for_each below is known at plan.
+  hub_regional_cidr = lookup(var.regional_cidrs, var.aws_region, null)
+  hub_static_overlapping_pool = local.hub_regional_cidr == null || !contains(var.aws_enabled_regions, var.aws_region) ? {} : {
+    for name, cidr in { inspection = var.inspection_cidr, egress = var.egress_cidr } : name => cidr
+    if var.ipam_mode_for_new_vpcs_only && !contains(var.ipam_new_vpcs, name) &&
+    cidrhost("${split("/", cidr)[0]}/${min(tonumber(split("/", cidr)[1]), tonumber(split("/", local.hub_regional_cidr)[1]))}", 0) ==
+    cidrhost("${split("/", local.hub_regional_cidr)[0]}/${min(tonumber(split("/", cidr)[1]), tonumber(split("/", local.hub_regional_cidr)[1]))}", 0)
+  }
+}
+
+# A static hub VPC is not an IPAM allocation, so IPAM does not know its range is
+# in use and could allocate it to a spoke (ARC-1). This manual allocation
+# reserves the range in the regional pool. It never touches the VPC itself.
+# Every argument forces replacement (hashicorp/aws 6.72.0), so the description is
+# fixed text. A hub VPC that allocates from the pool is its own allocation and
+# needs no reservation.
+resource "aws_vpc_ipam_pool_cidr_allocation" "hub_static" {
+  for_each = local.hub_static_overlapping_pool
+
+  ipam_pool_id = local.hub_regional_pool_id
+  cidr         = each.value
+  description  = "Reserved for the static ${each.key} hub VPC (aws-network)."
+
+  # The regional pool must have its CIDR provisioned before an allocation.
+  depends_on = [module.ipam]
+
+  lifecycle {
+    precondition {
+      condition = (
+        tonumber(split("/", each.value)[1]) >= tonumber(split("/", local.hub_regional_cidr)[1]) &&
+        cidrhost("${split("/", each.value)[0]}/${split("/", local.hub_regional_cidr)[1]}", 0) == cidrhost(local.hub_regional_cidr, 0)
+      )
+      error_message = "The ${each.key} hub VPC CIDR (${each.value}) overlaps the ${var.aws_region} regional IPAM pool (${local.hub_regional_cidr}) but is not inside it, so it cannot be reserved and IPAM can allocate part of it to a spoke. Move ${each.key}_cidr inside the pool CIDR or out of it (aws.network in config/landing-zone.yaml)."
+    }
+  }
 }
 
 # ---------------------------------------------------------------------------

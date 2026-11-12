@@ -46,6 +46,12 @@ Managed by the IPAM pool hierarchy in `envs/aws/network` (`modules/aws/network/i
 IPAM allocates each spoke VPC a CIDR from the regional pool, so per-VPC ranges are
 not hand-assigned. Keep the top-level IPAM supernet inside `10.64.0.0/10` and
 record any additional regional pools here.
+The inspection and egress VPCs keep their static CIDRs by default. aws-network
+reserves each static hub block that lies inside the regional pool
+(`hub_static_ipam_allocations` in `modules/aws/stages/network-hub`), and a hub
+VPC created from the pool is its own allocation, so IPAM never allocates a hub
+range to a spoke. A hub CIDR that only partly overlaps the regional pool fails
+the aws-network plan.
 
 | Purpose | Default CIDR | Set in (`config/landing-zone.yaml`) |
 |---|---|---|
