@@ -30,6 +30,8 @@ name: Drift Detection
 #                              TFC_TOKEN_DRIFT fails the run (see below).
 #   - vars.TFC_ORGANIZATION    Terraform Cloud organization name.
 #   - vars.TFC_DRIFT_WORKSPACES  (optional) JSON array of workspace names to check.
+#                              A manual run's `workspaces` input wins over it;
+#                              it wins over the inline default (resolve-workspaces).
 #                              Defaults to the GCP control plane, gcp-workload-dev
 #                              and the AWS guardrail workspaces (aws-organization,
 #                              aws-security, aws-network). Set it to the tfc-admin
@@ -58,7 +60,8 @@ on:
       workspaces:
         description: >
           Comma-separated list of TFC workspace names to check for drift.
-          Defaults to the standard set when left blank.
+          Blank uses the TFC_DRIFT_WORKSPACES repository variable, else the
+          default set. Names must be in the tfc-admin output drift_workspaces.
           Example: gcp-organization,gcp-workload-dev,gcp-workload-prod
         required: false
         default: ""
@@ -72,6 +75,59 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Workspace set, first match wins: the workflow_dispatch `workspaces` input
+  # (comma-separated), the TFC_DRIFT_WORKSPACES repository variable (a JSON
+  # array), the inline default. No secret is used here. The input reaches the
+  # script through env only, and every name must look like a TFC workspace
+  # name, so the matrix never carries shell or JSON syntax.
+  resolve-workspaces:
+    name: Resolve drift workspaces
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      workspaces: ${{ steps.resolve.outputs.workspaces }}
+      source: ${{ steps.resolve.outputs.source }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+
+      - name: Resolve the workspace list
+        id: resolve
+        env:
+          INPUT_WORKSPACES: ${{ github.event.inputs.workspaces }}
+          VAR_WORKSPACES: ${{ vars.TFC_DRIFT_WORKSPACES }}
+          # yamllint disable-line rule:line-length
+          DEFAULT_WORKSPACES: '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]'
+        run: |
+          set -euo pipefail
+          if [ -n "$(printf '%s' "${INPUT_WORKSPACES:-}" | tr -d ' ,')" ]; then
+            src="workflow_dispatch input"
+            list=$(printf '%s' "$INPUT_WORKSPACES" \
+              | jq -R -s -c 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')
+          elif [ -n "${VAR_WORKSPACES:-}" ]; then
+            src="TFC_DRIFT_WORKSPACES repository variable"
+            list=$(printf '%s' "$VAR_WORKSPACES" | jq -c '.') \
+              || { echo "::error::TFC_DRIFT_WORKSPACES is not valid JSON." >&2; exit 1; }
+          else
+            src="inline default"
+            list=$(printf '%s' "$DEFAULT_WORKSPACES" | jq -c '.')
+          fi
+          if ! printf '%s' "$list" | jq -e \
+            'type == "array" and length > 0 and all(.[]; type == "string" and test("^[A-Za-z0-9_-]{1,90}$"))' \
+            >/dev/null; then
+            echo "::error::The drift workspace list (${src}) must be a non-empty list of" \
+              "TFC workspace names (letters, digits, - and _ only)." >&2
+            exit 1
+          fi
+          list=$(printf '%s' "$list" | jq -c 'unique')
+          echo "Workspaces (${src}): ${list}"
+          echo "workspaces=${list}" >> "$GITHUB_OUTPUT"
+          echo "source=${src}" >> "$GITHUB_OUTPUT"
+
   check-credentials:
     name: Check Terraform Cloud credentials
     runs-on: ubuntu-latest
@@ -129,13 +185,14 @@ jobs:
     # branch; an environment secret only by runs its branch policy allows.
     environment: tfc-drift
     timeout-minutes: 30
-    needs: check-credentials
+    needs: [resolve-workspaces, check-credentials]
     if: needs.check-credentials.outputs.configured == 'true'
     strategy:
       fail-fast: false
       matrix:
-        # Workspace set: the TFC_DRIFT_WORKSPACES repository variable (a JSON
-        # array), else the inline default below. Workload workspaces are named
+        # Workspace set: resolve-workspaces (the dispatch input, else the
+        # TFC_DRIFT_WORKSPACES repository variable as a JSON array, else the
+        # inline default there). Workload workspaces are named
         # gcp-workload-<env> / aws-workload-<env> (there is no bare
         # "gcp-workload"), e.g. '["gcp-organization","gcp-workload-dev","gcp-workload-prod"]'.
         #
@@ -168,8 +225,7 @@ jobs:
         # the shared gcp project holds a static secret, that whole project is
         # secret-bearing and leaves the default list unreachable: set
         # split_workload_projects = true, or set TFC_DRIFT_WORKSPACES.
-        # yamllint disable-line rule:line-length
-        workspace: ${{ fromJSON(vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]') }}
+        workspace: ${{ fromJSON(needs.resolve-workspaces.outputs.workspaces) }}
     steps:
       # This job holds TFC_TOKEN_DRIFT. Its steps call only the HCP Terraform
       # API (curl) and the GitHub API (gh issue), so all other egress is blocked.
@@ -418,7 +474,7 @@ jobs:
   summary:
     name: Drift Detection Summary
     runs-on: ubuntu-latest
-    needs: [check-credentials, detect-drift]
+    needs: [resolve-workspaces, check-credentials, detect-drift]
     if: always()
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
@@ -438,8 +494,8 @@ jobs:
           CONFIGURED: ${{ needs.check-credentials.outputs.configured }}
           RESULT: ${{ needs.detect-drift.result }}
           OPT_OUT: ${{ vars.REAL_CLOUD_CHECKS_OPT_OUT }}
-          # yamllint disable-line rule:line-length
-          WORKSPACES: ${{ vars.TFC_DRIFT_WORKSPACES || '["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]' }}
+          WORKSPACES: ${{ needs.resolve-workspaces.outputs.workspaces }}
+          WORKSPACES_SOURCE: ${{ needs.resolve-workspaces.outputs.source }}
         run: |
           {
             echo "## Drift Detection Summary"
@@ -466,7 +522,7 @@ jobs:
               echo "\"pending configuration\" warning, never as drift."
             fi
             echo ""
-            echo "**Configured workspaces** (\`TFC_DRIFT_WORKSPACES\` repository variable): \`${WORKSPACES}\`"
+            echo "**Checked workspaces** (${WORKSPACES_SOURCE:-not resolved}): \`${WORKSPACES}\`"
             echo ""
-            echo "To override at runtime, use the workflow_dispatch input."
+            echo "To override at runtime, use the workflow_dispatch \`workspaces\` input."
           } >> "$GITHUB_STEP_SUMMARY"
