@@ -33,6 +33,14 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `tag:ListRequiredTags`. Confirm in the sandbox that the `tfc-plan` and
   `tfc-apply` roles may call it before a workspace sets the variable to
   `error`. The AWS tag policy itself never blocks an untagged resource.
+- **AWS automated incident response is a scaffold (CMP-01, DET-05).** The
+  GuardDuty to EventBridge to `ir-isolate` Lambda trigger is deployed, but the
+  shipped handler (`modules/aws/security/incident-response/files/isolate.py`)
+  only logs the finding. It attaches no quarantine security group, takes no
+  snapshot and has no cross-account access to the workload account that holds
+  the instance. Do not claim automated isolation to an auditor until you write
+  and test that handler. Until then, isolate by hand with
+  [`aws-incident-response.md`](runbooks/aws-incident-response.md).
 - **IAM Identity Center delegation before enablement is unproven (ADO-08).**
   On a greenfield estate the first `aws-organization` apply enables trusted
   access for `sso.amazonaws.com` and registers the `shared_services` account

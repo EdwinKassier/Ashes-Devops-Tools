@@ -49,7 +49,7 @@ This landing zone implements defense-in-depth across every layer:
 ### Identity & Access
 
 - **Workload Identity Federation** — keyless authentication for CI/CD (no long-lived service account keys)
-- **IAM least privilege** — all module roles validated against a blocklist of primitive roles (`roles/owner`, `roles/editor`, `roles/viewer`)
+- **No basic roles at organization or folder scope**: the mandatory OPA policy `gcp_no_basic_roles_high_scope` (`policies/opa`) fails an HCP Terraform run that grants `roles/owner` or `roles/editor` on an organization or folder (`google_organization_iam_*` and `google_folder_iam_*` member, binding and policy resources). It applies only when tfc-admin attaches the policy sets (`enable_policy_sets`, on by default with a VCS repo on the Standard or Premium plan). It does not check project-level grants or `roles/viewer`. A few module inputs also reject basic roles: `project_admin_roles` in `modules/gcp/stages/workload` (owner, editor and viewer) and the bootstrap plan-role and grantable-role lists.
 - **Separate service accounts** per stage (bootstrap, network, workload)
 
 ### Data Protection
@@ -62,8 +62,8 @@ This landing zone implements defense-in-depth across every layer:
 ### Network Security
 
 - **VPC Service Controls** — data perimeter around sensitive projects. **Ships in dry-run mode by default** (audit-only; it logs would-be violations but does not block them). Promote to enforced per environment once ingress/egress rules are validated — see [known-gaps.md](docs/known-gaps.md).
-- **Private Service Access** — RFC 1918 connectivity to Google APIs (no public egress for managed services)
-- **Cloud Armor** — WAF with OWASP rule sets for internet-facing workloads
+- **Private Google Access and Private Service Connect for Google APIs**: every `tiered-vpc` subnet has Private Google Access on, and the hub and each spoke VPC get a Private Service Connect endpoint for Google APIs (`private_service_connect.enabled`, default true), so VMs without external IPs reach Google APIs on internal addresses. Private Service Access (`private_service_access`) is a different feature: it peers the VPC with Google-managed producer services such as Cloud SQL private IP. It is not the path to Google APIs.
+- **Cloud Armor**: a WAF policy with the OWASP managed rules for internet-facing workloads. It is **off by default**. The `prod-gcp-workload` preset turns it on, and a `compliance_class: regulated` environment requires it (control matrix NET-03, NET-11).
 - **VPC Flow Logs**: on every subnet, exported to a CMEK BigQuery dataset per environment (default 10% sampling, 30-day retention). A `compliance_class: regulated` environment already gets sampling 1.0 and 365-day retention from the regulated preset, and its plan fails on a lower sampling rate or a retention under 365 days. For other environments, raise `log_config_flow_sampling` and `vpc_flow_logs_retention_days` by hand.
 
 ### Audit & Compliance

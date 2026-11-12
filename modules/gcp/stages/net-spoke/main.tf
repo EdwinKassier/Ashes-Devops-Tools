@@ -211,9 +211,9 @@ module "private_service_access" {
 # of this VPC; peered networks use other blocks of the CIDR plan.
 locals {
   psc_name = coalesce(var.private_service_connect.name, "${substr(replace(lower(var.network.name), "/[^a-z0-9]/", ""), 0, 17)}psc")
-  # The try() fallback only serves static evaluation: tflint evaluates the
-  # roots with the unset sentinel cidr_block 0.0.0.0/32, which has no host -2.
-  # The root validations reject that sentinel before any real plan.
+  # The try() fallback keeps a degenerate /31 or /32 block, which has no host
+  # -2, from erroring during static evaluation (the gcp-network-hub root uses
+  # the 0.0.0.0/32 sentinel for an unset CIDR). The CIDR plan's blocks are /16.
   psc_address = coalesce(var.private_service_connect.address, try(cidrhost(var.network.cidr_block, -2), cidrhost(var.network.cidr_block, 0)))
 }
 

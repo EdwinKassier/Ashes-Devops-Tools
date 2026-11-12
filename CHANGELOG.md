@@ -74,6 +74,11 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 #### Fixed
 
+- **Compliance docs no longer overstate controls (CMP-01, CMP-09, CMP-12).** DET-05 is a
+  Scaffold: the incident-response Lambda only logs the finding. SECURITY.md states what the
+  `gcp_no_basic_roles_high_scope` policy covers, that Cloud Armor is off by default, and that
+  Google APIs are reached through Private Google Access and Private Service Connect, not Private
+  Service Access. The HIPAA 164.312(c)(1) row maps to backup and deletion-protection controls.
 - **The AWS bootstrap docs match the code (ADO-02, ADO-08).** The operator creates only the
   management account; `aws-organization` creates the organization or imports one through
   `aws.adopt`. That apply also enables trusted access for `sso.amazonaws.com` and registers the

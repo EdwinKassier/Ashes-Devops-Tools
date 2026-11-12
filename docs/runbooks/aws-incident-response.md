@@ -14,14 +14,14 @@
 
 ## Automated quarantine flow
 
-`modules/aws/security/incident-response` wires this automatically in the security stage:
+`modules/aws/security/incident-response` wires the trigger in the security stage. The last step is yours to write: the shipped handler stops at logging (see the note below).
 
 ```text
 GuardDuty finding (severity >= 7)
   -> EventBridge rule (ir-guardduty-high-severity)
     -> EventBridge target
       -> isolation Lambda (ir-isolate)
-        -> attach quarantine security group to the flagged instance
+        -> (your handler) attach quarantine security group to the flagged instance
 ```
 
 The quarantine security group is a **deny-all** SG (no ingress, no egress) — attaching it severs the instance's network reachability while leaving it running and its EBS volumes intact for imaging.

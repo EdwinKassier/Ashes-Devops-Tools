@@ -185,7 +185,7 @@ The SRA security stack is delegated from the management account to the **Securit
 
 ### Incident response & forensics
 
-`modules/aws/security/incident-response` wires a GuardDuty finding (severity ≥ 7) → EventBridge rule → isolation Lambda (attach quarantine SG). The `ir-forensics-snapshot-share` role is trusted only by the **Forensics account** principal and further scoped by `aws:PrincipalOrgID`, for cross-account EBS-snapshot sharing into the forensics clean-room. See [`aws-incident-response.md`](../runbooks/aws-incident-response.md).
+`modules/aws/security/incident-response` wires a GuardDuty finding (severity ≥ 7) → EventBridge rule → isolation Lambda. The Lambda is a scaffold: the shipped handler only logs the finding, and attaching the quarantine SG is code you write (control matrix DET-05). The `ir-forensics-snapshot-share` role is trusted only by the **Forensics account** principal and further scoped by `aws:PrincipalOrgID`, for cross-account EBS-snapshot sharing into the forensics clean-room. See [`aws-incident-response.md`](../runbooks/aws-incident-response.md).
 
 ---
 

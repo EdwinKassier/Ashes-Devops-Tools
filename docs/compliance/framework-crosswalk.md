@@ -16,7 +16,7 @@ reference only); ISO/IEC 27001:2022 Annex A.
 |:--|:--|
 | Controls | Row IDs in the [control matrix](control-matrix.md). The matrix row has the full detail. |
 | Code | A path in this repository. Every backticked path is checked by `scripts/check-matrix-paths.sh`. |
-| Default | **On**: active on a default apply of the root. **Off**: opt-in. **Preset**: turned on by a `prod-*` preset. **Production scaffold**: written by `make init --profile production`. **Regulated**: on only for an environment with `compliance_class: regulated` ([regulated environments](../architecture/regulated-environments.md)). **Manual**: a console or admin step with no Terraform API. **Customer**: the landing zone ships nothing for it. **Docs**: a runbook or register you adopt and run. |
+| Default | **On**: active on a default apply of the root. **Off**: opt-in. **Preset**: turned on by a `prod-*` preset. **Production scaffold**: written by `make init --profile production`. **Regulated**: on only for an environment with `compliance_class: regulated` ([regulated environments](../architecture/regulated-environments.md)). **Manual**: a console or admin step with no Terraform API. **Scaffold**: the plumbing is deployed, but the control does not act until you complete the code the matrix row names. **Customer**: the landing zone ships nothing for it. **Docs**: a runbook or register you adopt and run. |
 | You still do | The customer share. A landing-zone control never covers your application, your people or your processes. |
 | ID checked | **Yes**: the requirement ID was checked against the source named in [How the IDs were checked](#how-the-ids-were-checked). **No**: not checked; confirm it against the standard before you rely on it. |
 
@@ -44,7 +44,7 @@ reference only); ISO/IEC 27001:2022 Annex A.
 | 11.5.1 | Detect and alert on intrusions | DET-01, NET-05 | `modules/aws/security/guardduty-org`, `modules/aws/network/network-firewall` | On | Respond to findings | Yes |
 | 11.5.2 | Change-detection (file integrity monitoring) | DET-06 | none | Customer | Deploy a file integrity monitoring agent on CDE hosts | No |
 | 12.8 | Manage third-party service providers | DP-09 | `envs/saas/main.tf`, `docs/compliance/third-parties.md` | DP-09 on when `saas.allowed_regions` or `aws.allowed_regions` is set; register: Docs | List providers and their responsibilities; keep it current | No |
-| 12.10.1 | Incident response plan | DET-05 | `modules/aws/security/incident-response`, `docs/runbooks/regulatory-notification.md` | DET-05 On; runbook: Docs | Approve the plan, test it yearly, add your acquirer and brand contacts | No |
+| 12.10.1 | Incident response plan | DET-05 | `modules/aws/security/incident-response`, `docs/runbooks/regulatory-notification.md` | DET-05 Scaffold (the handler only logs); runbook: Docs | Approve the plan, test it yearly, add your acquirer and brand contacts; write the isolation handler if you rely on automated response | No |
 
 ## HIPAA Security Rule (45 CFR 164.308 to 164.316)
 
@@ -56,7 +56,7 @@ The labels Required and Addressable are the rule's own.
 | 164.308(a)(1)(ii)(D) | Information system activity review (Required) | LOG-05, LOG-09, LOG-10, LOG-14 | On | Review and document | Yes |
 | 164.308(a)(3), (a)(4) | Workforce security; information access management | IAM-06, IAM-14, IAM-16 | On; MFA enforcement Manual | Joiner, mover and leaver process | Yes |
 | 164.308(a)(5)(ii)(C) | Log-in monitoring (Addressable) | LOG-09 (CIS 4.6, console authentication failures), LOG-10 | On | Respond | Yes |
-| 164.308(a)(6) | Security incident procedures | DET-05 | On; `docs/runbooks/regulatory-notification.md`: Docs | Breach risk assessment (164.402) | Yes |
+| 164.308(a)(6) | Security incident procedures | DET-05 | DET-05 Scaffold (the handler only logs); `docs/runbooks/regulatory-notification.md`: Docs | Response procedures and their records; breach risk assessment (164.402) | Yes |
 | 164.308(a)(7)(ii)(A) | Data backup plan (Required) | BCK-01, BCK-03, BCK-04, BCK-07 | BCK-03 and BCK-04 On; BCK-01 copy Off, On in a production scaffold; BCK-07 Off, On for Regulated | Tag PHI resources `backup = true` | Yes |
 | 164.308(a)(7)(ii)(B) | Disaster recovery plan (Required) | BCK-03 (`compliance.backup.dr_region`) | DR copy Off; `docs/runbooks/disaster-recovery.md`: Docs | Approve RTO and RPO; record measured values | Yes |
 | 164.308(a)(7)(ii)(D) | Testing and revision procedures (Addressable) | BCK-02 | On; effective only with BCK-01 | Yearly DR exercise | Yes |
@@ -64,7 +64,7 @@ The labels Required and Addressable are the rule's own.
 | 164.312(a)(1) | Access control | IAM-02, IAM-05, GRD-07 | On | | Yes |
 | 164.312(a)(2)(iv) | Encryption and decryption (Addressable) | DP-01, DP-02, DP-03, GRD-04 | On; CMEK org policy Preset; Cloud SQL CMEK Regulated | Document the decision | Yes |
 | 164.312(b) | Audit controls | LOG-01, LOG-07 | On | Application audit logs | Yes |
-| 164.312(c)(1) | Integrity | LOG-03, LOG-07 (log file validation), LOG-08 | AWS On; GCP bucket lock Off, required for Regulated | | Yes |
+| 164.312(c)(1) | Integrity: protect ePHI from improper alteration or destruction | BCK-01, BCK-03, BCK-04, BCK-06, BCK-07 | BCK-03, BCK-04 and BCK-06 On; BCK-01 copy Off, On in a production scaffold; BCK-07 Off, On for Regulated | Versioning or Object Lock on the buckets that hold ePHI, and integrity checks in your application: the landing zone sets neither on workload data stores. Audit-log integrity (LOG-03, LOG-07, LOG-08) supports 164.312(b), not this standard | Yes |
 | 164.312(d) | Person or entity authentication | IAM-01, IAM-05, IAM-16 | On; MFA enforcement Manual | Enforce MFA | Yes |
 | 164.312(e)(1), (e)(2)(ii) | Transmission security; encryption (Addressable) | DP-04, GRD-07 | On | | Yes |
 | 164.316(b)(2)(i) | Keep documentation 6 years (Required) | LOG-02, LOG-08 | The 2190-day floor applies only with `compliance.frameworks: [hipaa]` | List the framework; keep policies and records outside the landing zone too | Yes |
@@ -76,7 +76,7 @@ The labels Required and Addressable are the rule's own.
 | Art. 6, 8 | ICT risk management framework; identification and asset inventory | LOG-11, GRD-09 | On (required-tag reporting: opt-in) | The framework and its yearly review | Yes |
 | Art. 9(2) to 9(4) | Protection and prevention: access, authentication, encryption, network management, change management, patching | IAM-02, IAM-05, IAM-16, DP-01, DP-04, NET-05, NET-11, CHG-01, VUL-04 | On; NET-11 Regulated; MFA enforcement Manual | Documented policies and procedures | Yes |
 | Art. 10 | Detection | DET-01, DET-02, DET-03, LOG-05 | On | Monitoring capability and staffing | Yes |
-| Art. 11 | Response and recovery | DET-05 | On; `docs/runbooks/disaster-recovery.md`: Docs | Business continuity policy, crisis communication | Yes |
+| Art. 11 | Response and recovery | DET-05 | DET-05 Scaffold (the handler only logs); `docs/runbooks/disaster-recovery.md`: Docs | Business continuity policy, crisis communication; the response actions themselves | Yes |
 | Art. 12(1) to 12(3) | Backup policies; backup systems and periodic tests; restore to systems segregated from the source | BCK-01, BCK-02, BCK-03, BCK-07 | BCK-01 copy Off, On in a production scaffold; BCK-02 On, effective with BCK-01; BCK-07 Regulated | Turn the copy on; write restoration procedures | Yes |
 | Art. 12(6) | Recovery time and recovery point objectives | BCK-03 | `docs/runbooks/disaster-recovery.md`: Docs (design targets) | Set and approve the objectives | Yes |
 | Art. 17 | ICT-related incident management process | DET-05 | `docs/runbooks/regulatory-notification.md`: Docs | Classification criteria (Delegated Regulation (EU) 2024/1772) | Yes |
