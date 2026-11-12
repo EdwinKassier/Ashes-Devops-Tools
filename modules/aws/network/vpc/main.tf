@@ -163,6 +163,21 @@ resource "aws_flow_log" "this" {
   tags = merge(var.tags, { Name = "${var.name}-flow-log" })
 }
 
+# AWS's default endpoint policy, as DescribeVpcEndpoints returns it for a
+# gateway endpoint created without one (AWS CLI reference, describe-vpc-endpoints
+# and create-vpc-endpoint examples: Version 2008-10-17, one Allow on "*";
+# the PrivateLink guide "Default endpoint policy" shows the same statement;
+# checked 2026-11-12). The provider compares policies with
+# awspolicyequivalence (Version must match exactly) and keeps the configured
+# string when the remote one is equivalent, so an endpoint that never had a
+# policy shows no diff.
+locals {
+  gateway_endpoint_default_policy = jsonencode({
+    Version   = "2008-10-17"
+    Statement = [{ Effect = "Allow", Principal = "*", Action = "*", Resource = "*" }]
+  })
+}
+
 # Gateway endpoints (S3, DynamoDB) keep that traffic on the AWS backbone. They
 # bypass the hub egress firewall, so a caller that enforces egress passes an
 # endpoint policy per service (gateway_endpoint_policies).
@@ -172,8 +187,10 @@ resource "aws_vpc_endpoint" "gateway" {
   vpc_id            = aws_vpc.this.id
   service_name      = "com.amazonaws.${var.region}.${each.value}"
   vpc_endpoint_type = "Gateway"
-  # null = no policy argument: AWS attaches its default full-access policy.
-  policy = lookup(var.gateway_endpoint_policies, each.value, null)
+  # A service without an entry gets AWS's default full-access document, sent
+  # explicitly: the provider's policy argument is Optional+Computed, so null
+  # would keep a restrictive policy from an earlier apply in place.
+  policy = lookup(var.gateway_endpoint_policies, each.value, local.gateway_endpoint_default_policy)
 
   tags = merge(var.tags, { Name = "${var.name}-${each.value}" })
 }

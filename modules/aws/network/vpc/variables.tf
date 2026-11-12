@@ -135,7 +135,7 @@ variable "gateway_endpoints" {
 }
 
 variable "gateway_endpoint_policies" {
-  description = "Endpoint policy (JSON string) per gateway endpoint service, keyed like gateway_endpoints (e.g. s3, dynamodb). A service without an entry gets no policy argument, so AWS applies its default full-access policy. Build the JSON with jsonencode."
+  description = "Endpoint policy (JSON string) per gateway endpoint service, keyed like gateway_endpoints (e.g. s3, dynamodb). A service without an entry gets the AWS default full-access policy, sent explicitly so that removing an entry also removes an earlier restriction. Build the JSON with jsonencode."
   type        = map(string)
   default     = {}
   nullable    = false

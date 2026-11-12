@@ -346,7 +346,7 @@ variable "enable_vpc_bpa_exclusion" {
 }
 
 variable "enable_gateway_endpoint_policies" {
-  description = "Attach endpoint policies to the spoke's S3 and DynamoDB gateway endpoints, which bypass the hub egress firewall: each service only on resources of the organization (aws:ResourceOrgID = organization_id), AWS service principals, and (S3) read-only access to the documented AWS-owned buckets of aws_region (ECR image layers, Amazon Linux repositories, SSM Agent, Patch Manager) plus gateway_endpoint_extra_s3_arns. Requires organization_id. Default false: no policy, so AWS applies full access. The aws-workload root turns it on for production."
+  description = "Attach endpoint policies to the spoke's S3 and DynamoDB gateway endpoints, which bypass the hub egress firewall: each service only on resources of the organization (aws:ResourceOrgID = organization_id) and (S3) read-only access to the documented AWS-owned buckets of aws_region (ECR image layers, Amazon Linux repositories, SSM Agent, Patch Manager) plus gateway_endpoint_extra_s3_arns. Requires organization_id. Default false: the endpoints carry the AWS default full-access policy (sent explicitly, so turning this off also removes the restriction). The aws-workload root turns it on for production."
   type        = bool
   default     = false
   nullable    = false

@@ -1071,8 +1071,7 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
 - **Organization-only gateway endpoint policies (ARC-2, on in production).**
   A production `aws-workload-<env>` puts endpoint policies on its S3 and
   DynamoDB gateway endpoints (`enable_gateway_endpoint_policies`, NET-12):
-  `aws:ResourceOrgID` equals the organization ID, AWS service principals, and
-  read-only access to the AWS-owned buckets that AWS documents for ECR image
+  `aws:ResourceOrgID` equals the organization ID, and read-only access to the AWS-owned buckets that AWS documents for ECR image
   layers, Amazon Linux, SSM Agent and Patch Manager (bucket names checked
   2026-11-12). Mock-tested only. Prove in a sandbox with `is_production: true`:
   - An ECS task pulls a private ECR image (layers from
@@ -1087,6 +1086,19 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
     `gateway_endpoint_extra_s3_arns` only for reads.
   - Patch Manager bucket names have a per-region suffix copied from the AWS
     reference; a region missing from the map gets a `check` warning.
+  - Calls whose resource is not an existing organization bucket:
+    `s3:ListAllMyBuckets` (no bucket in the request) and `s3:CreateBucket`
+    (the bucket does not exist yet) through the endpoint. Record whether
+    `aws:ResourceOrgID` is present for them; if not, they are denied, and
+    the AWS CLI `aws s3 ls` and in-VPC bucket creation fail.
+- **The regional AWS names in the egress allowlist admit any account (ARC-2).**
+  `api.ecr.<region>.amazonaws.com`, `.dkr.ecr.<region>.amazonaws.com` and
+  `secretsmanager.<region>.amazonaws.com` match on the host name only, so the
+  firewall also passes calls to ECR repositories and secrets in accounts
+  outside the organization. The real fix is hub interface endpoints for these
+  services with an organization endpoint policy
+  (`aws.network.vpc_endpoint_policy_mode`), which the stage does not create
+  for them today.
 
 - **Resource-organization policy on the hub interface endpoints**
   (`aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`,

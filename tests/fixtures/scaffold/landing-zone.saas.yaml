@@ -482,7 +482,12 @@ aws:
     # organization-only policies in production. List only the regional AWS
     # APIs your workloads call that have no endpoint. The default app golden
     # path (ECS on Fargate pulling from ECR, secrets from Secrets Manager)
-    # needs these three:
+    # needs these three. Add sqs.eu-west-2.amazonaws.com when a service sets
+    # a queue. The default bootstrap_image pulls from public.ecr.aws, whose
+    # layers come from a CloudFront host AWS does not document: add both, or
+    # use an image in your own ECR. Host names match any account, so this list
+    # does not stop calls to another account's ECR or secrets
+    # (docs/known-gaps.md).
     egress_domain_allowlist:
       - api.ecr.eu-west-2.amazonaws.com
       - .dkr.ecr.eu-west-2.amazonaws.com

@@ -16,9 +16,10 @@
 #     list in the global condition keys reference names no S3 or DynamoDB
 #     action (checked 2026-11-12). The AWS data-perimeter examples use the same
 #     condition in their S3 and default endpoint policies.
-#   - AllowAwsServicePrincipals: requests that AWS services make with their
-#     own service principal (aws:PrincipalIsAWSService), as in the AWS
-#     data-perimeter endpoint policy examples.
+#   No statement for AWS service principals (aws:PrincipalIsAWSService): the
+#   AWS data-perimeter examples carry one, but a service principal does not
+#   send its own requests through a VPC gateway endpoint, so it would have no
+#   effect here.
 #   - AllowAwsOwnedAndListedObjectReads (S3 only): s3:GetObject on the
 #     AWS-owned buckets the landing zone's own workloads need, plus
 #     gateway_endpoint_extra_s3_arns. Exact names, never a region wildcard (the
@@ -133,18 +134,11 @@ locals {
         Resource  = "*"
         Condition = { StringEquals = { "aws:ResourceOrgID" = var.organization_id } }
       },
-      {
-        Sid       = "AllowAwsServicePrincipals"
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "${svc}:*"
-        Resource  = "*"
-        Condition = { Bool = { "aws:PrincipalIsAWSService" = "true" } }
-      },
     ]
   }
 
-  # {} when off: the vpc module then sends no policy (AWS full access).
+  # {} when off: the vpc module then sends the AWS default full-access policy,
+  # which also removes a restriction left by an earlier apply.
   gateway_endpoint_policies = var.enable_gateway_endpoint_policies ? {
     s3 = jsonencode({
       Version = "2012-10-17"

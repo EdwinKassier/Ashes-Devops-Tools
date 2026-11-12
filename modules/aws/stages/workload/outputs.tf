@@ -64,6 +64,6 @@ output "patch_install_targets" {
 }
 
 output "gateway_endpoint_policies" {
-  description = "Endpoint policy JSON per gateway endpoint service (s3, dynamodb) when enable_gateway_endpoint_policies is true; {} when off (AWS default full access)."
+  description = "Endpoint policy JSON per gateway endpoint service (s3, dynamodb) when enable_gateway_endpoint_policies is true; {} when off (the vpc module then sends the AWS default full-access policy)."
   value       = local.gateway_endpoint_policies
 }

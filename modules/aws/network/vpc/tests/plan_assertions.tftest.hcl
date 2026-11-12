@@ -250,9 +250,7 @@ run "allocation_outside_subnet_math_is_reported" {
   expect_failures = [check.ipam_allocation_matches_subnet_math]
 }
 
-# ARC-2: a gateway endpoint carries the policy given for its service. (A
-# service without an entry sends no policy; the provider then reports the AWS
-# default as a computed value, which a mocked plan cannot assert on.)
+# ARC-2: a gateway endpoint carries the policy given for its service.
 run "gateway_endpoint_policy_per_service" {
   command = plan
 
@@ -268,4 +266,27 @@ run "gateway_endpoint_policy_per_service" {
     error_message = "the s3 gateway endpoint must carry the s3 policy"
   }
 
+}
+
+# A service without an entry gets the AWS default full-access document, sent
+# explicitly. The provider treats policy as Optional+Computed, so sending null
+# would leave a policy from an earlier apply in place: turning the restriction
+# off must send the default back.
+run "gateway_endpoint_without_policy_gets_aws_default" {
+  command = plan
+
+  variables {
+    flow_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
+  }
+
+  assert {
+    condition = alltrue([
+      for svc in ["s3", "dynamodb"] :
+      jsondecode(aws_vpc_endpoint.gateway[svc].policy) == {
+        Version   = "2008-10-17"
+        Statement = [{ Effect = "Allow", Principal = "*", Action = "*", Resource = "*" }]
+      }
+    ])
+    error_message = "an endpoint without a policy entry must carry the AWS default full-access policy (Version 2008-10-17)"
+  }
 }

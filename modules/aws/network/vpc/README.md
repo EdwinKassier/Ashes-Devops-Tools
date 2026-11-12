@@ -53,15 +53,15 @@ The following resources are created:
 
 - resource.aws_default_security_group.this (modules/aws/network/vpc/main.tf#L150)
 - resource.aws_flow_log.this (modules/aws/network/vpc/main.tf#L157)
-- resource.aws_internet_gateway.this (modules/aws/network/vpc/main.tf#L212)
-- resource.aws_route.public_internet (modules/aws/network/vpc/main.tf#L220)
-- resource.aws_route.this (modules/aws/network/vpc/main.tf#L231)
-- resource.aws_route_table.this (modules/aws/network/vpc/main.tf#L192)
-- resource.aws_route_table_association.this (modules/aws/network/vpc/main.tf#L203)
+- resource.aws_internet_gateway.this (modules/aws/network/vpc/main.tf#L229)
+- resource.aws_route.public_internet (modules/aws/network/vpc/main.tf#L237)
+- resource.aws_route.this (modules/aws/network/vpc/main.tf#L248)
+- resource.aws_route_table.this (modules/aws/network/vpc/main.tf#L209)
+- resource.aws_route_table_association.this (modules/aws/network/vpc/main.tf#L220)
 - resource.aws_subnet.this (modules/aws/network/vpc/main.tf#L130)
 - resource.aws_vpc.this (modules/aws/network/vpc/main.tf#L85)
-- resource.aws_vpc_endpoint.gateway (modules/aws/network/vpc/main.tf#L169)
-- resource.aws_vpc_endpoint_route_table_association.gateway (modules/aws/network/vpc/main.tf#L181)
+- resource.aws_vpc_endpoint.gateway (modules/aws/network/vpc/main.tf#L184)
+- resource.aws_vpc_endpoint_route_table_association.gateway (modules/aws/network/vpc/main.tf#L198)
 
 
 ## Inputs
@@ -75,7 +75,7 @@ The following resources are created:
 | <a name="input_cidr_block"></a> [cidr\_block](#input\_cidr\_block) | IPv4 CIDR used for subnet math (cidrsubnet). Also the VPC CIDR: literal when ipam\_pool\_id is empty, otherwise the exact block requested from the IPAM pool. | `string` | `"10.0.0.0/16"` | no |
 | <a name="input_create_internet_gateway"></a> [create\_internet\_gateway](#input\_create\_internet\_gateway) | Whether this module creates an internet gateway. When true, every public tier (public = true) route table gets a 0.0.0.0/0 default route to it. | `bool` | `false` | no |
 | <a name="input_enable_ipv6"></a> [enable\_ipv6](#input\_enable\_ipv6) | Whether to assign an Amazon-provided /56 IPv6 CIDR block to the VPC. | `bool` | `false` | no |
-| <a name="input_gateway_endpoint_policies"></a> [gateway\_endpoint\_policies](#input\_gateway\_endpoint\_policies) | Endpoint policy (JSON string) per gateway endpoint service, keyed like gateway\_endpoints (e.g. s3, dynamodb). A service without an entry gets no policy argument, so AWS applies its default full-access policy. Build the JSON with jsonencode. | `map(string)` | `{}` | no |
+| <a name="input_gateway_endpoint_policies"></a> [gateway\_endpoint\_policies](#input\_gateway\_endpoint\_policies) | Endpoint policy (JSON string) per gateway endpoint service, keyed like gateway\_endpoints (e.g. s3, dynamodb). A service without an entry gets the AWS default full-access policy, sent explicitly so that removing an entry also removes an earlier restriction. Build the JSON with jsonencode. | `map(string)` | `{}` | no |
 | <a name="input_gateway_endpoint_tiers"></a> [gateway\_endpoint\_tiers](#input\_gateway\_endpoint\_tiers) | Subnet tiers whose route tables the gateway endpoints are associated with. null (default) associates them with every non-public tier. | `list(string)` | `null` | no |
 | <a name="input_gateway_endpoints"></a> [gateway\_endpoints](#input\_gateway\_endpoints) | AWS services to create Gateway VPC endpoints for (e.g. s3, dynamodb). | `list(string)` | <pre>[<br/>  "s3",<br/>  "dynamodb"<br/>]</pre> | no |
 | <a name="input_ipam_allocation"></a> [ipam\_allocation](#input\_ipam\_allocation) | How an IPAM VPC obtains its CIDR: explicit\_cidr (default: pool + cidr\_block, so the pool allocates exactly the block the subnets are cut from) or netmask (legacy: pool + netmask\_length). An existing netmask VPC keeps its id when you switch, because ipv4\_netmask\_length is ignored after create. If the allocated block differs from cidr\_block, set cidr\_block to the allocated block so the subnet math matches. Ignored when ipam\_pool\_id is empty. | `string` | `"explicit_cidr"` | no |
