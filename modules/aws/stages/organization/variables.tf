@@ -436,6 +436,45 @@ variable "member_backup_vault_name" {
   }
 }
 
+variable "member_backup_vault_encryption" {
+  description = "Key for the member-account backup vault. aws_managed (default): one vault on the AWS managed aws/backup key. cmk: the StackSet also creates a rotating customer managed key (tagged protected = true, so only break-glass can change its key policy, disable it or schedule its deletion) and a second vault, <member_backup_vault_name>-cmk, encrypted with it. The key policy lets the backup account use the key for copy jobs. Cross-account copy to the backup account needs the cmk vault. The original vault is kept: its recovery points cannot be moved. Needs create_backup_service_role and create_member_backup_vault."
+  type        = string
+  default     = "aws_managed"
+  nullable    = false
+
+  validation {
+    condition     = contains(["aws_managed", "cmk"], var.member_backup_vault_encryption)
+    error_message = "member_backup_vault_encryption must be aws_managed or cmk."
+  }
+
+  validation {
+    condition     = var.member_backup_vault_encryption != "cmk" || (var.backup_copy_account_id == null ? contains(keys(merge(var.accounts, var.workload_accounts)), "backup") : can(regex("^[0-9]{12}$", var.backup_copy_account_id)))
+    error_message = "member_backup_vault_encryption = cmk needs the backup account: an accounts[\"backup\"] entry, or a 12-digit backup_copy_account_id."
+  }
+
+  validation {
+    condition     = var.member_backup_vault_encryption != "cmk" || (var.create_backup_service_role && var.create_member_backup_vault)
+    error_message = "member_backup_vault_encryption = cmk needs create_backup_service_role = true and create_member_backup_vault = true: the StackSet that creates the member vault also creates the key and the cmk vault."
+  }
+}
+
+variable "backup_copy_account_id" {
+  description = "12-digit ID of the backup account that may use the member backup key for cross-account copy jobs. Null derives it from the accounts[\"backup\"] (or workload_accounts[\"backup\"]) entry. Used only when member_backup_vault_encryption = cmk."
+  type        = string
+  default     = null
+}
+
+variable "member_backup_dr_region" {
+  description = "Optional second region for a member-account DR vault: a second service-managed StackSet creates the same customer managed key and <member_backup_vault_name>-cmk vault there in every Workloads-OU account (no IAM: the roles are global). It is the target for cross-region copy (aws-backup compliance.backup.dr_region). Needs member_backup_vault_encryption = cmk, must be in allowed_regions (the region SCP blocks AWS Backup elsewhere) and must differ from backup_service_role_region. Null (default) creates nothing."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.member_backup_dr_region == null || (var.member_backup_vault_encryption == "cmk" && contains(var.allowed_regions, coalesce(var.member_backup_dr_region, "-")) && var.member_backup_dr_region != var.backup_service_role_region)
+    error_message = "member_backup_dr_region needs member_backup_vault_encryption = cmk, must be one of allowed_regions and must differ from backup_service_role_region (the home vault region)."
+  }
+}
+
 variable "backup_service_role_stack_set_name" {
   description = "Name of the StackSet that deploys the Backup service role."
   type        = string

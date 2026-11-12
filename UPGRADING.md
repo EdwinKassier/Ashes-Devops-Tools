@@ -363,6 +363,30 @@ variable to its own workspaces (or `REAL_CLOUD_CHECKS_OPT_OUT=true`).
 
 ### AWS
 
+#### Opt-in customer managed key member backup vaults (aws-organization)
+
+No change unless you opt in. With the defaults the Backup service-role StackSet template stays the same, so the plan shows no StackSet change.
+
+You opt in with `compliance.backup.copy_to_central_vault: true` or `compliance.backup.dr_region` in `config/landing-zone.yaml`, or with `member_backup_vault_encryption = "cmk"` on the root. Then the StackSet `aws-backup-org-role` adds two resources to every Workloads-OU account:
+
+- a customer managed KMS key with rotation on, tagged `protected = true`, whose policy lets the backup account use it for copy jobs
+- a second vault, `<member_backup_vault_name>-cmk` (default `org-backup-vault-cmk`), encrypted with that key
+
+Cross-account copy needs a customer managed key on the source vault, and AWS Backup cannot change the key of an existing vault. So the original `org-backup-vault` is kept, with its recovery points. It ages out under its lifecycle.
+
+What operators see on apply:
+
+- One StackSet update operation that updates the stack in every Workloads-OU account, 10 accounts at a time, with zero failure tolerance. One failed account stops the operation. Read the stack events in that account, fix the cause, and apply again.
+- With `compliance.backup.dr_region` (or `member_backup_dr_region`), a second StackSet, `aws-backup-org-role-dr-vault`, creates the same key and vault in that region in every Workloads-OU account. The region must be in `aws.allowed_regions` and must differ from `org.regions.aws`.
+- Accounts that join the Workloads OU later get both through auto-deployment.
+
+What you cannot undo:
+
+- After the key exists, the deny-tamper SCP lets only break-glass change its key policy, disable it, turn off rotation, remove its `protected` tag or schedule its deletion. The StackSet execution role is not break-glass. A later template change that edits the key policy fails in each account. This includes a new backup account ID. Plan such a change as a break-glass operation.
+- The key and both vaults have `DeletionPolicy: Retain`. If you turn the option off again, the StackSet stops managing them but does not delete them. Delete them by hand as break-glass after their recovery points expire.
+
+Apply `aws-organization` before `aws-backup`, so the vaults exist before a backup policy names them.
+
 #### The tfc-plan read deny is now a managed policy with more actions (aws-organization)
 
 The plan-role deny moves from an inline policy on each `tfc-plan` role to one managed policy per account, `tfc-plan-data-read-deny`. It now also denies:

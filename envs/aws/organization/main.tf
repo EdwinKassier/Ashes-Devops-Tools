@@ -45,6 +45,8 @@ module "aws_organization" {
   backup_service_role_region             = local.aws_region
   create_member_backup_vault             = var.create_member_backup_vault
   member_backup_vault_name               = var.member_backup_vault_name
+  member_backup_vault_encryption         = local.member_backup_vault_encryption
+  member_backup_dr_region                = local.member_backup_dr_region
   org_policy_overrides                   = var.org_policy_overrides
   partition                              = var.partition
   disabled_org_policies                  = var.disabled_org_policies

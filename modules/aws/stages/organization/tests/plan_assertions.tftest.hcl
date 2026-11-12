@@ -742,3 +742,84 @@ run "guard_alerts_trail_scoped_by_default" {
     error_message = "By default every guard-rule CloudTrail clause stays scoped to the org trail."
   }
 }
+
+# CMP-1: a CMK-encrypted member vault (cross-account copy needs a customer
+# managed key on the source vault) is added next to the AWS-managed one.
+run "member_backup_vault_cmk" {
+  command = plan
+
+  variables {
+    member_backup_vault_encryption = "cmk"
+    backup_copy_account_id         = "444444444444"
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVaultCmk.Properties.BackupVaultName == "org-backup-vault-cmk" &&
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVaultCmk.Properties.EncryptionKeyArn["Fn::GetAtt"][0] == "MemberBackupVaultKey"
+    )
+    error_message = "the cmk mode must add org-backup-vault-cmk encrypted with the StackSet's own key."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVault.Properties.BackupVaultName == "org-backup-vault"
+    )
+    error_message = "the original AWS-managed vault must stay in the template (its recovery points cannot be moved)."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVaultKey.Properties.EnableKeyRotation == true &&
+      contains([for t in jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVaultKey.Properties.Tags : "${t.Key}=${t.Value}"], "protected=true") &&
+      jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVaultKey.DeletionPolicy == "Retain"
+    )
+    error_message = "the member backup key must rotate, carry the deny-tamper protection tag and be retained."
+  }
+
+  assert {
+    condition = (
+      contains(
+        [for s in jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources.MemberBackupVaultKey.Properties.KeyPolicy.Statement : s.Sid],
+        "BackupAccountCopy"
+      ) &&
+      aws_cloudformation_stack_set.backup_service_role[0].parameters["BackupAccountId"] == "444444444444"
+    )
+    error_message = "the key policy must let the backup account use the key for copy jobs, through the BackupAccountId parameter."
+  }
+}
+
+run "member_backup_vault_default_unchanged" {
+  command = plan
+
+  assert {
+    condition = (
+      !contains(keys(jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body).Resources), "MemberBackupVaultCmk") &&
+      !contains(keys(jsondecode(aws_cloudformation_stack_set.backup_service_role[0].template_body)), "Parameters") &&
+      length(aws_cloudformation_stack_set.member_backup_dr_vault) == 0
+    )
+    error_message = "the default (aws_managed) must leave the StackSet template as it is today and add no DR StackSet."
+  }
+}
+
+run "member_backup_dr_vault" {
+  command = plan
+
+  variables {
+    allowed_regions                = ["eu-west-2", "eu-west-1"]
+    member_backup_vault_encryption = "cmk"
+    backup_copy_account_id         = "444444444444"
+    member_backup_dr_region        = "eu-west-1"
+  }
+
+  assert {
+    condition = (
+      aws_cloudformation_stack_set_instance.member_backup_dr_vault[0].stack_set_instance_region == "eu-west-1" &&
+      tolist(aws_cloudformation_stack_set_instance.member_backup_dr_vault[0].deployment_targets[0].organizational_unit_ids) == tolist(["ou-abcd-workload0"]) &&
+      !contains(keys(jsondecode(aws_cloudformation_stack_set.member_backup_dr_vault[0].template_body).Resources), "BackupServiceRole") &&
+      jsondecode(aws_cloudformation_stack_set.member_backup_dr_vault[0].template_body).Resources.MemberBackupVaultCmk.Properties.BackupVaultName == "org-backup-vault-cmk" &&
+      aws_cloudformation_stack_set.member_backup_dr_vault[0].parameters["BackupAccountId"] == "444444444444"
+    )
+    error_message = "the DR-region StackSet must create only the key and vault (IAM roles are global and already exist)."
+  }
+}

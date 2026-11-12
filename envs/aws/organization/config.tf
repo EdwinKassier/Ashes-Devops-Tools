@@ -46,8 +46,11 @@ locals {
     enable_config_recorder_scp  = try(tobool(local.lz.aws.enable_config_recorder_scp), null)
     # Org trail managed by the CloudTrail delegated admin (docs/runbooks/aws-cloudtrail-delegated-admin-migration.md).
     enable_cloudtrail_delegated_admin = try(tobool(local.lz.aws.enable_cloudtrail_delegated_admin), null)
-    terraform_run_role_arn            = try(tostring(local.lz.aws.terraform_run_role_arn), null)
-    break_glass_role_arn              = try(tostring(local.lz.aws.break_glass_role_arn), null)
+    # compliance.backup (CMP-1): the CMK member vault and the DR-region vault.
+    backup_copy_to_central_vault = try(tobool(local.lz.compliance.backup.copy_to_central_vault), null)
+    backup_dr_region             = try(tostring(local.lz.compliance.backup.dr_region), null)
+    terraform_run_role_arn       = try(tostring(local.lz.aws.terraform_run_role_arn), null)
+    break_glass_role_arn         = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
     tfc_project = try(tostring(local.lz.org.tfc.aws_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws")
     # With org.tfc.split_workload_projects, tfc-admin puts aws-workload-<env> in
@@ -168,6 +171,14 @@ locals {
   terraform_run_role_arn            = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
   break_glass_role_arn              = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
   tfc_project                       = coalesce(var.tfc_project, local.cfg.tfc_project)
+  # Cross-account (copy_to_central_vault) and cross-region (dr_region) copy
+  # both need the customer managed key vault.
+  member_backup_vault_encryption = coalesce(
+    var.member_backup_vault_encryption,
+    local.cfg.backup_copy_to_central_vault == true || local.cfg.backup_dr_region != null ? "cmk" : null,
+    "aws_managed",
+  )
+  member_backup_dr_region = var.member_backup_dr_region != null ? var.member_backup_dr_region : local.cfg.backup_dr_region
   # Foundational bindings + the workload bindings derived from the config file;
   # an explicit var.tfc_workspace_bindings replaces both.
   tfc_workspace_bindings = var.tfc_workspace_bindings != null ? var.tfc_workspace_bindings : {

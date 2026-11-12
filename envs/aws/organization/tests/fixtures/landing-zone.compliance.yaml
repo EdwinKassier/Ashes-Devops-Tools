@@ -1,0 +1,27 @@
+# Test fixture: compliance.backup for the aws-organization root (config.tftest.hcl).
+# The DR region differs from org.regions.aws (the home vault region).
+version: 1
+org:
+  name: cfgco
+  regions:
+    aws: eu-west-1
+  tfc:
+    organization: cfg-tfc
+aws:
+  management_account_id: "012345678901"
+  allowed_regions: [eu-west-1, eu-west-2]
+  terraform_run_role_arn: arn:aws:iam::012345678901:role/tfc-mgmt-apply
+  break_glass_role_arn: arn:aws:iam::012345678901:role/break-glass
+  log_archive_bucket_name: cfgco-org-log-archive
+  guard_alert_emails: [secops@cfg.test]
+  accounts:
+    log_archive: {email: aws+log-archive@cfg.test, ou: Security}
+    security_tooling: {email: aws+security-tooling@cfg.test, ou: Security}
+    network: {email: aws+network@cfg.test, ou: Infrastructure}
+    shared_services: {email: aws+shared-services@cfg.test, ou: Infrastructure}
+    backup: {email: aws+backup@cfg.test, ou: Infrastructure}
+    forensics: {email: aws+forensics@cfg.test, ou: Security}
+compliance:
+  backup:
+    copy_to_central_vault: true
+    dr_region: eu-west-2

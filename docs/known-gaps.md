@@ -22,6 +22,14 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 - **Member-account backup vault first apply is unproven.** Confirm that the
   updated Backup service-role StackSet creates `org-backup-vault` in a
   Workloads-OU account, and that the next daily BACKUP_POLICY job completes.
+- **The customer managed key member backup vault is mock-tested only.** Mock
+  tests prove the StackSet templates, not AWS Backup or KMS behaviour. With
+  `member_backup_vault_encryption = "cmk"` (or `compliance.backup`), confirm
+  in the sandbox that the StackSet execution role creates the key tagged
+  `protected = true` under the deny-tamper SCP, that `org-backup-vault-cmk` is
+  encrypted with it, that the DR StackSet does the same in
+  `member_backup_dr_region`, and that a copy job from that vault to the backup
+  account succeeds with the `BackupAccountCopy` key-policy grant.
 
 - **The explicit-CIDR IPAM default for spoke VPCs needs the sandbox proof (ARC-1).**
   `modules/aws/network/vpc` requests `cidr_block` from the IPAM pool by default.
@@ -585,9 +593,12 @@ AWS:
   Air-Gapped destination vault. Latest AWS Backup guidance makes cross-region /
   cross-account copy the resilience baseline. Add a `copy_actions` destination +
   second-region vault (needs a real apply). Member-account vaults now exist
-  (aws-organization `create_member_backup_vault`), but they use the AWS managed
-  key and nothing copies their recovery points to the backup account's locked
-  vault, so backups still share the workload account's blast radius. Ref:
+  (aws-organization `create_member_backup_vault`). By default they use the AWS
+  managed key, which cross-account copy cannot use. The opt-in
+  `member_backup_vault_encryption = "cmk"` adds a customer managed key vault
+  (and, with `member_backup_dr_region`, one in a second region), but the
+  BACKUP_POLICY does not copy to the backup account, so backups still share
+  the workload account's blast radius. Ref:
   <https://aws.amazon.com/blogs/storage/aws-backup-2025-year-in-review-advancing-recovery-resilience/>
 - **A6 — log-analytics primary lags the June-2026 SRA** (MEDIUM, SAFE-DOC done /
   re-plumb BEHAVIOR-CHANGING). The June-2026 SRA names **CloudWatch Unified Data

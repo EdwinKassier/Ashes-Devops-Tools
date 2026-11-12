@@ -395,3 +395,40 @@ run "cloudtrail_delegated_admin_absent_is_off" {
     error_message = "With the keys absent the CloudTrail delegated admin must stay off and nothing is imported."
   }
 }
+
+# CMP-1: compliance.backup selects the CMK member vault and the DR-region vault.
+run "compliance_backup_selects_cmk_vaults" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.member_backup_vault_encryption == "cmk" && local.member_backup_dr_region == "eu-west-2"
+    error_message = "compliance.backup.copy_to_central_vault and dr_region must reach the organization stage."
+  }
+}
+
+run "compliance_backup_absent_keeps_aws_managed_vault" {
+  command = plan
+
+  assert {
+    condition     = local.member_backup_vault_encryption == "aws_managed" && local.member_backup_dr_region == null
+    error_message = "without compliance.backup the member vault must stay on the AWS managed key with no DR vault."
+  }
+}
+
+run "explicit_vault_encryption_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path       = "tests/fixtures/landing-zone.compliance.yaml"
+    member_backup_vault_encryption = "aws_managed"
+  }
+
+  assert {
+    condition     = local.member_backup_vault_encryption == "aws_managed"
+    error_message = "an explicit member_backup_vault_encryption must win over compliance.backup."
+  }
+}

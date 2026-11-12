@@ -588,3 +588,20 @@ variable "member_backup_vault_name" {
   default     = "org-backup-vault"
   nullable    = false
 }
+
+variable "member_backup_vault_encryption" {
+  description = "Key for the member-account backup vault: aws_managed (one vault on the aws/backup key) or cmk (also a protected customer managed key and a second vault, <member_backup_vault_name>-cmk, that cross-account copy to the backup account needs; the original vault is kept). Null (default) = cmk when the config file sets compliance.backup.copy_to_central_vault: true or compliance.backup.dr_region, else aws_managed. See UPGRADING.md: after the key exists only break-glass can change its policy or delete it."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.member_backup_vault_encryption == null || contains(["aws_managed", "cmk"], coalesce(var.member_backup_vault_encryption, "aws_managed"))
+    error_message = "member_backup_vault_encryption must be aws_managed or cmk."
+  }
+}
+
+variable "member_backup_dr_region" {
+  description = "Region of the member-account DR key and vault (cross-region copy target), created in every Workloads-OU account by a second StackSet. Needs the cmk vault encryption, must be in allowed_regions and must differ from the home region (org.regions.aws). Null (default) = compliance.backup.dr_region from the config file, else none."
+  type        = string
+  default     = null
+}
