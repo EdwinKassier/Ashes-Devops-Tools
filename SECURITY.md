@@ -4,15 +4,17 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Report vulnerabilities via the repository's **Security** tab → **"Report a vulnerability"**
-(GitHub private vulnerability reporting). **This is the only guaranteed channel** and
-reaches the maintainers directly and confidentially. We aim to acknowledge within 48
-hours and keep you informed of progress.
+Report vulnerabilities through the repository's **Security** tab, **Report a vulnerability**
+(GitHub private vulnerability reporting). It is the only channel; there is no security
+email address. It reaches the maintainers directly and confidentially. We aim to
+acknowledge within 48 hours and keep you informed of progress.
 
-> **Email backstop not yet configured.** A role-based alias (`security@…`) is intended
-> as a fallback but is **not live yet** — do not rely on email until this notice is
-> removed. Until then, use GitHub private vulnerability reporting above. Maintainers:
-> configure a real alias and replace this notice before any public release.
+**Maintainers:** this channel works only while the repository setting is on (Settings,
+Code security, Private vulnerability reporting). A repository admin must switch it on.
+`make security-contact-live` checks the setting (read-only, needs `gh` access).
+
+**Forks:** private vulnerability reporting is a per-repository setting. Switch it on in your
+fork, or replace this section with your own channel.
 
 ### What to Include
 
@@ -116,8 +118,5 @@ SARIF results are uploaded to GitHub Security tab for all scans.
 
 ## Contact
 
-- Security issues: repository **Security** tab → **"Report a vulnerability"** (the only
-  guaranteed channel). A `security@…` email backstop is planned but **not yet configured**
-  — see the notice under "Reporting a Vulnerability" above.
-- General inquiries: open a [GitHub Discussion](../../discussions) or non-security issue
-  on this repository
+- Security issues: the **Report a vulnerability** button above (no email address exists).
+- General questions: open a non-security issue on this repository

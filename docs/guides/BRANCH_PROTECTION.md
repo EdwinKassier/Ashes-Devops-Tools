@@ -123,6 +123,14 @@ Once the sandbox workflow exists, add **`Sandbox convergence`** (HCP Terraform h
 
 ---
 
+## Private vulnerability reporting
+
+`SECURITY.md` names GitHub private vulnerability reporting as the only reporting channel. A repository
+admin must switch it on: **Settings → Code security → Private vulnerability reporting → Enable**.
+Run `make security-contact-live` to confirm (read-only; it fails while the setting is off).
+
+---
+
 ## Dependabot Security Updates
 
 Ensure Dependabot auto-approves and merges **security** PRs only:
