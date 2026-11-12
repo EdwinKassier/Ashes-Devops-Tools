@@ -976,6 +976,68 @@ Direct callers of the module: nothing changes unless you set
 `enable_shared_private_dns`, list in `interface_services` only services whose
 private DNS name is `<service>.<region>.amazonaws.com`.
 
+#### Spoke VPCs associate the org Route 53 Profile: spoke DNS changes (aws-workload)
+
+`aws-workload-<env>` now creates `aws_route53profiles_association.spoke`
+(`workload-<env>-dns-profile`) for its spoke VPC. It reads the profile ID from the
+aws-network contract `resolver_profile_id` (remote state, the
+`network_contract` variable or `aws.contracts.network.resolver_profile_id`).
+Standalone spokes (`enable_network_hub = false`) associate nothing. The plan
+shows one create and changes no other resource, but DNS in the spoke changes as
+soon as the association is complete:
+
+- The DNS Firewall rule group of the profile applies to every query from the
+  spoke. A query for a domain on the block list fails.
+- The central interface endpoint zones apply. The names
+  `<service>.<region>.amazonaws.com` of the services in the egress VPC
+  (default: ec2, ssm, ssmmessages, ec2messages, kms, logs, sts) resolve to the
+  endpoint IPs in the egress VPC, not to public AWS addresses. AWS API calls to
+  these services then go over the transit gateway to the endpoints. With the
+  Network Firewall on, they are inspected on the way (the spoke default route
+  goes to the inspection attachment), as before through NAT.
+- Any resolver forward rules in the profile apply.
+
+What could break:
+
+- A workload that needs a domain on the DNS Firewall block list.
+- AWS API calls that the endpoints refuse. The endpoint policy allows only
+  principals in the organization (`aws:PrincipalOrgID`). Calls signed with
+  credentials of another AWS account now fail for these services. Test
+  unauthenticated STS calls (`AssumeRoleWithWebIdentity`,
+  `AssumeRoleWithSAML`) in the sandbox first, because they carry no principal.
+- With `aws:drop_established` and an egress domain allowlist, the firewall
+  still matches the TLS server name, so the service names must stay on the
+  allowlist. Traffic now goes to a private address instead of a public one,
+  so check custom Suricata rules that match on the destination.
+- A spoke with its own interface endpoint for one of these services, with
+  private DNS on, now has two private zones for the same name. Remove that
+  endpoint or switch off its private DNS before you apply.
+- The endpoint security group admits HTTPS only from `top_cidr`. A spoke
+  outside `top_cidr` cannot reach the endpoints.
+
+How to check before you apply, per spoke:
+
+1. List the blocked domains: `aws route53resolver list-firewall-rules
+   --firewall-rule-group-id <id>` and `aws route53resolver
+   list-firewall-domains --firewall-domain-list-id <id>` in the network
+   account. Compare them with the domains the workload uses.
+2. List the spoke interface endpoints: `aws ec2 describe-vpc-endpoints
+   --filters Name=vpc-id,Values=<spoke-vpc-id>
+   Name=vpc-endpoint-type,Values=Interface`. Check `PrivateDnsEnabled`.
+3. From an instance in the spoke, call a central endpoint before the DNS
+   change, for example `curl -sS -o /dev/null -w '%{http_code}\n' --resolve
+   sts.<region>.amazonaws.com:443:<endpoint-ip>
+   https://sts.<region>.amazonaws.com/`. Any HTTP status proves the path
+   through inspection to the endpoint. A timeout means the firewall or a
+   route drops it. Get the endpoint IPs from the network account with
+   `aws ec2 describe-network-interfaces` on the endpoint ENIs.
+4. Run the `aws-workload-<env>` plan. It must show only
+   `aws_route53profiles_association.spoke` to create.
+
+To hold back one environment, set its `network_contract` workspace variable
+with `tgw_id` and `ipam_pool_ids` and no `resolver_profile_id`. The root then
+plans no association. Remove the variable once the checks pass.
+
 #### Access Analyzer in every enabled region (aws-security)
 
 The external analyzer now exists in every `aws.enabled_regions` entry (the home
