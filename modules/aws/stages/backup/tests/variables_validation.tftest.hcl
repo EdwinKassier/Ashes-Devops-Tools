@@ -101,3 +101,33 @@ run "dr_region_equal_to_home_region_rejected" {
 
   expect_failures = [var.dr_region]
 }
+
+# The copy vault publishes failed backup, copy and restore events to
+# copy_vault_notification_topic_arn. Planned without overriding the copy vault
+# module so its notification_topic_arn output comes from the planned resource.
+run "copy_vault_notification_topic_wired" {
+  command = plan
+
+  variables {
+    enable_central_copy               = true
+    organization_id                   = "o-abc1234567"
+    backup_account_id                 = "444444444444"
+    copy_vault_kms_key_arn            = "arn:aws:kms:eu-west-2:444444444444:key/11111111-2222-3333-4444-555555555555"
+    copy_vault_notification_topic_arn = "arn:aws:sns:eu-west-2:444444444444:backup-events"
+  }
+
+  assert {
+    condition     = module.copy_vault[0].notification_topic_arn == "arn:aws:sns:eu-west-2:444444444444:backup-events"
+    error_message = "copy_vault_notification_topic_arn must reach the copy vault's notifications."
+  }
+}
+
+run "malformed_copy_vault_notification_topic_arn_rejected" {
+  command = plan
+
+  variables {
+    copy_vault_notification_topic_arn = "backup-events"
+  }
+
+  expect_failures = [var.copy_vault_notification_topic_arn]
+}

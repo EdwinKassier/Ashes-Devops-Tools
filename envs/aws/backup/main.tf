@@ -79,6 +79,8 @@ module "aws_backup" {
   backup_account_id     = lookup(local.org.account_ids, "backup", null)
   copy_retention_days   = local.copy_retention_days
   dr_region             = local.dr_region
+
+  copy_vault_notification_topic_arn = var.copy_vault_notification_topic_arn
 }
 
 # The copy vault admits copies from the organization ID in the contract. The

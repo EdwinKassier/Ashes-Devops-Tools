@@ -58,13 +58,14 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L87)
-- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L104)
-- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L54)
-- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L61)
-- resource.aws_backup_vault_policy.copy_in (modules/aws/backup/backup-vault/main.tf#L71)
-- resource.aws_iam_role.restore_testing (modules/aws/backup/backup-vault/main.tf#L31)
-- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L48)
+- resource.aws_backup_restore_testing_plan.this (modules/aws/backup/backup-vault/main.tf#L104)
+- resource.aws_backup_restore_testing_selection.this (modules/aws/backup/backup-vault/main.tf#L121)
+- resource.aws_backup_vault.this (modules/aws/backup/backup-vault/main.tf#L58)
+- resource.aws_backup_vault_lock_configuration.this (modules/aws/backup/backup-vault/main.tf#L65)
+- resource.aws_backup_vault_notifications.this (modules/aws/backup/backup-vault/main.tf#L94)
+- resource.aws_backup_vault_policy.copy_in (modules/aws/backup/backup-vault/main.tf#L75)
+- resource.aws_iam_role.restore_testing (modules/aws/backup/backup-vault/main.tf#L35)
+- resource.aws_iam_role_policy_attachment.restore_testing (modules/aws/backup/backup-vault/main.tf#L52)
 
 
 ## Inputs
@@ -77,6 +78,7 @@ The following resources are created:
 | <a name="input_kms_key_arn"></a> [kms\_key\_arn](#input\_kms\_key\_arn) | ARN of the KMS key used to encrypt recovery points in the vault. Empty string uses the AWS-managed default Backup key. | `string` | `""` | no |
 | <a name="input_max_retention_days"></a> [max\_retention\_days](#input\_max\_retention\_days) | Maximum retention (days) allowed for recovery points stored in the vault. | `number` | `3650` | no |
 | <a name="input_min_retention_days"></a> [min\_retention\_days](#input\_min\_retention\_days) | Minimum retention (days) enforced on every recovery point stored in the vault. Recovery points cannot be deleted before this age. | `number` | `7` | no |
+| <a name="input_notification_topic_arn"></a> [notification\_topic\_arn](#input\_notification\_topic\_arn) | SNS topic that receives this vault's failed backup, copy and restore events (restore-testing restores included) and RECOVERY\_POINT\_MODIFIED. Null (default) = no vault notifications. The topic policy must allow backup.amazonaws.com to publish, and a KMS-encrypted topic's key must allow it too. | `string` | `null` | no |
 | <a name="input_partition"></a> [partition](#input\_partition) | AWS partition for the managed-policy ARNs attached to the created restore-testing role (aws, aws-us-gov, aws-cn). | `string` | `"aws"` | no |
 | <a name="input_permissions_boundary_arn"></a> [permissions\_boundary\_arn](#input\_permissions\_boundary\_arn) | Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable\_apply\_boundary\_propagation): pass arn:PARTITION:iam::ACCOUNT\_ID:policy/tfc-apply-boundary. Null (default) = no boundary. | `string` | `null` | no |
 | <a name="input_restore_testing_plan_name"></a> [restore\_testing\_plan\_name](#input\_restore\_testing\_plan\_name) | Name of the AWS Backup restore testing plan. AWS restricts this to alphanumeric characters and underscores. | `string` | `"org_restore_test"` | no |
@@ -96,6 +98,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_notification_topic_arn"></a> [notification\_topic\_arn](#output\_notification\_topic\_arn) | SNS topic that receives this vault's failed-job notifications. Null when notification\_topic\_arn was null. |
 | <a name="output_restore_testing_plan_arn"></a> [restore\_testing\_plan\_arn](#output\_restore\_testing\_plan\_arn) | The ARN of the restore testing plan, if one was created. |
 | <a name="output_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#output\_restore\_testing\_role\_arn) | ARN of the role restore testing jobs assume (created here when restore\_testing\_role\_arn was null). Null when create\_restore\_testing is false. |
 | <a name="output_vault_arn"></a> [vault\_arn](#output\_vault\_arn) | The ARN of the AWS Backup vault. |

@@ -23,7 +23,9 @@
 # <vault_name>-cmk member vault (aws-organization member_backup_vault_encryption
 # = cmk) and copies every recovery point to the copy vault. dr_region adds a
 # copy to the <vault_name>-cmk vault in that region of the same member account.
-# Restore testing moves to the copy vault.
+# Restore testing moves to the copy vault. copy_vault_notification_topic_arn
+# publishes the copy vault's failed backup, copy and restore events (restore
+# testing included) to an SNS topic in the backup account.
 
 # ---------------------------------------------------------------------------
 # Backup vault + Vault Lock + restore testing (BACKUP account)
@@ -279,6 +281,7 @@ module "copy_vault" {
   restore_testing_plan_name       = "org_restore_test_copy"
   restore_testing_resource_types  = ["EBS", "EC2", "RDS", "Aurora", "S3", "DynamoDB", "EFS"]
   restore_testing_role_arn        = var.restore_testing_role_arn
+  notification_topic_arn          = var.copy_vault_notification_topic_arn
   # A distinct name: the backup_vault role of the default name is destroyed in
   # the same apply, and IAM names must be unique.
   restore_testing_role_name = "aws-backup-restore-testing-copy"

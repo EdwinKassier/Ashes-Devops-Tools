@@ -203,6 +203,17 @@ variable "copy_vault_kms_key_arn" {
   }
 }
 
+variable "copy_vault_notification_topic_arn" {
+  description = "SNS topic in the backup account that receives the copy vault's failed backup, copy and restore events (restore-testing restores included) and RECOVERY_POINT_MODIFIED. Null (default) = no vault notifications. Used only with enable_central_copy. The topic policy (and the key policy of a KMS-encrypted topic) must allow backup.amazonaws.com to publish."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.copy_vault_notification_topic_arn == null || can(regex("^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$", coalesce(var.copy_vault_notification_topic_arn, "x")))
+    error_message = "copy_vault_notification_topic_arn must be null or an SNS topic ARN."
+  }
+}
+
 variable "copy_vault_key_admin_arn" {
   description = "Principal granted key administration (no usage, no kms:PutKeyPolicy) on the created copy vault key. Null = the backup account's tfc-apply role, the role that applies this stage there."
   type        = string

@@ -164,3 +164,34 @@ run "no_restore_testing_when_disabled" {
     error_message = "with restore testing off the restore-testing outputs must be null."
   }
 }
+
+# Failed backup, copy and restore jobs (restore-testing restores included) and
+# changed recovery points publish to the caller's SNS topic.
+run "vault_notifications_for_failed_jobs" {
+  command = plan
+
+  variables {
+    notification_topic_arn = "arn:aws:sns:eu-west-2:444444444444:backup-events"
+  }
+
+  assert {
+    condition = toset(aws_backup_vault_notifications.this[0].backup_vault_events) == toset([
+      "BACKUP_JOB_FAILED", "COPY_JOB_FAILED", "RESTORE_JOB_FAILED", "S3_BACKUP_OBJECT_FAILED", "S3_RESTORE_OBJECT_FAILED", "RECOVERY_POINT_MODIFIED",
+    ])
+    error_message = "the vault must publish failed backup, copy and restore events (restore testing results included)."
+  }
+
+  assert {
+    condition     = aws_backup_vault_notifications.this[0].sns_topic_arn == "arn:aws:sns:eu-west-2:444444444444:backup-events" && output.notification_topic_arn == "arn:aws:sns:eu-west-2:444444444444:backup-events"
+    error_message = "the notifications must go to notification_topic_arn."
+  }
+}
+
+run "no_vault_notifications_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_backup_vault_notifications.this) == 0 && output.notification_topic_arn == null
+    error_message = "without notification_topic_arn the vault must publish no notifications."
+  }
+}

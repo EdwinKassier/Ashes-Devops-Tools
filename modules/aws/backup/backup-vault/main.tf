@@ -18,6 +18,10 @@
 # selects by a tag condition; every other type selects all protected resources
 # of that type ("*"). Restore testing proves recoverability only when the vault
 # receives recovery points.
+#
+# notification_topic_arn (off by default) publishes failed backup, copy and
+# restore events (restore-testing restores included) and RECOVERY_POINT_MODIFIED
+# to an SNS topic.
 
 locals {
   create_restore_testing_role = var.create_restore_testing && var.restore_testing_role_arn == null
@@ -82,6 +86,19 @@ resource "aws_backup_vault_policy" "copy_in" {
       Condition = { StringEquals = { "aws:PrincipalOrgID" = var.allow_copy_from_organization_id } }
     }]
   })
+}
+
+# Failed jobs and changed recovery points publish to the caller's SNS topic.
+# Restore-testing restores run as restore jobs on this vault, so their failures
+# arrive as RESTORE_JOB_FAILED.
+resource "aws_backup_vault_notifications" "this" {
+  count             = var.notification_topic_arn != null ? 1 : 0
+  backup_vault_name = aws_backup_vault.this.name
+  sns_topic_arn     = var.notification_topic_arn
+  backup_vault_events = [
+    "BACKUP_JOB_FAILED", "COPY_JOB_FAILED", "RESTORE_JOB_FAILED",
+    "S3_BACKUP_OBJECT_FAILED", "S3_RESTORE_OBJECT_FAILED", "RECOVERY_POINT_MODIFIED",
+  ]
 }
 
 resource "aws_backup_restore_testing_plan" "this" {

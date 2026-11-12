@@ -52,6 +52,17 @@ variable "allow_copy_from_organization_id" {
   }
 }
 
+variable "notification_topic_arn" {
+  description = "SNS topic that receives this vault's failed backup, copy and restore events (restore-testing restores included) and RECOVERY_POINT_MODIFIED. Null (default) = no vault notifications. The topic policy must allow backup.amazonaws.com to publish, and a KMS-encrypted topic's key must allow it too."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.notification_topic_arn == null || can(regex("^arn:aws[a-z-]*:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_-]{1,256}$", coalesce(var.notification_topic_arn, "x")))
+    error_message = "notification_topic_arn must be null or an SNS topic ARN."
+  }
+}
+
 # -----------------------------------------------------------------------------
 # Restore testing plan
 # -----------------------------------------------------------------------------

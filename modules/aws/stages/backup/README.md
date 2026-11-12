@@ -92,11 +92,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_backup_global_settings.this (modules/aws/stages/backup/main.tf#L230)
-- resource.aws_cloudformation_stack_set.backup_role (modules/aws/stages/backup/main.tf#L155)
-- resource.aws_cloudformation_stack_set_instance.backup_role (modules/aws/stages/backup/main.tf#L187)
-- data source.aws_caller_identity.backup (modules/aws/stages/backup/main.tf#L35)
-- data source.aws_partition.backup (modules/aws/stages/backup/main.tf#L40)
+- resource.aws_backup_global_settings.this (modules/aws/stages/backup/main.tf#L232)
+- resource.aws_cloudformation_stack_set.backup_role (modules/aws/stages/backup/main.tf#L157)
+- resource.aws_cloudformation_stack_set_instance.backup_role (modules/aws/stages/backup/main.tf#L189)
+- data source.aws_caller_identity.backup (modules/aws/stages/backup/main.tf#L37)
+- data source.aws_partition.backup (modules/aws/stages/backup/main.tf#L42)
 
 
 ## Inputs
@@ -115,6 +115,7 @@ The following resources are created:
 | <a name="input_copy_vault_key_policy_admin_role_name"></a> [copy\_vault\_key\_policy\_admin\_role\_name](#input\_copy\_vault\_key\_policy\_admin\_role\_name) | Role name in the backup account granted kms:PutKeyPolicy, and nothing else, on the created copy vault key. Default break-glass: the member break-glass role aws-organization deploys (enable\_member\_break\_glass\_role); it must exist before the key is created. Null = the key admin also holds kms:PutKeyPolicy. | `string` | `"break-glass"` | no |
 | <a name="input_copy_vault_kms_key_arn"></a> [copy\_vault\_kms\_key\_arn](#input\_copy\_vault\_kms\_key\_arn) | ARN of an existing customer managed key in the backup account for the copy vault. Null (default) creates one (alias backup-copy-vault): rotating, tagged protected = true, usable by backup-account principals only through AWS Backup and the restore services. | `string` | `null` | no |
 | <a name="input_copy_vault_name"></a> [copy\_vault\_name](#input\_copy\_vault\_name) | Name of the locked central copy vault in the backup account. | `string` | `"org-backup-copy-vault"` | no |
+| <a name="input_copy_vault_notification_topic_arn"></a> [copy\_vault\_notification\_topic\_arn](#input\_copy\_vault\_notification\_topic\_arn) | SNS topic in the backup account that receives the copy vault's failed backup, copy and restore events (restore-testing restores included) and RECOVERY\_POINT\_MODIFIED. Null (default) = no vault notifications. Used only with enable\_central\_copy. The topic policy (and the key policy of a KMS-encrypted topic) must allow backup.amazonaws.com to publish. | `string` | `null` | no |
 | <a name="input_create_backup_role_stack_set"></a> [create\_backup\_role\_stack\_set](#input\_create\_backup\_role\_stack\_set) | Deploy the member-account Backup service role (backup\_role\_name) from THIS stage through a service-managed StackSet. Default false: aws-organization deploys it (create\_backup\_service\_role there), so the least-privilege aws-backup management role needs no CloudFormation rights. Set true only when aws-backup applies as the phase-0 management role. | `bool` | `false` | no |
 | <a name="input_dr_copy_retention_days"></a> [dr\_copy\_retention\_days](#input\_dr\_copy\_retention\_days) | Days each cross-region copy is kept in the member DR vault. | `number` | `35` | no |
 | <a name="input_dr_region"></a> [dr\_region](#input\_dr\_region) | Second region for a cross-region copy: the BACKUP\_POLICY copies each recovery point to the <vault\_name>-cmk vault in this region of the same member account (aws-organization member\_backup\_dr\_region creates it). Also points the policy at the <vault\_name>-cmk member vault. Must differ from aws\_region and be an allowed region. Null (default) = no cross-region copy. | `string` | `null` | no |

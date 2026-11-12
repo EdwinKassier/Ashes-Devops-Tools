@@ -17,3 +17,8 @@ output "restore_testing_role_arn" {
   description = "ARN of the role restore testing jobs assume (created here when restore_testing_role_arn was null). Null when create_restore_testing is false."
   value       = local.restore_testing_role_arn
 }
+
+output "notification_topic_arn" {
+  description = "SNS topic that receives this vault's failed-job notifications. Null when notification_topic_arn was null."
+  value       = try(aws_backup_vault_notifications.this[0].sns_topic_arn, null)
+}

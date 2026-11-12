@@ -43,7 +43,10 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   EC2, RDS, Aurora, S3, DynamoDB, EFS); the copy vault key grants are enough
   for copy-in and for restores (the key admits backup-account principals only
   through Backup, EC2, RDS, S3, DynamoDB and EFS); and the restore-testing
-  plan restores RDS and Aurora without restore metadata overrides. Do this in a
+  plan restores RDS and Aurora without restore metadata overrides. With
+  `copy_vault_notification_topic_arn` set, also confirm which failure events
+  reach the topic: copy jobs into the copy vault start in the member account,
+  so a failed copy may be reported on the source vault only. Do this in a
   throwaway vault first or within `changeable_for_days`: the lock cannot be
   removed after that window.
 

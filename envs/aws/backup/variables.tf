@@ -121,6 +121,12 @@ variable "dr_region" {
   default     = null
 }
 
+variable "copy_vault_notification_topic_arn" {
+  description = "SNS topic in the backup account that receives the central copy vault's failed backup, copy and restore events (restore-testing restores included) and RECOVERY_POINT_MODIFIED. Null (default) = no vault notifications. Used only with central copy on. The topic policy (and the key policy of a KMS-encrypted topic) must allow backup.amazonaws.com to publish."
+  type        = string
+  default     = null
+}
+
 # -----------------------------------------------------------------------------
 # IAM role ARNs (operator-supplied)
 # -----------------------------------------------------------------------------

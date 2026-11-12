@@ -53,3 +53,13 @@ run "malformed_organization_id_rejected" {
 
   expect_failures = [var.allow_copy_from_organization_id]
 }
+
+run "malformed_notification_topic_arn_rejected" {
+  command = plan
+
+  variables {
+    notification_topic_arn = "arn:aws:sqs:eu-west-2:444444444444:backup-events"
+  }
+
+  expect_failures = [var.notification_topic_arn]
+}
