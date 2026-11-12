@@ -312,12 +312,17 @@ aws:
   # Workload environments => the account key they deploy into. tfc-admin
   # declares one aws-workload-<env> workspace per key and sets its
   # workload_account_key; aws-organization adds the matching OIDC trust binding
-  # (account key => aws-workload-<env>). vpc_cidr is optional.
+  # (account key => aws-workload-<env>). Give each workload its own vpc_cidr
+  # inside the regional pool (aws.network.regional_cidrs): a workload without
+  # one counts as 10.72.0.0/16, and tfc-admin fails when two workloads share it.
   workload_environments:
     dev:
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
       is_production: false
+      # AZ IDs for this spoke only. Unset = aws.network.availability_zone_ids,
+      # else the region's first three available zones.
+      # availability_zone_ids: [euw2-az2, euw2-az3]
       # Services deployed to this environment (ECS Fargate behind the shared
       # ALB, optional Aurora and GitHub deploy role). Fields:
       # envs/aws/workload (variable services).
@@ -354,12 +359,18 @@ aws:
   network:
     # Addressing (aws-network). docs/architecture/cidr-plan.md gives AWS
     # 10.64.0.0/10 and GCP 10.0.0.0/12; tfc-admin fails its plan when an AWS
-    # range overlaps a GCP one, or a workload vpc_cidr falls outside top_cidr.
+    # range overlaps a GCP one, or a workload vpc_cidr falls outside top_cidr or the regional pool.
     # The values below are the defaults.
     # top_cidr: 10.64.0.0/10
     # regional_cidrs: {eu-west-2: 10.64.0.0/12}
     # inspection_cidr: 10.64.0.0/16
     # egress_cidr: 10.65.0.0/16
+    # Availability zones (aws-network and every aws-workload-<env>). AZ IDs
+    # name the same physical zone in every account; zone names (eu-west-2a)
+    # do not. Unset = the region's first three available zones (in eu-west-2:
+    # eu-west-2a/b/c, of which az_count = 2 uses a and b). Before you set IDs
+    # on an existing estate, read UPGRADING.md: a changed zone replaces subnets.
+    # availability_zone_ids: [euw2-az2, euw2-az3]
     egress_domain_allowlist:
       - .amazonaws.com
       - .github.com
@@ -452,6 +463,20 @@ saas:
 #   # failures, on every workspace tfc-admin manages.
 #   hcp_email_user_ids:
 #     - user-REPLACE_WITH_HCP_USER_ID
+
+# compliance: estate-wide compliance knobs. Absent = today's behaviour.
+compliance:
+  # frameworks: [soc2, pci_dss]            # raises the audit-retention floor
+  # audit_log_retention_days: 400          # GCP audit bucket and AWS log archive
+  # breach_notification_contacts: [dpo@acme.example]
+  backup:
+    # Production profile: copy every AWS recovery point to the locked central
+    # copy vault (apply aws-organization, then aws-backup). Its Compliance-mode
+    # Vault Lock becomes irreversible changeable_for_days (aws-backup, default 3)
+    # after the first aws-backup apply. Read UPGRADING.md before that apply.
+    copy_to_central_vault: true
+    # copy_retention_days: 365
+    # dr_region: eu-west-1                 # must be in aws.allowed_regions
 
 # Presets: named overlays from examples/presets/<name>.yaml, applied by the
 # root the preset targets (precedence: explicit variable > preset > this file).

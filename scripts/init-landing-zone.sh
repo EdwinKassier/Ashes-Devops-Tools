@@ -91,7 +91,10 @@ Options:
                                 Default false.
   --profile production|starter  Cost/assurance profile (org.profile). Default production, about
                                 $1.4-1.9k/month idle on AWS; interactive runs show that figure
-                                and ask for confirmation. starter requires --monthly-budget.
+                                and ask for confirmation. production also writes
+                                compliance.backup.copy_to_central_vault: true (an AWS
+                                Vault Lock that becomes irreversible; UPGRADING.md).
+                                starter requires --monthly-budget.
   --monthly-budget USD          Monthly budget in USD (org.monthly_budget_usd); required with
                                 --profile starter.
   --yes                         Skip the production-profile cost confirmation.
@@ -431,8 +434,33 @@ trap 'rm -f "${tmp}"' EXIT
 } | awk -v gcp="$(has_cloud gcp && echo true || echo false)" \
   -v aws="$(has_cloud aws && echo true || echo false)" \
   -v saas="$(has_cloud saas && echo true || echo false)" \
-  -v org_id="${GCP_ORG_ID}" -v budget="${MONTHLY_BUDGET}" '
+  -v org_id="${GCP_ORG_ID}" -v budget="${MONTHLY_BUDGET}" -v profile="${PROFILE}" '
   /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  # Production profile (decision D3): uncomment compliance: with only
+  # backup.copy_to_central_vault set. The other keys stay commented, one level
+  # deeper, and the backup: block moves last so every comment is indented like
+  # the content around it (yamllint comments-indentation).
+  profile == "production" && $0 == "# compliance:" { compliance = 1; in_backup = 0; deferred = ""; print "compliance:"; next }
+  compliance && !/^#/ { printf "%s", deferred; compliance = 0 }
+  compliance {
+    body = substr($0, 2)
+    match(body, /^ */)
+    key = substr(body, RLENGTH + 1)
+    indent = substr(body, 2, RLENGTH - 1)
+    if (key == "backup:") { in_backup = 1; deferred = deferred indent key "\n"; next }
+    if (length(indent) <= 2) in_backup = 0
+    if (!in_backup) { print indent "# " key; next }
+    if (key ~ /^copy_to_central_vault:/) {
+      deferred = deferred indent "# Production profile: copy every AWS recovery point to the locked central\n"
+      deferred = deferred indent "# copy vault (apply aws-organization, then aws-backup). Its Compliance-mode\n"
+      deferred = deferred indent "# Vault Lock becomes irreversible changeable_for_days (aws-backup, default 3)\n"
+      deferred = deferred indent "# after the first aws-backup apply. Read UPGRADING.md before that apply.\n"
+      deferred = deferred indent "copy_to_central_vault: true\n"
+      next
+    }
+    deferred = deferred indent "# " key "\n"
+    next
+  }
   section == "org" && /^  # monthly_budget_usd: / {
     if (budget != "") print "  monthly_budget_usd: " budget; else print
     next

@@ -334,6 +334,13 @@ run "scaffold_aws_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
   }
+
+  # Decision D3: the production scaffold sets compliance.backup
+  # .copy_to_central_vault: true, so the member vaults get the CMK copy source.
+  assert {
+    condition     = local.member_backup_vault_encryption == "cmk" && local.member_backup_dr_region == null
+    error_message = "the production scaffold must select the CMK member vault (central copy on, no DR region)."
+  }
 }
 
 run "scaffold_gcp_aws_plans" {

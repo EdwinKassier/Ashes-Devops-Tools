@@ -379,7 +379,7 @@ What to do:
 
 No change unless you opt in. With the defaults the `aws-backup` plan changes no backup resource: the BACKUP_POLICY document is now built with `jsonencode()` instead of a template file, with the same content, and the restore-testing plan and selection move in state (`moved` blocks).
 
-You opt in with `compliance.backup.copy_to_central_vault: true` in `config/landing-zone.yaml` (or `enable_central_copy = true` on the root). Apply `aws-organization` first with the same `compliance.backup` settings: it creates the `<vault_name>-cmk` member vaults and their keys. Then apply `aws-backup`. It:
+You opt in with `compliance.backup.copy_to_central_vault: true` in `config/landing-zone.yaml` (or `enable_central_copy = true` on the root). A new `make init --profile production` scaffold writes that line for you; a starter scaffold does not, and an existing config file does not change. Apply `aws-organization` first with the same `compliance.backup` settings: it creates the `<vault_name>-cmk` member vaults and their keys. Then apply `aws-backup`. It:
 
 - creates `org-backup-copy-vault` in the backup account, encrypted with a new customer managed key (alias `backup-copy-vault`, rotating, tagged `protected = true`), with a **Compliance-mode Vault Lock**, and a vault access policy that accepts copies only from your organization
 - enables org-wide cross-account backup (`aws_backup_global_settings`) in the management account

@@ -240,8 +240,29 @@ if bash "${SCRIPT}" --non-interactive --output "${out7}" --org-name acme --cloud
   assert_eq "$(section_value "${out7}" org monthly_budget_usd)" "750" "org.monthly_budget_usd"
   schema_check "${out7}" "starter scaffold"
   if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out7}"; then pass "starter scaffold is yamllint-clean"; else fail "starter scaffold is yamllint-clean"; fi
+  assert_no_line "${out7}" '^compliance:' "starter scaffold leaves compliance commented"
+  assert_no_line "${out7}" '^ +copy_to_central_vault:' "starter scaffold does not set compliance.backup.copy_to_central_vault"
 else
   fail "starter run exits 0"; cat "${log}" >&2
+fi
+
+echo "==> decision D3: production scaffolds the locked central backup copy"
+out7p="${workdir}/production.yaml"
+if bash "${SCRIPT}" --non-interactive --yes --output "${out7p}" --org-name acme --clouds aws --profile production \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_line "${out7p}" '^compliance:$' "production scaffold uncomments compliance"
+  assert_eq "$(awk '/^[a-z_]+:/ { s = $1 } s == "compliance:" && /^  backup:$/ { b = 1; next } b && /^    copy_to_central_vault: / { print $2; exit } b && /^  [a-z]/ { b = 0 }' "${out7p}")" \
+    "true" "production scaffold sets compliance.backup.copy_to_central_vault: true"
+  # The uncommented compliance: block alone (it ends at the next top-level line).
+  awk '/^compliance:$/ { c = 1; print; next } c && /^[^ ]/ { c = 0 } c' "${out7p}" >"${workdir}/compliance-block"
+  assert_line "${workdir}/compliance-block" '^    # .*irreversible' "the compliance block says the copy vault lock becomes irreversible"
+  assert_line "${workdir}/compliance-block" '^    # .*changeable_for_days' "the compliance block names changeable_for_days"
+  assert_line "${workdir}/compliance-block" '^    # .*UPGRADING\.md' "the compliance block names UPGRADING.md"
+  assert_no_line "${workdir}/compliance-block" '^  (frameworks|audit_log_retention_days|breach_notification_contacts):' "production scaffold sets no other compliance key"
+  schema_check "${out7p}" "production scaffold"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out7p}"; then pass "production scaffold is yamllint-clean"; else fail "production scaffold is yamllint-clean"; fi
+else
+  fail "production run exits 0"; cat "${log}" >&2
 fi
 
 echo "==> task 2.7: interactive production shows the idle cost and asks for confirmation"

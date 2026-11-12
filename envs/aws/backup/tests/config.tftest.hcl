@@ -14,6 +14,9 @@ override_data {
   values = {
     outputs = {
       contract = {
+        # A real aws-organization contract always carries the organization ID;
+        # the production scaffold's central copy (decision D3) needs it.
+        organization_id = "o-abc1234567"
         ou_ids = {
           Workloads = "ou-abcd-workloads0"
         }
@@ -47,6 +50,11 @@ run "scaffold_aws_plans" {
     condition     = local.management_account_id == "123456789012"
     error_message = "aws.management_account_id from the config file must resolve into the root locals."
   }
+
+  assert {
+    condition     = local.enable_central_copy == true
+    error_message = "the production scaffold sets compliance.backup.copy_to_central_vault: true (decision D3), so the backup root must turn on the central copy."
+  }
 }
 
 run "scaffold_gcp_aws_plans" {
@@ -70,6 +78,11 @@ run "scaffold_gcp_aws_plans" {
     condition     = local.management_account_id == "123456789012"
     error_message = "aws.management_account_id from the config file must resolve into the root locals."
   }
+
+  assert {
+    condition     = local.enable_central_copy == true
+    error_message = "the production scaffold sets compliance.backup.copy_to_central_vault: true (decision D3), so the backup root must turn on the central copy."
+  }
 }
 
 run "scaffold_gcp_aws_saas_plans" {
@@ -92,6 +105,11 @@ run "scaffold_gcp_aws_saas_plans" {
   assert {
     condition     = local.management_account_id == "123456789012"
     error_message = "aws.management_account_id from the config file must resolve into the root locals."
+  }
+
+  assert {
+    condition     = local.enable_central_copy == true
+    error_message = "the production scaffold sets compliance.backup.copy_to_central_vault: true (decision D3), so the backup root must turn on the central copy."
   }
 }
 

@@ -89,11 +89,13 @@ apply or a human decision. Enable them per environment, highest-value first.
 | CMEK (AWS/GCP) | pass a key ARN/name at the module boundary | per module (e.g. `ecr`, `network-firewall`, `cloud-storage`) | Without a key, encryption falls back to an AWS-owned key or GMEK. Supplying a CMK is safe; requiring it can break a module that is not given one. |
 | **Audit-log WORM lock (GCP)** | `gcp.enable_audit_bucket_lock: true` (or `gcp_overrides.enable_audit_bucket_lock = true`) | `envs/gcp/organization` → `cloud-audit-logs` | **IRREVERSIBLE.** A locked retention policy cannot be shortened or removed. Enable only for a compliance regime that requires tamper-proof retention, and only once the retention period is final. This is why it is **not** default-on. |
 | AWS CloudTrail → CloudWatch Logs + CIS 4.x alarms | **on by default** (`enable_cloudwatch_logs`) | `modules/aws/stages/security` | The module creates its own rotated, `logs.*`-granted CMK and a KMS-encrypted SNS topic unless you pass `cloudwatch_logs_kms_key_arn`. Subscribe your on-call address. See audit A1/A4. |
-| AWS Backup (locked copy and DR) | **Not available yet.** Planned in WS4 Tasks 1 to 3: `compliance.backup.copy_to_central_vault` and `compliance.backup.dr_region` | `modules/aws/stages/backup`, `modules/aws/stages/organization/backup_role.tf` | Today member-account vaults are unlocked, use the AWS-managed key and are not copied to the locked central vault (control matrix BCK-01 to BCK-03). Until the copy exists, do not rely on AWS backups for ransomware or account-compromise recovery. Once it ships, enable it here and apply `aws-organization` before `aws-backup`. |
+| AWS Backup (locked copy and DR) | `compliance.backup.copy_to_central_vault: true` (a `make init --profile production` scaffold writes it), optionally `compliance.backup.dr_region`; `copy_vault_notification_topic_arn` on `envs/aws/backup` for failed-job alerts | `modules/aws/stages/backup`, `modules/aws/stages/organization/backup_role.tf` | **IRREVERSIBLE** after `changeable_for_days` (default 3): the copy vault has a Compliance-mode Vault Lock. Apply `aws-organization` before `aws-backup`, and read the UPGRADING.md entry first. Without the copy, member-account vaults are unlocked, use the AWS-managed key and are not copied to the locked central vault (control matrix BCK-01 to BCK-03), so do not rely on AWS backups for ransomware or account-compromise recovery. Copy jobs are mock-tested only (known-gaps A5). |
 
-The WORM lock is the one item that must stay opt-in: an irreversible default in a
-template is a footgun, so the best-practice choice is to keep it off and enable it
-deliberately.
+The two WORM locks (GCP audit bucket, AWS backup copy vault) stay off in the
+module defaults: an irreversible default in a template is a footgun, so each one
+is enabled deliberately. A production scaffold writes the AWS backup copy as an
+explicit line in `config/landing-zone.yaml`, so the owner reviews and commits it
+before any apply.
 
 ## 3. Non-production cost right-sizing (audit F5, F2)
 
