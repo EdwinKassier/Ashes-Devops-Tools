@@ -1,9 +1,13 @@
 name: Drift Detection
 
-# Fallback drift check for HCP Terraform tiers without health assessments.
-# Where the tier has them, tfc-admin turns them on for every workspace
-# (enable_health_assessments, default true) and HCP itself reports drift; this
-# workflow then duplicates that signal and may be opted out of (below).
+# Drift source of record: HCP Terraform health assessments. Where the tier has
+# them, tfc-admin turns them on for every workspace (enable_health_assessments,
+# default true), and HCP reports drift itself, including for the secret-bearing
+# workspaces this workflow cannot plan. This workflow is the fallback for tiers
+# without health assessments. When health assessments are on, set the repository
+# variable TFC_HEALTH_ASSESSMENTS=true: the workflow then skips with a notice
+# and needs no TFC_TOKEN_DRIFT. The variable is your statement that they are on;
+# nothing here checks it. Without it, both paths run and can disagree.
 #
 # Required repository configuration (see docs/guides/CI_SECRETS.md):
 #   - secrets.TFC_TOKEN_DRIFT  Token of the team set as tfc-admin drift_team_id
@@ -29,6 +33,9 @@ name: Drift Detection
 #                              be granted queue-plans, so a missing
 #                              TFC_TOKEN_DRIFT fails the run (see below).
 #   - vars.TFC_ORGANIZATION    Terraform Cloud organization name.
+#   - vars.TFC_HEALTH_ASSESSMENTS  (optional) Set to true when HCP health
+#                              assessments own drift detection. The workflow
+#                              skips and the credential checks below do not run.
 #   - vars.TFC_DRIFT_WORKSPACES  (optional) JSON array of workspace names to check.
 #                              A manual run's `workspaces` input wins over it;
 #                              it wins over the inline default (resolve-workspaces).
@@ -97,6 +104,13 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
 
+      - name: Skip when HCP health assessments are the drift source
+        if: vars.TFC_HEALTH_ASSESSMENTS == 'true'
+        run: |
+          echo "::notice::TFC_HEALTH_ASSESSMENTS=true: HCP health assessments own drift" \
+            "detection for this estate. This workflow is the fallback for tiers" \
+            "without them, so it does not run."
+
       - name: Resolve the workspace list
         id: resolve
         env:
@@ -139,6 +153,7 @@ jobs:
     # branch; an environment secret only by runs its branch policy allows.
     environment: tfc-drift
     timeout-minutes: 5
+    if: vars.TFC_HEALTH_ASSESSMENTS != 'true'
     permissions:
       contents: read
     outputs:
@@ -190,7 +205,7 @@ jobs:
     environment: tfc-drift
     timeout-minutes: 30
     needs: [resolve-workspaces, check-credentials]
-    if: needs.check-credentials.outputs.configured == 'true'
+    if: vars.TFC_HEALTH_ASSESSMENTS != 'true' && needs.check-credentials.outputs.configured == 'true'
     permissions:
       contents: read
       issues: write  # gh issue list/create in "Open drift issue"
@@ -501,6 +516,7 @@ jobs:
         # Individual per-workspace results appear as annotations on each matrix job.
         env:
           CONFIGURED: ${{ needs.check-credentials.outputs.configured }}
+          HEALTH_ASSESSMENTS: ${{ vars.TFC_HEALTH_ASSESSMENTS }}
           RESULT: ${{ needs.detect-drift.result }}
           OPT_OUT: ${{ vars.REAL_CLOUD_CHECKS_OPT_OUT }}
           WORKSPACES: ${{ needs.resolve-workspaces.outputs.workspaces }}
@@ -509,7 +525,11 @@ jobs:
           {
             echo "## Drift Detection Summary"
             echo ""
-            if [ "$CONFIGURED" != "true" ]; then
+            if [ "$HEALTH_ASSESSMENTS" = "true" ]; then
+              echo "HCP Terraform health assessments are the drift source of record"
+              echo "(\`TFC_HEALTH_ASSESSMENTS=true\`). This workflow did not run. Read drift in"
+              echo "HCP Terraform, on each workspace's Health tab."
+            elif [ "$CONFIGURED" != "true" ]; then
               echo "⚠️ **Drift detection did NOT run — Terraform Cloud credentials are not configured.**"
               echo ""
               echo "Drift is unmonitored. Set the \`TFC_TOKEN_DRIFT\` repository secret and"

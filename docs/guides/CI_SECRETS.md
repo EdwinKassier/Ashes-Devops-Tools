@@ -142,6 +142,7 @@ the ones it manages at its next apply).
 
 | Name | Kind | Used by | Purpose | Default when unset |
 |------|------|---------|---------|---------------------|
+| `TFC_HEALTH_ASSESSMENTS` | Variable | `drift-detection.yml` | Set to `true` when HCP Terraform health assessments are on (tfc-admin `enable_health_assessments`, default true; needs a tier that has them). They are the drift source of record, so the workflow skips with a notice and needs neither `TFC_TOKEN_DRIFT` nor `REAL_CLOUD_CHECKS_OPT_OUT`. It is your statement that they are on; the workflow does not check. | Unset: the workflow runs as the fallback, and both paths can report drift. |
 | `TFC_DRIFT_WORKSPACES` | Variable | `drift-detection.yml` | JSON array of TFC workspace names to check for drift. Use the tfc-admin output `drift_workspaces` or a subset of it: a workspace outside it fails its leg, because the drift token has no access there. | `["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]` |
 | `DOCS_BOT_PAT` | Secret | `documentation.yml` | Fine-grained PAT (see [below](#docs_bot_pat)) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
 | `DOCS_REVIEWER` | Variable | `documentation.yml` | GitHub username to request as reviewer on auto-generated docs PRs. | No reviewer requested. |
@@ -213,6 +214,11 @@ Prefer a GitHub App installation token over a `DOCS_BOT_PAT` PAT where
 your organization allows it. The release workflow already does this.
 
 ## Drift detection behavior without secrets
+
+HCP Terraform health assessments are the drift source of record. When they are on, set the
+repository variable `TFC_HEALTH_ASSESSMENTS=true`: `drift-detection.yml` then skips with a
+notice, and the rest of this section does not apply. The workflow is the fallback for tiers
+without health assessments.
 
 `drift-detection.yml` runs a `check-credentials` job before the matrix job. It evaluates
 `secrets.TFC_TOKEN_DRIFT` and `vars.TFC_ORGANIZATION` (secrets cannot be referenced directly in a
