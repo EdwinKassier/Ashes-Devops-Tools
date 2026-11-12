@@ -763,6 +763,11 @@ locals {
     sentinel_mocks = "none"
     locking        = false
   }
+  # The platform team on the same projects: the same access. Its usual
+  # read-outputs is not enough of a limit there, because the API can still
+  # return a sensitive output value. Bridging workloads read the saas outputs
+  # with their own saas-outputs-reader team token, not the platform team's.
+  platform_secret_state_access = local.viewer_secret_state_access
   # State export team (state-backup.yml): reads state versions, nothing else.
   state_backup_custom_access = {
     runs           = "read"
@@ -908,7 +913,9 @@ locals {
         team_id = var.platform_team_id
         access  = contains(local.platform_custom_projects, p) ? "custom" : "write"
         custom = contains(local.platform_custom_projects, p) ? (
-          contains(local.secret_bearing_projects, p) ? merge(local.platform_custom_access, { runs = "read" }) : local.platform_custom_access
+          contains(local.saas_projects, p) ? local.platform_secret_state_access : (
+            contains(local.secret_bearing_projects, p) ? merge(local.platform_custom_access, { runs = "read" }) : local.platform_custom_access
+          )
         ) : null
       }
     },

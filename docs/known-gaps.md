@@ -998,10 +998,18 @@ side (all mock-tested, secure defaults):
   confirms saas applies (`saas_approvers_team_id`, else
   `control_plane_approvers_team_id`), the listed `extra_remote_state_consumers`
   and, only with `enable_saas_state_backup = true`, the state-backup team.
-  Viewers get `state_versions = none` there. The platform team and the
-  `saas-outputs-reader` teams read outputs only (the readers ephemerally, for
-  the bridging workloads). Rotation: see
+  Viewers and the platform team get `state_versions = none` there. The
+  `saas-outputs-reader` teams read outputs only, ephemerally, for the bridging
+  workloads. Rotation: see
   [saas-bootstrap](runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them).
+- **Viewers keep fixed `read` on the platform (tfc-admin) project.** tfc-admin
+  state holds no secret by design: sensitive variables are written write-only
+  (`value_wo`), and its `data "tfe_outputs"` reads of `gcp-bootstrap` and
+  `aws-organization` (stored in its state in full) return only identifiers:
+  project IDs and numbers, service-account emails, WIF pool and provider names,
+  role names, account and OU IDs, and role and topic ARNs. Neither root marks
+  an output sensitive. A future secret output in either root, or a secret
+  passed to tfc-admin without `sensitive = true`, would reach viewers.
 
 ## OPEN — WS3 trust-model residuals (2026-11-11 due-diligence audit)
 

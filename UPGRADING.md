@@ -129,6 +129,13 @@ service-role key, and HCP Terraform's fixed `read` includes the full state file.
   `enable_saas_state_backup = true`. Remove `saas-*` from the
   `STATE_BACKUP_WORKSPACES` repository variable, or the backup job fails on
   them. HCP Terraform keeps every saas state version.
+- The platform team (`platform_team_id`) loses `state_versions = read-outputs`
+  on the saas project (now `none`; runs and variables stay read). Its members
+  can no longer see saas outputs in the UI or through the API. Read-outputs
+  still let the API return a sensitive output value. Bridging workloads are not
+  affected: they read the saas outputs with their saas-outputs-reader team
+  token. A person who needs a saas output asks an organization owner or the
+  team that confirms saas applies.
 - Optional: set `saas_approvers_team_id` to a small, dedicated team. It then
   confirms `saas-*` applies instead of `control_plane_approvers_team_id`. A
   team that may confirm an apply may also queue a plan, and a plan can read

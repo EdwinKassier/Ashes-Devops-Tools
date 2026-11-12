@@ -2371,3 +2371,34 @@ run "saas_without_dedicated_approvers_warns" {
 
   expect_failures = [check.saas_approvers_dedicated]
 }
+
+# SEC-7: the platform team keeps runs and variables read on saas, but no state
+# and no outputs: read-outputs can still return a sensitive output (the
+# Supabase database password, the service-role key) through the API. Bridging
+# workloads read those outputs with their saas-outputs-reader team token.
+run "platform_cannot_read_saas_outputs" {
+  command = plan
+
+  variables {
+    platform_team_id                = "team-platform1"
+    control_plane_approvers_team_id = "team-approvers1"
+    saas_approvers_team_id          = "team-saasapprove1"
+  }
+
+  assert {
+    condition = (
+      tfe_team_project_access.this["saas/platform"].access == "custom" &&
+      tfe_team_project_access.this["saas/platform"].workspace_access[0].state_versions == "none" &&
+      tfe_team_project_access.this["saas/platform"].workspace_access[0].runs == "read" &&
+      tfe_team_project_access.this["saas/platform"].workspace_access[0].variables == "read"
+    )
+    error_message = "the platform team must not read saas state or outputs (state_versions = none); runs and variables stay read."
+  }
+
+  assert {
+    condition = alltrue([
+      for p in ["gcp", "aws"] : tfe_team_project_access.this["${p}/platform"].workspace_access[0].state_versions == "read-outputs"
+    ])
+    error_message = "the platform team keeps read-outputs on projects without secrets in state."
+  }
+}

@@ -434,7 +434,8 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 - **saas state is not readable by viewers or the backup team, and saas applies can have their own
   approvers (SEC-7, breaking).** HCP Terraform's fixed `read` includes the full state file, and
   `saas-*` state holds the Supabase database password and service-role key. On the saas project,
-  viewers now get custom access with `state_versions = none`, and the state-backup team gets no
+  viewers and the platform team now get custom access with `state_versions = none` (the platform
+  team loses read-outputs, which can still return a sensitive output), and the state-backup team gets no
   grant unless `enable_saas_state_backup = true`. The new `saas_approvers_team_id` confirms saas
   applies instead of the control-plane approvers; a `check` warns while it is unset. See
   `UPGRADING.md`.
