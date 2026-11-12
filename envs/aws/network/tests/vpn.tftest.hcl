@@ -14,6 +14,7 @@ mock_provider "aws" {
 
 variables {
   landing_zone_config_path = ""
+  alarm_subscriber_emails  = ["netops@acme.io"]
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "ashes-org-log-archive"
   default_tags             = { CostCenter = "networking" }

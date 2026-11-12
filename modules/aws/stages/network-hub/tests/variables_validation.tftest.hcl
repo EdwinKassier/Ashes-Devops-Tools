@@ -11,6 +11,7 @@ variables {
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 run "valid_var_set_accepted" {
@@ -92,4 +93,14 @@ run "rejects_unknown_vpc_endpoint_policy_mode" {
   }
 
   expect_failures = [var.vpc_endpoint_policy_mode]
+}
+
+run "alarm_subscriber_emails_must_be_addresses" {
+  command = plan
+
+  variables {
+    alarm_subscriber_emails = ["not-an-address"]
+  }
+
+  expect_failures = [var.alarm_subscriber_emails]
 }

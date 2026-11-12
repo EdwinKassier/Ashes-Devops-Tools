@@ -16,6 +16,7 @@ mock_provider "aws" {
 variables {
   # Isolate the suite from any committed config/landing-zone.yaml.
   landing_zone_config_path = ""
+  alarm_subscriber_emails  = ["netops@acme.io"]
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "acme-org-log-archive"
   organization_contract = {

@@ -398,3 +398,15 @@ variable "spoke_attachments" {
   }))
   default = null
 }
+
+variable "alarm_sns_topic_arn" {
+  description = "Existing SNS topic that receives the hub network alarms (transit gateway blackhole drops, NAT port exhaustion, VPN tunnel state). Null = the hub creates a topic in the network account and subscribes alarm_subscriber_emails. It must allow cloudwatch.amazonaws.com to publish; the security-notifications topic is in another account and does not."
+  type        = string
+  default     = null
+}
+
+variable "alarm_subscriber_emails" {
+  description = "Email addresses subscribed to the hub network alarm topic (each must confirm). Null = notifications.emails from config/landing-zone.yaml. A production estate (profile production, or an aws.workload_environments entry with is_production: true) fails its plan with no real address here and no alarm_sns_topic_arn; example, .invalid, .localhost and .test domains are rejected."
+  type        = list(string)
+  default     = null
+}

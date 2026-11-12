@@ -9,6 +9,7 @@ variables {
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 override_module {

@@ -15,6 +15,12 @@ mock_provider "aws" {
   }
 }
 
+variables {
+  # The production scaffold has no notifications.emails: the alarm contact is
+  # an operator-supplied value, as in the aws-security suite.
+  alarm_subscriber_emails = ["netops@acme-corp.io"]
+}
+
 override_data {
   target = data.terraform_remote_state.aws_organization
   values = {

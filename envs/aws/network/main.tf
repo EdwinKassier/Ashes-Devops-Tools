@@ -103,6 +103,34 @@ module "aws_network_hub" {
   network_firewall_stateful_default_actions = local.network_firewall_stateful_default_actions
 
   vpc_endpoint_policy_mode = local.vpc_endpoint_policy_mode
+
+  alarm_sns_topic_arn     = var.alarm_sns_topic_arn
+  alarm_subscriber_emails = local.alarm_subscriber_emails
+}
+
+# A hub alarm that notifies nobody is worse than none (CMP-6): production needs
+# a real subscriber or a topic the caller owns. Production = profile production,
+# or any aws.workload_environments entry with is_production: true.
+locals {
+  alarm_placeholder_emails = sort([
+    for e in local.alarm_subscriber_emails : e
+    if can(regex("(^|\\.)(example\\.(com|net|org)|example|invalid|localhost|test)$", lower(try(regex("@([^@]+)$", e)[0], ""))))
+  ])
+  alarm_contact_required = local.profile == "production" || length(local.cfg.workload_production) > 0
+}
+
+resource "terraform_data" "alarm_contact_guard" {
+  input = local.alarm_subscriber_emails
+
+  lifecycle {
+    precondition {
+      condition = (
+        !local.alarm_contact_required || var.alarm_sns_topic_arn != null ||
+        (length(local.alarm_subscriber_emails) > 0 && length(local.alarm_placeholder_emails) == 0)
+      )
+      error_message = "Production hub network alarms have no real subscriber${length(local.alarm_placeholder_emails) > 0 ? " (placeholder domain: ${join(", ", local.alarm_placeholder_emails)})" : ""}. Set notifications.emails in config/landing-zone.yaml, alarm_subscriber_emails, or alarm_sns_topic_arn. Example, .invalid, .localhost and .test domains are rejected. Production means org.profile = production or an aws.workload_environments entry with is_production: true."
+    }
+  }
 }
 
 # The aws:ResourceOrgID endpoint policy is not yet sandbox-proven, so a

@@ -87,3 +87,26 @@ output "segment_isolation_routes" {
   description = "Blackhole routes that isolate prod and non-prod spokes, keyed <table>|<spoke>: the route table (prod or nonprod) and the other segment's spoke CIDR it drops."
   value       = local.segment_isolation_routes
 }
+
+output "alarm_topic_arn" {
+  description = "ARN of the SNS topic the hub network alarms publish to (the caller's alarm_sns_topic_arn, else the topic the stage created)."
+  value       = module.network_alarms.sns_topic_arn
+}
+
+output "network_alarm_arns" {
+  description = "Map of alarm key to CloudWatch alarm ARN: tgw-blackhole-drops, nat-port-allocation-errors-<az index>, and vpn-tunnel-not-up with enable_vpn."
+  value       = module.network_alarms.alarm_arns
+}
+
+output "network_alarms" {
+  description = "The CloudWatch alarm definitions the hub creates, keyed like network_alarm_arns: namespace, metric name, statistic, threshold and dimensions."
+  value = {
+    for k, a in merge(local.nat_alarms, local.tgw_alarms, local.vpn_alarms) : k => {
+      namespace   = a.namespace
+      metric_name = a.metric_name
+      statistic   = a.statistic
+      threshold   = a.threshold
+      dimensions  = a.dimensions
+    }
+  }
+}

@@ -649,8 +649,25 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   Production services autoscale by default (ARC-16). Services with a deploy role
   ignore `desired_count`.
 - **The Secure Web Proxy has no TLS inspection.** Rules match on host name only.
-- **AWS data-plane alarms are not implemented:** TGW `PacketDropCountBlackhole` /
-  `NoRoute`, Network Firewall `DroppedPackets`, Site-to-Site VPN `TunnelState`.
+- **AWS hub network alarms cover three signals, not the firewall.** The
+  aws-network hub alarms on transit gateway `PacketDropCountBlackhole`, NAT
+  gateway `ErrorPortAllocation` (one alarm per gateway) and, with the VPN,
+  Site-to-Site VPN `TunnelState` (below 1 means at least one tunnel is not up).
+  Prod and nonprod isolation uses blackhole routes on purpose, so the transit
+  gateway alarm fires only after three 5-minute periods of drops. There is no
+  Network Firewall alarm: `DroppedPackets` counts packets dropped by rule
+  actions, so in alert-only mode it stays at zero, and in block mode it counts
+  the drops the policy exists to make. Neither says the firewall is unhealthy.
+  The signals that do (`OtherDroppedPackets`, which includes packets throttled
+  under burst load, and `InvalidDroppedPackets`) have a dimension set that the
+  documentation does not give per metric, and an alarm on the wrong set stays in
+  INSUFFICIENT_DATA. Add them after reading the set from a deployed firewall
+  (`aws cloudwatch list-metrics --namespace AWS/NetworkFirewall`). The alarms
+  publish to a topic in the network account, not to `security-notifications`
+  (another account); a production plan needs `notifications.emails` or
+  `alarm_sns_topic_arn`. TGW `PacketDropCountNoRoute` is not alarmed: spokes
+  without a matching route also drop there, and the sandbox has not shown a
+  threshold that stays quiet in normal use.
 - **The tfc-plan API-key deny cannot use `plan_role_data_read_exempt_arns`.** A
   stack that plans REST API keys must turn the deny off.
 - **The deny-tamper SCP does not cover an external apply boundary** set through

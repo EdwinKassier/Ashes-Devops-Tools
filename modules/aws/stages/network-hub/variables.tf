@@ -360,3 +360,21 @@ variable "spoke_attachments" {
     error_message = "spoke_attachments must not list the same attachment_id twice (an attachment associates with exactly one route table)."
   }
 }
+
+variable "alarm_sns_topic_arn" {
+  description = "Existing SNS topic that receives the hub network alarms (transit gateway blackhole drops, NAT port exhaustion, VPN tunnel state). Null = the stage creates its own topic in the network account and subscribes alarm_subscriber_emails to it. The topic must allow cloudwatch.amazonaws.com to publish."
+  type        = string
+  default     = null
+}
+
+variable "alarm_subscriber_emails" {
+  description = "Email addresses subscribed to the topic the stage creates (ignored when alarm_sns_topic_arn is set). Each address must confirm its subscription. Empty = the alarms notify nobody."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for e in var.alarm_subscriber_emails : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "alarm_subscriber_emails entries must be email addresses."
+  }
+}

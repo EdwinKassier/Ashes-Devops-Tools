@@ -10,13 +10,19 @@
 # route_table_ids. That makes the for_each keys known and lets us assert the
 # OUTPUT WIRING (input <- output edges) concretely under `command = apply`.
 
-mock_provider "aws" {}
+# The alarm actions validate the topic ARN, which a mock would generate as random text.
+mock_provider "aws" {
+  mock_resource "aws_sns_topic" {
+    defaults = { arn = "arn:aws:sns:eu-west-2:111111111111:network-hub-alarms" }
+  }
+}
 
 variables {
   org_id                   = "o-abc1234567"
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 # Feed known vpc ids + subnet tiers so downstream for_each keys are plan-known.
@@ -435,5 +441,68 @@ run "interface_endpoints_admit_the_org_supernet" {
   assert {
     condition     = length(local.endpoint_allowed_cidrs) == 1 && local.endpoint_allowed_cidrs[0] == "10.64.0.0/10"
     error_message = "The central interface endpoints must admit HTTPS from top_cidr, so the spokes can reach them (the VPC default security group denies everything)."
+  }
+}
+
+run "hub_network_alarms_exist" {
+  command = apply
+
+  # tgw_id is known (override_module), the NAT ids are mock values: assert the
+  # metric identity, which is what makes an alarm real or silently empty.
+  assert {
+    condition = (
+      output.network_alarms["tgw-blackhole-drops"].namespace == "AWS/TransitGateway" &&
+      output.network_alarms["tgw-blackhole-drops"].metric_name == "PacketDropCountBlackhole" &&
+      output.network_alarms["tgw-blackhole-drops"].dimensions == { TransitGateway = "tgw-000000000000abcd" }
+    )
+    error_message = "the hub must alarm on blackhole drops of its own transit gateway"
+  }
+
+  assert {
+    condition     = toset(keys(output.network_alarms)) == toset(["nat-port-allocation-errors-0", "nat-port-allocation-errors-1", "tgw-blackhole-drops"])
+    error_message = "one NAT alarm per AZ, the blackhole alarm, and no VPN alarm without enable_vpn"
+  }
+
+  assert {
+    condition = alltrue([
+      for k in ["nat-port-allocation-errors-0", "nat-port-allocation-errors-1"] :
+      output.network_alarms[k].namespace == "AWS/NATGateway" &&
+      output.network_alarms[k].metric_name == "ErrorPortAllocation" &&
+      output.network_alarms[k].statistic == "Sum" &&
+      toset(keys(output.network_alarms[k].dimensions)) == toset(["NatGatewayId"])
+    ])
+    error_message = "the hub must alarm on port allocation errors of every NAT gateway"
+  }
+
+  assert {
+    condition     = length(module.network_alarms.alarm_arns) == 3 && output.alarm_topic_arn != null
+    error_message = "every alarm definition must become an alarm, publishing to a topic"
+  }
+}
+
+run "alarm_topic_is_created_and_subscribed" {
+  command = apply
+
+  variables {
+    alarm_subscriber_emails = ["netops@corp.test"]
+  }
+
+  assert {
+    condition     = length(aws_sns_topic_subscription.alarm_email) == 1 && aws_sns_topic_subscription.alarm_email["netops@corp.test"].protocol == "email"
+    error_message = "the topic the stage creates must carry the email subscribers"
+  }
+}
+
+run "supplied_alarm_topic_is_reused" {
+  command = apply
+
+  variables {
+    alarm_sns_topic_arn     = "arn:aws:sns:eu-west-2:111111111111:ops-alerts"
+    alarm_subscriber_emails = ["netops@corp.test"]
+  }
+
+  assert {
+    condition     = output.alarm_topic_arn == "arn:aws:sns:eu-west-2:111111111111:ops-alerts" && length(aws_sns_topic_subscription.alarm_email) == 0
+    error_message = "a supplied topic is used as is: the stage creates no topic and no subscription"
   }
 }

@@ -27,6 +27,8 @@ locals {
     tfc_organization        = try(tostring(local.lz.org.tfc.organization), null)
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
+    # notifications.emails: the hub network alarm subscribers (CMP-6 pattern).
+    notification_emails = try([for e in local.lz.notifications.emails : tostring(e)], null)
     # aws.network.*: Network Firewall egress posture.
     egress_domain_allowlist  = try([for d in local.lz.aws.network.egress_domain_allowlist : tostring(d)], null)
     stateful_default_actions = try([for a in local.lz.aws.network.stateful_default_actions : tostring(a)], null)
@@ -124,6 +126,8 @@ locals {
   # from compliance_class until a sandbox proves it: main.tf warns when a
   # regulated estate keeps the principal-only policy.
   vpc_endpoint_policy_mode = coalesce(var.vpc_endpoint_policy_mode, local.cfg.vpc_endpoint_policy_mode, "org_principals")
+  # Hub network alarm subscribers: explicit variable > notifications.emails.
+  alarm_subscriber_emails = var.alarm_subscriber_emails != null ? var.alarm_subscriber_emails : coalesce(local.cfg.notification_emails, [])
   # Opt-in hybrid connectivity (default off: no VPN).
   # Addressing: explicit variable > aws.network.* in config > the CIDR plan's
   # AWS block (10.64.0.0/10), clear of the GCP block 10.0.0.0/12.

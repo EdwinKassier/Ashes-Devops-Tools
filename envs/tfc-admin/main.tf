@@ -43,6 +43,7 @@ locals {
       "modules/aws/network/vpc",
       "modules/aws/network/vpc-endpoints",
       "modules/aws/network/vpn",
+      "modules/aws/ops/cloudwatch",
       "modules/aws/stages/network-hub",
     ]
     "envs/aws/organization" = [

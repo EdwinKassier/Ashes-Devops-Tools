@@ -13,6 +13,7 @@ mock_provider "aws" {
 
 variables {
   landing_zone_config_path = ""
+  alarm_subscriber_emails  = ["netops@acme.io"]
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "acme-org-log-archive"
   assume_role_arn          = "arn:aws:iam::666666666666:role/OrganizationAccountAccessRole"

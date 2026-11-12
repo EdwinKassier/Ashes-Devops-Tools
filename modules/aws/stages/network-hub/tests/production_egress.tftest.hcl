@@ -10,13 +10,19 @@
 # route_table_ids. That makes the for_each keys known and lets us assert the
 # OUTPUT WIRING (input <- output edges) concretely under `command = apply`.
 
-mock_provider "aws" {}
+# The alarm actions validate the topic ARN, which a mock would generate as random text.
+mock_provider "aws" {
+  mock_resource "aws_sns_topic" {
+    defaults = { arn = "arn:aws:sns:eu-west-2:111111111111:network-hub-alarms" }
+  }
+}
 
 variables {
   org_id                   = "o-abc1234567"
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 # Feed known vpc ids + subnet tiers so downstream for_each keys are plan-known.

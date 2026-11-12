@@ -21,6 +21,7 @@ mock_provider "aws" {
 variables {
   # Isolate the suite from any committed config/landing-zone.yaml.
   landing_zone_config_path = ""
+  alarm_subscriber_emails  = ["netops@acme.io"]
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "ashes-org-log-archive"
   default_tags             = { CostCenter = "networking" }
@@ -301,4 +302,67 @@ run "unknown_compliance_class_fails" {
   }
 
   expect_failures = [var.enforce_egress_allowlist]
+}
+
+# Hub network alarms (ARC-15): production needs a real subscriber or a topic.
+run "production_alarms_without_subscriber_fail" {
+  command = plan
+
+  variables {
+    alarm_subscriber_emails = []
+  }
+
+  expect_failures = [terraform_data.alarm_contact_guard]
+}
+
+run "production_alarms_reject_a_placeholder_address" {
+  command = plan
+
+  variables {
+    alarm_subscriber_emails = ["secops@example.com"]
+  }
+
+  expect_failures = [terraform_data.alarm_contact_guard]
+}
+
+run "production_alarms_accept_a_supplied_topic" {
+  command = plan
+
+  variables {
+    alarm_subscriber_emails = []
+    alarm_sns_topic_arn     = "arn:aws:sns:eu-west-2:666666666666:ops-alerts"
+  }
+
+  assert {
+    condition     = local.alarm_contact_required
+    error_message = "the default (production) profile must require an alarm contact, so this run proves the topic satisfies the guard"
+  }
+}
+
+run "starter_alarms_may_have_no_subscriber" {
+  command = plan
+
+  variables {
+    profile                 = "starter"
+    alarm_subscriber_emails = []
+  }
+
+  assert {
+    condition     = !local.alarm_contact_required
+    error_message = "a starter estate without production workloads only warns"
+  }
+}
+
+run "alarm_subscribers_follow_notifications_emails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    alarm_subscriber_emails  = null
+  }
+
+  assert {
+    condition     = local.alarm_subscriber_emails == tolist(["secops@acme.io"])
+    error_message = "notifications.emails must feed the hub alarm subscribers when the variable is unset"
+  }
 }

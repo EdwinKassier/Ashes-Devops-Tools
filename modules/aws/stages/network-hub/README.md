@@ -94,6 +94,7 @@ module "example" {
 - inspection_vpc - ../../network/vpc
 - ipam - ../../network/ipam
 - network_access_analyzer - ../../network/network-access-analyzer
+- network_alarms - ../../ops/cloudwatch
 - network_firewall - ../../network/network-firewall
 - route53_resolver - ../../network/route53-resolver
 - transit_gateway - ../../network/transit-gateway
@@ -119,6 +120,7 @@ The following resources are created:
 - resource.aws_route.egress_tgw_default (modules/aws/stages/network-hub/main.tf#L311)
 - resource.aws_route.hub_to_tgw (modules/aws/stages/network-hub/main.tf#L333)
 - resource.aws_route.inspection_tgw_to_firewall (modules/aws/stages/network-hub/main.tf#L325)
+- resource.aws_sns_topic_subscription.alarm_email (modules/aws/stages/network-hub/alarms.tf#L80)
 - resource.aws_vpc_ipam_pool_cidr_allocation.hub_static (modules/aws/stages/network-hub/main.tf#L156)
 - resource.terraform_data.hybrid_needs_inspection (modules/aws/stages/network-hub/main.tf#L521)
 - resource.terraform_data.production_egress_enforced (modules/aws/stages/network-hub/main.tf#L504)
@@ -132,6 +134,8 @@ The following resources are created:
 | <a name="input_log_bucket_name"></a> [log\_bucket\_name](#input\_log\_bucket\_name) | Name of the S3 bucket that receives Network Firewall flow logs. | `string` | n/a | yes |
 | <a name="input_org_arn"></a> [org\_arn](#input\_org\_arn) | ARN of the AWS Organization (arn:aws:organizations::<mgmt-account>:organization/o-xxxx) used as the RAM principal so the IPAM pools, transit gateway, and Route 53 Profile are shared org-wide. | `string` | n/a | yes |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations org id (o-xxxxxxxxxx) used to scope centralized VPC-endpoint access to this organization. | `string` | n/a | yes |
+| <a name="input_alarm_sns_topic_arn"></a> [alarm\_sns\_topic\_arn](#input\_alarm\_sns\_topic\_arn) | Existing SNS topic that receives the hub network alarms (transit gateway blackhole drops, NAT port exhaustion, VPN tunnel state). Null = the stage creates its own topic in the network account and subscribes alarm\_subscriber\_emails to it. The topic must allow cloudwatch.amazonaws.com to publish. | `string` | `null` | no |
+| <a name="input_alarm_subscriber_emails"></a> [alarm\_subscriber\_emails](#input\_alarm\_subscriber\_emails) | Email addresses subscribed to the topic the stage creates (ignored when alarm\_sns\_topic\_arn is set). Each address must confirm its subscription. Empty = the alarms notify nobody. | `list(string)` | `[]` | no |
 | <a name="input_availability_zones"></a> [availability\_zones](#input\_availability\_zones) | Availability zones to spread each subnet tier across. Only the first az\_count entries are used. | `list(string)` | <pre>[<br/>  "eu-west-2a",<br/>  "eu-west-2b"<br/>]</pre> | no |
 | <a name="input_aws_enabled_regions"></a> [aws\_enabled\_regions](#input\_aws\_enabled\_regions) | Regions IPAM operates in. Each becomes an operating region on the IPAM and gets its own regional pool. | `list(string)` | <pre>[<br/>  "eu-west-2"<br/>]</pre> | no |
 | <a name="input_aws_region"></a> [aws\_region](#input\_aws\_region) | AWS region the network hub is deployed in. Used for the inspection/egress VPCs, gateway/interface endpoint service names, and NAT placement. | `string` | `"eu-west-2"` | no |
@@ -164,6 +168,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_alarm_topic_arn"></a> [alarm\_topic\_arn](#output\_alarm\_topic\_arn) | ARN of the SNS topic the hub network alarms publish to (the caller's alarm\_sns\_topic\_arn, else the topic the stage created). |
 | <a name="output_availability_zones"></a> [availability\_zones](#output\_availability\_zones) | Availability zone names the inspection and egress VPC subnets are placed in (the first az\_count entries of availability\_zones). |
 | <a name="output_egress_route_table_ids_by_tier"></a> [egress\_route\_table\_ids\_by\_tier](#output\_egress\_route\_table\_ids\_by\_tier) | Map of egress VPC subnet tier to its per-AZ route table IDs (owned by the vpc module). |
 | <a name="output_egress_vpc_id"></a> [egress\_vpc\_id](#output\_egress\_vpc\_id) | The ID of the centralized egress VPC that hosts NAT, the interface endpoints and the optional resolver endpoints. |
@@ -172,6 +177,8 @@ The following resources are created:
 | <a name="output_inspection_vpc_id"></a> [inspection\_vpc\_id](#output\_inspection\_vpc\_id) | The ID of the inspection VPC that hosts the Network Firewall. |
 | <a name="output_interface_endpoint_phz_id"></a> [interface\_endpoint\_phz\_id](#output\_interface\_endpoint\_phz\_id) | Zone ID of the shared private hosted zone fronting the interface endpoints, or null when no zone was created. |
 | <a name="output_ipam_pool_ids"></a> [ipam\_pool\_ids](#output\_ipam\_pool\_ids) | Map of region to the ID of its regional IPAM pool, consumed by app roots to allocate VPC CIDRs. |
+| <a name="output_network_alarm_arns"></a> [network\_alarm\_arns](#output\_network\_alarm\_arns) | Map of alarm key to CloudWatch alarm ARN: tgw-blackhole-drops, nat-port-allocation-errors-<az index>, and vpn-tunnel-not-up with enable\_vpn. |
+| <a name="output_network_alarms"></a> [network\_alarms](#output\_network\_alarms) | The CloudWatch alarm definitions the hub creates, keyed like network\_alarm\_arns: namespace, metric name, statistic, threshold and dimensions. |
 | <a name="output_resolver_endpoints_enabled"></a> [resolver\_endpoints\_enabled](#output\_resolver\_endpoints\_enabled) | Whether the Route 53 Resolver inbound and outbound endpoints exist (enable\_resolver\_endpoints, else enable\_vpn). |
 | <a name="output_resolver_inbound_endpoint_ips"></a> [resolver\_inbound\_endpoint\_ips](#output\_resolver\_inbound\_endpoint\_ips) | IP addresses of the inbound Route 53 Resolver endpoint (point the on-premises conditional forwarders at them), or an empty list when the resolver endpoints are off. |
 | <a name="output_resolver_profile_id"></a> [resolver\_profile\_id](#output\_resolver\_profile\_id) | The ID of the Route 53 Profile shared org-wide over RAM. |

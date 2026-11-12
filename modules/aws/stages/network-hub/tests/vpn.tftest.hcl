@@ -2,13 +2,19 @@
 # terminates on the hub TGW and is associated with / propagated into the
 # configured segments. Same stubbing as plan_assertions.tftest.hcl.
 
-mock_provider "aws" {}
+# The alarm actions validate the topic ARN, which a mock would generate as random text.
+mock_provider "aws" {
+  mock_resource "aws_sns_topic" {
+    defaults = { arn = "arn:aws:sns:eu-west-2:111111111111:network-hub-alarms" }
+  }
+}
 
 variables {
   org_id                   = "o-abc1234567"
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 override_module {
@@ -379,5 +385,23 @@ run "overlap_is_not_checked_without_the_vpn" {
   assert {
     condition     = length(local.onprem_route_cidrs) == 0
     error_message = "Without the VPN onprem_cidrs is not routed, so it is not checked for overlap."
+  }
+}
+
+run "vpn_tunnel_state_alarm_follows_the_vpn" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
+  }
+
+  assert {
+    condition = (
+      output.network_alarms["vpn-tunnel-not-up"].namespace == "AWS/VPN" &&
+      output.network_alarms["vpn-tunnel-not-up"].metric_name == "TunnelState" &&
+      keys(output.network_alarms["vpn-tunnel-not-up"].dimensions) == ["VpnId"]
+    )
+    error_message = "enable_vpn must alarm on TunnelState of the hub VPN connection"
   }
 }

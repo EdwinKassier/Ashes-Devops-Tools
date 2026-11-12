@@ -455,6 +455,16 @@ unknown at plan time, is reported by the advisory
 
 ### AWS
 
+#### Production hub network alarms need a subscriber (aws-network)
+
+**Breaking: a production aws-network plan now fails without an alarm contact.** The hub creates CloudWatch alarms for transit gateway blackhole drops, NAT gateway port allocation errors and, with the VPN, VPN tunnel state. They publish to an SNS topic in the network account. A topic with no subscriber notifies nobody, so the root fails a production plan (`org.profile: production`, or any `aws.workload_environments` entry with `is_production: true`) unless there is a real contact. Before you plan `aws-network`, do one of these:
+
+1. Set `notifications.emails` in `config/landing-zone.yaml`. The `aws-security` root already needs it in production, so most forks have it.
+2. Set `alarm_subscriber_emails` on the root.
+3. Set `alarm_sns_topic_arn` to a topic you own that allows `cloudwatch.amazonaws.com` to publish.
+
+Example, `.invalid`, `.localhost` and `.test` addresses are rejected. Each address receives a confirmation email; the subscription does nothing until it is confirmed. A starter estate without production workloads is not blocked. The apply adds the topic, one alarm per NAT gateway, one for the transit gateway and, with `enable_vpn`, one for the VPN. The `aws-network-hub` stage has two new inputs (`alarm_sns_topic_arn`, `alarm_subscriber_emails`, both optional) and three new outputs (`alarm_topic_arn`, `network_alarm_arns`, `network_alarms`).
+
 #### Developer is refused in production accounts (CMP-14, aws-identity, breaking)
 
 **Breaking: the `aws-identity` plan now fails for configs that passed before.** A new plan guard (`terraform_data.production_assignment_guard`) refuses an assignment of any set in `production_restricted_permission_sets` (default `["Developer"]`, which is PowerUserAccess) in a production workload account. A production account is the `account_key` of an `aws.workload_environments` entry with `is_production: true`, or the list in `production_account_keys`. The check covers `aws.identity.groups`, `identity_groups` and `assignments` (by `account_key` or `account_id`). The error names each assignment key. Before you plan `aws-identity`:
