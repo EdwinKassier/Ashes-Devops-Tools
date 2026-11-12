@@ -61,6 +61,11 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
+  # No Terraform version/advisory check and no gcloud update check or usage
+  # report: the cloud jobs block every host they do not need.
+  CHECKPOINT_DISABLE: "1"
+  CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK: "true"
+  CLOUDSDK_CORE_DISABLE_USAGE_REPORTING: "true"
 
 jobs:
   preflight:
@@ -159,11 +164,14 @@ jobs:
     permissions:
       issues: write   # removeLabel is an issues API call
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds an issues: write token. github-script calls only the
+      # GitHub API, so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
 
       - name: Remove the e2e label
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
@@ -200,14 +208,23 @@ jobs:
       TF_VAR_run_id: ${{ github.run_id }}
       TF_VAR_run_attempt: ${{ github.run_attempt }}
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
-      # Not block: a real apply reaches the Terraform registry, provider
-      # downloads and many regional cloud API endpoints, which a fixed
-      # allow-list would break as the suites grow.
+      # This job holds a GCP OIDC token. Every endpoint it calls, from its steps:
+      # - github.com: checkout.
+      # - releases.hashicorp.com: setup-terraform and the hashicorp provider
+      #   packages; registry.terraform.io: provider metadata. tests/e2e uses
+      #   only hashicorp providers and local modules.
+      # - *.googleapis.com: WIF token exchange, the google provider and the
+      #   gcloud cleanup script.
+      # The OIDC token, artifact and cache hosts are allowed by harden-runner.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            releases.hashicorp.com:443
+            registry.terraform.io:443
+            *.googleapis.com:443
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -267,14 +284,23 @@ jobs:
       TF_VAR_run_id: ${{ github.run_id }}
       TF_VAR_run_attempt: ${{ github.run_attempt }}
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
-      # Not block: a real apply reaches the Terraform registry, provider
-      # downloads and many regional cloud API endpoints, which a fixed
-      # allow-list would break as the suites grow.
+      # This job holds an AWS OIDC token. Every endpoint it calls, from its steps:
+      # - github.com: checkout.
+      # - releases.hashicorp.com: setup-terraform and the hashicorp provider
+      #   packages; registry.terraform.io: provider metadata. tests/e2e uses
+      #   only hashicorp providers and local modules.
+      # - *.amazonaws.com: STS, the aws provider and the aws CLI cleanup
+      #   script. A China-region sandbox (amazonaws.com.cn) needs that domain.
+      # The OIDC token, artifact and cache hosts are allowed by harden-runner.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            releases.hashicorp.com:443
+            registry.terraform.io:443
+            *.amazonaws.com:443
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

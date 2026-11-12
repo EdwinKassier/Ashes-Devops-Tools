@@ -686,8 +686,19 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   An object type drops undeclared keys silently, so map inputs here use `any`
   plus key validation instead.
 - **CI hardening:** `check-jsonschema` is still installed without hashes
-  (`terraform-plan.yml`). harden-runner is still in audit mode for docs-bot,
-  e2e-sandbox and state-backup.
+  (`terraform-plan.yml`).
+- **The egress allow-lists are traced from the steps, not from a run (CICD-12).**
+  Every job that holds a secret or an OIDC token runs harden-runner with
+  `egress-policy: block` (`scripts/check-github-governance.sh` enforces it).
+  Each list comes from the job's steps and the source of its actions, and
+  harden-runner itself allows the GitHub Actions hosts (OIDC token, cache,
+  artifacts). Run documentation, state-backup, tfc-audit-trail, sandbox-e2e,
+  the Secret Scanning job and a deployment tag once each; a denied host shows as
+  a "DNS resolution ... was blocked" annotation, and then belongs in that job's
+  list. The cloud jobs allow `*.amazonaws.com` and `*.googleapis.com` because
+  the bucket and regional endpoints come from repository variables; a job can
+  still reach any bucket in those domains. A China-region target
+  (`amazonaws.com.cn`) needs that domain added.
 - **Release:** one SemVer for all 125 modules, no signed tags or build provenance.
 - **Bus factor:** one maintainer. Code cannot fix this; see the operator items below.
 - **Release tags are mutable.** Published examples pin `?ref=vX.Y.Z` tags

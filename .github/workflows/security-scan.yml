@@ -88,11 +88,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds GITLEAKS_LICENSE. Every endpoint it calls, from its steps:
+      # - github.com: checkout and the gitleaks release download.
+      # - release-assets.githubusercontent.com and objects.githubusercontent.com:
+      #   the release asset hosts the download redirects to.
+      # - api.github.com: gitleaks-action reads the latest release and, on a
+      #   pull request, its commits.
+      # The Actions cache and artifact hosts are allowed by harden-runner itself.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

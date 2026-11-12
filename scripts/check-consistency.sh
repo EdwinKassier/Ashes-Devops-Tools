@@ -402,6 +402,9 @@ while IFS= read -r ex; do
   done
 done < <(find modules -path '*/examples/*' -name versions.tf ! -path '*/.terraform/*' -exec dirname {} \; | sort)
 
+echo "==> Every workflow job that holds a secret or an OIDC token blocks egress"
+./scripts/check-github-governance.sh || note "a credential-holding job is not harden-runner egress-policy: block (see above)"
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

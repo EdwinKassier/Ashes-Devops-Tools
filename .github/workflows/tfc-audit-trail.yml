@@ -64,14 +64,30 @@ jobs:
     timeout-minutes: 30
     permissions:
       id-token: write  # GitHub OIDC to AWS / GCP; no repository access needed
+    env:
+      # gcloud makes no background update check or usage report, so it calls
+      # only the Google APIs below.
+      CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK: "true"
+      CLOUDSDK_CORE_DISABLE_USAGE_REPORTING: "true"
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block),
-      # as in state-backup.yml: the S3 and GCP endpoints depend on the
-      # configured buckets.
+      # This job holds TFC_TOKEN_AUDIT_TRAIL and an OIDC token. Every endpoint
+      # it calls, from its steps:
+      # - app.terraform.io: the audit trail API (curl).
+      # - *.amazonaws.com: STS for configure-aws-credentials, then the S3
+      #   bucket (aws s3api). A bucket in a China region (amazonaws.com.cn)
+      #   needs that domain added here.
+      # - *.googleapis.com: sts, iamcredentials and oauth2 for the WIF
+      #   credentials, storage for gcloud storage.
+      # The GitHub OIDC token endpoint (*.actions.githubusercontent.com) is
+      # allowed by harden-runner itself.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            app.terraform.io:443
+            *.amazonaws.com:443
+            *.googleapis.com:443
 
       - name: Check export configuration
         id: cfg

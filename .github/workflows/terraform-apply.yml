@@ -45,11 +45,14 @@ jobs:
       status: ${{ steps.run_status.outputs.status }}
       commit_match: ${{ steps.run_status.outputs.commit_match }}
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds TFC_TOKEN (or TFC_TOKEN_GUARDRAILS). Its only network
+      # call is curl to the HCP Terraform API, so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            app.terraform.io:443
 
       - name: Parse tag
         id: parse
@@ -219,11 +222,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds a contents: write token. Its only network call is the
+      # gh CLI to the GitHub API, so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
 
       - name: Create release summary
         # Tag-derived values reach the shell through env, never by expression
