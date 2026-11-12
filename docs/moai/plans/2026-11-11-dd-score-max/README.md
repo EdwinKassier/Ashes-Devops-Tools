@@ -410,7 +410,9 @@ variable "alarm_sns_topic_arn" {
 
 ### Task M7: Assert the real SCP size limit (ARC-18)
 
-**Evidence:** the AWS SCP limit is 5,120 characters. The test at `modules/aws/governance/organization-policy/tests/plan_assertions.tftest.hcl:163-166` asserts `< 10240`. A scratch measurement on 2026-11-11 with the suite's inputs gave `scp-deny-tamper` 4,376, `rcp-data-perimeter` 1,945, `scp-baseline` 1,641 and `scp-region-restriction` 1,464 characters. The deny-tamper SCP has 744 characters of headroom with short test ARNs. Real role and bucket names are longer.
+**Status: done in commit 6bbcffcc (2026-11-12).** The text below is the original plan. Its evidence was wrong: the SCP quota is 10,240 characters and the RCP quota is 5,120 (AWS docs, checked 2026-11-12). The defect was the RCP test asserting 10,240. The commit adds a per-type plan precondition in `modules/aws/governance/organization-policy`; the worst case is `scp-deny-tamper` at 6,485 and `rcp-data-perimeter` at 2,811 characters.
+
+**Original evidence (superseded):** ~~the AWS SCP limit is 5,120 characters.~~ A scratch measurement on 2026-11-11 with the suite's inputs gave `scp-deny-tamper` 4,376, `rcp-data-perimeter` 1,945, `scp-baseline` 1,641 and `scp-region-restriction` 1,464 characters.
 
 **Files:**
 - Modify: `modules/aws/governance/organization-policy/tests/plan_assertions.tftest.hcl:163-166`

@@ -532,6 +532,8 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 [The audit](audit/2026-11-11-expert-audit.md) has the findings. These parts are not closed:
 
+**Phase 1 complete (2026-11-12).** Phase 1 of [the remediation plan](moai/plans/2026-11-11-dd-score-max/README.md) is done in code. Phase 2 is next. The mock-tested items below still need the sandbox.
+
 - **Validate in the sandbox (mock-tested only):**
   - GCP rejects a peering to a network that does not exist yet. The hub-side
     `hub-to-<env>` peering design relies on it, and on the `google_compute_networks`
