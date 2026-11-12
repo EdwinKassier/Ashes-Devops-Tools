@@ -38,6 +38,9 @@ locals {
     admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
     principal_access_boundary = try(tobool(local.lz.gcp.principal_access_boundary), null)
     enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
+    logging_project_id        = try(tostring(local.lz.gcp.logging_project_id), null)
+    logging_project_number    = try(tostring(local.lz.gcp.logging_project_number), null)
+    audit_store_waived        = try(tobool(local.lz.gcp.audit_store_waived), null)
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
     audit_log_retention_days  = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
@@ -83,6 +86,7 @@ locals {
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
         labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
         is_production           = tobool(try(e.is_production, false))
+        compliance_class        = tostring(try(e.compliance_class, "standard"))
       }
     }
     # Environment keys whose is_production is missing or not a boolean. The
@@ -107,6 +111,8 @@ locals {
     billing_admin_groups             = local.cfg.billing_admin_groups
     allowed_regions                  = local.cfg.allowed_regions
     enable_audit_bucket_lock         = local.cfg.enable_audit_bucket_lock
+    logging_project_id               = local.cfg.logging_project_id
+    logging_project_number           = local.cfg.logging_project_number
     enable_admin_containment         = local.cfg.admin_containment
     enable_principal_access_boundary = local.cfg.principal_access_boundary
     # gcp.break_glass_group as an IAM v2 principal.
@@ -141,6 +147,18 @@ locals {
   production_environment_keys   = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
   enable_admin_containment      = coalesce(local.gcp.enable_admin_containment, length(local.production_environment_keys) > 0 || length(local.containment_exempt_principals) > 0)
   containment_exempt_principals = local.gcp.containment_exempt_principals == null ? [] : tolist(local.gcp.containment_exempt_principals)
+
+  # CMP-4: environments marked compliance_class: regulated need a hardened audit
+  # store: the bucket and its CMEK in a separate logging project
+  # (gcp.logging_project_id) and the bucket WORM-locked (gcp.enable_audit_bucket_lock).
+  regulated_environment_keys = sort([for k, e in coalesce(local.environments, {}) : k if try(e.compliance_class, "standard") == "regulated"])
+  # The logging project must not be the admin project, or nothing is separated.
+  audit_store_hardened = (
+    try(local.gcp.logging_project_id, null) != null
+    && try(local.gcp.logging_project_id, null) != try(local.bootstrap.admin_project_id, null)
+    && coalesce(try(local.gcp.enable_audit_bucket_lock, null), false)
+  )
+  audit_store_waived = coalesce(local.cfg.audit_store_waived, false)
   # Cost profile (variable > org.profile > production). The starter profile
   # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
   profile = coalesce(var.profile, local.cfg.profile, "production")

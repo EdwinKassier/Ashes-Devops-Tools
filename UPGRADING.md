@@ -1450,6 +1450,20 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Regulated environments require a hardened audit store (gcp-organization, CMP-4)
+
+Nothing changes for an estate without `compliance_class: regulated`. Setting `compliance_class: regulated` on a `gcp.environments` entry fails the `gcp-organization` plan until `gcp.logging_project_id`, `gcp.logging_project_number` and `gcp.enable_audit_bucket_lock: true` are set, or `gcp.audit_store_waived: true`. The logging project must not be the admin project. The lock is irreversible. The three keys are new in `config/landing-zone.yaml`; `gcp_overrides.logging_project_id`, `gcp_overrides.logging_project_number` and `gcp_overrides.enable_audit_bucket_lock` still win over them.
+
+Two new plan warnings (they never fail the plan): the production profile warns when an `is_production` environment exists and the audit store is not hardened (or waived), and the plan warns when the logging project sits in a folder.
+
+Moving an existing estate to a logging project is a new audit store, not a move:
+
+- The audit keyring and keys (`<prefix>-org-cmek` keys `audit-logs` and `audit-analytics`) leave the stage's key map. The KMS module sets `prevent_destroy` and GCP never deletes a key, so first remove them from the `gcp-organization` state (`terraform state rm` on `module.organization.module.cmek.google_kms_crypto_key.keys["audit-logs"]` and `["audit-analytics"]`, and their `key_iam` members). They stay in the admin project; destroy their key versions only after every object they encrypt has expired.
+- The audit bucket, access-log bucket, BigQuery audit dataset, Log Analytics bucket and control-plane alerts are recreated in the logging project, and the org sinks are pointed at them. Plan shows them as replaced. A bucket you locked earlier cannot be deleted before its retention ends (GCS refuses the delete), and `destroy_guard` stops the run. Remove the old buckets and dataset from the state (`terraform state rm`) so the plan creates the new ones and leaves the old ones in place, read-only, until their retention ends. Then delete them by hand.
+- Logs written before the switch stay in the old bucket. Keep it, and its CMEK keys enabled, for the full retention period. Auditors read both stores for that period.
+
+Steps: create the logging project as `docs/runbooks/production-hardening.md` section 3 describes (directly under the organization, owned by a security group, organization-apply and organization-plan roles granted), set the three keys, run the `state rm` commands above in a speculative-plan-reviewed change, then apply `gcp-organization`.
+
 #### Cloud Run probes and a warm instance in production (gcp-workload, breaking)
 
 Production Cloud Run services without `min_instances` now keep one instance warm. Cloud Run bills an idle instance, so this adds a monthly cost per service. Production means the environment's `is_production` is `true`. Set `min_instances: 0` on a service to keep scale-to-zero in production.

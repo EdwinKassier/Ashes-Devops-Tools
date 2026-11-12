@@ -85,10 +85,10 @@ resource "google_storage_bucket" "audit_logs" {
   # checkov:skip=CKV2_GCP_4:A GCS bucket lock (retention_policy { locked = true }) is
   # not used BY DEFAULT on this bucket (it is available opt-in via
   # var.enable_bucket_lock — see the dynamic block above). Rationale for the default:
-  #   1. Durability/immutability is achieved via the org-level Cloud Logging sink
-  #      (google_logging_project_sink.audit_logs_sink, below) writing into this bucket —
-  #      the authoritative, tamper-evident copy of audit events lives in Cloud Logging's
-  #      own storage, independent of this bucket's lifecycle.
+  #   1. The sink stores nothing; this bucket IS the stored copy. Without the lock, an
+  #      identity with storage.objects.delete or lifecycle rights on this bucket can
+  #      remove audit history. The opt-in lock (enable_bucket_lock) and admin containment
+  #      (IAM-12 deny policy on `containment/protected`) are the tamper controls.
   #   2. This bucket's `lifecycle_rule` (age = var.log_retention_days, action = Delete)
   #      enforces a deliberate, operator-controlled retention window. A locked retention
   #      policy would make that window immutable and irreversible even for legitimate

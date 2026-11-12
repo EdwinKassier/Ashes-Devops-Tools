@@ -153,3 +153,45 @@ check "supplied_bootstrap_contract_is_current" {
     error_message = "The supplied bootstrap contract has no organization_apply_grantable_roles / organization_admin_members. This root grants no organizationAdmin and cannot check its grants against organization-apply's role condition. Make sure gcp-bootstrap was applied with this release and copy both lists from its contract output."
   }
 }
+
+# CMP-4: a regulated estate keeps its audit store WORM-locked in a project the
+# automation identity does not own. Both settings are irreversible, so they are
+# never defaults: the plan fails until they are set or explicitly waived.
+resource "terraform_data" "regulated_audit_store_guard" {
+  input = local.regulated_environment_keys
+
+  lifecycle {
+    precondition {
+      condition     = length(local.regulated_environment_keys) == 0 || local.audit_store_hardened || local.audit_store_waived
+      error_message = "Regulated environments (${join(", ", local.regulated_environment_keys)}) need a hardened audit store: gcp.logging_project_id + gcp.logging_project_number (a project other than the admin project, directly under the organization; decide before the first apply because the audit keys cannot be moved) and gcp.enable_audit_bucket_lock: true (IRREVERSIBLE). Or set gcp.audit_store_waived: true and record why. See docs/runbooks/production-hardening.md."
+    }
+  }
+}
+
+# The production profile only warns: the lock is irreversible and the logging
+# project is created outside Terraform, so neither can be a default. It warns
+# once the estate has a production environment (is_production), because the
+# profile defaults to production even for an estate that has none yet.
+check "production_audit_store" {
+  assert {
+    condition     = local.profile != "production" || length(local.production_environment_keys) == 0 || local.audit_store_hardened || local.audit_store_waived
+    error_message = "Production profile with production environments (${join(", ", local.production_environment_keys)}): the audit bucket is not WORM-locked (gcp.enable_audit_bucket_lock) or shares the admin project (gcp.logging_project_id is unset). Auditors testing NIST 800-53 AU-9 or PCI DSS 10.3.3 will flag this. See docs/runbooks/production-hardening.md."
+  }
+}
+
+# The logging project must sit directly under the organization node. In a
+# folder, organization-apply's org-level folderIamAdmin could grant itself
+# roles on it through the folder. A warning only: a check never fails the plan,
+# also when the identity cannot read a project created outside Terraform.
+check "logging_project_under_organization" {
+  # A scoped data source cannot take count. Without a logging project it reads
+  # the admin project, and the assertion ignores the result.
+  data "google_project" "logging" {
+    project_id = coalesce(try(local.gcp.logging_project_id, null), local.bootstrap.admin_project_id)
+  }
+
+  assert {
+    condition     = try(local.gcp.logging_project_id, null) == null || try(data.google_project.logging.folder_id, "") == ""
+    error_message = "gcp.logging_project_id (${coalesce(try(local.gcp.logging_project_id, null), "unset")}) is in a folder. Move it directly under the organization: organization-apply holds folderIamAdmin at the organization node and could grant itself roles on any project in a folder."
+  }
+}

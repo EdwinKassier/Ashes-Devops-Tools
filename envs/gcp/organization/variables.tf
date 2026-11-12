@@ -80,7 +80,7 @@ variable "shared_iam_group_role_bindings" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml) marks production environments: it drives the production guardrail checks here and in gcp-bootstrap / gcp-workload. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
+  description = "Map of application environment definitions. is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml) marks production environments: it drives the production guardrail checks here and in gcp-bootstrap / gcp-workload. compliance_class (standard or regulated, default standard) marks regulated environments: any regulated environment makes this root require a hardened audit store (gcp.logging_project_id and gcp.enable_audit_bucket_lock, or gcp.audit_store_waived). Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
     display_name            = string
     region                  = string
@@ -89,6 +89,7 @@ variable "environments" {
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
     is_production           = optional(bool, false)
+    compliance_class        = optional(string, "standard")
   }))
   default = null
 
@@ -112,6 +113,11 @@ variable "environments" {
   }
 
   validation {
+    condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.compliance_class] : [for e in values(local.cfg.environments) : e.compliance_class]) : contains(["standard", "regulated"], c)])
+    error_message = "Each environment's compliance_class must be standard or regulated."
+  }
+
+  validation {
     condition     = var.environments != null || length(local.cfg.environments_missing_is_production) == 0
     error_message = "Every gcp.environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.environments_missing_is_production)}."
   }
@@ -124,7 +130,7 @@ variable "default_region" {
 }
 
 variable "gcp_overrides" {
-  description = "Explicit overrides of the gcp section (config/landing-zone.yaml gcp.*) fed to the organization stage. Every key is optional and the type is the stage's gcp object: a set (non-null) key wins over the config file, an unset or null key keeps the config value, else the stage default. Keys that are not in the config schema (enable_pam, logging_project_id, ...) are set only here. Precedence: gcp_overrides > config/landing-zone.yaml > built-in default. See UPGRADING.md for the old variable names."
+  description = "Explicit overrides of the gcp section (config/landing-zone.yaml gcp.*) fed to the organization stage. Every key is optional and the type is the stage's gcp object: a set (non-null) key wins over the config file, an unset or null key keeps the config value, else the stage default. Keys that are not in the config schema (enable_pam, audit_soft_delete_retention_days, ...) are set only here. Precedence: gcp_overrides > config/landing-zone.yaml > built-in default. See UPGRADING.md for the old variable names."
   type = object({
     admin_email                           = optional(string)
     break_glass_user                      = optional(string)

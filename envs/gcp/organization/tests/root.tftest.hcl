@@ -299,6 +299,8 @@ run "production_environment_with_containment" {
     condition     = module.organization.production_environment_keys == tolist(["prod"])
     error_message = "is_production must flow into the organization stage."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # The bootstrap read is skippable (bootstrap_contract), mirroring gcp-projects:
@@ -390,6 +392,8 @@ run "containment_derived_on_for_production_from_config" {
     condition     = output.admin_containment_enabled == true && jsonencode(local.containment_exempt_principals) == jsonencode(["principalSet://goog/group/gcp-break-glass@acme.io"]) && jsonencode(local.gcp.alert_notification_emails) == jsonencode(["secops@acme.io"]) && length(module.organization.admin_containment_rules) > 0
     error_message = "a production estate must turn containment on with the config break-glass group and alert emails."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # A break-glass group alone derives containment ON, before any production
@@ -432,6 +436,8 @@ run "config_false_waives_containment" {
     condition     = output.admin_containment_enabled == false && length(module.organization.admin_containment_rules) == 0
     error_message = "gcp.admin_containment: false must waive containment for a production estate and plan."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # Production without a break-glass principal fails the plan instead of
@@ -452,7 +458,7 @@ run "production_without_break_glass_fails" {
     }
   }
 
-  expect_failures = [output.contract]
+  expect_failures = [output.contract, check.production_audit_store]
 }
 
 run "production_containment_explicit_opt_out" {
@@ -478,6 +484,8 @@ run "production_containment_explicit_opt_out" {
     condition     = output.admin_containment_enabled == false
     error_message = "an explicit gcp_overrides.enable_admin_containment = false must win over the production default."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # gcp.principal_access_boundary is shared with gcp-bootstrap and gcp-guardrails:
@@ -500,6 +508,8 @@ run "principal_access_boundary_from_config" {
     condition     = local.gcp.enable_principal_access_boundary && contains(flatten([for r in module.organization.admin_containment_rules : r.denied_permissions]), "iam.googleapis.com/principalaccessboundarypolicies.unbind")
     error_message = "gcp.principal_access_boundary: true must turn the boundary (and its containment deny rules) on."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 run "principal_access_boundary_variable_wins_over_config" {
@@ -521,6 +531,8 @@ run "principal_access_boundary_variable_wins_over_config" {
     condition     = !local.gcp.enable_principal_access_boundary && output.principal_access_boundary_policy == null
     error_message = "an explicit gcp_overrides.enable_principal_access_boundary = false must override the config key."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # notifications.emails feeds the control-plane alert channels when neither
@@ -698,6 +710,8 @@ run "override_wins_over_config" {
     condition     = output.principal_access_boundary_policy == null && output.log_analytics_bucket_id == null
     error_message = "the overridden values must reach the stage (boundary and Log Analytics off)."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # ... and an unset (or null) key keeps the config value, else the stage default.
@@ -726,6 +740,8 @@ run "unset_override_keeps_config_value" {
     condition     = contains(flatten([for r in module.organization.admin_containment_rules : r.denied_permissions]), "iam.googleapis.com/principalaccessboundarypolicies.unbind")
     error_message = "the config value (boundary on) must reach the stage."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # ... and a key unset in both the config file and gcp_overrides takes the stage
@@ -748,6 +764,8 @@ run "unset_everywhere_takes_stage_default" {
     condition     = try(local.gcp.strict_folder_policy_environment_keys, null) == null && module.organization.strict_folder_policy_environment_keys == tolist(["prod"])
     error_message = "a key unset in config and gcp_overrides must reach the stage as its default (strict folder bundle on prod)."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # Production is the is_production flag alone: a config environment without it

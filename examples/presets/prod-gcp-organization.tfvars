@@ -30,14 +30,12 @@ gcp_overrides = {
   # alert_notification_emails    = ["secops@your-domain.com"]
   # break_glass_principal_emails = ["bg-admin-1@your-domain.com"]
 
-  # Separation of duties: a dedicated logging project for the audit bucket, audit CMEK and
-  # alerts. It must NOT be owned by the Terraform admin SA. Decide before the first apply.
-  # logging_project_id     = "acme-logging-prod"
-  # logging_project_number = "123456789012"
-
-  # Audit-log WORM lock. IRREVERSIBLE: a locked retention policy can never be shortened
-  # or removed. Enable only once retention is final and a compliance regime requires it.
-  # enable_audit_bucket_lock = true
+  # Audit store: the dedicated logging project (separation of duties) and the WORM lock
+  # (IRREVERSIBLE) are set in config/landing-zone.yaml as gcp.logging_project_id,
+  # gcp.logging_project_number and gcp.enable_audit_bucket_lock, so every reader sees them.
+  # A gcp.environments entry with compliance_class: regulated fails the plan until they
+  # are set (or gcp.audit_store_waived: true). The production profile warns once an
+  # environment is_production. See docs/runbooks/production-hardening.md.
 
   # Standing org/billing admin is group-only (organization_admin_groups /
   # billing_admin_groups are required). Keep the user-principal escape hatch off.

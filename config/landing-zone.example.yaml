@@ -132,6 +132,16 @@ gcp:
   # Opt-in WORM lock on the org audit-log bucket (gcp-organization). IRREVERSIBLE:
   # leave false unless a compliance regime requires tamper-proof retention.
   # enable_audit_bucket_lock: false
+  # Dedicated logging project for the audit bucket, audit CMEK keys and
+  # control-plane alerts (gcp-organization). Create it outside Terraform,
+  # directly under the organization node, owned by a group other than the
+  # automation identities. Decide before the first apply: the audit KMS keys
+  # cannot be deleted or moved. Any environment with compliance_class: regulated
+  # fails the plan until this project and the lock are set, or
+  # audit_store_waived: true (record why).
+  # logging_project_id: my-org-logging
+  # logging_project_number: "123456789012"
+  # audit_store_waived: false
   # Regions allowed by the resource-location org policy (gcp-organization).
   allowed_regions:
     - europe-west2

@@ -100,6 +100,8 @@ run "scaffold_gcp_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 run "scaffold_gcp_aws_plans" {
@@ -108,6 +110,8 @@ run "scaffold_gcp_aws_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 run "scaffold_gcp_aws_saas_plans" {
@@ -116,6 +120,8 @@ run "scaffold_gcp_aws_saas_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # CMP-2: compliance.audit_log_retention_days reaches the audit bucket. The
@@ -158,5 +164,39 @@ run "retention_default_unchanged" {
   assert {
     condition     = local.audit_log_retention_days == 365 && module.organization.audit_log_retention_days == 365
     error_message = "with no compliance section the retention must stay 365 days."
+  }
+}
+
+# CMP-4: the logging project and the WORM lock come from the config file.
+run "logging_project_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-sod.yaml"
+  }
+
+  override_data {
+    target = data.google_project.logging
+    values = {
+      folder_id = ""
+    }
+  }
+
+  assert {
+    condition     = local.gcp.logging_project_id == "acme-logging-prod" && local.gcp.logging_project_number == "222233334444" && local.gcp.enable_audit_bucket_lock == true
+    error_message = "gcp.logging_project_id/number and gcp.enable_audit_bucket_lock must flow from config into the stage object."
+  }
+}
+
+run "compliance_class_defaults_to_standard" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = alltrue([for e in values(local.cfg.environments) : e.compliance_class == "standard"]) && length(local.regulated_environment_keys) == 0
+    error_message = "an environment without compliance_class must be standard."
   }
 }

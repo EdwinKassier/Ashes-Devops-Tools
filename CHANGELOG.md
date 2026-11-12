@@ -532,6 +532,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   defaults it to `/` (empty string = keep the TCP probe) and keeps one instance warm for every
   production service whose `min_instances` is unset. The key is accepted in every `services` key list
   and in `config/landing-zone.schema.json`. See `UPGRADING.md`.
+- **Hardened audit store for regulated GCP estates (CMP-4).** A `gcp.environments` entry with
+  `compliance_class: regulated` fails the `gcp-organization` plan until `gcp.logging_project_id`,
+  `gcp.logging_project_number` (not the admin project) and `gcp.enable_audit_bucket_lock: true` are
+  set, or `gcp.audit_store_waived: true`. The three keys are new in the config file. The production
+  profile warns when an `is_production` environment exists without them, and the plan warns when the
+  logging project sits in a folder. See `UPGRADING.md`.
 - **No placeholder SecOps subscriber (breaking, CMP-6).** `aws-security` no longer subscribes
   `secops@example.com`. A production plan (`org.profile = production` or a production AWS workload
   environment) fails until `notifications.emails` or `aws_overrides.notification_subscribers` names

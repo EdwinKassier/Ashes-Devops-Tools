@@ -309,22 +309,52 @@ denied for the SA, then promote.
 
 ### 3. Dedicated logging project (audit G4/C3)
 
-Set `gcp_overrides.logging_project_id` and `gcp_overrides.logging_project_number` (gcp-organization). The
-following then move out of the admin project into that project:
+Set `gcp.logging_project_id` and `gcp.logging_project_number` in
+`config/landing-zone.yaml` (or the same keys in `gcp_overrides`, gcp-organization).
+The following then move out of the admin project into that project:
 
 - the org audit bucket
 - the BigQuery audit dataset
 - the audit CMEK keyring (`<prefix>-audit-cmek`)
 - the control-plane alerts
 
-**The logging project must not be owned by the Terraform admin/automation SA.**
-That means no `roles/owner`, `roles/editor`, `roles/storage.admin` or
-`roles/cloudkms.admin` at project level. Otherwise the audited identity can purge
-its own trail. Create the project out-of-band, or from a separate identity, and
-grant the SA only the narrow roles it needs.
+**Required for regulated estates.** When any `gcp.environments` entry has
+`compliance_class: regulated`, the gcp-organization plan fails until both the
+logging project and `gcp.enable_audit_bucket_lock: true` are set. Set
+`gcp.audit_store_waived: true` to plan without them, and record why. In the
+production profile, an estate with an `is_production` environment and no hardened
+audit store gets a plan warning.
+
+Create the project outside Terraform, with an identity other than the automation
+service accounts:
+
+1. Create it **directly under the organization node**, not in a folder.
+   organization-apply holds `roles/resourcemanager.folderIamAdmin` at the
+   organization node, so it can grant itself roles on any project in a folder.
+   The gcp-organization plan warns when the project has a folder parent.
+2. Make a security group, not the platform team, the project owner. It owns
+   the project IAM: organization-apply gets no owner, editor or
+   `projectIamAdmin` role there.
+3. Grant `<prefix>-organization-apply` the resource roles the stage needs in the
+   project: `roles/cloudkms.admin`, `roles/storage.admin`, `roles/bigquery.admin`,
+   `roles/logging.configWriter` and `roles/monitoring.editor` (the roles it holds
+   on the admin project). Grant `<prefix>-organization-plan`
+   `roles/cloudkms.viewer`, `roles/monitoring.viewer`,
+   `roles/bigquery.metadataViewer` and the plan viewer custom role.
+4. The stage then grants, through organization-apply's role-conditioned org
+   `iam.securityAdmin`, only roles on the gcp-bootstrap
+   `organization_apply_grantable_roles` list: `roles/storage.objectCreator` on the
+   audit buckets, `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the audit keys,
+   and `roles/logging.bucketWriter` / `roles/logging.logWriter` on the project.
+   The plan fails if one is missing from that list.
+
+With those roles organization-apply can still administer the buckets and keys.
+The tamper controls are the WORM lock (no identity can delete a locked object or
+shorten the locked period) and admin containment (the deny policy on the
+`containment/protected` tag, IAM-12). Turn both on for a regulated estate.
 
 Decide this before the first apply. KMS keys can't be deleted, so moving the audit
-keys later leaves orphaned keys behind.
+keys later leaves orphaned keys behind (see UPGRADING.md for the migration).
 
 ### 4. Log Analytics, logging settings and the automation boundary
 

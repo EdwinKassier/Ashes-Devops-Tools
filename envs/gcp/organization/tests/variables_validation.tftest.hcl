@@ -156,3 +156,127 @@ run "unlocked_short_retention_plans" {
     error_message = "an unlocked bucket may use any retention of 1 day or more."
   }
 }
+
+# CMP-4: a regulated environment needs a WORM-locked audit store in a separate
+# logging project, or an explicit waiver.
+run "regulated_estate_needs_worm_and_sod" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated.yaml"
+  }
+
+  expect_failures = [terraform_data.regulated_audit_store_guard, check.production_audit_store]
+}
+
+run "regulated_estate_with_waiver_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-waived.yaml"
+  }
+
+  assert {
+    condition     = local.regulated_environment_keys == tolist(["prod"])
+    error_message = "the waiver must let a regulated estate plan without the lock."
+  }
+}
+
+# The lock alone is not enough: the audit store must also leave the admin project.
+run "regulated_estate_lock_without_logging_project_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated.yaml"
+    gcp_overrides = {
+      enable_audit_bucket_lock = true
+    }
+  }
+
+  expect_failures = [terraform_data.regulated_audit_store_guard, check.production_audit_store]
+}
+
+run "regulated_estate_hardened_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-sod.yaml"
+  }
+
+  # The logging project sits directly under the organization (no folder).
+  override_data {
+    target = data.google_project.logging
+    values = {
+      folder_id = ""
+      org_id    = "111122223333"
+    }
+  }
+
+  assert {
+    condition     = local.audit_store_hardened && module.organization.audit_project_id == "acme-logging-prod"
+    error_message = "a logging project plus the lock must plan, with the audit store in the logging project."
+  }
+}
+
+run "rejects_unknown_compliance_class" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-waived.yaml"
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 1000
+        iam_group_role_bindings = {}
+        is_production           = true
+        compliance_class        = "pci"
+      }
+    }
+  }
+
+  expect_failures = [var.environments]
+}
+
+# A logging project inside a folder is reachable through organization-apply's
+# org-level folderIamAdmin: the plan warns.
+run "logging_project_in_folder_warns" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-sod.yaml"
+  }
+
+  override_data {
+    target = data.google_project.logging
+    values = {
+      folder_id = "444455556666"
+      org_id    = ""
+    }
+  }
+
+  expect_failures = [check.logging_project_under_organization]
+}
+
+# The admin project is not a separate logging project.
+run "regulated_estate_admin_project_as_logging_project_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-sod.yaml"
+    gcp_overrides = {
+      logging_project_id     = "acme-admin-abcd"
+      logging_project_number = "123456789012"
+    }
+  }
+
+  override_data {
+    target = data.google_project.logging
+    values = {
+      folder_id = ""
+    }
+  }
+
+  expect_failures = [terraform_data.regulated_audit_store_guard, check.production_audit_store]
+}

@@ -160,7 +160,22 @@
           "format": "date-time"
         },
         "enable_audit_bucket_lock": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "WORM-lock the org audit bucket's retention policy (gcp-organization). IRREVERSIBLE. Required, with logging_project_id, when any gcp.environments entry is compliance_class: regulated (unless audit_store_waived)."
+        },
+        "logging_project_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
+          "description": "Dedicated logging project for the org audit bucket, BigQuery audit dataset, audit CMEK keyring and control-plane alerts (gcp-organization). Created outside Terraform, directly under the organization node, and not owned by the automation identities. Decide before the first apply: the audit KMS keys cannot be deleted or moved. Requires logging_project_number."
+        },
+        "logging_project_number": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "description": "Numeric project number of logging_project_id (quote it in YAML)."
+        },
+        "audit_store_waived": {
+          "type": "boolean",
+          "description": "Let a regulated estate (any gcp.environments entry with compliance_class: regulated) plan without logging_project_id and enable_audit_bucket_lock. Record why in your risk register."
         },
         "allowed_regions": {
           "type": "array",
@@ -922,7 +937,7 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "Reserved: no root reads this key yet.",
+                "description": "standard (default) or regulated. gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or gcp.audit_store_waived is true.",
                 "enum": [
                   "standard",
                   "regulated"

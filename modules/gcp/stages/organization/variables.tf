@@ -93,11 +93,12 @@ variable "gcp" {
     budget_currency = optional(string, "USD")
     # Dedicated logging project ID for the org audit sink, audit bucket, BigQuery audit dataset, audit
     # CMEK keyring and control-plane alerts (separation of duties). Default null = the admin/bootstrap
-    # project (unchanged). The project MUST NOT be owned (roles/owner, roles/editor, or storage/KMS
-    # admin) by the Terraform admin / automation service account — otherwise the identity being
-    # audited can delete object generations or destroy the key protecting its own audit trail. Create
-    # it out-of-band (or from a separate identity) and grant the automation SA only what it needs to
-    # manage the resources here. Decide BEFORE the first apply: KMS keys cannot be deleted, so moving
+    # project (unchanged). The project MUST NOT be owned (roles/owner, roles/editor, projectIamAdmin)
+    # by the Terraform admin / automation service account. Create it outside Terraform, directly under
+    # the organization node (not in a folder), with a security group as owner, and grant the
+    # automation SA only the resource roles it needs here (docs/runbooks/production-hardening.md). The
+    # WORM lock and admin containment (both opt-in) keep it from deleting the audit trail. Decide BEFORE
+    # the first apply: KMS keys cannot be deleted, so moving
     # the audit keys later orphans the old ones. Requires logging_project_number. PREVIEW: not yet
     # validated against a real apply.
     logging_project_id = optional(string)
