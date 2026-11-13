@@ -13,6 +13,9 @@ module "iam_role" {
           Effect    = "Allow"
           Principal = { AWS = "arn:aws:iam::111111111111:root" }
           Action    = "sts:AssumeRole"
+          # Account-root trust admits any principal that account allows; pin
+          # callers to the organization.
+          Condition = { StringEquals = { "aws:PrincipalOrgID" = "o-abc123xyz0" } }
         }]
       })
       max_session_duration = 3600

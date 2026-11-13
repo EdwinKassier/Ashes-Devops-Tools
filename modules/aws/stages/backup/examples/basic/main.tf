@@ -4,8 +4,8 @@
 # provider authenticates into the MANAGEMENT account (which owns the org
 # BACKUP_POLICY) and aws.backup targets the delegated BACKUP account (which owns
 # the Vault-Locked vault). In a real deployment each provider assumes a role in
-# its target account; here they use the same credentials for a validate-only
-# check. Run `terraform init && terraform validate` here.
+# its target account (the assume_role lines below); here they use the same
+# credentials. Run `terraform init && terraform validate` here.
 
 provider "aws" {
   region = "eu-west-2"
@@ -28,7 +28,7 @@ module "aws_backup" {
   }
 
   vault_name  = "org-backup-vault"
-  kms_key_arn = "arn:aws:kms:eu-west-2:444444444444:key/backup-cmk-0000"
+  kms_key_arn = "arn:aws:kms:eu-west-2:444444444444:key/00000000-0000-0000-0000-000000000000"
   # restore_testing_role_arn / backup_role_arn omitted: the stage creates the
   # restore-testing role and deploys the member-account backup role (StackSet).
   workloads_ou_id = "ou-abcd-11111111"

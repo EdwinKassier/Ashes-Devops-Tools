@@ -89,6 +89,20 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   sensitive variable, and `cdn`, `cloud-audit-logs` and `scc` attach Cloud Armor or a CMEK as
   the stages do. Comments that described rules the examples do not create are corrected.
 
+- **AWS and SaaS module examples follow the platform.** Secrets in the Supabase, vault-secrets
+  and `saas-workload` examples (database passwords, the pooler URL, the CA certificate, vault
+  values) now come from sensitive variables, not literals. The vault-secrets example, scripts
+  and error message no longer point at an `ensureSupabaseSslCert` helper that does not exist:
+  they say to pass the project's CA certificate as `supabase_ssl_cert`. The TFC organization
+  placeholder is `my-tfc-org`, not the claimable `acme`. `stages/organization` sets
+  `guard_alert_emails` and the GitHub owner pins, `cost-governance` sets budget and anomaly
+  recipients, `network-firewall` and `vpc-endpoints` pass the subnets, HOME_NET, allowed CIDRs
+  and shared private DNS as `network-hub` does, the secrets examples pass a CMK,
+  `incident-response` passes the forensics key, and `iam-role` pins its cross-account trust to
+  the organization. Domains, repositories and KMS key ARNs are reserved or UUID-form
+  placeholders, the QA `saas-workload` example no longer binds the production domain, and
+  `supabase/environment` keeps the 12-character password minimum.
+
 #### Security
 
 - **The app-delivery example workflows start with harden-runner.** Each job in

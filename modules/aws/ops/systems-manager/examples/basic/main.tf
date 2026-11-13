@@ -6,5 +6,5 @@ module "systems_manager" {
   source = "../../"
 
   log_bucket_name = "org-ssm-session-logs"
-  kms_key_id      = "arn:aws:kms:us-east-1:111111111111:key/EXAMPLE-KEY-ID"
+  kms_key_id      = "arn:aws:kms:us-east-1:111111111111:key/00000000-0000-0000-0000-000000000000"
 }

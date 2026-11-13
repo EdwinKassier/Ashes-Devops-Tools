@@ -64,8 +64,8 @@ const isLocal = hostname === "127.0.0.1" || hostname === "localhost";
 //     Checked as fallback for backward compat.
 //   - Supabase pooler (*.pooler.supabase.com): the pgbouncer endpoint uses
 //     a self-signed TLS certificate not in CI runner CA stores. The CA
-//     bundle MUST be supplied. ensureSupabaseSslCert() fetches it
-//     automatically and fails fast in CI if it cannot.
+//     bundle MUST be supplied (var.supabase_ssl_cert); without it the
+//     script fails fast.
 //   - PGSSL_INSECURE_NO_VERIFY=1: break-glass only. Never in normal ops.
 // Use || (not ??) so that an empty-string SUPABASE_SSL_CERT (e.g. when
 // the Terraform variable was unset and defaulted to "") falls through to
@@ -80,10 +80,10 @@ const isSupabasePooler =
 if (!isLocal && isSupabasePooler && !sslCert && !allowInsecureTls) {
   console.error(
     "[vault-secrets/bootstrap] SUPABASE_SSL_CERT is required for pooler " +
-      "connections but is not set. ensureSupabaseSslCert() should have fetched " +
-      "it automatically — check that TF_VAR_region is correct and the pooler " +
-      "endpoint is reachable from CI. Set PGSSL_INSECURE_NO_VERIFY=1 only for " +
-      "break-glass recovery.",
+      "connections but is not set. Pass the project's base64-encoded CA " +
+      "certificate (Supabase dashboard: Database settings, SSL configuration) " +
+      "as the supabase_ssl_cert variable. Set PGSSL_INSECURE_NO_VERIFY=1 only " +
+      "for break-glass recovery.",
   );
   process.exit(1);
 }

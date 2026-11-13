@@ -5,9 +5,9 @@
 # Basic working example for the aws-security stage.
 #
 # The stage runs across four accounts, so it declares four aliased providers.
-# In a real deployment each provider assumes a role in its target account; here
-# they use provider aliases against the same credentials for a validate-only
-# check. Run `terraform init && terraform validate` here.
+# In a real deployment each provider assumes a role in its target account
+# (the assume_role lines below); here all four use the same credentials, which
+# is enough to validate the example. Run `terraform init && terraform validate` here.
 
 provider "aws" {
   alias  = "management"
@@ -61,11 +61,11 @@ module "aws_security" {
     meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
     break_glass_role_arn        = "arn:aws:iam::111111111111:role/break-glass"
 
-    # Fake address for illustration: replace it with a real, staffed
-    # mailbox. The aws-security root rejects reserved placeholder domains
-    # (example.com, .test, .invalid, ...) in production.
+    # Placeholder address: replace it with a real, staffed mailbox. The
+    # aws-security root rejects reserved placeholder domains (example.com,
+    # .test, .invalid, ...) in production.
     notification_subscribers = {
-      secops = { protocol = "email", endpoint = "secops@acme-corp.io" }
+      secops = { protocol = "email", endpoint = "secops@example.com" }
     }
   }
 }
