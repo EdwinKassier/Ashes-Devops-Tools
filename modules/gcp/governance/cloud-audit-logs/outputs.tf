@@ -97,7 +97,7 @@ output "log_retention_days" {
 }
 
 output "network_log_sink" {
-  description = "The org sink that copies firewall, Cloud NAT and load balancer request logs into the audit bucket: name, destination and filter. Null when enable_network_log_export is false or org_id is null."
+  description = "The org sink that copies firewall, Cloud NAT, load balancer request, Secure Web Proxy and Cloud NGFW threat logs into the audit bucket: name, destination and filter. Null when enable_network_log_export is false or org_id is null."
   value = local.enable_network_log_export ? {
     name        = google_logging_organization_sink.org_network_logs_sink[0].name
     destination = google_logging_organization_sink.org_network_logs_sink[0].destination
@@ -106,6 +106,6 @@ output "network_log_sink" {
 }
 
 output "network_log_sink_writer_identity" {
-  description = "Writer identity of the network log sink (null when the sink is not created)."
+  description = "Writer identity of the network log sink: the org Logging service account it shares with org-audit-sink (a postcondition checks that they match). Null when the sink is not created."
   value       = local.enable_network_log_export ? google_logging_organization_sink.org_network_logs_sink[0].writer_identity : null
 }

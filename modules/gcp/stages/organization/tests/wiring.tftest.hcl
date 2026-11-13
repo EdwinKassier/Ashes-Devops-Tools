@@ -86,18 +86,21 @@ run "network_log_export_off_by_default" {
   }
 }
 
-# On, it writes to the same audit bucket (here in the logging project) and the
-# writer's logging.logWriter grant is checked against organization-apply's
-# hasOnly allow-list.
+# On, it writes to the same audit bucket (here in the logging project). It
+# shares the org Logging service account, so organization-apply grants no new
+# role: with control-plane alerting off, logging.logWriter stays off the list
+# and an allow-list without it still plans.
 run "network_log_export_to_audit_store" {
   command = plan
 
   variables {
     gcp = merge(var.gcp, {
-      logging_project_id        = "acme-logging"
-      logging_project_number    = "999999999999"
-      enable_network_log_export = true
+      logging_project_id            = "acme-logging"
+      logging_project_number        = "999999999999"
+      enable_network_log_export     = true
+      enable_control_plane_alerting = false
     })
+    organization_apply_grantable_roles = ["roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter", "roles/storage.objectCreator"]
   }
 
   assert {
@@ -106,21 +109,7 @@ run "network_log_export_to_audit_store" {
   }
 
   assert {
-    condition     = contains(local.organization_apply_granted_roles, "roles/logging.logWriter") && contains(local.organization_apply_granted_roles, "roles/storage.objectCreator")
-    error_message = "the sink writer grants must be listed for the organization-apply hasOnly check."
+    condition     = !contains(local.organization_apply_granted_roles, "roles/logging.logWriter") && length(local.organization_apply_missing_roles) == 0
+    error_message = "the network log sink must not add a role to organization-apply's grants."
   }
-}
-
-run "network_log_export_grant_not_allowed_fails" {
-  command = plan
-
-  variables {
-    gcp = merge(var.gcp, {
-      enable_control_plane_alerting = false
-      enable_network_log_export     = true
-    })
-    organization_apply_grantable_roles = ["roles/billing.admin", "roles/logging.bucketWriter"]
-  }
-
-  expect_failures = [terraform_data.organization_apply_grants_allowed]
 }

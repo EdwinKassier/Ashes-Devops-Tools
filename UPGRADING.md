@@ -1641,13 +1641,14 @@ apply.
 
 **Behaviour change, not breaking.** Nothing existing changes or is replaced. When any
 `gcp.environments` entry is `compliance_class: regulated`, or `compliance.frameworks` lists any
-framework, the next `gcp-organization` plan adds three resources:
+framework, the next `gcp-organization` plan adds one resource: the aggregated org sink
+`org-network-logs`. It copies firewall rule logs, Cloud NAT logs, load balancer request logs (with
+the Cloud Armor verdict), Secure Web Proxy request logs and Cloud NGFW threat logs from every project
+into the GCS audit bucket.
 
-- the aggregated org sink `org-network-logs`, which copies firewall rule logs, Cloud NAT logs and
-  load balancer request logs (with the Cloud Armor verdict) from every project into the GCS audit
-  bucket;
-- `roles/storage.objectCreator` on the audit bucket for the sink writer identity;
-- `roles/logging.logWriter` on the audit project for the same identity.
+No new IAM grant is needed. Since 2023-05-22 Cloud Logging uses one service account for all sinks
+in a resource, so the new sink writes as the same identity as `org-audit-sink`, which already holds
+`roles/storage.objectCreator` on the audit bucket.
 
 The logs then have the audit bucket's retention (`audit_log_retention_days`, at least the
 framework floor) and, when `gcp.enable_audit_bucket_lock` is on, its locked retention. With the
@@ -1655,22 +1656,32 @@ lock they cannot be deleted before that period ends, so the storage cost is comm
 cost note in [`docs/architecture/gcp-landing-zone.md`](docs/architecture/gcp-landing-zone.md#cost-of-the-baseline)
 and `docs/compliance/control-matrix.md` LOG-06.
 
-Before you apply:
+**Legacy audit sink identity.** If `org-audit-sink` was created before 2023-05-22, it keeps a
+dedicated legacy service account, and the new sink gets the shared one. The apply then fails on a
+postcondition of `org-network-logs` that names both identities. Check before you apply:
 
-1. `roles/logging.logWriter` must be in the gcp-bootstrap input
-   `organization_apply_grantable_roles` (it is in the default). The plan fails and names the role
-   if it is not.
-2. If the audit project is in a VPC-SC perimeter, the existing audit sink already needs an ingress
-   rule for sink writers. Check that the rule also admits the new writer identity
-   (`network_log_sink_writer_identity` output of `modules/gcp/governance/cloud-audit-logs`).
-3. To keep the old behaviour, set `gcp.enable_network_log_export: false` in
+```sh
+gcloud logging sinks describe org-audit-sink --organization=<ORG_ID> --format='value(writerIdentity)'
+```
+
+A shared identity has the form `service-org-<ORG_ID>@gcp-sa-logging.iam.gserviceaccount.com`. If
+yours differs, either set `gcp.enable_network_log_export: false`, or grant
+`roles/storage.objectCreator` on the audit bucket to the shared identity as break-glass (admin
+containment denies `setIamPolicy` on the audit bucket to the automation identity), then apply.
+
+Other steps:
+
+1. If the audit project is in an enforced VPC-SC perimeter, the ingress rule that admits the audit
+   sink's writer already admits the shared identity. A legacy identity needs the shared one added.
+2. To keep the old behaviour, set `gcp.enable_network_log_export: false` in
    `config/landing-zone.yaml` (or `gcp_overrides.enable_network_log_export = false`). Set it to
    `true` to turn the export on for any other estate.
 
 With admin containment on, the org IAM deny policy blocks sink update and delete for everyone but
 break-glass. Turning the export off after it was applied, or changing its filter, then needs a
 break-glass apply. Deleting the sink also trips the `destroy_guard` policy
-(`google_logging_organization_sink`), so the security team must override that run.
+(`google_logging_organization_sink`), so the security team must override that run. Deleting it never
+removes the shared identity or its grant.
 
 #### The audit store waiver names a reason and expires (gcp-organization, breaking, CMP-05)
 

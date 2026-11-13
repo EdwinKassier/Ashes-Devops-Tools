@@ -306,7 +306,7 @@ run "network_log_export_on_for_regulated" {
   }
 
   assert {
-    condition     = strcontains(module.organization.network_log_sink.filter, "logName:\"/logs/compute.googleapis.com%2Ffirewall\"") && strcontains(module.organization.network_log_sink.filter, "logName:\"/logs/requests\"") && strcontains(module.organization.network_log_sink.filter, "logName:\"/logs/compute.googleapis.com%2Fnat_flows\"")
+    condition     = strcontains(module.organization.network_log_sink.filter, "log_id(\"compute.googleapis.com/firewall\")") && strcontains(module.organization.network_log_sink.filter, "log_id(\"requests\")") && strcontains(module.organization.network_log_sink.filter, "log_id(\"compute.googleapis.com/nat_flows\")") && strcontains(module.organization.network_log_sink.filter, "log_id(\"networkservices.googleapis.com/gateway_requests\")")
     error_message = "the root's sink must carry the firewall, request and NAT log filter."
   }
 }

@@ -649,14 +649,16 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `production_egress_proxy_waiver` and `production_vpc_sc_dry_run_waiver` read `expires` from its
   first 10 characters, so `YYYY-MM-DDT00:00:00Z` (what `yamldecode` makes of an unquoted YAML date)
   waives through that day instead of failing. The schema still asks for a quoted date.
-- **GCP network and edge logs reach the audit store (CMP-02).** Firewall rule logs, Cloud NAT logs
-  and load balancer request logs (with the Cloud Armor verdict) stayed in each project's 30-day
-  `_Default` bucket. A new aggregated org sink, `org-network-logs`
-  (`modules/gcp/governance/cloud-audit-logs` input `enable_network_log_export`), copies them into
-  the GCS audit bucket with its retention, lock and CMEK. gcp-organization turns it on when an
-  environment is `compliance_class: regulated` or `compliance.frameworks` is set;
-  `gcp.enable_network_log_export` forces it on or off. Control matrix LOG-06 (PREVIEW). See
-  `UPGRADING.md`.
+- **GCP network and edge logs reach the audit store (CMP-02).** Firewall rule logs, Cloud NAT
+  logs, load balancer request logs (with the Cloud Armor verdict), Secure Web Proxy request logs and
+  Cloud NGFW threat logs stayed in each project's 30-day `_Default` bucket. A new aggregated org
+  sink, `org-network-logs` (`modules/gcp/governance/cloud-audit-logs` input
+  `enable_network_log_export`), copies them into the GCS audit bucket with its retention, lock and
+  CMEK. It adds no IAM grant: it shares the org Logging service account that already writes the
+  audit logs, and a postcondition fails the apply when a legacy audit sink identity differs.
+  gcp-organization turns it on when an environment is `compliance_class: regulated` or
+  `compliance.frameworks` is set; `gcp.enable_network_log_export` forces it on or off. Control
+  matrix LOG-06 (PREVIEW). See `UPGRADING.md`.
 
 ### Changed
 

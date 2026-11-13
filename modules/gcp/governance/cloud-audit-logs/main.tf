@@ -213,38 +213,61 @@ resource "google_storage_bucket_iam_member" "org_log_writer" {
 # =============================================================================
 # NETWORK AND EDGE LOGS (CMP-02, opt-in)
 # =============================================================================
-# Firewall rule logs, Cloud NAT logs and Application Load Balancer request logs
-# (which carry the Cloud Armor verdict in jsonPayload.enforcedSecurityPolicy)
-# stay in each project's _Default log bucket (30 days) unless something routes
-# them. This aggregated org sink copies them into the same protected audit
-# bucket as the audit logs, so they get the same retention, lifecycle, WORM lock,
-# CMEK and containment tag. It is a separate sink so the audit sink's filter
-# never changes. Log IDs (checked 2026-11-13):
-#   compute.googleapis.com%2Ffirewall  firewall rules logging, gce_subnetwork
+# Firewall rule logs, Cloud NAT logs, Application Load Balancer request logs
+# (which carry the Cloud Armor verdict in jsonPayload.enforcedSecurityPolicy),
+# Secure Web Proxy request logs and Cloud NGFW threat logs stay in each
+# project's _Default log bucket (30 days) unless something routes them. This
+# aggregated org sink copies them into the same protected audit bucket as the
+# audit logs, so they get the same retention, lifecycle, WORM lock, CMEK and
+# containment tag. It is a separate sink so the audit sink's filter never
+# changes. Log IDs and resource types (checked 2026-11-13):
+#   compute.googleapis.com/firewall     firewall rules and firewall policy
+#     rules, gce_subnetwork
 #     https://docs.cloud.google.com/firewall/docs/using-firewall-rules-logging
-#   compute.googleapis.com%2Fnat_flows Cloud NAT, nat_gateway
+#   compute.googleapis.com/nat_flows    Cloud NAT, nat_gateway
 #     https://docs.cloud.google.com/nat/docs/monitoring
-#   requests                           global external ALB (http_load_balancer)
-#     and internal ALB; https://docs.cloud.google.com/cdn/docs/logging,
+#   requests                            http_load_balancer (global external
+#     ALB) https://docs.cloud.google.com/cdn/docs/logging, and
+#     internal_http_lb_rule
 #     https://docs.cloud.google.com/load-balancing/docs/l7-internal/monitoring
-#   loadbalancing.googleapis.com%2Frequests and
-#   loadbalancing.googleapis.com%2Fexternal_regional_requests
-#     regional ALB log IDs listed in
+#   loadbalancing.googleapis.com/requests (internal_http_lb_rule) and
+#   loadbalancing.googleapis.com/external_regional_requests
+#     (http_external_regional_lb_rule)
 #     https://docs.cloud.google.com/logging/docs/api/platform-logs
+#   networkservices.googleapis.com/gateway_requests  Secure Web Proxy,
+#     networkservices.googleapis.com/Gateway
+#     https://docs.cloud.google.com/secure-web-proxy/docs/monitor-logs
+#   networksecurity.googleapis.com/firewall_threat   Cloud NGFW threats,
+#     networksecurity.googleapis.com/FirewallEndpoint
+#     https://docs.cloud.google.com/firewall/docs/threat_logs
 # Cloud Armor logs are part of the load balancer request logs:
 #   https://docs.cloud.google.com/armor/docs/request-logging
+# log_id() takes the unencoded log ID and matches it exactly. The generic
+# request log IDs are also scoped to the load balancer resource types.
 locals {
   enable_network_log_export = var.org_id != null && var.enable_network_log_export
-  network_log_ids = [
-    "compute.googleapis.com%2Ffirewall",
-    "compute.googleapis.com%2Fnat_flows",
-    "requests",
-    "loadbalancing.googleapis.com%2Frequests",
-    "loadbalancing.googleapis.com%2Fexternal_regional_requests",
+
+  network_log_lb_resource_types = ["http_load_balancer", "internal_http_lb_rule", "http_external_regional_lb_rule"]
+  network_log_clauses = [
+    "log_id(\"compute.googleapis.com/firewall\")",
+    "log_id(\"compute.googleapis.com/nat_flows\")",
+    "((log_id(\"requests\") OR log_id(\"loadbalancing.googleapis.com/requests\") OR log_id(\"loadbalancing.googleapis.com/external_regional_requests\")) AND (${join(" OR ", [for t in local.network_log_lb_resource_types : "resource.type=\"${t}\""])}))",
+    "log_id(\"networkservices.googleapis.com/gateway_requests\")",
+    "log_id(\"networksecurity.googleapis.com/firewall_threat\")",
   ]
-  network_log_filter = join(" OR ", [for id in local.network_log_ids : "logName:\"/logs/${id}\""])
+  network_log_filter = join(" OR ", local.network_log_clauses)
 }
 
+# No IAM grant of its own. Since 2023-05-22 Cloud Logging uses one service
+# account for all sinks in a resource ("As of May 22, 2023, Logging uses the
+# same service account for all sinks in the underlying resource",
+# https://docs.cloud.google.com/logging/docs/export/aggregated_sinks, checked
+# 2026-11-13). That account already holds objectCreator on the audit bucket
+# (org_log_writer). A second binding would duplicate it, and destroying it when
+# the export is turned off would stop the audit export. A new grant would also
+# be refused: admin containment denies setIamPolicy on the tagged audit bucket.
+# The postcondition catches the one case where the identities differ: an audit
+# sink created before 2023-05-22 keeps its own legacy service account.
 resource "google_logging_organization_sink" "org_network_logs_sink" {
   count = local.enable_network_log_export ? 1 : 0
 
@@ -253,28 +276,15 @@ resource "google_logging_organization_sink" "org_network_logs_sink" {
   destination      = "storage.googleapis.com/${google_storage_bucket.audit_logs.name}"
   include_children = true
   filter           = local.network_log_filter
-  description      = "Routes firewall, Cloud NAT and load balancer request (Cloud Armor) logs into the protected audit bucket."
-}
+  description      = "Routes firewall, Cloud NAT, load balancer request (Cloud Armor), Secure Web Proxy and Cloud NGFW threat logs into the protected audit bucket."
 
-# Same grant as org_log_writer: objectCreator on the audit bucket only.
-resource "google_storage_bucket_iam_member" "org_network_log_writer" {
-  count = local.enable_network_log_export ? 1 : 0
-
-  bucket = google_storage_bucket.audit_logs.name
-  role   = "roles/storage.objectCreator"
-  member = google_logging_organization_sink.org_network_logs_sink[0].writer_identity
-}
-
-# Google's sink guide (checked 2026-11-13): "For all destinations, grant the
-# Logs Writer role (roles/logging.logWriter)", which holds
-# logging.logEntries.route.
-# https://docs.cloud.google.com/logging/docs/export/aggregated_sinks
-resource "google_project_iam_member" "org_network_log_router" {
-  count = local.enable_network_log_export ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = google_logging_organization_sink.org_network_logs_sink[0].writer_identity
+  lifecycle {
+    # org_audit_sink exists whenever this sink does: both need org_id.
+    postcondition {
+      condition     = self.writer_identity == google_logging_organization_sink.org_audit_sink[0].writer_identity
+      error_message = "The org-network-logs sink writes as ${self.writer_identity}, but org-audit-sink writes as ${google_logging_organization_sink.org_audit_sink[0].writer_identity}. org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated service account, so only that account holds roles/storage.objectCreator on the audit bucket. Grant roles/storage.objectCreator on gs://${google_storage_bucket.audit_logs.name} to ${self.writer_identity} as break-glass (admin containment denies setIamPolicy on the audit bucket to the automation identity), or set gcp.enable_network_log_export: false. See UPGRADING.md (CMP-02)."
+    }
+  }
 }
 
 # =============================================================================

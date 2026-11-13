@@ -1061,23 +1061,32 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   `modules/gcp/governance/cloud-audit-logs` `enable_network_log_export`; on in
   `gcp-organization` for a regulated or framework estate, else
   `gcp.enable_network_log_export`). Mock-tested only. Prove in a sandbox:
-  - The sink filter matches. The log IDs come from Google's docs, checked
-    2026-11-13: `compute.googleapis.com/firewall` (firewall rules and firewall
-    policy rules), `compute.googleapis.com/nat_flows` (Cloud NAT), `requests`
-    (global external and internal Application Load Balancers),
+  - The sink filter matches. It uses `log_id()` with the log IDs from Google's
+    docs, checked 2026-11-13: `compute.googleapis.com/firewall` (firewall rules
+    and firewall policy rules), `compute.googleapis.com/nat_flows` (Cloud NAT),
+    `networkservices.googleapis.com/gateway_requests` (Secure Web Proxy),
+    `networksecurity.googleapis.com/firewall_threat` (Cloud NGFW threats), and
+    the load balancer request IDs `requests`,
     `loadbalancing.googleapis.com/requests` and
-    `loadbalancing.googleapis.com/external_regional_requests` (listed for the
-    internal and regional external load balancers). Google's pages disagree on
-    the regional log IDs, so the filter takes all of them. Check that objects
-    appear in the audit bucket for a firewall hit, a NAT translation error and
-    a request to a load balancer with a Cloud Armor policy.
-  - The writer grants. The module grants `roles/storage.objectCreator` on the
-    bucket (as for `org-audit-sink`) and `roles/logging.logWriter` on the audit
-    project, which Google's sink guide asks for on every destination.
-    `org-audit-sink` has no `roles/logging.logWriter` grant: confirm whether it
-    needs one.
+    `loadbalancing.googleapis.com/external_regional_requests`, scoped to the
+    resource types `http_load_balancer`, `internal_http_lb_rule` and
+    `http_external_regional_lb_rule`. Google's pages disagree on the internal
+    and regional load balancer log IDs, so the filter takes all of them. Check
+    that objects appear in the audit bucket for a firewall hit, a NAT error, a
+    request to a load balancer with a Cloud Armor policy, a Secure Web Proxy
+    request and an NGFW threat.
+  - The shared writer identity. The sink has no IAM grant of its own: since
+    2023-05-22 Logging uses one service account for all sinks in a resource,
+    and `org-audit-sink` already grants it `roles/storage.objectCreator`. A
+    postcondition fails the apply when the two identities differ (an
+    `org-audit-sink` created before 2023-05-22 keeps a legacy dedicated
+    account); the fix is a break-glass grant, see `UPGRADING.md`. Confirm on a
+    real org that the identities match and that `roles/storage.objectCreator`
+    alone delivers to a Cloud Storage bucket (Google's sink guide also lists
+    `roles/logging.logWriter` "for all destinations"; neither org sink to the
+    audit bucket has that grant).
   - With the audit project in an enforced VPC-SC perimeter, the ingress rule
-    admits the new writer identity.
+    admits the shared identity.
 
 - **GCP Backup and DR vault for Cloud SQL** (BCK-07, CMP-8,
   `modules/gcp/backup/backup-vault`; on for `compliance_class: regulated`,

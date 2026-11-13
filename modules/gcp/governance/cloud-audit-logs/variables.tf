@@ -83,7 +83,7 @@ variable "org_id" {
 }
 
 variable "enable_network_log_export" {
-  description = "With org_id set, add an aggregated org sink that copies firewall rule logs, Cloud NAT logs and Application Load Balancer request logs (with the Cloud Armor verdict) from every project into the audit bucket, under the same retention, lifecycle and lock as the audit logs. Default false. Volume, and so storage cost, grows with traffic and with how many firewall rules and NAT gateways have logging on."
+  description = "With org_id set, add an aggregated org sink that copies firewall rule logs, Cloud NAT logs, Application Load Balancer request logs (with the Cloud Armor verdict), Secure Web Proxy request logs and Cloud NGFW threat logs from every project into the audit bucket, under the same retention, lifecycle and lock as the audit logs. It adds no IAM grant: it shares the org Logging service account that org-audit-sink already granted objectCreator, and a postcondition fails the apply when org-audit-sink has a legacy (pre-2023-05-22) dedicated identity. Default false. Volume, and so storage cost, grows with traffic and with how many firewall rules and NAT gateways have logging on."
   type        = bool
   default     = false
   nullable    = false
