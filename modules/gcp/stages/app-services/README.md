@@ -190,3 +190,7 @@ The following resources are created:
 | <a name="output_workload_identity_pool_name"></a> [workload\_identity\_pool\_name](#output\_workload\_identity\_pool\_name) | Full resource name of the app-deploy Workload Identity pool, or null when enable\_app\_deploy\_wif = false. |
 | <a name="output_workload_identity_provider"></a> [workload\_identity\_provider](#output\_workload\_identity\_provider) | Full resource name of the GitHub OIDC provider (the google-github-actions/auth `workload_identity_provider` input), or null until a service declares `github`. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -120,3 +120,7 @@ The following resources are created:
 | <a name="output_subnets"></a> [subnets](#output\_subnets) | Subnet module outputs by tier (public, private, database), each keyed by zone. |
 | <a name="output_zones"></a> [zones](#output\_zones) | The zones of the anchor VPC's zonal subnets, in subnet order: network.explicit\_zones, else the zones GCP returns for the region. Subnet i of each tier takes the i-th CIDR, so this order fixes the subnet CIDRs. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

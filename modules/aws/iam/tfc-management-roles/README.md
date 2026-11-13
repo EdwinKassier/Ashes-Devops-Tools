@@ -98,3 +98,7 @@ The following resources are created:
 | <a name="output_plan_role_arns"></a> [plan\_role\_arns](#output\_plan\_role\_arns) | Workspace name => management-account PLAN role ARN (TFC\_AWS\_PLAN\_ROLE\_ARN). |
 | <a name="output_security_teardown_policy"></a> [security\_teardown\_policy](#output\_security\_teardown\_policy) | Rendered aws-security teardown inline policy JSON, attached only while enable\_security\_service\_teardown is true (null otherwise). |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

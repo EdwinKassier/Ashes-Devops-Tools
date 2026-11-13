@@ -155,3 +155,7 @@ The following resources are created:
 | <a name="output_service_attachment_id"></a> [service\_attachment\_id](#output\_service\_attachment\_id) | ID of the PSC service attachment (projects/<project>/regions/<region>/serviceAttachments/<name>) consumers target from their endpoint, or null when create\_service\_attachment is false. |
 | <a name="output_url_list_id"></a> [url\_list\_id](#output\_url\_list\_id) | ID of the FQDN allowlist URL list, or null when allowed\_fqdns is empty. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

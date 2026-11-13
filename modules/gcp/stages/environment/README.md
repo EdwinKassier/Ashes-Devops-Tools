@@ -183,3 +183,7 @@ The following resources are created:
 | <a name="output_vpc_peerings"></a> [vpc\_peerings](#output\_vpc\_peerings) | VPC peering connection outputs |
 | <a name="output_vpc_sc_perimeter_names"></a> [vpc\_sc\_perimeter\_names](#output\_vpc\_sc\_perimeter\_names) | Map of VPC-SC perimeter key to perimeter name; an empty map when VPC-SC is disabled. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

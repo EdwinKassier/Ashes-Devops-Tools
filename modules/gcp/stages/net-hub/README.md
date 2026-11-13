@@ -166,3 +166,7 @@ The following resources are created:
 | <a name="output_vpn_tunnel_statuses"></a> [vpn\_tunnel\_statuses](#output\_vpn\_tunnel\_statuses) | The status of each VPN tunnel, or null when VPN is disabled. |
 | <a name="output_zones"></a> [zones](#output\_zones) | The zones of the zonal subnets, in subnet order: network.explicit\_zones, else the zones GCP returns for the region. Subnet i of each tier takes the i-th CIDR, so this order fixes the subnet CIDRs. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

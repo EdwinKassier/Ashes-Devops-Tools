@@ -136,3 +136,7 @@ The following resources are created:
 | <a name="output_zone"></a> [zone](#output\_zone) | The created DNS managed zone resource |
 | <a name="output_zone_name"></a> [zone\_name](#output\_zone\_name) | The name of the DNS zone |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

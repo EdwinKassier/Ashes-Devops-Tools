@@ -65,3 +65,7 @@ The following resources are created:
 | <a name="output_id"></a> [id](#output\_id) | The Supabase project ref — a 20-character lowercase alphanumeric string used as the project identifier in all API calls. |
 | <a name="output_name"></a> [name](#output\_name) | The Supabase project display name. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

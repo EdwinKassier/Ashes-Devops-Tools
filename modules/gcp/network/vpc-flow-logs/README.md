@@ -251,3 +251,7 @@ The following resources are created:
 | <a name="output_storage_bucket_name"></a> [storage\_bucket\_name](#output\_storage\_bucket\_name) | The Cloud Storage bucket name (if created) |
 | <a name="output_writer_identity"></a> [writer\_identity](#output\_writer\_identity) | The service account identity for the sink writer |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

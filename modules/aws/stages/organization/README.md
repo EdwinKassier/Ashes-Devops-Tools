@@ -193,3 +193,7 @@ The following resources are created:
 | <a name="output_tfc_plan_role_arns"></a> [tfc\_plan\_role\_arns](#output\_tfc\_plan\_role\_arns) | Map of account key -> member-account tfc-plan (read-only) role ARN. Set as TFC\_AWS\_PLAN\_ROLE\_ARN on the workspaces bound to that account. Empty when the TFC OIDC baseline is disabled. |
 | <a name="output_tfc_workspace_bindings"></a> [tfc\_workspace\_bindings](#output\_tfc\_workspace\_bindings) | Map of account key -> TFC workspace names bound to that account's tfc-plan / tfc-apply roles (empty when the baseline is disabled). |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

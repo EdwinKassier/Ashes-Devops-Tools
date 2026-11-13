@@ -136,3 +136,7 @@ The following resources are created:
 | <a name="output_policy_self_link"></a> [policy\_self\_link](#output\_policy\_self\_link) | The self\_link of the created security policy (deprecated: use 'self\_link' instead) |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The self\_link of the created security policy |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

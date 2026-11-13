@@ -144,3 +144,7 @@ The following resources are created:
 | <a name="output_restore_testing_role_arn"></a> [restore\_testing\_role\_arn](#output\_restore\_testing\_role\_arn) | ARN of the restore-testing role in the backup account (created by the stage unless restore\_testing\_role\_arn was set). With enable\_central\_copy it is the copy vault's role. |
 | <a name="output_vault_arn"></a> [vault\_arn](#output\_vault\_arn) | ARN of the KMS-encrypted, Vault-Locked backup vault in the backup account. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

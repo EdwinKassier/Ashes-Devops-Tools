@@ -78,3 +78,7 @@ The following resources are created:
 | <a name="output_policy_id"></a> [policy\_id](#output\_policy\_id) | ID of the principal access boundary policy. |
 | <a name="output_policy_name"></a> [policy\_name](#output\_policy\_name) | Full resource name of the principal access boundary policy. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

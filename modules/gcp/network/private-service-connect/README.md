@@ -118,3 +118,7 @@ The following resources are created:
 | <a name="output_id"></a> [id](#output\_id) | The ID of the PSC forwarding rule |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the PSC forwarding rule |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -125,3 +125,7 @@ The following resources are created:
 | <a name="output_managed_secret_names"></a> [managed\_secret\_names](#output\_managed\_secret\_names) | Sorted list of secret names managed by this module. Visible in plan output — useful for verifying the desired-state map without exposing values. |
 | <a name="output_reconcile_trigger_id"></a> [reconcile\_trigger\_id](#output\_reconcile\_trigger\_id) | Unique ID of the reconcile terraform\_data resource; changes when secrets are reconciled. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

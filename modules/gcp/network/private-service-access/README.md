@@ -109,3 +109,7 @@ The following resources are created:
 | <a name="output_peering"></a> [peering](#output\_peering) | The service networking connection resource |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The self\_link of the reserved global IP address |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

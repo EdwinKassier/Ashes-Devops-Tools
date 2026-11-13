@@ -89,3 +89,7 @@ The following resources are created:
 | <a name="output_patch_deployment_ids"></a> [patch\_deployment\_ids](#output\_patch\_deployment\_ids) | Map of deployment key to the created patch deployment resource ID. |
 | <a name="output_patch_deployment_names"></a> [patch\_deployment\_names](#output\_patch\_deployment\_names) | Map of deployment key to the fully-qualified patch deployment name. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

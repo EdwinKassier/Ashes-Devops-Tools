@@ -99,3 +99,7 @@ The following resources are created:
 | <a name="output_name"></a> [name](#output\_name) | The name of the Cloud Run job. |
 | <a name="output_service_account_email"></a> [service\_account\_email](#output\_service\_account\_email) | The service account the job's tasks run as. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

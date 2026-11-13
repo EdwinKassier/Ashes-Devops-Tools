@@ -128,3 +128,7 @@ The following resources are created:
 | <a name="output_watch_alert_policy_ids"></a> [watch\_alert\_policy\_ids](#output\_watch\_alert\_policy\_ids) | Map of watch name to the created alert policy ID. |
 | <a name="output_watched_names"></a> [watched\_names](#output\_watched\_names) | Names of the guardrail watches that are active. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

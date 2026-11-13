@@ -72,3 +72,7 @@ The following resources are created:
 | <a name="output_repository_urls"></a> [repository\_urls](#output\_repository\_urls) | Map of repository names to their package-registry URLs, built per format (docker/maven/npm/python). Formats without a registry host (APT/YUM/GOOGET/KFP/GENERIC) are omitted. |
 | <a name="output_vulnerability_scanning_enabled"></a> [vulnerability\_scanning\_enabled](#output\_vulnerability\_scanning\_enabled) | Whether DOCKER repositories are configured to scan pushed images (enable\_vulnerability\_scanning). |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

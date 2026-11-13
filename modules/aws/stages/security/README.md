@@ -256,3 +256,7 @@ The following resources are created:
 | <a name="output_security_notifications_topic_arn"></a> [security\_notifications\_topic\_arn](#output\_security\_notifications\_topic\_arn) | ARN of the security-notifications SNS topic (consumed by downstream usage/alarm actions). |
 | <a name="output_securityhub_configuration_policy_id"></a> [securityhub\_configuration\_policy\_id](#output\_securityhub\_configuration\_policy\_id) | UUID of the baseline Security Hub configuration policy. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

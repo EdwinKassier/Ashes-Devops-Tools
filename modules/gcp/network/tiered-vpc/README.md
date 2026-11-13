@@ -174,3 +174,7 @@ The following resources are created:
 | <a name="output_subnets"></a> [subnets](#output\_subnets) | Subnet module outputs by tier (public, private, database), each keyed by zone. |
 | <a name="output_vpc"></a> [vpc](#output\_vpc) | The composed VPC module outputs. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

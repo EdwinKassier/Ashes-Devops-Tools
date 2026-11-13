@@ -123,3 +123,7 @@ The following resources are created:
 | <a name="output_serverless_neg_id"></a> [serverless\_neg\_id](#output\_serverless\_neg\_id) | The ID of the Serverless NEG for Load Balancer integration |
 | <a name="output_service_name"></a> [service\_name](#output\_service\_name) | The full service name used for the API Gateway |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

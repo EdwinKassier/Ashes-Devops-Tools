@@ -119,3 +119,7 @@ The following resources are created:
 | <a name="output_reverse_peering"></a> [reverse\_peering](#output\_reverse\_peering) | The reverse peering connection resource (if created) |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The network self\_link associated with the peering |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

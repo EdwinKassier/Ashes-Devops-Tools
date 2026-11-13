@@ -235,3 +235,7 @@ The following resources are created:
 | <a name="output_static_ip_address"></a> [static\_ip\_address](#output\_static\_ip\_address) | The static IP address resource (if created) |
 | <a name="output_url_map"></a> [url\_map](#output\_url\_map) | The URL map resource (if L7) |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

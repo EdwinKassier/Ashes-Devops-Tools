@@ -77,3 +77,7 @@ The following resources are created:
 | <a name="output_project_name"></a> [project\_name](#output\_project\_name) | The Supabase project display name. |
 | <a name="output_service_role_key"></a> [service\_role\_key](#output\_service\_role\_key) | The Supabase service role key. Treat as a secret — grants full database access bypassing Row Level Security. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

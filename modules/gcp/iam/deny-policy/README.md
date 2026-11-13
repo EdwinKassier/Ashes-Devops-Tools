@@ -101,3 +101,7 @@ The following resources are created:
 | <a name="output_deny_policy_ids"></a> [deny\_policy\_ids](#output\_deny\_policy\_ids) | Map of deny-policy name to the created google\_iam\_deny\_policy resource ID. |
 | <a name="output_deny_policy_names"></a> [deny\_policy\_names](#output\_deny\_policy\_names) | List of deny-policy names created. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

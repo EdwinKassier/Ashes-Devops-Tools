@@ -103,6 +103,11 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   placeholders, the QA `saas-workload` example no longer binds the production domain, and
   `supabase/environment` keeps the 12-character password minimum.
 
+- **Every module README links its example.** The 83 module READMEs (of 126 with an
+  `examples/basic/`) that had no link to `examples/basic/main.tf` gain an `## Examples` section
+  after the generated docs, and `make consistency` now fails when a module with
+  `examples/basic/` lacks that link.
+
 #### Security
 
 - **The app-delivery example workflows start with harden-runner.** Each job in

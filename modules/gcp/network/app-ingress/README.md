@@ -135,3 +135,7 @@ The following resources are created:
 | <a name="output_managed_domains"></a> [managed\_domains](#output\_managed\_domains) | Domains the managed certificate covers. |
 | <a name="output_ssl_policy_id"></a> [ssl\_policy\_id](#output\_ssl\_policy\_id) | SSL policy on the HTTPS proxy: ssl\_policy\_id when set, else the TLS-floor policy this module creates. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

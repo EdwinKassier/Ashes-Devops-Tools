@@ -190,3 +190,7 @@ The following resources are created:
 | <a name="output_vpn_preshared_key_arn"></a> [vpn\_preshared\_key\_arn](#output\_vpn\_preshared\_key\_arn) | ARN of the Secrets Manager secret holding the VPN tunnel pre-shared keys (read it to configure the on-premises device), or null when enable\_vpn = false or vpn.preshared\_key\_storage = Standard. |
 | <a name="output_vpn_tunnel_addresses"></a> [vpn\_tunnel\_addresses](#output\_vpn\_tunnel\_addresses) | AWS-side public IPs of the two VPN tunnels (configure these on the on-premises device), or an empty list when enable\_vpn = false. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -199,3 +199,7 @@ The following resources are created:
 | <a name="output_vpc_service_controls"></a> [vpc\_service\_controls](#output\_vpc\_service\_controls) | All VPC Service Controls perimeter outputs, keyed by perimeter name. |
 | <a name="output_zones"></a> [zones](#output\_zones) | The zones of the zonal subnets, in subnet order: network.explicit\_zones, else the zones GCP returns for the region. Subnet i of each tier takes the i-th CIDR, so this order fixes the subnet CIDRs. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

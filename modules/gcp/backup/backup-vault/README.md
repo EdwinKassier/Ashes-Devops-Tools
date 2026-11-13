@@ -126,3 +126,7 @@ The following resources are created:
 | <a name="output_vault_id"></a> [vault\_id](#output\_vault\_id) | Terraform ID of the backup vault (projects/<project>/locations/<location>/backupVaults/<vault\_id>). |
 | <a name="output_vault_name"></a> [vault\_name](#output\_vault\_name) | Resource name of the backup vault. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

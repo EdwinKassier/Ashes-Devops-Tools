@@ -206,3 +206,7 @@ The following resources are created:
 | <a name="output_workload_folder_roles"></a> [workload\_folder\_roles](#output\_workload\_folder\_roles) | Effective folder roles for workload SAs ({ plan, apply }, plan includes the plan viewer custom role); consumed by gcp-projects so the grant list and the projects-apply delegation condition stay in lock-step. |
 | <a name="output_workload_service_accounts"></a> [workload\_service\_accounts](#output\_workload\_service\_accounts) | Map of application environment key -> { plan, apply } SA emails. Consumed by gcp-projects, which grants them roles on the environment folder. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

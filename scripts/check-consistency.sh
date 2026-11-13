@@ -415,6 +415,14 @@ while IFS= read -r ex; do
   done
 done < <(find modules -path '*/examples/*' -name versions.tf ! -path '*/.terraform/*' -exec dirname {} \; | sort)
 
+echo "==> Every module with examples/basic links it from its README"
+# readme_links_example <module dir>: its README links examples/basic/main.tf
+# (an "## Examples" section after END_TF_DOCS, as in templates/aws/module).
+readme_links_example() { grep -qF '](examples/basic/main.tf)' "$1/README.md" 2>/dev/null; }
+while IFS= read -r mod; do
+  readme_links_example "${mod}" || note "${mod}/README.md does not link examples/basic/main.tf (add an \"## Examples\" section after END_TF_DOCS)"
+done < <(find modules -type d -path '*/examples/basic' ! -path '*/.terraform/*' | sed 's#/examples/basic$##' | sort)
+
 echo "==> Every workflow job that holds a secret or an OIDC token blocks egress"
 ./scripts/check-github-governance.sh || note "a credential-holding job is not harden-runner egress-policy: block (see above)"
 

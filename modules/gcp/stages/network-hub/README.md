@@ -184,3 +184,7 @@ The following resources are created:
 | <a name="output_spoke_peering_states"></a> [spoke\_peering\_states](#output\_spoke\_peering\_states) | State of each hub-side environment peering (ACTIVE once the workload has created the spoke side), keyed by environment key. |
 | <a name="output_vpn_gateway_ips"></a> [vpn\_gateway\_ips](#output\_vpn\_gateway\_ips) | The hub HA VPN gateway external IP addresses (give them to the on-premises peer), or null when vpn.enabled = false. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

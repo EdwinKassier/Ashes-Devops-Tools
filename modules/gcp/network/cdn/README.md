@@ -129,3 +129,7 @@ The following resources are created:
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The self link of the backend service |
 | <a name="output_url_map_id"></a> [url\_map\_id](#output\_url\_map\_id) | The ID of the URL map |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

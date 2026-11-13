@@ -87,3 +87,7 @@ The following resources are created:
 | <a name="output_project_id"></a> [project\_id](#output\_project\_id) | The Firebase project ID |
 | <a name="output_web_app_id"></a> [web\_app\_id](#output\_web\_app\_id) | The Web app ID |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

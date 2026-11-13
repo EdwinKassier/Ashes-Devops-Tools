@@ -154,3 +154,7 @@ The following resources are created:
 | <a name="output_vpc_id"></a> [vpc\_id](#output\_vpc\_id) | The ID of the workload spoke VPC. |
 | <a name="output_workload_role_arns"></a> [workload\_role\_arns](#output\_workload\_role\_arns) | Map of workload IAM role name to role ARN. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

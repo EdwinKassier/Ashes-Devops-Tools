@@ -115,3 +115,7 @@ module "org_config_recorders" {
   log_archive_bucket_name     = "acme-org-log-archive"
 }
 ```
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

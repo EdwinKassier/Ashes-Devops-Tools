@@ -245,6 +245,10 @@ Keep generated README sections current with:
 make docs
 ```
 
+A module that ships `examples/basic/` links it from an `## Examples` section after
+`<!-- END_TF_DOCS -->` (see `templates/aws/module/README.md`); `make consistency` fails
+otherwise.
+
 ## Planning Changes
 
 ### Control Plane

@@ -180,3 +180,7 @@ The following resources are created:
 | <a name="output_group_keys"></a> [group\_keys](#output\_group\_keys) | Map of group key → email address that identifies each group, keyed by the group's email/id. |
 | <a name="output_group_names"></a> [group\_names](#output\_group\_names) | Map of group key → resource name (e.g. groups/123456789), keyed by the group's email/id. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

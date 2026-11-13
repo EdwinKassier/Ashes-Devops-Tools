@@ -189,3 +189,7 @@ The following resources are created:
 | <a name="output_stage"></a> [stage](#output\_stage) | The current launch stage of the role |
 | <a name="output_title"></a> [title](#output\_title) | The human-readable title of the custom role |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -88,3 +88,7 @@ The following resources are created:
 | <a name="output_data_lake_arn"></a> [data\_lake\_arn](#output\_data\_lake\_arn) | ARN of the Security Lake data lake, or null when Security Lake is disabled. |
 | <a name="output_log_source_names"></a> [log\_source\_names](#output\_log\_source\_names) | Names of the AWS-native log sources ingested into Security Lake. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

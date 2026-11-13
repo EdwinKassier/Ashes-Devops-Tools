@@ -172,3 +172,7 @@ The following resources are created:
 | <a name="output_protected_project_numbers"></a> [protected\_project\_numbers](#output\_protected\_project\_numbers) | List of project numbers protected by this perimeter |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The self\_link of the service perimeter |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -70,3 +70,7 @@ The following resources are created:
 | <a name="output_bucket_self_links"></a> [bucket\_self\_links](#output\_bucket\_self\_links) | Map of data\_buckets key to self\_link for all data buckets in this module |
 | <a name="output_logs_bucket_name"></a> [logs\_bucket\_name](#output\_logs\_bucket\_name) | Name of the audit logs bucket (used as a log sink destination) |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

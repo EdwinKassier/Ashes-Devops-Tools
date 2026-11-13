@@ -96,3 +96,7 @@ The following resources are created:
 | <a name="output_project_name"></a> [project\_name](#output\_project\_name) | The Vercel project name. |
 | <a name="output_uat_environment_id"></a> [uat\_environment\_id](#output\_uat\_environment\_id) | The Vercel custom environment ID for the UAT environment. Pass to vercel\_project\_domain or additional env var resources targeting UAT. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

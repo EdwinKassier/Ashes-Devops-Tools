@@ -81,3 +81,7 @@ module "example" {
 | <a name="output_ca_arn"></a> [ca\_arn](#output\_ca\_arn) | ARN of the ACM Private CA, or null when the Private CA capability is disabled. |
 | <a name="output_secret_arns"></a> [secret\_arns](#output\_secret\_arns) | Map of secret name to its ARN. Empty when the Secrets Manager baseline is disabled. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

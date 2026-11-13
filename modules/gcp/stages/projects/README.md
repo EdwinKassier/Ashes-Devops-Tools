@@ -183,3 +183,7 @@ The following resources are created:
 | <a name="output_project_numbers"></a> [project\_numbers](#output\_project\_numbers) | Map of Project Numbers |
 | <a name="output_projects"></a> [projects](#output\_projects) | Map of created projects, keyed "<env>-<project>": { id, project\_id, number, name, parent, labels, billing\_account }. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

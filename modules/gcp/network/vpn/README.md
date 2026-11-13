@@ -146,3 +146,7 @@ The following resources are created:
 | <a name="output_tunnel_statuses"></a> [tunnel\_statuses](#output\_tunnel\_statuses) | The status of each VPN tunnel |
 | <a name="output_tunnels"></a> [tunnels](#output\_tunnels) | The VPN tunnel resources (marked sensitive because tunnels contain shared\_secret) |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.
