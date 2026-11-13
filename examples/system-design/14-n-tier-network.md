@@ -37,8 +37,10 @@ someone can edit. Environments are **spokes**, one VPC each, joined to a
 **hub** that owns shared routing, DNS and egress. Prod and nonprod spokes never
 learn each other's routes. On AWS every spoke's default route goes to the
 Transit Gateway, through AWS Network Firewall, and out through a central NAT,
-so egress is inspected. On GCP each environment has its own Cloud NAT, which is
-not inspected. Say so, and name Secure Web Proxy or Cloud NGFW as the addition.
+so egress is inspected. On GCP each environment has its own Cloud NAT, which
+has no allowlist, unless it opts in to the hub Secure Web Proxy (preview): an
+FQDN allowlist that replaces Cloud NAT for the private tier. A production
+environment must use the proxy or carry a time-boxed waiver.
 Cloud APIs and managed databases are reached over private endpoints, never the
 internet.
 
@@ -159,7 +161,7 @@ tiers enforce, and the **cross-root outputs** that let a spoke find its hub.
 | Presentation → application | container port | `-svc` SG admits the ALB SG | public → compute rule on `compute_tier_ports` (8080, 8443, 3000) |
 | Application → data | 5432 | `-db` SG admits only the `-svc` SG | compute → database on `database_ports` (3306, 5432, 6379); Cloud SQL over PSA |
 | Data → anywhere | none | `-db` SG has no egress; `isolated` has no route | database-tier egress deny |
-| Application → internet | 443 | SG egress 443 → TGW → firewall → NAT | Cloud NAT, not inspected |
+| Application → internet | 443 | SG egress 443 → TGW → firewall → NAT | Hub Secure Web Proxy FQDN allowlist with `egress_proxy` on; otherwise Cloud NAT, not inspected |
 | Application → cloud APIs | 443 | Gateway endpoints (S3, DynamoDB); others via inspection | PSC `googleapis.com` endpoint |
 | Operators → VMs | 22 | SSM Session Manager, no inbound | IAP range `35.235.240.0/20` in the VPC rules, but the hub's hierarchical deny blocks it first (see deep dive 1) |
 | Prod ↔ nonprod | none | Separate TGW tables; each blackholes the other segment's spoke CIDRs | Peering is non-transitive; no route |
@@ -222,12 +224,13 @@ back through the firewall because the `shared` table routes the org supernet to
 inspection
 ([`modules/aws/stages/network-hub/main.tf`](../../modules/aws/stages/network-hub/main.tf)).
 
-**Egress path (GCP).** A VM or GKE node in `private` leaves through the
-environment's Cloud NAT. Cloud Run with `PRIVATE_RANGES_ONLY` (the default
+**Egress path (GCP).** With the egress proxy off or waived, a VM or GKE node
+in `private` leaves through the environment's Cloud NAT. Cloud Run with `PRIVATE_RANGES_ONLY` (the default
 while the environment egress proxy is off) sends internet traffic straight
 out, past the VPC firewall and NAT (see the primer). With the egress proxy on,
 the default is `ALL_TRAFFIC` and the app services get `HTTPS_PROXY` for the hub
-Secure Web Proxy.
+Secure Web Proxy. The `private` tier then has no Cloud NAT, so a VM or GKE pod
+reaches the internet only if it sets the proxy itself.
 
 ## Deep dives
 
@@ -380,35 +383,46 @@ directions of a flow use the same AZ and the same stateful endpoint
 checked 2026-11). Without it, asymmetric return traffic is dropped as
 out-of-state.
 
-**GCP, as built: not inspected.** Each environment has its own Cloud NAT for
-the `private` and `database` tiers, and the database tier's egress is denied
-by firewall. That is egress *control* (no public IPs, a known set of NAT
-addresses), not inspection. To add inspection:
+**GCP, as built: two modes.** By default each environment has its own Cloud
+NAT for the `private` tier; the `database` tier is not translated and its
+egress is denied by firewall. That is egress *control* (no public IPs, a known
+set of NAT addresses), not an allowlist. The opt-in mode is the hub
+**Secure Web Proxy** (preview,
+[`modules/gcp/network/secure-web-proxy`](../../modules/gcp/network/secure-web-proxy/)):
 
-- **Cloud NGFW Standard** adds FQDN objects and threat intelligence to firewall
-  policies. **Enterprise** adds intrusion prevention and URL filtering
-  ([Google Cloud docs](https://docs.cloud.google.com/firewall/docs/about-firewalls),
-  checked 2026-11). This builds on the tier policy above, so it needs
-  `firewall_mode = "policy"` first.
-- **Secure Web Proxy** inspects HTTP and HTTPS egress as an explicit proxy, as a
-  next hop by route, or through a PSC service attachment, with optional TLS
-  inspection
-  ([Google Cloud docs](https://docs.cloud.google.com/secure-web-proxy/docs/overview),
-  checked 2026-11). Its PSC mode is the closest GCP analogue to a central AWS
-  inspection VPC.
+- `secure_web_proxy` on `gcp-network-hub` creates the proxy in the hub region
+  with an FQDN allowlist (`allowed_fqdns`; everything else is denied) and
+  publishes it over a Private Service Connect service attachment. Peering
+  cannot carry a next-hop route to it, so PSC is how spokes reach it.
+- `gcp.environments.<env>.egress_proxy: true` gives that environment a PSC
+  endpoint to the proxy and takes the `private` tier off Cloud NAT, so the
+  proxy is its only internet path. app-services sends every Cloud Run service
+  and job through the VPC (`ALL_TRAFFIC`) and sets `HTTPS_PROXY`, `HTTP_PROXY`
+  and `NO_PROXY`. VMs and GKE pods must set the proxy themselves.
+- A production environment's plan fails unless the proxy is on or a
+  time-boxed `production_egress_proxy_waiver` is set on its workspace
+  ([production hardening](../../docs/runbooks/production-hardening.md#1-vpc-service-controls-promote-from-dry-run-to-enforced-audit-m2)).
 
-Neither exists in this repo.
+The limits: the proxy matches host names only (no TLS inspection), it serves
+only environments in the hub region (a PSC endpoint must be in the region of
+the published service), traffic through PSC is source-NATed so rules cannot
+match the client, and it is not yet proven in a sandbox
+([known gaps](../../docs/known-gaps.md)). **Cloud NGFW** is not built: Standard
+adds FQDN objects and threat intelligence to firewall policies, Enterprise adds
+intrusion prevention and URL filtering
+([Google Cloud docs](https://docs.cloud.google.com/firewall/docs/about-firewalls),
+checked 2026-11), and both build on the tier policy above, so they need
+`firewall_mode = "policy"` first.
 
-**A routing catch on GCP.** `tiered-vpc` creates every VPC with
+**A routing detail on GCP.** `tiered-vpc` creates every VPC with
 `delete_default_routes_on_create = true`
-([`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)),
-and no module in the repo recreates a `0.0.0.0/0` route. Public NAT can use only
-routes whose next hop is the default internet gateway
+([`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)).
+Public NAT can use only routes whose next hop is the default internet gateway
 ([Google Cloud docs](https://docs.cloud.google.com/nat/docs/nat-product-interactions),
-checked 2026-11), and peering never exchanges such routes (VPC peering docs
-above). As written, the private tier probably has no internet path at all.
-API traffic still works through the PSC endpoint. **Verify before relying on**
-this in a sandbox; "Build it here" shows the one-resource fix.
+checked 2026-11), so `tiered-vpc` adds that `0.0.0.0/0` route back
+(`resource "google_compute_route" "internet_egress"`) when
+`enable_internet_egress_route` is true. `net-hub` and `net-spoke` set it from
+`nat.enabled`. The tier firewall still decides which tiers may use it.
 
 **Where it breaks.** At ×100 egress, Network Firewall's 100 Gbps per AZ
 becomes the ceiling, and per-GB processing dominates the bill. Move bulk flows
@@ -429,11 +443,15 @@ Three patterns, each with different reach.
   The hub centralises `ec2`, `ssm`, `ssmmessages`, `ec2messages`, `kms`,
   `logs` and `sts` in the egress VPC with an org-scoped policy
   ([`modules/aws/network/vpc-endpoints/variables.tf`](../../modules/aws/network/vpc-endpoints/variables.tf)).
-  The catch: `private_dns_enabled` answers only inside the egress VPC, and the
-  module leaves cross-account zone association out of scope. A spoke therefore
-  resolves those names to the public endpoints and reaches them through
-  inspection and NAT. The fix is either spoke-local endpoints for chatty APIs
-  or a hub-owned private hosted zone shared with spokes.
+  Each name is served from a hub-owned private hosted zone
+  (`enable_shared_private_dns`) that the org Route 53 Profile carries to every
+  spoke VPC that associates it (`resolver_profile_id` in the aws-network
+  contract), so spokes resolve the central endpoints privately. The catch: the
+  traffic still crosses the inspection firewall in both directions, so it pays
+  the per-GB processing charge, and a fail-closed production allowlist must
+  cover the service names
+  ([known gaps](../../docs/known-gaps.md), D5). For a chatty API, a
+  spoke-local endpoint avoids both.
 - **GCP Private Service Access.** An allocated range peered to Google's
   producer network, which Cloud SQL and Memorystore private IPs come from. It
   is on by default with a /16
@@ -461,7 +479,7 @@ the public address.
 | AWS tier control | SG-to-SG references per component | NACLs; CIDR rules | Identity-based, survives churn, stateful | A compliance rule demanding subnet ACLs too (add, do not replace) |
 | GCP tier control | Firewall policy by subnet CIDR (`policy`) | Tag-based VPC rules | Tags are editable by too many principals | Pure Cloud Run estates with no VMs, where tags barely matter |
 | AWS egress | Central Network Firewall + NAT | NAT per spoke | One allowlist, one bill, one log | Latency-critical egress or a per-GB bill that dwarfs the risk |
-| GCP egress | Per-environment Cloud NAT (as built) | Secure Web Proxy via PSC | It is what exists; proxy needs client or route changes | A requirement for inspected egress on GCP |
+| GCP egress | Hub Secure Web Proxy via PSC for prod (`egress_proxy`); Cloud NAT elsewhere | Cloud NAT everywhere; Cloud NGFW Enterprise | An FQDN allowlist without TLS interception; production requires it or a waiver | An environment outside the hub region, clients that ignore proxy variables, or a need for TLS inspection |
 | Data tier | No route out (`isolated`) / PSA | Private subnets with NAT | A database never needs to initiate | Self-managed databases that pull patches (use a mirror) |
 | API access | Gateway endpoints + PSC | Everything via NAT | Free, private, bypasses inspection costs | Endpoint quotas or DNS complexity outweighing NAT cost |
 | Hub link (GCP) | VPC peering (default) | NCC STAR | Proven in this repo | Peering-group quotas, many spokes, sandbox-proven NCC |
@@ -494,6 +512,7 @@ TGW-native Network Firewall attachment.
 | Transit Gateway route table | Wrong route or blackhole | Every spoke in that segment |
 | Firewall policy change | Allowed flow now dropped | All spokes, both segments |
 | Cloud NAT (GCP) | Egress fails | One environment |
+| Hub Secure Web Proxy (GCP) | Proxied egress fails, or an allowlist change drops a host | Every environment with `egress_proxy` on |
 | Hub peering or NCC spoke | Hub DNS fails | One environment's internal names |
 | Tier firewall rule | Tier-to-tier traffic blocked | One environment |
 | PSA peering | Cloud SQL unreachable | Every database in that environment |
@@ -507,10 +526,10 @@ TGW-native Network Firewall attachment.
 | Tiers | `public` (opt-in), `private`, `isolated`, `tgw` | `public`, `private`, `database` per zone | AWS needs a `tgw` tier for attachment ENIs |
 | Tier control | Security groups | VPC rules or network firewall policy | SGs reference identities; GCP policies select ranges, secure tags or service accounts |
 | Org-wide floor | VPC Block Public Access via declarative policy | Hierarchical firewall + `vmExternalIpAccess` | BPA ingress-only still lets NAT out ([AWS docs](https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa-basics.html), checked 2026-11) |
-| Egress | Central inspection + NAT | Cloud NAT per environment | Only AWS is inspected |
-| Inspection | AWS Network Firewall | Cloud NGFW Enterprise / Secure Web Proxy (not built) | Network Firewall runs inline on a route |
+| Egress | Central inspection + NAT | Cloud NAT per environment, or the hub Secure Web Proxy (`egress_proxy`) | AWS inspects every spoke; GCP allowlists only environments that opt in |
+| Inspection | AWS Network Firewall | Secure Web Proxy, host names only (preview); Cloud NGFW not built | Network Firewall runs inline on a route; the proxy needs clients to use it |
 | Managed DB access | DB subnet group in `isolated` | Private Service Access | PSA is a peering; it is not transitive |
-| Cloud API access | Gateway + interface endpoints | Private Google Access + PSC | PSC brings its own DNS zone; central AWS endpoints need shared DNS |
+| Cloud API access | Gateway + interface endpoints | Private Google Access + PSC | PSC brings its own DNS zone; central AWS endpoints reach spokes through a Route 53 Profile |
 | Flow logs | VPC flow logs to the log-archive bucket | Subnet flow logs, exported to BigQuery | GCP sampling defaults to 0.1 in the environment stage |
 
 Two differences change the design: transitive routing (a TGW table can send
@@ -543,11 +562,14 @@ gcp:
     hub_cidr_block: 10.0.0.0/16
     dns_hub_cidr_block: 10.1.0.0/16
     connectivity: peering # ncc only after the sandbox proof
+    zones: [europe-west2-a, europe-west2-b, europe-west2-c] # required once any environment is production
   environments:
     prod:
       cidr_block: 10.60.0.0/16
-      region: europe-west2
+      region: europe-west2 # the hub region: the hub proxy serves no other
       is_production: true
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c] # required when is_production
+      egress_proxy: true # needs secure_web_proxy on gcp-network-hub (a variable, not config)
 aws:
   workload:
     app_ingress_mode: cloudfront_vpc_origin # ALB stays internal
@@ -570,6 +592,24 @@ aws:
         segment: prod
 ```
 
+The hub proxy is the `secure_web_proxy` variable of `gcp-network-hub`
+(`envs/gcp/network-hub`), not a config key. Set it on that workspace in
+`config/tfc-workspaces.yaml` (same fields; see
+`config/tfc-workspaces.example.yaml`) and apply the hub before the environment:
+
+```hcl
+# Illustrative value of the gcp-network-hub variable secure_web_proxy.
+secure_web_proxy = {
+  enabled                = true
+  allowed_fqdns          = ["api.payments.example.com", "*.github.com"]
+  proxy_only_subnet_cidr = "10.0.250.0/23" # must not overlap a hub subnet
+  psc_nat_subnet_cidr    = "10.0.252.0/24"
+}
+```
+
+Production also fails the plan on a dry-run VPC-SC perimeter unless it is
+enforced or waived (see [#9](09-video-upload-streaming.md)).
+
 Gaps this design hits:
 
 - **`firewall_mode`** is not exposed by `gcp-workload-<env>` or
@@ -580,8 +620,8 @@ Gaps this design hits:
   network-hub stage but not on `envs/aws/network`.
 - **Cloud NAT tuning** (ports per VM, dynamic allocation) is not passed through
   `net-spoke`.
-- **No inspected egress on GCP**, and no shared DNS for the central AWS
-  interface endpoints.
+- **No TLS inspection on GCP egress.** The hub Secure Web Proxy (preview)
+  matches host names only, and serves only environments in the hub region.
 - **IAP is denied by the hub's hierarchical policy.** `gcp-network-hub` needs
   an allow or `goto_next` rule for `35.235.240.0/20` on tcp 22 and 3389 at a
   priority higher than 500.
@@ -596,7 +636,7 @@ The migration runbook requires a sandbox proof before any environment adopts
 module "sandbox_spoke" {
   source = "../../../modules/gcp/stages/net-spoke"
 
-  project_id     = "SANDBOX_HOST_PROJECT_ID"
+  project_id     = "my-org-sandbox-host"
   project_prefix = "my-org"
   region         = "europe-west2"
 
@@ -620,28 +660,6 @@ Run the runbook's Connectivity Tests against it (public → compute,
 compute → database, Cloud Run → Cloud SQL, database egress denied), then
 re-plan to 0 changes.
 
-### GCP: a default route for Cloud NAT
-
-In `envs/gcp/workload`. Argument names checked against google v8.10.0
-([`google_compute_route`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/compute_route),
-checked 2026-11):
-
-```hcl
-# Gap: tiered-vpc deletes the default route and no module recreates it; Public NAT
-# only uses routes whose next hop is the default internet gateway. Verify in a sandbox.
-resource "google_compute_route" "default_internet" {
-  project          = local.env_config.host_project_id
-  name             = "${module.environment.network_name}-default-igw"
-  network          = module.environment.network_self_link
-  dest_range       = "0.0.0.0/0"
-  next_hop_gateway = "default-internet-gateway"
-  priority         = 1000
-}
-```
-
-The public tier gains the route too, but its VMs cannot hold external IPs and
-are not in the NAT's subnet list, so nothing there gains egress.
-
 ### AWS: a spoke-local interface endpoint for a chatty API
 
 In `envs/aws/workload`, using `module.aws_workload`, `local.environment`,
@@ -654,8 +672,8 @@ v6.72.0
 checked 2026-11):
 
 ```hcl
-# Gap: the hub's central endpoints answer private DNS only inside the egress VPC;
-# a spoke-local SQS endpoint, in the landing zone's conventions.
+# Gap: no module creates spoke-local endpoints. Central endpoints resolve from every
+# spoke but cross the inspection firewall; this SQS endpoint stays in the spoke.
 resource "aws_security_group" "sqs_endpoint" {
   name        = "${local.environment}-sqs-endpoint"
   description = "SQS interface endpoint; HTTPS from this spoke only."
@@ -686,7 +704,9 @@ resource "aws_vpc_endpoint" "sqs" {
 ```
 
 Add an endpoint policy scoped by `aws:PrincipalOrgID`, as the hub module does,
-and the SQS calls stop crossing the firewall and its per-GB bill.
+and the SQS calls stop crossing the firewall and its per-GB bill. SQS is not one of
+the hub's central endpoints, so this endpoint's private DNS does not clash with
+a central name.
 
 ## Runbook
 
@@ -743,11 +763,13 @@ APIs that are crossing the firewall.
 **Detection:** `nat/dropped_sent_packets_count` with reason `OUT_OF_RESOURCES`,
 or `nat/nat_allocation_failed`
 ([Google Cloud docs](https://docs.cloud.google.com/nat/docs/monitoring),
-checked 2026-11). **Triage:** if no traffic is translated at all, check for a
-`0.0.0.0/0` route to the default internet gateway; if only some VMs fail, check
-`nat/allocated_ports` per VM. **Mitigation:** add the default route; raise
-ports per VM or enable dynamic allocation (a `net-spoke` change). **Follow-up:**
-pool outbound connections.
+checked 2026-11). **Triage:** if no traffic is translated at all, check that
+the environment's `egress_proxy` is off (with it on, the `private` tier has no
+Cloud NAT by design: check the proxy endpoint and the hub allowlist instead) and
+that the `<vpc>-egress-internet` route exists; if only some VMs fail, check
+`nat/allocated_ports` per VM. **Mitigation:** restore the route by re-applying
+`gcp-workload-<env>`; raise ports per VM or enable dynamic allocation (a
+`net-spoke` change). **Follow-up:** pool outbound connections.
 
 ## Study aids
 
@@ -772,9 +794,11 @@ pool outbound connections.
   identity-based. NACLs are a coarse backstop at most.
 - **"Why is the database tier unable to reach the internet?"** It never needs
   to initiate. No route out turns a credential leak into a contained incident.
-- **"Is GCP egress inspected?"** No. It is per-environment Cloud NAT. Inspection
-  would be Secure Web Proxy or Cloud NGFW Enterprise, which this repo does not
-  build.
+- **"Is GCP egress inspected?"** Allowlisted, not inspected, when the
+  environment turns on `egress_proxy`: the hub Secure Web Proxy (preview)
+  allows listed host names and denies the rest, without TLS inspection.
+  Otherwise it is per-environment Cloud NAT. Cloud NGFW Enterprise would add
+  intrusion prevention; this repo does not build it.
 - **"How do prod and nonprod stay apart?"** AWS: separate TGW route tables; the
   firewall policy decides the routable-through-inspection path. GCP: peering is
   not transitive, and NCC edge spokes cannot see each other.

@@ -83,6 +83,13 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   inspection, not no egress), notes the tfc-admin policy-sets guard, and its raw Cloud Run
   snippet names the real gap (the cloud-run module has no CMEK input) and the proxy variables a
   raw service must set.
+- **`14-n-tier-network` matches the network as built.** It no longer says that no module
+  recreates the `0.0.0.0/0` route (`tiered-vpc` `enable_internet_egress_route`, set by
+  net-hub and net-spoke from `nat.enabled`) and drops the raw route snippet. GCP egress now
+  covers the hub Secure Web Proxy with a `secure_web_proxy` example; the config adds zones and
+  `egress_proxy`; spokes resolve the central AWS endpoints through the org Route 53 Profile,
+  so the spoke-local SQS endpoint is justified by the inspection charge; the sandbox spoke uses
+  a valid project ID.
 
 ### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
 
