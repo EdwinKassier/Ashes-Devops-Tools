@@ -26,6 +26,108 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 ## [Unreleased]
 
+### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
+
+IDs prefixed `re-audit-2` are this report's; the same IDs in older entries belong to earlier audits.
+
+#### Security
+
+- **The GCP environment perimeter protects the service-team projects (ARC-C1, breaking).** The
+  `<env>_perimeter` perimeter (`modules/gcp/stages/environment`) held only the Shared VPC host
+  project, so the team projects that hold Cloud Run, Cloud SQL, Artifact Registry and Secret
+  Manager were outside it. It now lists the host project and every `service_teams` project, by
+  project number. Google requires a Shared VPC host and its service projects in the same perimeter.
+  Service-team projects now attach to the host after the spoke network only (the new net-spoke
+  output `shared_vpc_host_project_id`), not after all of the spoke, because the perimeter lists
+  them. An existing perimeter shows an in-place update, and an enforced perimeter can now block calls
+  to and from the team projects. Enforced with team projects is PREVIEW
+  (`docs/known-gaps.md`); see `UPGRADING.md` before you apply an enforced perimeter.
+- **Federated-trust OPA gates close the re-audit bypasses (re-audit-2 SEC-1, breaking).**
+  `aws_iam_federated_trust_pinned` now denies a `*` or `?` anywhere in a subject, a TFC subject
+  without a literal organization, project, workspace and run phase (`plan` or `apply`), and a
+  GitHub subject without a literal repository and a `ref:` or `environment:` value
+  (`repo:owner/app:*`, `repo:owner/app:pull_request`, a `job_workflow_ref`-only template). Any
+  action that matches `sts:AssumeRoleWithWebIdentity` (`sts:AssumeRoleWith*`, `sts:*`, other case,
+  or a `NotAction` that leaves it allowed) counts as web identity. A trust unknown at plan time is
+  now denied, except in a run that also creates an OIDC provider or the AWS organization.
+  `gcp_wif_principalset_pinned` now also denies raw TFC claims (`attribute.terraform_*`, such as
+  `terraform_run_phase/apply`), `attribute.repository_owner/`, `attribute.actor/` and
+  `attribute.aud/` principalSets, and workforce pool members on `roles/iam.workloadIdentityUser`
+  or `roles/iam.serviceAccountTokenCreator`. Every trust and binding the repo builds still passes.
+  See `UPGRADING.md`.
+- **Federated-trust gate: second review fixes (re-audit-2 SEC-1, breaking).** `aws_iam_federated_trust_pinned`
+  no longer counts `ForAllValues:` conditions as pins (they are true when the key is absent), counts
+  only condition keys (compared without case) that name one of the statement's Federated providers,
+  denies a wildcard audience and a web-identity action on any principal (`"*"`, `{"AWS": "*"}`), and
+  exempts an unknown trust only when the provider or organization is created in the role's module
+  or below it. The app-services stage now fails the plan for a `github.subject` without a literal
+  repository and a `ref:` or `environment:` value. See `UPGRADING.md`.
+- **GCP workload identity gate allows only pinned forms on impersonation roles (re-audit-2 SEC-1, breaking).**
+  `gcp_wif_principalset_pinned` now allows, on a role that acts as a service account (now also
+  `serviceAccountOpenIdTokenCreator` and `serviceAccountKeyAdmin`) or an unknown role, only the
+  `repo_ref`, `repo_env`, `repo_ref_env`, `workspace_id_phase` and `workspace_phase` principalSets,
+  with `repository_id` and GitLab `project_path` as advisory. It denies `attribute.account/`,
+  `repo_env` without an environment and any `terraform_*` claim on any role, a `principal://`
+  subject that the AWS policy would deny, and a workforce member on a custom role. See
+  `UPGRADING.md`.
+- **Workload identity allowlist on every role; trust gate minors (re-audit-2 SEC-1, breaking).**
+  `gcp_wif_principalset_pinned` applies its pinned-form allowlist to a workload pool member on every
+  role, not only the service-account roles (`attribute.namespace_path/` on `serviceAccountUser`,
+  `serviceAccountAdmin` or a custom role passed before), rejects `*` and `?` in any member, and
+  matches member prefixes without case. `aws_iam_federated_trust_pinned` exempts an unknown trust
+  only on a role created in the run, and denies web identity with `NotPrincipal` or
+  `{"Federated": "*"}`. See `UPGRADING.md`.
+- **The organization plan identity reads no log entries (re-audit-2 SEC-2).** gcp-bootstrap no longer grants
+  `<prefix>-organization-plan` `roles/logging.viewer` at the org node. That role holds
+  `logging.logEntries.list`, so every speculative gcp-organization plan (and the GitHub drift
+  identity, when `enable_github_wif` is on) could read the logs of every project. The new org
+  custom role `landingZoneLoggingConfigViewer` (input `logging_config_viewer_role_id`) holds only
+  the logging configuration get/list permissions the gcp-organization refresh needs. Apply
+  gcp-bootstrap to take it. See `UPGRADING.md`.
+- **A production estate needs the OPA policy sets or a waiver (re-audit-2 ADO-20, breaking).** tfc-admin now
+  fails its plan (`terraform_data.policy_sets_guard`) when a managed workspace is production
+  (`is_production: true` in `gcp.environments` or `aws.workload_environments`) and the policy sets
+  are off: no `vcs_repo`, an `org.tfc.plan` below `standard`, or `enable_policy_sets = false`.
+  The new `org.tfc.policy_sets_waiver` `{ reason, expires }` (tfc-admin `policy_sets_waiver`)
+  waives it through the `expires` day (UTC). The scaffolder's new `--tfc-plan` flag writes
+  `org.tfc.plan`, `standard` by default with `--profile production`, and the scaffolder lists the
+  policy sets as still required when they would be off. See `UPGRADING.md`.
+- **More paths need a security approval (re-audit-2 CICD-3).** The security-only section of
+  `.github/CODEOWNERS` and `templates/CODEOWNERS.tftpl` now also lists
+  `/modules/gcp/iam/deny-policy/`, `/modules/tfc/`, `/renovate.json`,
+  `/release-please-config.json`, `/.tool-versions` and `/.pre-commit-config.yaml`. Before, a
+  platform approval alone was enough for all of them. Forks copy the lines into their own
+  CODEOWNERS (`UPGRADING.md`).
+
+#### Changed
+
+- **Cloud Run goes through the hub egress proxy when it is on (ARC-H1, breaking).** App-services
+  `vpc_egress` defaulted to `PRIVATE_RANGES_ONLY`, so Cloud Run internet traffic skipped Cloud
+  NAT and the hub Secure Web Proxy. With the environment egress proxy on, every Cloud Run service
+  and job now defaults to `ALL_TRAFFIC` and gets `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` for
+  the proxy endpoint; production rejects an explicit `PRIVATE_RANGES_ONLY`. The gcp-network-hub
+  contract carries `egress_proxy_port`. With the proxy off nothing changes. See `UPGRADING.md`.
+  A per-service `no_proxy` list and any `NO_PROXY` in a service's `env_vars` are appended to the
+  default `NO_PROXY`, and `NODE_USE_ENV_PROXY=1` makes Node.js 24+ use the proxy.
+
+#### Fixed
+
+- **A production AWS scaffold plans (ADO-21).** The scaffolder left `notifications.emails`
+  commented, so a fresh production scaffold failed the `aws-security` (security contact) and
+  `aws-network` (hub alarm subscribers) plans. The new `--notification-emails` flag writes it,
+  rejecting example, `.invalid`, `.localhost` and `.test` domains as both roots do. Without the
+  flag, a production AWS scaffold lists `notifications.emails` under "Still required for
+  production". The scaffold matrix now plans both roots with no test-supplied contact.
+- **The spoke egress proxy endpoint must be in the hub proxy region (ARC-H2).** net-spoke fails the
+  plan when `egress_proxy` is on and the spoke region differs from the region of the hub proxy's
+  service attachment. Google requires a Private Service Connect endpoint in the region of the
+  published service, so this configuration failed at apply before.
+- **Scaffolded notification emails are quoted (ADO-21 follow-up).** `--notification-emails`
+  wrote each address as a plain YAML scalar, so an address whose local part starts with `%` gave
+  a file that YAML cannot parse. Each list item is now double-quoted. `--profile starter` help and
+  QUICK_START say that a starter scaffold keeps the example's production environments, so the
+  tfc-admin plan fails until the policy sets are on or waived.
+
 ### Score-8 remediation ([2026-11-06 five-dimension audit](docs/audit/2026-11-06-five-dimension-audit.md))
 
 #### Security
@@ -74,16 +176,6 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 #### Fixed
 
-- **A production AWS scaffold plans (ADO-21).** The scaffolder left `notifications.emails`
-  commented, so a fresh production scaffold failed the `aws-security` (security contact) and
-  `aws-network` (hub alarm subscribers) plans. The new `--notification-emails` flag writes it,
-  rejecting example, `.invalid`, `.localhost` and `.test` domains as both roots do. Without the
-  flag, a production AWS scaffold lists `notifications.emails` under "Still required for
-  production". The scaffold matrix now plans both roots with no test-supplied contact.
-- **The spoke egress proxy endpoint must be in the hub proxy region (ARC-H2).** net-spoke fails the
-  plan when `egress_proxy` is on and the spoke region differs from the region of the hub proxy's
-  service attachment. Google requires a Private Service Connect endpoint in the region of the
-  published service, so this configuration failed at apply before.
 - **Every root's backend now initialises (C1).** All 14 `envs/**/backend.tf`, plus both clone-me
   templates, declared `backend "cloud" {}`. That is not a valid backend type: Terraform rejects
   it, so `terraform init` failed on every root. They are now top-level `cloud {}` blocks.
@@ -679,79 +771,6 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   whose `variable_set_id` is unknown at plan time used to pass whenever the plan created any
   `tfe_variable_set`. It now passes only when its configuration references a `tfe_variable_set`,
   followed through `each.value`, module arguments and module `for_each`. See `UPGRADING.md`.
-- **The GCP environment perimeter protects the service-team projects (ARC-C1).** The
-  `<env>_perimeter` perimeter (`modules/gcp/stages/environment`) held only the Shared VPC host
-  project, so the team projects that hold Cloud Run, Cloud SQL, Artifact Registry and Secret
-  Manager were outside it. It now lists the host project and every `service_teams` project, by
-  project number. Google requires a Shared VPC host and its service projects in the same perimeter.
-  Service-team projects now attach to the host after the spoke network only (the new net-spoke
-  output `shared_vpc_host_project_id`), not after all of the spoke, because the perimeter lists
-  them. An existing perimeter shows an in-place update. Enforced with team projects is PREVIEW
-  (`docs/known-gaps.md`); see `UPGRADING.md` before you apply an enforced perimeter.
-- **Federated-trust OPA gates close the re-audit bypasses (SEC-1, breaking).**
-  `aws_iam_federated_trust_pinned` now denies a `*` or `?` anywhere in a subject, a TFC subject
-  without a literal organization, project, workspace and run phase (`plan` or `apply`), and a
-  GitHub subject without a literal repository and a `ref:` or `environment:` value
-  (`repo:owner/app:*`, `repo:owner/app:pull_request`, a `job_workflow_ref`-only template). Any
-  action that matches `sts:AssumeRoleWithWebIdentity` (`sts:AssumeRoleWith*`, `sts:*`, other case,
-  or a `NotAction` that leaves it allowed) counts as web identity. A trust unknown at plan time is
-  now denied, except in a run that also creates an OIDC provider or the AWS organization.
-  `gcp_wif_principalset_pinned` now also denies raw TFC claims (`attribute.terraform_*`, such as
-  `terraform_run_phase/apply`), `attribute.repository_owner/`, `attribute.actor/` and
-  `attribute.aud/` principalSets, and workforce pool members on `roles/iam.workloadIdentityUser`
-  or `roles/iam.serviceAccountTokenCreator`. Every trust and binding the repo builds still passes.
-  See `UPGRADING.md`.
-- **Federated-trust gate: second review fixes (SEC-1, breaking).** `aws_iam_federated_trust_pinned`
-  no longer counts `ForAllValues:` conditions as pins (they are true when the key is absent), counts
-  only condition keys (compared without case) that name one of the statement's Federated providers,
-  denies a wildcard audience and a web-identity action on any principal (`"*"`, `{"AWS": "*"}`), and
-  exempts an unknown trust only when the provider or organization is created in the role's module
-  or below it. The app-services stage now fails the plan for a `github.subject` without a literal
-  repository and a `ref:` or `environment:` value. See `UPGRADING.md`.
-- **GCP workload identity gate allows only pinned forms on impersonation roles (SEC-1, breaking).**
-  `gcp_wif_principalset_pinned` now allows, on a role that acts as a service account (now also
-  `serviceAccountOpenIdTokenCreator` and `serviceAccountKeyAdmin`) or an unknown role, only the
-  `repo_ref`, `repo_env`, `repo_ref_env`, `workspace_id_phase` and `workspace_phase` principalSets,
-  with `repository_id` and GitLab `project_path` as advisory. It denies `attribute.account/`,
-  `repo_env` without an environment and any `terraform_*` claim on any role, a `principal://`
-  subject that the AWS policy would deny, and a workforce member on a custom role. See
-  `UPGRADING.md`.
-- **Workload identity allowlist on every role; trust gate minors (SEC-1, breaking).**
-  `gcp_wif_principalset_pinned` applies its pinned-form allowlist to a workload pool member on every
-  role, not only the service-account roles (`attribute.namespace_path/` on `serviceAccountUser`,
-  `serviceAccountAdmin` or a custom role passed before), rejects `*` and `?` in any member, and
-  matches member prefixes without case. `aws_iam_federated_trust_pinned` exempts an unknown trust
-  only on a role created in the run, and denies web identity with `NotPrincipal` or
-  `{"Federated": "*"}`. See `UPGRADING.md`.
-- **The organization plan identity reads no log entries (SEC-2).** gcp-bootstrap no longer grants
-  `<prefix>-organization-plan` `roles/logging.viewer` at the org node. That role holds
-  `logging.logEntries.list`, so every speculative gcp-organization plan (and the GitHub drift
-  identity, when `enable_github_wif` is on) could read the logs of every project. The new org
-  custom role `landingZoneLoggingConfigViewer` (input `logging_config_viewer_role_id`) holds only
-  the logging configuration get/list permissions the gcp-organization refresh needs. Apply
-  gcp-bootstrap to take it. See `UPGRADING.md`.
-- **Cloud Run goes through the hub egress proxy when it is on (ARC-H1, breaking).** App-services
-  `vpc_egress` defaulted to `PRIVATE_RANGES_ONLY`, so Cloud Run internet traffic skipped Cloud
-  NAT and the hub Secure Web Proxy. With the environment egress proxy on, every Cloud Run service
-  and job now defaults to `ALL_TRAFFIC` and gets `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` for
-  the proxy endpoint; production rejects an explicit `PRIVATE_RANGES_ONLY`. The gcp-network-hub
-  contract carries `egress_proxy_port`. With the proxy off nothing changes. See `UPGRADING.md`.
-  A per-service `no_proxy` list and any `NO_PROXY` in a service's `env_vars` are appended to the
-  default `NO_PROXY`, and `NODE_USE_ENV_PROXY=1` makes Node.js 24+ use the proxy.
-- **A production estate needs the OPA policy sets or a waiver (ADO-20, breaking).** tfc-admin now
-  fails its plan (`terraform_data.policy_sets_guard`) when a managed workspace is production
-  (`is_production: true` in `gcp.environments` or `aws.workload_environments`) and the policy sets
-  are off: no `vcs_repo`, an `org.tfc.plan` below `standard`, or `enable_policy_sets = false`.
-  The new `org.tfc.policy_sets_waiver` `{ reason, expires }` (tfc-admin `policy_sets_waiver`)
-  waives it through the `expires` day (UTC). The scaffolder's new `--tfc-plan` flag writes
-  `org.tfc.plan`, `standard` by default with `--profile production`, and the scaffolder lists the
-  policy sets as still required when they would be off. See `UPGRADING.md`.
-- **More paths need a security approval (CICD-3).** The security-only section of
-  `.github/CODEOWNERS` and `templates/CODEOWNERS.tftpl` now also lists
-  `/modules/gcp/iam/deny-policy/`, `/modules/tfc/`, `/renovate.json`,
-  `/release-please-config.json`, `/.tool-versions` and `/.pre-commit-config.yaml`. Before, a
-  platform approval alone was enough for all of them. Forks copy the lines into their own
-  CODEOWNERS (`UPGRADING.md`).
 
 ### Changed
 

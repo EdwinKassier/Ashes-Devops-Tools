@@ -30,8 +30,13 @@ Promotion steps:
    see audit finding M2). An environment perimeter (`envs/gcp/workload`)
    already admits that environment's own `wl-<env>-plan` and `wl-<env>-apply`
    SAs for its restricted services (`environment_config[<env>].automation_identities`
-   from gcp-projects). Add rules (`vpc_sc_ingress_policies`) only for other
-   callers, such as CI or app deploy identities.
+   from gcp-projects). The environment perimeter also holds the host project
+   and every `service_teams` project, so add `vpc_sc_ingress_policies` or
+   `vpc_sc_egress_policies` rules for the callers and resources outside it:
+   a CMEK key in a project outside the perimeter (a service's
+   `database.encryption_key_name`, `artifact_registry_kms_key_name`), an
+   image registry outside the perimeter, the app-deploy WIF identity, and CI.
+   Enforced with team projects is PREVIEW (`docs/known-gaps.md`).
 4. When the logs show only expected blocks, set `vpc_sc_enable_dry_run = false`
    (hub, via `envs/gcp/organization`), the per-perimeter `enable_dry_run` on the
    host stage, and the workload perimeter on `envs/gcp/workload`.
@@ -73,8 +78,16 @@ egress through the hub Secure Web Proxy. Choose one:
 
 - Turn the proxy on: `secure_web_proxy` on `gcp-network-hub` with the
   environment's host project as a consumer, then
-  `gcp.environments.<env>.egress_proxy: true`. The proxy is PREVIEW
-  (`docs/known-gaps.md`): prove it in the sandbox first.
+  `gcp.environments.<env>.egress_proxy: true`. The environment must be in the
+  hub proxy region, or its plan fails. With the proxy on, every app-services
+  Cloud Run service and job sends all its traffic into the VPC
+  (`vpc_egress` defaults to `ALL_TRAFFIC`, and production rejects
+  `PRIVATE_RANGES_ONLY`), and the stage injects `HTTPS_PROXY`, `HTTP_PROXY`,
+  `NO_PROXY` and `NODE_USE_ENV_PROXY=1`, so its internet calls go through the
+  proxy. The JVM and older Node.js releases (Node.js reads
+  `NODE_USE_ENV_PROXY` from v24.0.0 and v22.21.0) ignore those variables and
+  then have no internet path: configure them as `UPGRADING.md` shows. The
+  proxy is PREVIEW (`docs/known-gaps.md`): prove it in the sandbox first.
 - Or accept Cloud NAT egress with no allowlist for a limited time, with a
   waiver on that workspace in `config/tfc-workspaces.yaml`:
 
@@ -91,7 +104,9 @@ waiver. The scaffolder writes neither choice.
 
 **An expired waiver blocks every run.** After `expires`, every plan on that
 workspace fails, including the plan for an emergency fix. Renew the waiver, or
-make the change it waives, before the date.
+make the change it waives, before the date. The same holds for
+`org.tfc.policy_sets_waiver` in `config/landing-zone.yaml`: once it expires,
+the tfc-admin plan fails until you renew it or turn the policy sets on.
 
 **One access policy per environment.** By default (`enable_scoped_access_policies
 = true` in gcp-bootstrap and gcp-organization) gcp-organization creates a

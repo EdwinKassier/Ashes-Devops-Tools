@@ -1761,7 +1761,10 @@ side (all mock-tested, secure defaults):
   `gcp.audit_store_waiver`, `aws.network.egress_alert_only_waived` and
   `org.tfc.policy_sets_waiver` in `config/landing-zone.yaml`, and `production_vpc_sc_dry_run_waiver` and
   `production_egress_proxy_waiver` on a `gcp-workload-<env>` workspace in
-  `config/tfc-workspaces.yaml`. All of this holds only when code-owner review is required on the
+  `config/tfc-workspaces.yaml`. `policy_sets_waiver` can also be set as a
+  variable on the tfc-admin workspace, which no git review sees: anyone with
+  write access there (organization owners and the tfc-admin team) can set it,
+  as they can set `enable_policy_sets`. All of this holds only when code-owner review is required on the
   default branch and the security team has a member outside the platform team
   (`docs/guides/BRANCH_PROTECTION.md`). Owner: security team (decide whether
   more paths must be security-only).

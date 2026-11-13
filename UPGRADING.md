@@ -41,6 +41,33 @@ patch knowingly and expect conflicts here.
 Manual steps for the next release, grouped by area. A breaking change
 (`feat!:` or a `BREAKING CHANGE` footer) must add its entry here; CI enforces it.
 
+### What your next run does (re-audit 2 code wave)
+
+The 2026-11-13 code wave ([re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
+added these entries. Read them before the first run on this release:
+
+- [re-audit-2 SEC-1](#federated-trust-policies-deny-more-forms-policies-breaking-re-audit-2-sec-1):
+  with the policy sets on, the guardrails set denies more federated-trust and
+  workload identity forms, so a fork's own trust or binding can fail a run.
+- [re-audit-2 ADO-20](#a-production-estate-needs-the-policy-sets-or-a-waiver-tfc-admin-breaking-re-audit-2-ado-20):
+  the tfc-admin plan fails for a production estate without the policy sets or
+  an unexpired waiver. Turning the sets on also changes non-production runs.
+- [ARC-H1](#cloud-run-uses-the-egress-proxy-when-it-is-on-gcp-workload-app-services-breaking-arc-h1):
+  with the egress proxy on, every Cloud Run service and job gets a new
+  revision that sends all traffic through the proxy.
+- [ARC-H2](#an-environment-outside-the-hub-region-cannot-use-the-hub-egress-proxy-net-spoke-arc-h2):
+  with the egress proxy on, an environment outside the hub proxy region fails
+  the plan.
+- [ARC-C1](#the-environment-perimeter-now-holds-the-service-team-projects-gcp-workload-breaking-arc-c1):
+  an environment perimeter with service teams shows an in-place update; an
+  enforced one can block calls to and from the team projects.
+- [re-audit-2 SEC-2](#the-organization-plan-identity-loses-rolesloggingviewer-gcp-bootstrap-re-audit-2-sec-2):
+  gcp-bootstrap replaces the organization plan identity's `roles/logging.viewer`
+  with a custom role.
+- [CODEOWNERS](#guardrail-paths-need-a-security-approval-codeowners-cicd-2)
+  (re-audit-2 CICD-3): no run changes; copy the extended security-only section
+  into your fork's `.github/CODEOWNERS`.
+
 ### HCP Terraform and policy
 
 #### tfc-admin fails when an upstream contract lacks the credential keys
@@ -116,11 +143,11 @@ security team alone on `/policies/`, `/envs/gcp/guardrails/`, `/modules/gcp/stag
 `/templates/aws/bootstrap/` and `/templates/CODEOWNERS.tftpl`, so a change there needs a security
 approval. The section now also lists `/modules/gcp/iam/deny-policy/` (the module behind the org
 IAM deny policies), `/modules/tfc/` (the workspace module tfc-admin uses), `/renovate.json`,
-`/release-please-config.json`, `/.tool-versions` and `/.pre-commit-config.yaml` (CICD-3). Before,
+`/release-please-config.json`, `/.tool-versions` and `/.pre-commit-config.yaml` (re-audit-2 CICD-3). Before,
 `/modules/gcp/iam/` and `/.pre-commit-config.yaml` accepted a platform approval alone, and the
-other four fell to the platform-only default. Delete the old `/modules/tfc/` and
-`/.pre-commit-config.yaml` lines from the upper sections when you copy the new ones. Copy that section ("Guardrails (security team ONLY ...)") to the end of your
-`.github/CODEOWNERS` and replace `${security_team}` with your security team. Do not re-run the
+other four fell to the platform-only default. Copy that section ("Guardrails (security team ONLY ...)") to the end of your
+`.github/CODEOWNERS` and replace `${security_team}` with your security team. Delete the old `/modules/tfc/` and
+`/.pre-commit-config.yaml` lines from the upper sections when you copy the new ones. Do not re-run the
 scaffolder over an existing `config/landing-zone.yaml`: its `--force` overwrites that file too. Keep
 the section last, or a broader line after it wins. It takes effect only when code-owner review is required on the default
 branch ([branch protection](docs/guides/BRANCH_PROTECTION.md)).
@@ -518,7 +545,7 @@ Aurora cluster, `publicly_accessible` on a new cluster instance). Set each one
 explicitly to a plan-known value. The message ends with "an unknown value
 counts as a violation".
 
-#### Federated-trust policies deny more forms (policies, breaking, SEC-1)
+#### Federated-trust policies deny more forms (policies, breaking, re-audit-2 SEC-1)
 
 **Breaking: the non-overridable guardrails set now fails runs that passed
 before.** No trust or binding that this repo builds is denied. A fork's own
@@ -549,7 +576,7 @@ identity) now denies:
   `module.app_services.aws_iam_openid_connect_provider.github`, then the
   normal run, in which the provider ARN is known;
 - a statement that allows web identity with `NotPrincipal`, or to
-  `{"Federated": "*"}`;
+  `{"Federated": "*"}`.
 
 The app-services stage also fails the plan for a `github.subject` without a
 literal repository and a `ref:` or `environment:` value.
@@ -621,7 +648,7 @@ A member bound on `attribute.repository_id/<id>` alone, or a member that is
 unknown at plan time, is reported by the advisory
 `gcp_wif_principalset_repo_wide` and does not block the run.
 
-#### A production estate needs the policy sets or a waiver (tfc-admin, ADO-20)
+#### A production estate needs the policy sets or a waiver (tfc-admin, breaking, re-audit-2 ADO-20)
 
 **Who:** forks with a production environment (`is_production: true` in
 `gcp.environments` or `aws.workload_environments`, for a cloud that is enabled)
@@ -640,6 +667,27 @@ Before you plan tfc-admin, do one of these:
    `config/landing-zone.yaml`. This creates both policy sets. Set
    `security_team_id` too, or only organization owners can override the
    destructive-change guard.
+
+   On an estate that had the policy sets off, this changes every managed
+   workspace's next run, not only production. The `<prefix>opa-guardrails`
+   set applies all 13 mandatory policies in `policies/opa`, and no one can
+   override them (`policy_set_overridable` defaults to false). They include
+   the stricter federated-trust and workload identity rules above
+   (re-audit-2 SEC-1). `enable_nonprod_workload_auto_apply` defaults to
+   `enable_policy_sets` (`envs/tfc-admin/main.tf`), so every workload whose
+   environment sets `is_production: false` gets `queue_all_runs` and
+   auto-apply on run triggers
+   ([Run triggers auto-apply explicitly non-prod workloads](#run-triggers-auto-apply-explicitly-non-prod-workloads-tfc-admin)).
+   The `<prefix>destructive-change-guard` set starts `destroy_guard`,
+   `tfc_admin_guard` and `tfc_vcs_run_only` (PREVIEW), so a stateful delete
+   or replace, a weakening tfc-admin change and an API-uploaded apply on a
+   control-plane or production workspace need a security-team override.
+   Before you turn the sets on, run `make opa-test`, and run each
+   workspace's current plan through `opa eval` against `policies/opa` and
+   `policies/opa-destructive`
+   ([how](docs/architecture/policy-as-code.md)). To keep today's
+   confirmation behaviour, set `enable_nonprod_workload_auto_apply = false`
+   on tfc-admin in the same change.
 2. On a plan without VCS policy sets, record the risk with a time-boxed waiver:
 
    ```yaml
@@ -1754,7 +1802,7 @@ leave the setting out of the policy.
 
 ### GCP
 
-#### Cloud Run uses the egress proxy when it is on (gcp-workload, app-services, ARC-H1)
+#### Cloud Run uses the egress proxy when it is on (gcp-workload, app-services, breaking, ARC-H1)
 
 **Who:** every `gcp-workload-<env>` with the egress proxy on
 (`gcp.environments.<env>.egress_proxy: true` or `enable_egress_proxy`) and at
@@ -1811,7 +1859,7 @@ endpoint only in the region of the published service, so this configuration
 already failed at apply. Keep the proxy off for that environment; as production
 it needs `production_egress_proxy_waiver`.
 
-#### The environment perimeter now holds the service-team projects (gcp-workload, ARC-C1)
+#### The environment perimeter now holds the service-team projects (gcp-workload, breaking, ARC-C1)
 
 **Who:** every `gcp-workload-<env>` with a VPC-SC perimeter and at least one
 `service_teams` entry.
@@ -1821,6 +1869,11 @@ shows an in-place update of the perimeter. No input changes, and no resource is
 replaced. Service-team projects now wait for the spoke network only, not for
 all of the spoke, so the first apply of a new team may create its project
 earlier in the run.
+
+**Breaking (enforced perimeters):** an enforced perimeter can now block a call
+between a team project and a caller or resource outside it, such as a CMEK key,
+an image registry or an app-deploy WIF identity, until you add a rule for it. A
+dry-run perimeter blocks nothing.
 
 - **Dry-run perimeter** (the default outside production): only the dry-run
   spec changes. Nothing is blocked. Read the violation logs for the team
@@ -2260,7 +2313,7 @@ Set `vpc_sc_ingress_policies` and `vpc_sc_egress_policies` with named identities
 
 `custom.wifProviderTenantPinned` now also denies any provider for a pinned issuer (TFC or GitHub Actions) that sets `oidc.jwks_json`. With an uploaded JWKS, the key holder could sign any token while still passing the issuer and condition pins. Remove any uploaded JWKS from such providers before you apply gcp-organization.
 
-#### The organization plan identity loses roles/logging.viewer (gcp-bootstrap, SEC-2)
+#### The organization plan identity loses roles/logging.viewer (gcp-bootstrap, re-audit-2 SEC-2)
 
 **Who:** every estate that applies gcp-bootstrap.
 **What changes:** `<prefix>-organization-plan` no longer holds `roles/logging.viewer` at the org node. That role holds `logging.logEntries.list`, so a speculative gcp-organization plan could read the log entries of every project. The plan SA gets the new org custom role `landingZoneLoggingConfigViewer` in its place. The role holds only these Cloud Logging configuration reads: `get` and `list` on sinks, buckets, links, log-based metrics, views and exclusions, `logging.settings.get`, and `logging.buckets.listEffectiveTags` / `listTagBindings`. The gcp-bootstrap plan creates the custom role and one org binding, and removes the `roles/logging.viewer` binding. No required input changes (new optional input `logging_config_viewer_role_id`). No other stage changes.
