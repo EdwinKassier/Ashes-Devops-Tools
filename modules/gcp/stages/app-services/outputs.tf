@@ -88,7 +88,7 @@ output "gke_cluster_name" {
 }
 
 output "egress_proxy_settings" {
-  description = "The egress proxy settings injected into every Cloud Run service and job: enabled, the proxy URL (http://<address>:<port>), port and the NO_PROXY entries. url is null and no_proxy is empty when egress_proxy.enabled = false."
+  description = "The egress proxy settings injected into every Cloud Run service and job: enabled, the proxy URL (http://<address>:<port>), port and the default NO_PROXY entries (each service appends its own no_proxy and any env_vars NO_PROXY). url is null and no_proxy is empty when egress_proxy.enabled = false."
   value = {
     enabled  = var.egress_proxy.enabled
     url      = local.egress_proxy_url

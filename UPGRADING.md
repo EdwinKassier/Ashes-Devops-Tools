@@ -1743,10 +1743,24 @@ Steps:
    every FQDN a service calls is in `secure_web_proxy.allowed_fqdns`. With the
    proxy on, the private tier has no Cloud NAT, so a call the proxy does not
    carry fails.
-3. To extend `NO_PROXY` (for example with an internal host name), set
-   `NO_PROXY` and `no_proxy` in the service's `env_vars`. A service's own
-   `env_vars` win over the injected values, so repeat the defaults you keep
-   (the `egress_proxy_settings` output of the app-services stage lists them).
+   - Node.js: the stage injects `NODE_USE_ENV_PROXY=1`. Node.js v24.0.0 and
+     later (and v22.21.0 and later) then route `fetch()` and
+     `http(s).request` through the proxy. Older Node.js ignores the variables;
+     use an agent library or upgrade.
+   - JVM: the JVM ignores `HTTPS_PROXY`. Start it with
+     `-Dhttps.proxyHost=<address> -Dhttps.proxyPort=<port>`,
+     `-Dhttp.proxyHost` / `-Dhttp.proxyPort`, and `-Dhttp.nonProxyHosts`
+     (pipe-separated, `*` wildcards such as `*.googleapis.com|*.run.app`), for
+     example through `JAVA_TOOL_OPTIONS` in the service's `env_vars`. The stage
+     does not set these.
+   - Google domains outside `googleapis.com` (for example `*.pkg.dev`,
+     `gcr.io`, `accounts.google.com`, `*.firebaseio.com`, `*.appspot.com`) go to
+     the proxy: add them to `secure_web_proxy.allowed_fqdns`, or to a service's
+     `no_proxy` when Private Google Access serves them.
+3. To extend `NO_PROXY` (for example with an internal host name), set the
+   service's `no_proxy` list, or `NO_PROXY` / `no_proxy` in its `env_vars`.
+   Both are appended to the defaults, which always stay (the
+   `egress_proxy_settings` output of the app-services stage lists them).
 
 #### An environment outside the hub region cannot use the hub egress proxy (net-spoke, ARC-H2)
 

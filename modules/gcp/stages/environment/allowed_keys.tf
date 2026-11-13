@@ -9,7 +9,7 @@ locals {
     # modules/gcp/stages/app-services services, plus service_team, which this
     # stage resolves to a service-team project and does not forward.
     app_services = {
-      self              = ["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "health_check_path", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"]
+      self              = ["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "health_check_path", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "no_proxy", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"]
       artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]
       database          = ["database_version", "edition", "tier", "databases", "enable_high_availability", "enable_point_in_time_recovery", "backup_location", "encryption_key_name", "enable_deletion_protection"]
       github            = ["repository_id", "repository", "ref", "environment"]

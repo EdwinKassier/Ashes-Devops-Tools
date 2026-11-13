@@ -132,28 +132,53 @@ locals {
   # client must point at the proxy). NO_PROXY keeps the metadata server, Google
   # APIs (Private Google Access / the PSC endpoint), Cloud Run URLs (internal
   # ingress needs the request from this VPC, not from the hub proxy) and the
-  # private ranges off the proxy. CIDR entries in NO_PROXY depend on the client.
+  # private ranges off the proxy.
+  # Node.js matches NO_PROXY IP ranges only in first-last form, not as CIDRs
+  # (Node.js "Built-in Proxy Support", checked 2026-11-13), so both forms are
+  # listed; a client ignores an entry it cannot parse.
   egress_proxy_url = var.egress_proxy.enabled ? "http://${coalesce(var.egress_proxy.address, "-")}:${coalesce(var.egress_proxy.port, 443)}" : null
-  egress_no_proxy = join(",", distinct(concat(
-    ["localhost", "127.0.0.1", "::1", "metadata.google.internal", "169.254.169.254", ".googleapis.com", ".run.app", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+  egress_no_proxy_defaults = distinct(concat(
+    [
+      "localhost", "127.0.0.1", "::1", "metadata.google.internal", "169.254.169.254", ".googleapis.com", ".run.app",
+      "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+      "10.0.0.0-10.255.255.255", "172.16.0.0-172.31.255.255", "192.168.0.0-192.168.255.255",
+    ],
     var.egress_proxy.no_proxy,
-  )))
+  ))
+  egress_no_proxy = join(",", local.egress_no_proxy_defaults)
+
+  # Per service: the defaults, then services[*].no_proxy, then any NO_PROXY /
+  # no_proxy value from its env_vars. Appended, so the defaults always stay.
+  service_no_proxy = {
+    for k, s in var.services : k => join(",", distinct(compact(concat(
+      local.egress_no_proxy_defaults,
+      s.no_proxy,
+      [for e in split(",", lookup(s.env_vars, "NO_PROXY", "")) : trimspace(e)],
+      [for e in split(",", lookup(s.env_vars, "no_proxy", "")) : trimspace(e)],
+    ))))
+  }
+
+  # NODE_USE_ENV_PROXY=1: Node.js (v24.0.0+, v22.21.0+) then "parses the
+  # HTTP_PROXY, HTTPS_PROXY and NO_PROXY environment variables during startup,
+  # and routes requests through the specified proxy" (Node.js CLI docs,
+  # checked 2026-11-13). Other runtimes ignore it.
   egress_proxy_env = var.egress_proxy.enabled ? {
-    HTTPS_PROXY = local.egress_proxy_url
-    https_proxy = local.egress_proxy_url
-    HTTP_PROXY  = local.egress_proxy_url
-    http_proxy  = local.egress_proxy_url
-    NO_PROXY    = local.egress_no_proxy
-    no_proxy    = local.egress_no_proxy
+    HTTPS_PROXY        = local.egress_proxy_url
+    https_proxy        = local.egress_proxy_url
+    HTTP_PROXY         = local.egress_proxy_url
+    http_proxy         = local.egress_proxy_url
+    NODE_USE_ENV_PROXY = "1"
   } : {}
 
   # Environment of a service or job: the proxy settings (when the egress proxy
-  # is on), then its own env_vars (which win), then the injected database and
-  # Pub/Sub coordinates.
+  # is on), then its own env_vars (which win, except that NO_PROXY / no_proxy
+  # are appended to the defaults), then the injected database and Pub/Sub
+  # coordinates.
   service_env_vars = {
     for k, s in var.services : k => merge(
       local.egress_proxy_env,
       s.env_vars,
+      var.egress_proxy.enabled ? { NO_PROXY = local.service_no_proxy[k], no_proxy = local.service_no_proxy[k] } : {},
       s.database == null ? {} : {
         DB_INSTANCE_CONNECTION_NAME = "${local.service_project[k]}:${var.region}:${local.db_instance_name[k]}"
         DB_IAM_USER                 = trimsuffix(local.runtime_sa_email[k], ".gserviceaccount.com")

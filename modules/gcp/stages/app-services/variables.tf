@@ -235,7 +235,8 @@ variable "services" {
     env_vars                    = optional(map(string), {})
     secrets                     = optional(map(object({ secret = string, version = optional(string, "latest") })), {})
     subnetwork_id               = optional(string)
-    vpc_egress                  = optional(string) # null = ALL_TRAFFIC when egress_proxy.enabled, else PRIVATE_RANGES_ONLY
+    vpc_egress                  = optional(string)           # null = ALL_TRAFFIC when egress_proxy.enabled, else PRIVATE_RANGES_ONLY
+    no_proxy                    = optional(list(string), []) # extra NO_PROXY entries, appended to the defaults (egress_proxy.enabled only)
     enable_binary_authorization = optional(bool, false)
     binary_authorization_policy = optional(string)
     enable_unauthenticated      = optional(bool, false)
@@ -559,10 +560,16 @@ variable "egress_proxy" {
     proxy, and stages/net-spoke drops the private tier from Cloud NAT when the proxy is on. It also injects HTTPS_PROXY,
     HTTP_PROXY and NO_PROXY (upper and lower case) = http://<address>:<port>. NO_PROXY always
     holds localhost, the metadata server (metadata.google.internal, 169.254.169.254),
-    .googleapis.com, .run.app and the RFC 1918 ranges, plus no_proxy (for example the PSC
-    endpoint for Google APIs and the internal DNS domains). A service's own env_vars win over
-    the injected values. port is the proxy's listening port (default 443, the hub default).
-    Production rejects an explicit PRIVATE_RANGES_ONLY while enabled.
+    .googleapis.com, .run.app and the RFC 1918 ranges (as CIDRs and as Node.js first-last
+    ranges), plus no_proxy here (for example the PSC endpoint for Google APIs and the internal
+    DNS domains), plus the service's own services[*].no_proxy, plus any NO_PROXY / no_proxy
+    value in its env_vars: these are appended, the defaults always stay. It also injects
+    NODE_USE_ENV_PROXY=1, which makes Node.js 24+ (and 22.21+) fetch() and http(s).request
+    honour the variables. A service's own env_vars win over the other injected values. port is
+    the proxy's listening port (default 443, the hub default). Production rejects an explicit
+    PRIVATE_RANGES_ONLY while enabled. A direct caller whose spoke has nat.enabled = false also
+    has no default internet route, so Private Google Access to public Google IPs stops and
+    Google APIs need the PSC endpoint for googleapis.com.
   EOT
   type = object({
     enabled  = optional(bool, false)

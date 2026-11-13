@@ -759,6 +759,12 @@
                     "vpc_egress": {
                       "type": "string"
                     },
+                    "no_proxy": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "enable_binary_authorization": {
                       "type": "boolean"
                     },

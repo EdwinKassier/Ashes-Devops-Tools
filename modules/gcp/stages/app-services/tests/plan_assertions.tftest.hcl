@@ -1148,7 +1148,57 @@ run "egress_proxy_non_production_override_is_kept" {
   }
 
   assert {
-    condition     = local.service_env_vars["api"]["NO_PROXY"] == "custom.example" && local.service_env_vars["api"]["HTTPS_PROXY"] == "http://10.10.16.50:443"
-    error_message = "the service's own env_vars must win over the injected proxy variables; the port defaults to 443."
+    condition     = local.service_env_vars["api"]["HTTPS_PROXY"] == "http://10.10.16.50:443" && local.service_env_vars["api"]["NODE_USE_ENV_PROXY"] == "1"
+    error_message = "the proxy URL defaults to port 443 and NODE_USE_ENV_PROXY=1 is injected."
+  }
+
+  # A service's NO_PROXY is appended to the defaults, never a replacement.
+  assert {
+    condition = alltrue([for v in ["NO_PROXY", "no_proxy"] : alltrue([for entry in ["custom.example", ".googleapis.com", ".run.app", "metadata.google.internal"] :
+      contains(split(",", local.service_env_vars["api"][v]), entry)
+    ])])
+    error_message = "a service that sets NO_PROXY must keep .googleapis.com, .run.app and the metadata server in both NO_PROXY and no_proxy."
+  }
+}
+
+run "egress_proxy_per_service_no_proxy_appends" {
+  command = plan
+
+  variables {
+    egress_proxy = { enabled = true, address = "10.10.16.50" }
+    services = {
+      api    = { no_proxy = ["internal.example"], env_vars = { no_proxy = "lower.example, spaced.example", HTTPS_PROXY = "http://override:3128" } }
+      worker = { runtime = "cloud-run-job", no_proxy = ["jobs.example"] }
+    }
+  }
+
+  assert {
+    condition = alltrue([for v in ["NO_PROXY", "no_proxy"] : alltrue([for entry in ["internal.example", "lower.example", "spaced.example", ".googleapis.com", ".run.app", "10.0.0.0-10.255.255.255"] :
+      contains(split(",", local.service_env_vars["api"][v]), entry)
+    ])])
+    error_message = "services[*].no_proxy and an env_vars no_proxy must be appended to the defaults in both cases."
+  }
+
+  assert {
+    condition     = contains(split(",", local.service_env_vars["worker"]["NO_PROXY"]), "jobs.example") && !contains(split(",", local.service_env_vars["worker"]["NO_PROXY"]), "internal.example")
+    error_message = "a job gets its own no_proxy entries, not another service's."
+  }
+
+  assert {
+    condition     = local.service_env_vars["api"]["HTTPS_PROXY"] == "http://override:3128"
+    error_message = "a service's own env_vars still win for the other proxy variables."
+  }
+}
+
+run "no_proxy_untouched_with_proxy_off" {
+  command = plan
+
+  variables {
+    services = { api = { no_proxy = ["ignored.example"], env_vars = { NO_PROXY = "custom.example" } } }
+  }
+
+  assert {
+    condition     = local.service_env_vars["api"]["NO_PROXY"] == "custom.example" && !contains(keys(local.service_env_vars["api"]), "no_proxy") && !contains(keys(local.service_env_vars["api"]), "NODE_USE_ENV_PROXY")
+    error_message = "with the proxy off, a service's NO_PROXY stays as given and nothing is injected."
   }
 }

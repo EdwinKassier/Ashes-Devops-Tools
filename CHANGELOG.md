@@ -730,6 +730,8 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   and job now defaults to `ALL_TRAFFIC` and gets `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` for
   the proxy endpoint; production rejects an explicit `PRIVATE_RANGES_ONLY`. The gcp-network-hub
   contract carries `egress_proxy_port`. With the proxy off nothing changes. See `UPGRADING.md`.
+  A per-service `no_proxy` list and any `NO_PROXY` in a service's `env_vars` are appended to the
+  default `NO_PROXY`, and `NODE_USE_ENV_PROXY=1` makes Node.js 24+ use the proxy.
 
 ### Changed
 

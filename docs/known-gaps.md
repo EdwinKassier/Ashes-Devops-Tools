@@ -802,8 +802,18 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
     "point directly to the proxy server"; it does not name Cloud Run as a
     client (checked 2026-11-13). `NO_PROXY` holds the RFC 1918 ranges as CIDRs,
     and whether a client honours CIDR entries depends on its HTTP library;
-    host names are honoured more widely. Clients that ignore the proxy
-    variables have no internet path from Cloud Run when the proxy is on.
+    host names are honoured more widely. Node.js matches IP ranges only in
+    first-last form, so those forms are listed too. Clients that ignore the
+    proxy variables have no internet path from Cloud Run when the proxy is on.
+    The stage injects `NODE_USE_ENV_PROXY=1`, which Node.js reads from v24.0.0
+    and v22.21.0 (Node.js CLI docs, checked 2026-11-13); older Node.js ignores
+    the proxy variables. The JVM ignores them too: it needs
+    `-Dhttps.proxyHost`, `-Dhttps.proxyPort` and `-Dhttp.nonProxyHosts`, which
+    the stage does not set (`UPGRADING.md` shows how).
+  - The injected proxy URL is `http://<endpoint>:<port>`, so the hub
+    `secure_web_proxy.certificate_urls` must stay empty. With certificates,
+    the gateway presents TLS on connections to the proxy itself, and a client
+    that speaks plain HTTP to the proxy fails.
   - GKE Autopilot behind the hub proxy. GKE nodes sit in the private tier, so
     with the egress proxy on they have no Cloud NAT and no bypass: their
     internet egress fails unless the pods set the proxy variables themselves.
