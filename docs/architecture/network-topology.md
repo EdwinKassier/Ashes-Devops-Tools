@@ -125,6 +125,7 @@ graph LR
 
 - Hub: `secure_web_proxy` on `stages/network-hub` / `net-hub` (`modules/gcp/network/secure-web-proxy`). `psc_nat_subnet_cidr` publishes it; consumers default to the environment host projects.
 - Spoke: `egress_proxy` on `stages/net-spoke` creates the PSC endpoint and drops the private tier from Cloud NAT (so the proxy is the only path). `nat.include_private_subnets = true` keeps NAT during a migration.
+- Production gate: a production `gcp-workload-<env>` (`is_production`) fails the plan unless `egress_proxy` is on or the workspace sets `production_egress_proxy_waiver = { reason, expires }`, which stops working after `expires` (UTC). A standalone environment (no hub) cannot use the proxy, so in production it needs the waiver.
 - Why PSC and not routes: next-hop routing to the proxy works only inside the proxy's VPC and region, and a peered spoke has no supported route to it. PSC is the multi-VPC model Google documents. Through PSC the proxy sees a NAT address, so rules match on host, not client IP. Without TLS inspection rules match the host, not HTTPS paths.
 
 ## Data-Plane Alerts

@@ -634,6 +634,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   and network-hub stages take `network.explicit_zones` and `hub_zones`; net-hub, net-spoke and
   dns-anchor output `zones`. The scaffolder writes `<region>-a`, `-b` and `-c` (`-b`, `-c`, `-d`
   for `us-east1` and `europe-west1`) and lists them as derived, not verified. See `UPGRADING.md`.
+- **GCP production egress fails closed (ARC-4, breaking).** A production `gcp-workload-<env>`
+  plan fails unless the private tier egresses through the hub Secure Web Proxy
+  (`gcp.environments.<env>.egress_proxy`, PREVIEW) or the workspace sets the new
+  `production_egress_proxy_waiver = { reason, expires }`, which has the shape and expiry rule of
+  `production_vpc_sc_dry_run_waiver` and stops working after `expires` (UTC). The scaffolder
+  writes neither: the operator chooses. Control matrix NET-13. See `UPGRADING.md`.
 
 ### Changed
 

@@ -41,6 +41,11 @@ variables {
     }
   }
   enable_network_hub = false
+  # Standalone production cannot use the hub egress proxy (ARC-4).
+  production_egress_proxy_waiver = {
+    reason  = "Test suite: standalone, no hub egress proxy."
+    expires = "2099-12-31"
+  }
 }
 
 # The mock provider returns no zones, which trips the spoke network's postcondition.

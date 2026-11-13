@@ -32,6 +32,12 @@ variables {
   # Production needs pinned zones (IAC-1); the runs below that test the
   # requirement unset it.
   zones = ["europe-west1-b", "europe-west1-c", "europe-west1-d"]
+  # Production also needs the hub egress proxy or a waiver (ARC-4); the runs
+  # that test that requirement unset it.
+  production_egress_proxy_waiver = {
+    reason  = "Test suite: the egress proxy runs are separate."
+    expires = "2099-12-31"
+  }
 }
 
 override_data {
@@ -411,6 +417,199 @@ run "rejects_malformed_zone" {
   }
 
   expect_failures = [var.zones]
+}
+
+# ARC-4: production egress must go through the hub Secure Web Proxy, or a
+# time-boxed waiver (same shape as production_vpc_sc_dry_run_waiver) must say
+# why not. Without either, private-tier egress leaves through Cloud NAT
+# with no allowlist.
+run "prod_without_egress_proxy_fails" {
+  command = plan
+
+  variables {
+    environment                    = "prod"
+    vpc_sc_access_policy_name      = "1234567890"
+    vpc_sc_enable_dry_run          = false
+    production_egress_proxy_waiver = null
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_network_guard]
+}
+
+run "prod_with_egress_proxy_plans" {
+  command = plan
+
+  variables {
+    environment                    = "prod"
+    vpc_sc_access_policy_name      = "1234567890"
+    vpc_sc_enable_dry_run          = false
+    production_egress_proxy_waiver = null
+    enable_egress_proxy            = true
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+  override_data {
+    target = data.terraform_remote_state.network_hub
+    values = {
+      outputs = {
+        contract = {
+          hub_network = {
+            vpc_self_link                   = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+            vpc_name                        = "hub-vpc"
+            dns_zone_name                   = "hub-dns"
+            dns_domain                      = "hub.internal."
+            egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.enable_egress_proxy && length(terraform_data.production_network_guard) == 1
+    error_message = "A production environment with the hub egress proxy must plan without a waiver."
+  }
+}
+
+run "prod_egress_waiver_allows_plan" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = !local.enable_egress_proxy && length(terraform_data.production_network_guard) == 1
+    error_message = "A waiver with a reason and a future expiry lets production plan without the egress proxy."
+  }
+}
+
+run "prod_expired_egress_waiver_fails" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+    production_egress_proxy_waiver = {
+      reason  = "First rollout: the hub proxy is not applied yet."
+      expires = "2020-01-31"
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_network_guard]
+}
+
+run "rejects_egress_waiver_without_reason" {
+  command = plan
+
+  variables {
+    production_egress_proxy_waiver = { reason = " ", expires = "2099-12-31" }
+  }
+
+  expect_failures = [var.production_egress_proxy_waiver]
+}
+
+run "rejects_egress_waiver_with_malformed_expiry" {
+  command = plan
+
+  variables {
+    production_egress_proxy_waiver = { reason = "First rollout.", expires = "2099-13-01" }
+  }
+
+  expect_failures = [var.production_egress_proxy_waiver]
 }
 
 run "rejects_waiver_without_reason" {

@@ -1628,6 +1628,35 @@ Plan each workspace. The plan must show no subnet change. If it does, the order 
 verified. Check them with `gcloud compute zones list --filter=region:<region>` before the first
 apply.
 
+#### Production egress needs the hub proxy or a waiver (gcp-workload, breaking, ARC-4)
+
+**Breaking: a production `gcp-workload-<env>` plan that passed before now fails.** Without the hub
+Secure Web Proxy the private tier leaves through Cloud NAT with no destination allowlist.
+`terraform_data.production_network_guard` now fails the plan for a production environment
+(`environment_config.<env>.is_production = true`) unless one of these is true:
+
+1. **The egress proxy is on.** Enable `secure_web_proxy` on `gcp-network-hub` (with the host
+   project as a consumer) and apply it, then set `gcp.environments.<env>.egress_proxy: true` (or
+   `enable_egress_proxy`). The private tier then leaves Cloud NAT, so set `HTTPS_PROXY` in the
+   workloads and list every destination in the proxy allowlist first. The proxy is PREVIEW: prove
+   it in the sandbox (`docs/known-gaps.md`).
+2. **A time-boxed waiver.** Add it for that workspace in `config/tfc-workspaces.yaml`
+   (CODEOWNERS-reviewed) and re-apply tfc-admin:
+
+   ```yaml
+   workspaces:
+     gcp-workload-prod:
+       production_egress_proxy_waiver:
+         reason: Hub egress proxy not yet proven in the sandbox
+         expires: "2026-12-31"
+   ```
+
+   `reason` must not be empty and `expires` must be a real `YYYY-MM-DD` date. The waiver stops
+   working after that date (UTC), and the plan fails again.
+
+A standalone environment (`enable_network_hub = false`) cannot use the proxy, so in production it
+needs the waiver. The scaffolder writes neither choice. The guard has no cloud side effect.
+
 #### CMEK for regulated Cloud SQL (gcp-workload, CMP-12)
 
 **Who:** forks with a `compliance_class: regulated` environment whose app

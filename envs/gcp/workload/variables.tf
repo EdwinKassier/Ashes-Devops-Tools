@@ -362,6 +362,25 @@ variable "production_vpc_sc_dry_run_waiver" {
   }
 }
 
+variable "production_egress_proxy_waiver" {
+  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its private-tier egress does not go through the hub Secure Web Proxy (enable_egress_proxy / gcp.environments.<env>.egress_proxy off, or no hub). reason says why; expires (YYYY-MM-DD, UTC) is the last day it waives. Null (default) fails such a plan, because Cloud NAT egress has no destination allowlist. Set it through config/tfc-workspaces.yaml (reviewed)."
+  type = object({
+    reason  = string
+    expires = string
+  })
+  default = null
+
+  validation {
+    condition     = var.production_egress_proxy_waiver == null || try(length(trimspace(var.production_egress_proxy_waiver.reason)) > 0, false)
+    error_message = "production_egress_proxy_waiver.reason must say why production egress does not go through the hub egress proxy."
+  }
+
+  validation {
+    condition     = var.production_egress_proxy_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", var.production_egress_proxy_waiver.expires)) && can(formatdate("YYYY", "${var.production_egress_proxy_waiver.expires}T00:00:00Z")), false)
+    error_message = "production_egress_proxy_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC)."
+  }
+}
+
 variable "vpc_sc_dry_run_restricted_services" {
   description = "Optional restricted_services to TRIAL in a staged dry-run spec while the perimeter stays ENFORCED (only meaningful with vpc_sc_enable_dry_run = false). Status keeps enforcing vpc_sc_restricted_services; the dry-run spec logs what this list would block. Default null = no staged spec."
   type        = list(string)

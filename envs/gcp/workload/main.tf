@@ -357,8 +357,16 @@ resource "terraform_data" "production_vpc_sc_enforced" {
 
 # Production network guards. Pinned zones (IAC-1): the subnet CIDRs are
 # index-aligned with the zones, so with discovered zones a change in the list
-# GCP returns re-derives the CIDRs and replaces in-use subnets. The guard stops
-# the plan; it changes no resource.
+# GCP returns re-derives the CIDRs and replaces in-use subnets. Egress (ARC-4):
+# without the hub Secure Web Proxy the private tier leaves through Cloud NAT
+# with no destination allowlist, so production needs the proxy or
+# production_egress_proxy_waiver, the explicit, reviewed and time-boxed
+# exception (same shape and expiry rule as production_vpc_sc_dry_run_waiver).
+# The guard stops the plan; it changes no resource.
+locals {
+  egress_waiver_until = try("${var.production_egress_proxy_waiver.expires}T23:59:59Z", null)
+}
+
 resource "terraform_data" "production_network_guard" {
   count = local.is_production ? 1 : 0
 
@@ -366,6 +374,11 @@ resource "terraform_data" "production_network_guard" {
     precondition {
       condition     = length(local.zones) > 0
       error_message = "Environment '${var.environment}' is production, so its zones must be pinned: set gcp.environments.${var.environment}.zones in config/landing-zone.yaml (or the zones variable), such as [${local.env_config.region}-a, ${local.env_config.region}-b, ${local.env_config.region}-c]. Subnet i of each tier takes the i-th CIDR, so for an existing network list the zones in the order of its subnet CIDRs (UPGRADING.md), and the plan must show no subnet change."
+    }
+
+    precondition {
+      condition     = local.enable_egress_proxy || (local.egress_waiver_until != null && timecmp(plantimestamp(), coalesce(local.egress_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
+      error_message = "Environment '${var.environment}' is production but its private-tier egress does not go through the hub Secure Web Proxy${local.hub_network == null ? " (standalone: there is no hub)" : ""}, so it leaves through Cloud NAT with no destination allowlist${local.egress_waiver_until == null ? "" : ", and production_egress_proxy_waiver expired on ${try(var.production_egress_proxy_waiver.expires, "")}"}. Set gcp.environments.${var.environment}.egress_proxy: true (or enable_egress_proxy) with secure_web_proxy on gcp-network-hub (PREVIEW, docs/known-gaps.md), or set production_egress_proxy_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
     }
   }
 }

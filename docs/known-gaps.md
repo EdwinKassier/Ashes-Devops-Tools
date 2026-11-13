@@ -731,7 +731,10 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   - Server access logs arrive in the companion `<archive>-access-logs` bucket.
   - A no-op folder IAM write passes the `modifiedGrantsByRole` delegation condition.
   - The hub Secure Web Proxy (preview): the PSC endpoint, the FQDN allowlist,
-    and a spoke private tier with no Cloud NAT.
+    and a spoke private tier with no Cloud NAT. A production gcp-workload now
+    needs the proxy or `production_egress_proxy_waiver` (ARC-4), so until the
+    proxy is proven every production environment runs on a waiver that must be
+    renewed when it expires.
 - **An enforced environment perimeter admits the environment's own plan and
   apply SAs (ARC-13).** Mock-tested only. gcp-projects publishes them in
   `environment_config.<env>.automation_identities`, and the environment stage

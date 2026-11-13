@@ -62,7 +62,29 @@ workspaces:
 ```
 
 The waiver stops working after its `expires` date (UTC), and the plan fails
-again. `envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`)
+again.
+
+**Egress guard.** `envs/gcp/workload` also fails a production plan
+(`terraform_data.production_network_guard`) when the private tier does not
+egress through the hub Secure Web Proxy. Choose one:
+
+- Turn the proxy on: `secure_web_proxy` on `gcp-network-hub` with the
+  environment's host project as a consumer, then
+  `gcp.environments.<env>.egress_proxy: true`. The proxy is PREVIEW
+  (`docs/known-gaps.md`): prove it in the sandbox first.
+- Or accept Cloud NAT egress with no allowlist for a limited time, with a
+  waiver on that workspace in `config/tfc-workspaces.yaml`:
+
+```yaml
+workspaces:
+  gcp-workload-prod:
+    production_egress_proxy_waiver:
+      reason: Hub egress proxy not yet proven in the sandbox
+      expires: "2026-12-31"
+```
+
+A standalone environment (no hub) cannot use the proxy, so it needs the
+waiver. The scaffolder writes neither choice. `envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`)
 emits a plan **warning** for the hub perimeter. Production is the explicit
 `is_production = true` attribute on the shared `environments` map (surfaced to
 gcp-workload as `environment_config[<env>].is_production`), not a name match.
