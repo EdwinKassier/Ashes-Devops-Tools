@@ -137,11 +137,14 @@ gcp:
   # directly under the organization node, owned by a group other than the
   # automation identities. Decide before the first apply: the audit KMS keys
   # cannot be deleted or moved. Any environment with compliance_class: regulated
-  # fails the plan until this project and the lock are set, or
-  # audit_store_waived: true (record why).
+  # fails the plan until this project and the lock are set, or until
+  # audit_store_waiver names a reason and a quoted expiry date (YYYY-MM-DD,
+  # UTC). After that date the plan fails again.
   # logging_project_id: my-org-logging
   # logging_project_number: "123456789012"
-  # audit_store_waived: false
+  # audit_store_waiver:
+  #   reason: Logging project pending; risk register entry R-12
+  #   expires: "2027-03-31"
   # Protection level of the two audit CMEK keys: SOFTWARE (default) or HSM
   # (Cloud HSM, FIPS 140-2 Level 3; costs more per key version). It cannot
   # change on existing keys: set it with a new logging project or a new estate.

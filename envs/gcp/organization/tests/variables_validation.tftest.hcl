@@ -177,9 +177,42 @@ run "regulated_estate_with_waiver_plans" {
   }
 
   assert {
-    condition     = local.regulated_environment_keys == tolist(["prod"])
+    condition     = local.regulated_environment_keys == tolist(["prod"]) && local.audit_store_waived && !local.audit_store_hardened
     error_message = "the waiver must let a regulated estate plan without the lock."
   }
+}
+
+# CMP-05: the waiver expires. After its expires date (UTC) the plan fails again.
+run "regulated_estate_with_expired_waiver_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-waiver-expired.yaml"
+  }
+
+  expect_failures = [terraform_data.regulated_audit_store_guard, check.production_audit_store]
+}
+
+# The removed boolean gcp.audit_store_waived fails the plan (naming the new
+# key), even in an estate that needs no waiver.
+run "removed_audit_store_waived_key_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/schema-invalid-audit-store-waived.yaml"
+  }
+
+  expect_failures = [terraform_data.regulated_audit_store_guard]
+}
+
+run "malformed_audit_store_waiver_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/schema-invalid-audit-store-waiver.yaml"
+  }
+
+  expect_failures = [terraform_data.regulated_audit_store_guard]
 }
 
 # The lock alone is not enough: the audit store must also leave the admin project.

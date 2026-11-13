@@ -1,0 +1,5 @@
+# Expected to FAIL schema validation: gcp.audit_store_waived was replaced by
+# gcp.audit_store_waiver { reason, expires } (CMP-05).
+version: 1
+gcp:
+  audit_store_waived: true

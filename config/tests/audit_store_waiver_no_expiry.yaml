@@ -1,0 +1,6 @@
+# Expected to FAIL schema validation: gcp.audit_store_waiver needs both reason
+# and expires (CMP-05).
+version: 1
+gcp:
+  audit_store_waiver:
+    reason: Logging project not created yet

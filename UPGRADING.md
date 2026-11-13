@@ -1628,6 +1628,26 @@ Plan each workspace. The plan must show no subnet change. If it does, the order 
 verified. Check them with `gcloud compute zones list --filter=region:<region>` before the first
 apply.
 
+#### The audit store waiver names a reason and expires (gcp-organization, breaking, CMP-05)
+
+**Breaking: `gcp.audit_store_waived` is removed.** Any value of it (also `false`) now fails the
+`gcp-organization` plan and `make config-check`, and both name the new key. Replace it with an
+object:
+
+```yaml
+gcp:
+  audit_store_waiver:
+    reason: Logging project pending; risk register entry R-12
+    expires: "2027-03-31"
+```
+
+`reason` must not be empty. `expires` must be a real `YYYY-MM-DD` date; quote it, so YAML keeps it
+a string. The waiver lets a regulated estate (and the production-profile warning) pass without
+`gcp.logging_project_id` and `gcp.enable_audit_bucket_lock` through that day (UTC). After it, the
+plan fails again, the same rule as `production_vpc_sc_dry_run_waiver`. If you had
+`audit_store_waived: false`, delete the line. If you had `true`, write the object with the date by
+which the hardened audit store will exist.
+
 #### Production egress needs the hub proxy or a waiver (gcp-workload, breaking, ARC-4)
 
 **Breaking: a production `gcp-workload-<env>` plan that passed before now fails.** Without the hub
@@ -1765,7 +1785,7 @@ The production profile (`org.profile: production`, the default) also sets the or
 
 #### Regulated environments require a hardened audit store (gcp-organization, CMP-4)
 
-Nothing changes for an estate without `compliance_class: regulated`. Setting `compliance_class: regulated` on a `gcp.environments` entry fails the `gcp-organization` plan until `gcp.logging_project_id`, `gcp.logging_project_number` and `gcp.enable_audit_bucket_lock: true` are set, or `gcp.audit_store_waived: true`. The logging project must not be the admin project. The lock is irreversible. The three keys are new in `config/landing-zone.yaml`; `gcp_overrides.logging_project_id`, `gcp_overrides.logging_project_number` and `gcp_overrides.enable_audit_bucket_lock` still win over them.
+Nothing changes for an estate without `compliance_class: regulated`. Setting `compliance_class: regulated` on a `gcp.environments` entry fails the `gcp-organization` plan until `gcp.logging_project_id`, `gcp.logging_project_number` and `gcp.enable_audit_bucket_lock: true` are set, or an unexpired `gcp.audit_store_waiver` (see the CMP-05 entry above). The logging project must not be the admin project. The lock is irreversible. The three keys are new in `config/landing-zone.yaml`; `gcp_overrides.logging_project_id`, `gcp_overrides.logging_project_number` and `gcp_overrides.enable_audit_bucket_lock` still win over them.
 
 Two new plan warnings (they never fail the plan): the production profile warns when an `is_production` environment exists and the audit store is not hardened (or waived), and the plan warns when the logging project sits in a folder.
 

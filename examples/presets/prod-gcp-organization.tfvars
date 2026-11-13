@@ -34,7 +34,7 @@ gcp_overrides = {
   # (IRREVERSIBLE) are set in config/landing-zone.yaml as gcp.logging_project_id,
   # gcp.logging_project_number and gcp.enable_audit_bucket_lock, so every reader sees them.
   # A gcp.environments entry with compliance_class: regulated fails the plan until they
-  # are set (or gcp.audit_store_waived: true). The production profile warns once an
+  # are set (or an unexpired gcp.audit_store_waiver). The production profile warns once an
   # environment is_production. See docs/runbooks/production-hardening.md.
 
   # Standing org/billing admin is group-only (organization_admin_groups /

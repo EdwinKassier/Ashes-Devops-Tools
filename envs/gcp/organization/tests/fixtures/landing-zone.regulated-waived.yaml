@@ -1,5 +1,5 @@
 # Fixture: the regulated estate of landing-zone.regulated.yaml with the
-# explicit waiver (CMP-4: the plan must pass).
+# explicit, unexpired waiver (CMP-4, CMP-05: the plan must pass).
 org:
   prefix: acme
   display_name: Acme
@@ -14,7 +14,9 @@ gcp:
   break_glass_group: gcp-break-glass@acme.io
   alert_emails: [secops@acme.io]
   allowed_regions: [europe-west1]
-  audit_store_waived: true
+  audit_store_waiver:
+    reason: Logging project not created yet; risk register entry R-12
+    expires: "2099-12-31"
   environments:
     prod:
       display_name: Production

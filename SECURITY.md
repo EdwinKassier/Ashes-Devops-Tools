@@ -57,7 +57,7 @@ This landing zone implements defense-in-depth across every layer:
 - **CMEK (Customer-Managed Encryption Keys)** via Cloud KMS — available across storage primitives. Storage is always encrypted at rest; buckets default to Google-managed keys (GMEK) and accept a CMEK via `kms_key_name`, with the composing stages wiring a CMK for regulated data. Require a CMEK at the module boundary for compliance environments.
 - **Key rotation enforced** — rotation period validated between 1–365 days at plan time
 - **Uniform bucket-level access** — no per-object ACLs on Cloud Storage
-- **Opt-in WORM retention**: `gcp.enable_audit_bucket_lock` locks the audit bucket's retention policy (irreversible). Without it, the bucket is versioned and access-controlled but not immutable. Required for regulated environments (`compliance_class: regulated`), together with a separate logging project (`gcp.logging_project_id`): the `gcp-organization` plan fails without both unless `gcp.audit_store_waived` is true.
+- **Opt-in WORM retention**: `gcp.enable_audit_bucket_lock` locks the audit bucket's retention policy (irreversible). Without it, the bucket is versioned and access-controlled but not immutable. Required for regulated environments (`compliance_class: regulated`), together with a separate logging project (`gcp.logging_project_id`): the `gcp-organization` plan fails without both unless an unexpired `gcp.audit_store_waiver` (reason and expiry date) is set.
 
 ### Network Security
 

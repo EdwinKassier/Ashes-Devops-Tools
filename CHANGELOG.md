@@ -640,6 +640,11 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `production_egress_proxy_waiver = { reason, expires }`, which has the shape and expiry rule of
   `production_vpc_sc_dry_run_waiver` and stops working after `expires` (UTC). The scaffolder
   writes neither: the operator chooses. Control matrix NET-13. See `UPGRADING.md`.
+- **The GCP audit store waiver expires (CMP-05, breaking).** The boolean `gcp.audit_store_waived`
+  is replaced by `gcp.audit_store_waiver = { reason, expires }`. It waives the regulated
+  hardened-audit-store requirement (LOG-03, LOG-04) only until `expires` (UTC), the
+  `production_vpc_sc_dry_run_waiver` rule. The old key fails the gcp-organization plan and the
+  schema (`make config-check`), and both name the new key. See `UPGRADING.md`.
 
 ### Changed
 
@@ -662,7 +667,7 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 - **Hardened audit store for regulated GCP estates (CMP-4).** A `gcp.environments` entry with
   `compliance_class: regulated` fails the `gcp-organization` plan until `gcp.logging_project_id`,
   `gcp.logging_project_number` (not the admin project) and `gcp.enable_audit_bucket_lock: true` are
-  set, or `gcp.audit_store_waived: true`. The three keys are new in the config file. The production
+  set, or a waiver (`gcp.audit_store_waiver`, below). The three keys are new in the config file. The production
   profile warns when an `is_production` environment exists without them, and the plan warns when the
   logging project sits in a folder. See `UPGRADING.md`.
 - **Opt-in regulated environment class (CMP-7).** `compliance_class: regulated` on a

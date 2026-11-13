@@ -162,7 +162,7 @@
         },
         "enable_audit_bucket_lock": {
           "type": "boolean",
-          "description": "WORM-lock the org audit bucket's retention policy (gcp-organization). IRREVERSIBLE. Required, with logging_project_id, when any gcp.environments entry is compliance_class: regulated (unless audit_store_waived)."
+          "description": "WORM-lock the org audit bucket's retention policy (gcp-organization). IRREVERSIBLE. Required, with logging_project_id, when any gcp.environments entry is compliance_class: regulated (unless audit_store_waiver)."
         },
         "logging_project_id": {
           "type": "string",
@@ -182,9 +182,31 @@
           ],
           "description": "Cloud KMS protection level of the audit CMEK keys (gcp-organization). Default SOFTWARE. HSM (Cloud HSM) costs more per key version. It cannot change on existing keys (ForceNew; the plan fails): set it for a new estate or a new logging project only."
         },
+        "audit_store_waiver": {
+          "type": "object",
+          "description": "Let a regulated estate (any gcp.environments entry with compliance_class: regulated) plan without logging_project_id and enable_audit_bucket_lock until expires (gcp-organization). reason: why, for the risk register. expires: the last day it waives, YYYY-MM-DD (UTC), quoted; after it the plan fails again.",
+          "required": [
+            "reason",
+            "expires"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "expires": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          "additionalProperties": false
+        },
         "audit_store_waived": {
-          "type": "boolean",
-          "description": "Let a regulated estate (any gcp.environments entry with compliance_class: regulated) plan without logging_project_id and enable_audit_bucket_lock. Record why in your risk register."
+          "description": "REMOVED: use gcp.audit_store_waiver { reason, expires }. Any value fails validation and the gcp-organization plan.",
+          "enum": [
+            "REMOVED: replace gcp.audit_store_waived with gcp.audit_store_waiver { reason, expires }"
+          ]
         },
         "allowed_regions": {
           "type": "array",
@@ -996,7 +1018,7 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or gcp.audit_store_waived is true. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), Cloud Armor and its OWASP rules are on, flow-log sampling is 1, flow-log retention is at least 365 days and the Backup and DR vault (backup_vault) is on.",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or an unexpired gcp.audit_store_waiver is set. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), Cloud Armor and its OWASP rules are on, flow-log sampling is 1, flow-log retention is at least 365 days and the Backup and DR vault (backup_vault) is on.",
                 "enum": [
                   "standard",
                   "regulated"

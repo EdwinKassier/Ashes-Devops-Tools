@@ -80,7 +80,7 @@ variable "shared_iam_group_role_bindings" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml) marks production environments: it drives the production guardrail checks here and in gcp-bootstrap / gcp-workload. compliance_class (standard or regulated, default standard) marks regulated environments: any regulated environment makes this root require a hardened audit store (gcp.logging_project_id and gcp.enable_audit_bucket_lock, or gcp.audit_store_waived). Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
+  description = "Map of application environment definitions. is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml) marks production environments: it drives the production guardrail checks here and in gcp-bootstrap / gcp-workload. compliance_class (standard or regulated, default standard) marks regulated environments: any regulated environment makes this root require a hardened audit store (gcp.logging_project_id and gcp.enable_audit_bucket_lock, or an unexpired gcp.audit_store_waiver). Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
     display_name            = string
     region                  = string

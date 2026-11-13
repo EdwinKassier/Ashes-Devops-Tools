@@ -382,8 +382,17 @@ The following then move out of the admin project into that project:
 
 **Required for regulated estates.** When any `gcp.environments` entry has
 `compliance_class: regulated`, the gcp-organization plan fails until both the
-logging project and `gcp.enable_audit_bucket_lock: true` are set. Set
-`gcp.audit_store_waived: true` to plan without them, and record why. In the
+logging project and `gcp.enable_audit_bucket_lock: true` are set. To plan
+without them for a limited time, set a waiver and record the risk:
+
+```yaml
+gcp:
+  audit_store_waiver:
+    reason: Logging project pending; risk register entry R-12
+    expires: "2027-03-31"
+```
+
+The waiver stops working after `expires` (UTC), and the plan fails again. In the
 production profile, an estate with an `is_production` environment and no hardened
 audit store gets a plan warning.
 
