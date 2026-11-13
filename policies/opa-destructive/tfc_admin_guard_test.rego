@@ -396,8 +396,11 @@ test_attach_foreign_set_to_workspace_denied if denied(vs_attach("tfe_workspace_v
 
 test_attach_foreign_set_to_project_denied if denied(vs_attach("tfe_project_variable_set", "varset-handmade"))
 
-test_attach_new_managed_set_allowed if {
-	inp := {"plan": {"resource_changes": [
+# An attachment whose set ID is unknown at plan time (the set is created in
+# this plan). It passes only when its configuration expression references a
+# tfe_variable_set; `refs` is that expression's references list.
+new_set_root(refs) := {"plan": {
+	"resource_changes": [
 		{
 			"address": "tfe_variable_set.common",
 			"mode": "managed",
@@ -408,9 +411,81 @@ test_attach_new_managed_set_allowed if {
 			"address": "tfe_workspace_variable_set.x",
 			"mode": "managed",
 			"type": "tfe_workspace_variable_set",
+			"name": "x",
 			"change": {"actions": ["create"], "before": null, "after": {"workspace_id": "ws-1"}, "after_unknown": {"variable_set_id": true}},
 		},
-	]}}
+	],
+	"configuration": {"root_module": {"resources": [
+		{"address": "tfe_variable_set.common", "mode": "managed", "type": "tfe_variable_set", "name": "common", "expressions": {}},
+		{
+			"address": "tfe_workspace_variable_set.x",
+			"mode": "managed",
+			"type": "tfe_workspace_variable_set",
+			"name": "x",
+			"expressions": {"variable_set_id": {"references": refs}},
+		},
+	]}},
+}}
+
+test_attach_new_managed_set_allowed if allowed(new_set_root(["tfe_variable_set.common.id", "tfe_variable_set.common"]))
+
+# Before: any tfe_variable_set created in the same plan let an unknown ID pass.
+test_attach_unknown_set_not_referenced_denied if denied(new_set_root(["var.handmade_set_id"]))
+
+test_attach_unknown_set_without_configuration_denied if denied({"plan": object.remove(new_set_root(["tfe_variable_set.common.id"]).plan, ["configuration"])})
+
+# The tfc-admin shape (plan JSON of Terraform 1.17.1): module.workspace[key]
+# holds tfe_workspace_variable_set.this[k] with variable_set_id = each.value,
+# for_each = var.variable_set_ids, and the module call passes
+# { common = tfe_variable_set.common.id }.
+new_set_module(call_refs) := {"plan": {
+	"resource_changes": [
+		{
+			"address": "tfe_variable_set.common",
+			"mode": "managed",
+			"type": "tfe_variable_set",
+			"change": {"actions": ["create"], "before": null, "after": {"global": false}, "after_unknown": {"id": true}},
+		},
+		{
+			"address": "module.workspace[\"gcp-organization\"].tfe_workspace_variable_set.this[\"common\"]",
+			"module_address": "module.workspace[\"gcp-organization\"]",
+			"mode": "managed",
+			"type": "tfe_workspace_variable_set",
+			"name": "this",
+			"change": {"actions": ["create"], "before": null, "after": {}, "after_unknown": {"variable_set_id": true, "workspace_id": true}},
+		},
+	],
+	"configuration": {"root_module": {
+		"resources": [{"address": "tfe_variable_set.common", "mode": "managed", "type": "tfe_variable_set", "name": "common", "expressions": {}}],
+		"module_calls": {"workspace": {
+			"source": "../../modules/tfc/workspace",
+			"expressions": {"variable_set_ids": {"references": call_refs}},
+			"for_each_expression": {"references": ["local.workspaces"]},
+			"module": {"resources": [{
+				"address": "tfe_workspace_variable_set.this",
+				"mode": "managed",
+				"type": "tfe_workspace_variable_set",
+				"name": "this",
+				"expressions": {"variable_set_id": {"references": ["each.value"]}, "workspace_id": {"references": ["tfe_workspace.this.id", "tfe_workspace.this"]}},
+				"for_each_expression": {"references": ["var.variable_set_ids"]},
+			}]},
+		}},
+	}},
+}}
+
+test_attach_unknown_set_through_module_allowed if allowed(new_set_module(["local.guardrails_workspaces", "each.key", "tfe_variable_set.common.id", "tfe_variable_set.common"]))
+
+test_attach_unknown_set_through_module_local_denied if denied(new_set_module(["local.handmade_set_ids"]))
+
+# Existing attachments are never denied: a no-op on a set this configuration
+# does not manage passes.
+test_noop_attachment_of_foreign_set_allowed if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace_variable_set.legacy",
+		"mode": "managed",
+		"type": "tfe_workspace_variable_set",
+		"change": {"actions": ["no-op"], "before": {"variable_set_id": "varset-handmade", "workspace_id": "ws-1"}, "after": {"variable_set_id": "varset-handmade", "workspace_id": "ws-1"}, "after_unknown": {}},
+	}]}}
 	allowed(inp)
 }
 
@@ -419,3 +494,38 @@ test_variable_set_made_global_denied if denied(change("tfe_variable_set", ["upda
 test_new_global_variable_set_denied if denied(change("tfe_variable_set", ["create"], null, {"name": "x", "global": true}))
 
 test_steering_var_in_variable_set_denied if denied(change("tfe_variable", ["create"], null, object.union(object.remove(var("TFC_AWS_PROVIDER_AUTH", "env", "true"), ["workspace_id"]), {"variable_set_id": "varset-1"})))
+
+# Two module levels: root -> module.outer[k] (ids = { common = tfe_variable_set.common.id })
+# -> module.inner (ids = var.ids) -> the attachment (each.value over var.ids).
+nested_set_plan(root_refs) := {"plan": {
+	"resource_changes": [{
+		"address": "module.outer[\"a\"].module.inner.tfe_project_variable_set.this[\"common\"]",
+		"module_address": "module.outer[\"a\"].module.inner",
+		"mode": "managed",
+		"type": "tfe_project_variable_set",
+		"name": "this",
+		"change": {"actions": ["create"], "before": null, "after": {}, "after_unknown": {"variable_set_id": true}},
+	}],
+	"configuration": {"root_module": {
+		"resources": [{"address": "tfe_variable_set.common", "mode": "managed", "type": "tfe_variable_set", "name": "common", "expressions": {}}],
+		"module_calls": {"outer": {
+			"expressions": {"ids": {"references": root_refs}},
+			"for_each_expression": {"references": ["local.keys"]},
+			"module": {"module_calls": {"inner": {
+				"expressions": {"ids": {"references": ["var.ids"]}},
+				"module": {"resources": [{
+					"address": "tfe_project_variable_set.this",
+					"mode": "managed",
+					"type": "tfe_project_variable_set",
+					"name": "this",
+					"expressions": {"variable_set_id": {"references": ["each.value"]}},
+					"for_each_expression": {"references": ["var.ids"]},
+				}]},
+			}}},
+		}},
+	}},
+}}
+
+test_attach_unknown_set_two_modules_deep_allowed if allowed(nested_set_plan(["tfe_variable_set.common.id", "tfe_variable_set.common"]))
+
+test_attach_unknown_set_two_modules_deep_unreferenced_denied if denied(nested_set_plan(["var.foreign_ids"]))

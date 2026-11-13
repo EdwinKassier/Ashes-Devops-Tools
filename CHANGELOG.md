@@ -678,6 +678,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   turns a deletion-protection switch off (for example `deletion_protection` true to false, or
   `deletion_policy` away from `"PREVENT"`). The security team overrides an intended change. See
   `UPGRADING.md`.
+- **tfc_admin_guard follows an unknown variable set ID to its source (breaking).** An attachment
+  whose `variable_set_id` is unknown at plan time used to pass whenever the plan created any
+  `tfe_variable_set`. It now passes only when its configuration references a `tfe_variable_set`,
+  followed through `each.value`, module arguments and module `for_each`. See `UPGRADING.md`.
 
 ### Changed
 

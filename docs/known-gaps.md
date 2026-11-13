@@ -1498,6 +1498,14 @@ side (all mock-tested, secure defaults):
   manage and making a set global. It cannot see variables that someone adds
   by hand in the HCP Terraform UI to a set tfc-admin manages (such as
   `<prefix>common`), and it cannot read the contents of an existing set.
+  When the set ID of an attachment is unknown at plan time (the set is
+  created in the same plan), the policy follows the references in the plan
+  JSON `configuration` (through `each.value`, module arguments and module
+  `for_each`) and passes the attachment if any of them reaches a
+  `tfe_variable_set`. The references list does not say which part of an
+  expression a reference feeds, so `{ common = tfe_variable_set.common.id,
+  x = var.other_set_id }` passes. A reference the walk cannot follow (a
+  `local`, a data source) is denied, and the security team overrides it.
 - **Credential-file arguments are not checked.** The policy does not look at
   the aws provider's `shared_config_files`, `shared_credentials_files` or
   `profile` (a file can set `credential_process`, which runs a command, or

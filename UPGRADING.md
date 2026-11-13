@@ -458,6 +458,19 @@ project's `deletion_policy` from `"PREVENT"` before a teardown. Each such run ne
 [teardown runbook](docs/runbooks/teardown.md) describes. No manual step is
 needed before the upgrade.
 
+#### tfc_admin_guard checks where an unknown variable set ID comes from (policies, breaking)
+
+**Breaking: a run that passed before can now stop until the security team
+overrides it.** A `tfe_workspace_variable_set` or `tfe_project_variable_set`
+whose `variable_set_id` is unknown at plan time used to pass whenever the
+same plan created any `tfe_variable_set`. Now its configuration must
+reference a `tfe_variable_set` resource, directly or through `each.value`,
+module arguments and module `for_each`. tfc-admin's own attachments
+(`module.workspace` with `variable_set_ids = { common = tfe_variable_set.common.id }`)
+pass. A fork that passes a new set's ID through a `local` or a data source is
+denied on the plan that creates the set: pass the resource reference
+directly, or have the security team override that one run.
+
 #### Mandatory OPA controls deny unknown values (policies, breaking)
 
 **Breaking: the non-overridable guardrails set now fails runs that passed

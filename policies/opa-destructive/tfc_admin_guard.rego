@@ -494,12 +494,6 @@ managed_set_ids contains id if {
 	is_string(id)
 }
 
-creates_variable_set if {
-	some rc in lib.managed
-	rc.type == "tfe_variable_set"
-	lib.creates(rc)
-}
-
 variable_set_attachment_types := {"tfe_workspace_variable_set", "tfe_project_variable_set"}
 
 deny contains msg if {
@@ -512,14 +506,115 @@ deny contains msg if {
 	msg := sprintf("%s: plan attaches variable set %s, which this configuration does not manage, so its env vars are not judged; the security team must override this run if it is intended", [rc.address, set_id])
 }
 
-# An ID still unknown must belong to a set this plan creates.
+# An ID still unknown (the set is created or replaced in this plan) passes
+# only when the attachment's configuration expression references a
+# tfe_variable_set resource. The references are followed through `each.value`
+# (the resource's for_each), `var.<name>` (the calling module's argument) and
+# `each` of a module call, up through any module depth. Plan JSON fields
+# (terraform show -json, confirmed with Terraform 1.17.1):
+#   configuration.root_module(.module_calls.<name>.module)*.resources[i]
+#     .address (module-relative, no instance key), .expressions.<attr>.references,
+#     .for_each_expression.references
+#   ...module_calls.<name>.expressions.<arg>.references, .for_each_expression
+#   resource_changes[].module_address (with instance keys)
+# A reference the walk cannot follow (a local, a data source, a missing
+# configuration) never reaches a set, so the attachment is denied.
+#
+# Each module's configuration, keyed by its call path ("" for the root,
+# "workspace", "a.b" for nested calls).
+config_modules[key] := m if {
+	walk(object.get(object.get(input.plan, "configuration", {}), "root_module", {}), [path, m])
+	module_path(path)
+	key := concat(".", [path[i + 1] | some i, seg in path; seg == "module_calls"; i % 3 == 0])
+}
+
+module_path(path) if count(path) == 0
+
+module_path(path) if {
+	count(path) > 0
+	count(path) % 3 == 0
+	count([i | some i, seg in path; i % 3 == 0; seg != "module_calls"]) == 0
+	count([i | some i, seg in path; i % 3 == 2; seg != "module"]) == 0
+}
+
+# A resource change's module key: module.a["x"].module.b[0] -> "a.b".
+module_key(rc) := "" if object.get(rc, "module_address", "") == ""
+
+module_key(rc) := key if {
+	addr := object.get(rc, "module_address", "")
+	addr != ""
+	parts := split(regex.replace(addr, `\[[^\]]*\]`, ""), ".")
+	key := concat(".", [parts[i] | some i in numbers.range(1, count(parts) - 1); i % 2 == 1])
+}
+
+parent_key(key) := concat(".", array.slice(split(key, "."), 0, count(split(key, ".")) - 1))
+
+call_name(key) := split(key, ".")[count(split(key, ".")) - 1]
+
+# Graph node for a reference made in module `key` by the object `owner`
+# (a resource address, or module.<call> for a module call argument).
+ref_node(key, owner, ref) := sprintf("%s|each@%s", [key, owner]) if startswith(ref, "each.")
+
+ref_node(key, _, ref) := sprintf("%s|var.%s", [key, split(ref, ".")[1]]) if startswith(ref, "var.")
+
+ref_node(key, _, ref) := sprintf("%s|%s", [key, ref]) if {
+	not startswith(ref, "each.")
+	not startswith(ref, "var.")
+}
+
+refs_of(expr) := object.get(expr, "references", [])
+
+attach_edges contains [sprintf("%s|@%s", [key, r.address]), ref_node(key, r.address, ref)] if {
+	some key, m in config_modules
+	some r in object.get(m, "resources", [])
+	r.type in variable_set_attachment_types
+	some ref in refs_of(object.get(object.get(r, "expressions", {}), "variable_set_id", {}))
+}
+
+attach_edges contains [sprintf("%s|each@%s", [key, r.address]), ref_node(key, r.address, ref)] if {
+	some key, m in config_modules
+	some r in object.get(m, "resources", [])
+	r.type in variable_set_attachment_types
+	some ref in refs_of(object.get(r, "for_each_expression", {}))
+}
+
+attach_edges contains [sprintf("%s|var.%s", [key, arg]), ref_node(parent, owner, ref)] if {
+	some key, _ in config_modules
+	key != ""
+	parent := parent_key(key)
+	owner := sprintf("module.%s", [call_name(key)])
+	call := config_modules[parent].module_calls[call_name(key)]
+	some arg, expr in object.get(call, "expressions", {})
+	some ref in refs_of(expr)
+}
+
+attach_edges contains [sprintf("%s|each@module.%s", [parent, name]), ref_node(parent, sprintf("module.%s", [name]), ref)] if {
+	some parent, m in config_modules
+	some name, call in object.get(m, "module_calls", {})
+	some ref in refs_of(object.get(call, "for_each_expression", {}))
+}
+
+attach_nodes contains n if {
+	some e in attach_edges
+	some n in e
+}
+
+attach_graph := {n: {t | some [f, t] in attach_edges; f == n} | some n in attach_nodes}
+
+references_variable_set(rc) if {
+	start := sprintf("%s|@%s.%s", [module_key(rc), rc.type, rc.name])
+	some node in graph.reachable(attach_graph, {start})
+	ref := split(node, "|")[1]
+	startswith(ref, "tfe_variable_set.")
+}
+
 deny contains msg if {
 	some rc in lib.managed
 	rc.type in variable_set_attachment_types
 	lib.writes(rc)
 	attr_unknown(rc, "variable_set_id")
-	not creates_variable_set
-	msg := sprintf("%s: the attached variable set is unknown at plan time and no variable set is created in this plan; the security team must override this run if it is intended", [rc.address])
+	not references_variable_set(rc)
+	msg := sprintf("%s: the attached variable set is unknown at plan time and its configuration does not reference a tfe_variable_set this configuration manages; the security team must override this run if it is intended", [rc.address])
 }
 
 deny contains msg if {
