@@ -12,8 +12,9 @@
 # action on any principal ("*" or AWS "*") is denied outright.
 #
 # A trust document that is unknown at plan time cannot be checked, so it is
-# denied, unless the same run creates an OIDC provider or the AWS organization
-# in the role's own module instance or in a module below it. Those are the
+# denied, unless the role itself is created in this run and the same run
+# creates an OIDC provider or the AWS organization in the role's own module
+# instance or in a module below it. Those are the
 # legitimate first applies whose trust is unknown until apply (a GitHub deploy
 # role naming its new provider in app-services; the management-account roles
 # of a greenfield organization, one module above module.organization). The
@@ -69,8 +70,16 @@ federated_web_identity(stmt) if {
 	allows_web_identity(stmt)
 }
 
-# Any principal: "*" or {"AWS": "*"} (also inside a list).
+# Any principal: "*", {"AWS": "*"} or {"Federated": "*"} (also inside a
+# list), or a NotPrincipal (every principal it does not list).
 any_principal(stmt) if stmt.Principal == "*"
+
+any_principal(stmt) if {
+	some p in federated_principals(stmt)
+	p == "*"
+}
+
+any_principal(stmt) if object.get(stmt, "NotPrincipal", null) != null
 
 any_principal(stmt) if {
 	some p in lib.as_list(object.get(object.get(stmt, "Principal", {}), "AWS", null))
@@ -208,6 +217,7 @@ same_or_below(rc, dep) if {
 first_apply_dependency(rc) if {
 	some dep in lib.managed
 	dep.type in {"aws_iam_openid_connect_provider", "aws_organizations_organization"}
+	lib.creates(rc)
 	lib.creates(dep)
 	same_or_below(rc, dep)
 }
@@ -215,7 +225,7 @@ first_apply_dependency(rc) if {
 deny contains msg if {
 	some rc in unknown_trust
 	not first_apply_dependency(rc)
-	msg := sprintf("%s: assume_role_policy is unknown at plan time, so federated-trust pinning cannot be checked; build the trust from plan-known values (an unknown trust is allowed only when the same run creates an OIDC provider or the organization in the role's module or below it)", [rc.address])
+	msg := sprintf("%s: assume_role_policy is unknown at plan time, so federated-trust pinning cannot be checked; build the trust from plan-known values (an unknown trust is allowed only on a new role when the same run creates an OIDC provider or the organization in the role's module or below it)", [rc.address])
 }
 
 # Advisory twin: every trust whose policy is unknown at plan time.

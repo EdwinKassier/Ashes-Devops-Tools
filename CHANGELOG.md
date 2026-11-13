@@ -706,6 +706,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `repo_env` without an environment and any `terraform_*` claim on any role, a `principal://`
   subject that the AWS policy would deny, and a workforce member on a custom role. See
   `UPGRADING.md`.
+- **Workload identity allowlist on every role; trust gate minors (SEC-1, breaking).**
+  `gcp_wif_principalset_pinned` applies its pinned-form allowlist to a workload pool member on every
+  role, not only the service-account roles (`attribute.namespace_path/` on `serviceAccountUser`,
+  `serviceAccountAdmin` or a custom role passed before), rejects `*` and `?` in any member, and
+  matches member prefixes without case. `aws_iam_federated_trust_pinned` exempts an unknown trust
+  only on a role created in the run, and denies web identity with `NotPrincipal` or
+  `{"Federated": "*"}`. See `UPGRADING.md`.
 
 ### Changed
 

@@ -535,9 +535,16 @@ identity) now denies:
   `repository_id:<id>`) and a `ref:` or `environment:` value, for example
   `repo:acme/app:pull_request` or a template that holds only
   `job_workflow_ref`;
-- a trust that is unknown at plan time, unless the same run creates an
-  `aws_iam_openid_connect_provider` or an `aws_organizations_organization`
-  in the role's module instance or in a module below it.
+- a trust that is unknown at plan time, unless the role itself is created in
+  that run and the same run creates an `aws_iam_openid_connect_provider` or an
+  `aws_organizations_organization` in the role's module instance or in a
+  module below it. An update of an existing role is never exempt. So turning
+  `create_github_oidc_provider` on for an app-services deploy role that
+  already exists needs two runs: first a run that targets only
+  `module.app_services.aws_iam_openid_connect_provider.github`, then the
+  normal run, in which the provider ARN is known;
+- a statement that allows web identity with `NotPrincipal`, or to
+  `{"Federated": "*"}`;
 
 The app-services stage also fails the plan for a `github.subject` without a
 literal repository and a `ref:` or `environment:` value.
@@ -553,13 +560,16 @@ identity, so those statements are now checked.
 on `roles/iam.workloadIdentityUser`, `roles/iam.serviceAccountTokenCreator`,
 `roles/iam.serviceAccountOpenIdTokenCreator`, `roles/iam.serviceAccountKeyAdmin`,
 a custom role or a role unknown at plan time. It denies
-`attribute.account/...` and `attribute.repo_env/<id>/-` on any role. On those
-service-account roles (custom roles excepted), a workload pool member must be
+`attribute.account/...`, `attribute.repo_env/<id>/-` and any member that holds
+`*` or `?` (other than the whole-pool `/*`, which was already denied) on any
+role. On every role, a workload pool member must be
 `attribute.repo_ref/`, `attribute.repo_env/`, `attribute.repo_ref_env/`,
 `attribute.workspace_id_phase/` or `attribute.workspace_phase/`;
 `attribute.repository_id/` and `attribute.project_path/` pass with an
-advisory, and any other form (for example `attribute.role/...`, a GKE
-`namespace/...` set or a `group/...`) is denied. A
+advisory, and any other form (for example `attribute.role/...`,
+`attribute.namespace_path/...`, a GKE `namespace/...` set or a `group/...`) is
+denied, also on resource roles such as `roles/storage.objectViewer`. The
+scheme, host and pool path of a member are matched without case. A
 `principal://.../workloadIdentityPools/<pool>/subject/<sub>` member is denied
 when `<sub>` is a TFC or GitHub subject that the AWS rules above deny.
 

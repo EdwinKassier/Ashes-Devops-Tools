@@ -1596,9 +1596,9 @@ side (all mock-tested, secure defaults):
   `gcp_wif_principalset_pinned` denies a principalSet on the whole pool, the
   owner, a repository name, an actor, a bare ref, the audience, an AWS
   account, `repo_env` without an environment or a raw `attribute.terraform_*`
-  claim when the run is planned. On a role that acts as a service account it
-  allows only the pinned forms the repo builds, and it denies a workforce pool
-  member on such a role or on a custom role. Three cases
+  claim when the run is planned. On every role it allows only the pinned
+  workload pool forms the repo builds, and it denies a workforce pool member
+  on a role that acts as a service account or on a custom role. Three cases
   are advisory only (`gcp_wif_principalset_repo_wide`): a binding whose member
   is unknown at plan time (the pool is created in the same run), and a binding
   on `attribute.repository_id` alone, which trusts every branch and
@@ -1609,10 +1609,11 @@ side (all mock-tested, secure defaults):
   checked.
 - **Unknown AWS trusts in first-apply runs (SEC-1 residual).**
   `aws_iam_federated_trust_pinned` denies an `aws_iam_role` trust that is
-  unknown at plan time, unless the same run creates an
-  `aws_iam_openid_connect_provider` or an `aws_organizations_organization`
-  in the role's own module instance or in a module below it (a role at the
-  root counts every module as below it). Such a role passes with only the
+  unknown at plan time, unless the role itself is created in that run and the
+  same run creates an `aws_iam_openid_connect_provider` or an
+  `aws_organizations_organization` in the role's own module instance or in a
+  module below it (a role at the root counts every module as below it). An
+  update of an existing role is never exempt. Such a role passes with only the
   advisory `aws_iam_federated_trust_unknown` warning, so a wildcard subject
   hidden behind an apply-time value is not caught for it. The two cases in
   this repository are the first apply of an app-services GitHub deploy role
@@ -1629,7 +1630,10 @@ side (all mock-tested, secure defaults):
   Server issuer or a customised claim template that starts with another
   claim, and every other issuer (EKS, GitLab, Cognito, Google), gets only the
   wildcard rule and the requirement of a `:sub` and an `:aud` key for one of
-  the statement's providers.
+  the statement's providers. In the same way, `gcp_wif_principalset_pinned`
+  checks a `principal://.../workloadIdentityPools/<pool>/subject/<sub>` member
+  only when `<sub>` has a TFC (`organization:`) or GitHub (`repo:`,
+  `repository_owner`) shape; any other subject passes unchecked.
 - **CloudFormation-built web-identity trusts are not read by OPA.** The
   policy reads `aws_iam_role` resources in the plan. The `tfc-plan` and
   `tfc-apply` roles that `modules/aws/iam/tfc-oidc-baseline` deploys through a

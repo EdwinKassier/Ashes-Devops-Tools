@@ -255,3 +255,41 @@ test_repo_vpc_sc_example_passes if {
 test_repo_app_deploy_repo_ref_passes if count(p.deny) == 0 with input as sa_member(member_of("attribute.repo_ref/222/refs/tags/v1.2.3"))
 
 test_repo_app_deploy_repo_env_passes if count(p.deny) == 0 with input as sa_member(member_of("attribute.repo_env/222/production"))
+
+# ── Third review: the allowlist applies on every role ───────────────────────
+ns_member := member_of("attribute.namespace_path/acme")
+
+test_namespace_path_sa_admin_denied if {
+	count(p.deny) == 1 with input as one("google_service_account_iam_member", {"role": "roles/iam.serviceAccountAdmin", "member": ns_member})
+}
+
+test_namespace_path_sa_user_denied if {
+	count(p.deny) == 1 with input as one("google_service_account_iam_member", {"role": "roles/iam.serviceAccountUser", "member": ns_member})
+}
+
+test_namespace_path_custom_role_denied if {
+	count(p.deny) == 1 with input as one("google_project_iam_member", {"role": "projects/acme/roles/tokenMinter", "member": ns_member})
+}
+
+test_namespace_path_resource_role_denied if {
+	count(p.deny) == 1 with input as one("google_storage_bucket_iam_member", {"role": "roles/storage.objectViewer", "member": ns_member})
+}
+
+# Pinned forms may not hold a literal wildcard.
+test_pinned_form_with_wildcard_denied if count(p.deny) == 1 with input as sa_member(member_of("attribute.repo_ref/123/refs/heads/*"))
+
+test_workspace_phase_with_wildcard_denied if count(p.deny) == 1 with input as sa_member(member_of("attribute.workspace_phase/aws-*:apply"))
+
+# Prefixes are matched without case.
+test_upper_case_pool_member_denied if {
+	count(p.deny) == 1 with input as sa_member("PRINCIPALSET://IAM.GOOGLEAPIS.COM/projects/2/locations/global/workloadIdentityPools/apps-prod/attribute.namespace_path/acme")
+}
+
+test_upper_case_workforce_member_denied if {
+	count(p.deny) == 1 with input as sa_member("principalSet://iam.googleapis.com/locations/global/WORKFORCEPOOLS/staff/*")
+}
+
+# Repo forms still pass on resource roles (examples/vpc-sc grants repo_ref).
+test_repo_ref_on_resource_role_passes if {
+	count(p.deny) == 0 with input as one("google_storage_bucket_iam_member", {"role": "roles/storage.objectViewer", "member": member_of("attribute.repo_ref/123/refs/heads/main")})
+}

@@ -405,3 +405,29 @@ test_unknown_trust_root_role_child_provider_is_advisory if {
 		in_module(created("aws_iam_openid_connect_provider"), "module.app_services"),
 	]}}
 }
+
+# ── Third review ────────────────────────────────────────────────────────────
+# An update of an existing role is never exempt, even next to a new provider
+# in the same module.
+test_unknown_trust_update_same_module_denied if {
+	rc := json.patch(in_module(unknown_role, "module.app_services"), [{"op": "replace", "path": "/change/actions", "value": ["update"]}])
+	count(p.deny) == 1 with input as {"plan": {"resource_changes": [rc, in_module(created("aws_iam_openid_connect_provider"), "module.app_services")]}}
+}
+
+test_federated_star_web_identity_denied if count(p.deny) > 0 with input as any_principal({"Federated": "*"}, "sts:AssumeRoleWithWebIdentity")
+
+test_not_principal_web_identity_denied if {
+	count(p.deny) == 1 with input as role_doc({
+		"Effect": "Allow",
+		"NotPrincipal": {"AWS": "arn:aws:iam::111111111111:root"},
+		"Action": "sts:AssumeRoleWithWebIdentity",
+	})
+}
+
+test_not_principal_assume_role_ignored if {
+	count(p.deny) == 0 with input as role_doc({
+		"Effect": "Allow",
+		"NotPrincipal": {"AWS": "arn:aws:iam::111111111111:root"},
+		"Action": "sts:AssumeRole",
+	})
+}

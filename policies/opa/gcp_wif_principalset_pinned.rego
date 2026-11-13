@@ -10,12 +10,14 @@
 # google_*_iam_policy, for any role: service account impersonation and direct
 # resource access alike.
 #
-# On a role through which a principal acts as a service account (or a role
-# unknown at plan time), a principalSet under a workload pool must be one of
-# the pinned forms the repo builds (allowlist): attribute.repo_ref,
-# repo_env (with an environment), repo_ref_env, workspace_id_phase or
-# workspace_phase. attribute.repository_id and attribute.project_path pass
-# with an advisory (repo_wide). Every other attribute, group or form is denied.
+# On every role, a principalSet under a workload pool must be one of the
+# pinned forms the repo builds (allowlist): attribute.repo_ref, repo_env (with
+# an environment), repo_ref_env, workspace_id_phase or workspace_phase, with
+# no `*` or `?`. attribute.repository_id and attribute.project_path pass with
+# an advisory (repo_wide). Every other attribute, group or form is denied:
+# roles such as serviceAccountUser, serviceAccountAdmin or a custom role can
+# reach a service account too. The scheme, host and pool path of a member are
+# matched without case.
 #
 # A principal://.../subject/<sub> member is denied, on any role, when <sub> is
 # a TFC or GitHub subject that aws_iam_federated_trust_pinned would deny
@@ -36,7 +38,7 @@ import rego.v1
 
 import data.terraform.lib
 
-pool_prefix := `^principalSet://iam\.googleapis\.com/projects/[^/]+/locations/global/workloadIdentityPools/[^/]+/`
+pool_prefix := `^(?i:principalSet://iam\.googleapis\.com/projects/[^/]+/locations/global/workloadIdentityPools/)[^/]+/`
 
 # Suffixes after the pool prefix that trust more than one repository + ref or
 # environment: the whole pool, the owner (ID or name), a repository name
@@ -55,6 +57,7 @@ too_wide_patterns := [
 	`attribute\.terraform_[a-z0-9_]+/`,
 	`attribute\.account/`,
 	`attribute\.repo_env/[^/]+/-$`,
+	`.*[*?]`,
 ]
 
 # Pinned forms a federating principalSet may take (suffix after the pool).
@@ -85,7 +88,7 @@ pinned(m) if {
 	not too_wide(m)
 }
 
-subject_prefix := `^principal://iam\.googleapis\.com/projects/[^/]+/locations/global/workloadIdentityPools/[^/]+/subject/`
+subject_prefix := `^(?i:principal://iam\.googleapis\.com/projects/[^/]+/locations/global/workloadIdentityPools/)[^/]+/(?i:subject)/`
 
 # A workload pool subject that the AWS federated-trust policy would deny.
 unpinned_subject(m) if {
@@ -102,7 +105,7 @@ unpinned_subject(m) if {
 	not lib.github_subject_pinned(sub)
 }
 
-workforce_member(m) if regex.match(`^principal(Set)?://iam\.googleapis\.com/locations/global/workforcePools/`, m)
+workforce_member(m) if regex.match(`^(?i:principal(Set)?://iam\.googleapis\.com/locations/global/workforcePools/)`, m)
 
 # Roles through which a federated principal acts as a service account.
 federating_roles := {
@@ -165,7 +168,6 @@ deny contains msg if {
 	some rc in lib.managed
 	lib.writes(rc)
 	some [role, m] in role_members(rc)
-	federating_or_unknown_role(rc, role)
 	pool_member(m)
 	not too_wide(m)
 	not pinned(m)
