@@ -776,6 +776,8 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 **Phase 2b complete (2026-11-13).** The Phase 2b gap tasks are done in code; the [re-audit status section](audit/2026-11-12-due-diligence-reaudit.md#status-after-phase-2b-2026-11-13) lists each finding, its evidence commits and what still needs the sandbox. Phase 3 needs owner decisions O1 and O3.
 
+**Re-audit 2 code wave complete (2026-11-13).** ARC-C1, SEC-1, SEC-2, ARC-H1, ARC-H2, ADO-20, ADO-21 and CICD-3 are done in code; the [re-audit 2 status section](audit/2026-11-13-due-diligence-reaudit-2.md#status-after-the-code-wave-2026-11-13) lists each one, its evidence commits and what still needs the sandbox.
+
 - **Validate in the sandbox (mock-tested only):**
   - GCP rejects a peering to a network that does not exist yet. The hub-side
     `hub-to-<env>` peering design relies on it, and on the `google_compute_networks`

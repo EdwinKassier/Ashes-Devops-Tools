@@ -145,3 +145,28 @@ A short code wave is still worth doing first, because these findings are cheap a
 **Delivery.** CICD-6 gitleaks is not a PR gate and downloads the latest binary. CICD-7 no release-age delay on providers and lockfiles; Dependabot has no cooldown. CICD-8 approver four-eyes and one-person override. CICD-9 the checkov action runs a tag-referenced image. CICD-10 410 checkov suppressions; workflow-level `security-events: write`. CICD-11 release metadata fails open. CICD-12 wildcard egress allowlists, unhashed pip install, tag-pinned hook, CI zizmor skips examples. OpenSSF Scorecard estimate after merge: about 5.5; about 7.5 with live governance codified.
 
 **Adoption.** ADO-24 the break-glass IAM user must exist before the phase-0 stack (SUSPECTED). ADO-25 `TfcProject=<prefix>aws` reads like the org prefix. ADO-26 eight false doc claims, mostly in the GCP onboarding narrative and production-hardening.md. ADO-27 maturity signals (v0.1.0, bus factor 1, 82% AI co-authored, CI red on `main`). ADO-28 cognitive load (367 config keys, 501 root variables, 96 doc pages). ADO-29 the scaffolder writes a 7-day impersonation expiry at scaffold time.
+
+## Status after the code wave (2026-11-13)
+
+This section records what the code wave (`0590e70a..54a8dc6a`) did with the short code wave named in the Recommendation. It does not change the findings above. Scores are not re-estimated here: the next independent re-audit sets them. "Closed in code" means the code and its mock or OPA tests do what the finding asked; nothing below is proven on a real cloud or a real HCP Terraform run.
+
+| Finding | Status | Evidence commits | Still needs the sandbox (or a decision) |
+|---|---|---|---|
+| ARC-C1 | Closed with residual: an enforced perimeter that holds the team projects is PREVIEW; CMEK keys, image registries and app-deploy WIF identities outside the perimeter need ingress or egress rules | `93638218`, `2982e08e`, `54a8dc6a` | An enforced environment perimeter with team projects that runs app services; read the dry-run violations for those callers |
+| SEC-1 | Closed with residual: an unknown trust is exempt in its first-apply run when the role's own module tree creates the OIDC provider or the organization; issuers other than TFC and github.com are checked by shape only; CloudFormation-built trusts are not read; `attribute.repository_id/` and `attribute.project_path/` pass with an advisory | `44d6a170`, `8d467ee4`, `6a777216`, `6cfaad09` | None for the policies (OPA unit tests); one real run of each repo trust and binding with the policy sets attached |
+| SEC-2 | Closed in code | `ea87977d`, `11c9052a` | A gcp-organization refresh that shows the custom role `landingZoneLoggingConfigViewer` covers the org sinks, settings, buckets, links and metrics |
+| ARC-H1 | Closed with residual: mock-tested only; the JVM and older Node.js releases ignore the proxy variables; GKE workloads get no proxy settings; the hub `secure_web_proxy.certificate_urls` must stay empty | `41e6b956`, `6a834125`, `54a8dc6a` | A Cloud Run revision that reaches an allowlisted FQDN through the proxy, is denied another, and still reaches Google APIs and internal `run.app` URLs |
+| ARC-H2 | Closed in code: an environment outside the hub proxy region fails the plan. There is no proxy per extra region | `41e6b956` | None for the check; a regional proxy per extra region is design work |
+| ADO-20 | Closed in code. The waiver lives in `config/landing-zone.yaml` (platform-approvable) and can also be set as a tfc-admin workspace variable | `b97306ce`, `54a8dc6a` | None (that a platform approval can set the waiver is in the CICD-2 residual in `docs/known-gaps.md`) |
+| ADO-21 | Closed in code | `ce01bb05`, `0e34121d` | None |
+| CICD-3 | Closed in code for the listed paths. `envs/tfc-admin`, the workflows and the config files still accept a platform approval alone | `8326cce9` | Real teams and required code-owner review on the default branch (Phase 3) |
+
+**Breaking changes and upgrade notes.** The range adds 7 breaking (`!:`) commits (`git log --oneline 0590e70a..HEAD | grep -c '!:'`); `git log v0.1.0..HEAD --oneline | grep -c '!:'` now counts 64. `UPGRADING.md` has 3,490 lines.
+
+**Tool results at `8326cce9`** (before the two follow-up commits, which change the scaffolder, its test and fixtures, and docs)
+
+- `terraform test`: 3,259 runs in 145 directories, 0 failed.
+- `opa test` (OPA 1.22.2): 505 / 505 pass.
+- `make ci-quick`, yamllint, markdownlint, commit-check, `validate-all`, `lint` and `security` pass.
+
+**Still open.** The Recommendation's other steps are not done: a breaking-change freeze until v0.2.0 is cut with a filled sandbox upgrade log, one sandbox apply per cloud, and the Phase 3 owner steps (decisions O1 and O3).
