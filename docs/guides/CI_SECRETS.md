@@ -21,7 +21,10 @@ Without both of these, `drift-detection.yml` **fails**, unless the repository va
 behavior without secrets" below). `terraform-apply.yml`
 does NOT apply anything: the real apply is driven by Terraform Cloud's own VCS integration.
 That workflow only reads the latest TFC run status with the read-only `TFC_TOKEN` and publishes
-a GitHub Release when the run applied and its commit matches the tag. (The workflow is named
+a GitHub Release when the run applied and its commit matches the tag. The run's commit is the
+`commit-sha` of its configuration version's ingress attributes
+(`scripts/verify-run-commit.sh`); a run with none, such as a CLI or API run, fails the
+workflow and publishes nothing. (The workflow is named
 "Terraform Release Metadata" for this reason; `terraform-plan.yml`, named "Terraform Validation",
 runs `terraform validate` and the mock tests, and likewise never produces a real plan - that is
 the TFC speculative plan.)

@@ -1,0 +1,36 @@
+{
+  "data": [
+    {
+      "id": "run-CZcmD7eagjhyX0vN",
+      "type": "runs",
+      "attributes": {
+        "status": "applied",
+        "source": "tfe-api"
+      },
+      "relationships": {
+        "configuration-version": {
+          "data": {
+            "id": "cv-ntv3HbhJqvFzamy7",
+            "type": "configuration-versions"
+          }
+        }
+      }
+    }
+  ],
+  "included": [
+    {
+      "id": "cv-ntv3HbhJqvFzamy7",
+      "type": "configuration-versions",
+      "attributes": {
+        "source": "tfe-api",
+        "speculative": false,
+        "status": "uploaded"
+      },
+      "relationships": {
+        "ingress-attributes": {
+          "data": null
+        }
+      }
+    }
+  ]
+}

@@ -70,6 +70,15 @@ IDs prefixed `re-audit-3` are this report's; the same IDs in older entries belon
   false result. New gate: `scripts/check-workflow-pipefail.py` (run by `make consistency`) fails
   when a `run:` step pipes and neither the step, its job nor the workflow sets `shell: bash` or
   another shell with pipefail, unless the script sets `-o pipefail` itself.
+- **Release metadata checks the run's commit and fails closed (re-audit-3 CICD-2).**
+  `terraform-apply.yml` fetched the latest run with `include=configuration_version`, which does
+  not return the configuration version's ingress attributes, so the run's commit was always empty
+  and every applied tag published a GitHub Release, whatever commit the run applied. It now
+  requests `include=configuration_version.ingress_attributes`, and the new
+  `scripts/verify-run-commit.sh` (fixture-tested) reads the `commit-sha` of the ingress
+  attributes that the run's configuration version names. A run of another commit holds the
+  release as before; a run with no source commit (a CLI or API run) now fails the workflow and
+  publishes no release, where it used to publish one. The job checks out only that script.
 
 ### Examples audit (2026-11-13)
 

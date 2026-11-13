@@ -52,14 +52,24 @@ jobs:
       status: ${{ steps.run_status.outputs.status }}
       commit_match: ${{ steps.run_status.outputs.commit_match }}
     steps:
-      # This job holds TFC_TOKEN (or TFC_TOKEN_GUARDRAILS). Its only network
-      # call is curl to the HCP Terraform API, so all other egress is blocked.
+      # This job holds TFC_TOKEN (or TFC_TOKEN_GUARDRAILS). Its network calls
+      # are the checkout of scripts/verify-run-commit.sh from github.com and
+      # curl to the HCP Terraform API, so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
           egress-policy: block
           allowed-endpoints: >
             app.terraform.io:443
+            github.com:443
+
+      # Only the commit verifier, from the tagged commit; no credentials kept.
+      - name: Checkout the run-commit verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/verify-run-commit.sh
+          sparse-checkout-cone-mode: false
 
       - name: Parse tag
         id: parse
@@ -162,7 +172,7 @@ jobs:
           TAG_COMMIT: ${{ github.sha }}
         run: |
           RUNS_URL="https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}"
-          RUNS_URL="${RUNS_URL}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1&include=configuration_version"
+          RUNS_URL="${RUNS_URL}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1&include=configuration_version.ingress_attributes"
           response=$(curl --silent --show-error --fail-with-body \
             --max-time 30 --connect-timeout 10 \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
@@ -206,20 +216,13 @@ jobs:
           esac
 
           # L7: verify the run's source commit matches THIS tag's commit, so a
-          # release never asserts a deploy of a different configuration. A non-VCS
-          # (CLI-driven) run exposes no ingress commit; then we cannot verify, so
-          # we do not block (commit_match=true) and emit a notice.
-          run_commit=$(echo "$response" | jq -r \
-            '([.included[]? | select(.type=="ingress-attributes") | .attributes["commit-sha"]] | .[0]) // ""')
-          if [ -z "$run_commit" ] || [ "$run_commit" = "null" ]; then
-            echo "commit_match=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::No source commit on the run (non-VCS?); skipping provenance check."
-          elif [ "$run_commit" = "$TAG_COMMIT" ]; then
-            echo "commit_match=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "commit_match=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Run commit ${run_commit} != tag commit ${TAG_COMMIT}; release held."
-          fi
+          # release never asserts a deploy of a different configuration. The
+          # commit is in the ingress attributes of the run's configuration
+          # version, which the runs API includes when asked for
+          # include=configuration_version.ingress_attributes (above). A run with
+          # no source commit (a CLI or API run) fails this job, so no release is
+          # published: a release must point at a VCS run of the tagged commit.
+          ./scripts/verify-run-commit.sh <<<"$response" >> "$GITHUB_OUTPUT"
 
   release:
     name: Publish GitHub Release

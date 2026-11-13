@@ -122,7 +122,8 @@ gh api repos/OWNER/REPO/branches/main/protection \
 
 Tags that trigger the `terraform-apply.yml` workflow should be protected. That
 workflow ("Terraform Release Metadata") applies nothing: HCP Terraform runs every
-apply, and the workflow only publishes a GitHub Release for an applied tag. It
+apply, and the workflow only publishes a GitHub Release when the latest run of the
+workspace applied the tagged commit (a VCS run; a CLI or API run fails the workflow). It
 keeps its file name because docs and environment policies link to it. The
 workflow acts on all of these patterns (keep this list in sync with its `on.push.tags`):
 `gcp-bootstrap/v*`, `gcp-organization/v*`, `gcp-guardrails/v*`, `gcp-projects/v*`, `gcp-network-hub/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`, `tfc-admin/v*`.
