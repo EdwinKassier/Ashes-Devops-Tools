@@ -574,6 +574,7 @@ test_ephemeral_tfe_outputs_allowed if {
 
 test_ephemeral_in_provider_config_denied if {
 	pc := {"aws.role": prov("aws", aws_source, {"region": {"constant_value": "eu-west-2"}, "secret_key": {"references": ["ephemeral.random_password.x.result", "ephemeral.random_password.x"]}})}
+
 	# one deny for the secret_key argument, one for the ephemeral type
 	count(p.deny) == 2 with input as with_root(pc, {})
 }

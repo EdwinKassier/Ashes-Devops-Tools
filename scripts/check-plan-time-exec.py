@@ -33,9 +33,18 @@ time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
     allowed_credential_references for that provider type and argument, whose
     only string literals are on allowed_credential_literals, and which uses no
     function; a variable it reads must declare no default other than null or
-    a bool; nested or dynamic credential blocks always fail;
-  - a module source that is neither local nor this repository's release tag,
-    or a local source into .terraform/ or node_modules/;
+    a bool, and must have the type on allowed_credential_variable_types,
+    wherever it is declared; nested or dynamic credential blocks always fail;
+  - a tracked *.tfvars / *.tfvars.json file that sets a variable an allowed
+    credential form reads;
+  - an override file (override.tf, *_override.tf, .tf.json), except a fork's
+    envs/**/backend_override.tf that holds only terraform { backend / cloud };
+  - a non-local module source under envs/ (HCP Terraform runs envs/);
+  - file(), templatefile() and the other file readers with a literal path
+    that is not under path.module / path.root or leaves the repository, or a
+    path built by a function or expression;
+  - elsewhere, a module source that is neither local nor this repository's
+    release tag, or a local source into .terraform/ or node_modules/;
   - a drift between allowed_provisioner_chain and the module calls in the code;
   - a file that does not parse (fail closed, no fallback parse).
 

@@ -1602,32 +1602,45 @@ side (all mock-tested, secure defaults):
   `var.flag ? tfe_variable_set.c.id : data.tfe_variable_set.x.id`, passes. A
   reference the walk cannot follow (a `local`, a data source, a module
   output) is denied, and the security team overrides it.
-- **Credential arguments are checked by references, not values (SEC-1).**
-  The policy and `scripts/check-plan-time-exec.py` deny the provider
-  arguments in `credential_key_pattern` (`profile`, `shared_config_files`,
+- **Credential arguments: what the two layers still miss (SEC-1).** The
+  policy and `scripts/check-plan-time-exec.py` deny the provider arguments in
+  `credential_key_pattern` (`profile`, `shared_config_files`,
   `shared_credentials_files`, `access_key`, `secret_key`, `token`,
   `access_token`, `api_token`, `assume_role_with_web_identity`,
   `web_identity_token(_file)`, `impersonate_service_account(_delegates)`,
   `external_credentials`) unless the argument is null or every reference of
-  its expression is on `allowed_credential_references` for that provider
-  type and argument. Before this, an aws provider with `profile` and a
-  committed `shared_config_files` whose `credential_process` ran a command
-  passed both layers, and the command ran at plan and at apply. What is
-  left: the plan JSON shows the references of an expression, not its
-  literals or function calls, so OPA passes
-  `var.tfc_aws_dynamic_credentials == null ? ["./aws.cfg"] : [...]`; the
-  scanner rejects any literal (other than the placeholders on
-  `allowed_credential_literals`), function call or other reference in the
-  expression, but it runs only in CI. Both layers require a root variable
-  that an allowed form reads to have a null or bool default; neither checks
-  what a referenced local evaluates to, so a change to the placeholder locals
-  of `envs/saas` relies on review (CODEOWNERS). A value that HCP Terraform or
-  a person sets on the workspace (`terraform_admin_email`, or an
-  `AWS_CONFIG_FILE` / `AWS_PROFILE` env var) is not checked; tfc-admin's
-  reviewed configuration writes the workspace variables. `assume_role` is not
-  denied: the role it names must trust the workspace's identity, the
-  documented stage usage sets it to a literal ARN, and the roots use a
-  `dynamic "assume_role"` block, which the plan JSON does not render.
+  its expression is exactly a path on `allowed_credential_references` for that
+  provider type and argument. OPA also checks the value the run uses
+  (`input.plan.variables`) of each variable an allowed form reads: a
+  dynamic-credentials `shared_config_file` must be an absolute path without
+  `.` or `..` segments and outside `/proc`, `/dev` and `/sys`;
+  `terraform_admin_email` must be a service account email;
+  `enable_saas_secret_bridge` must be a bool. The scanner fails on a tracked
+  `*.tfvars` / `*.tfvars.json` that sets one of those variables, on a
+  declaration of one with another type than `allowed_credential_variable_types`
+  or a default other than null or a bool, and on override files. What is left:
+  - HCP Terraform's documentation for dynamic provider credentials does not
+    give the path of the file it writes, so OPA cannot pin it. An absolute
+    path into the run's own checkout passes OPA if someone can guess it; the
+    scanner keeps a committed tfvars file from setting the value.
+  - The plan JSON shows the references of an expression, not its literals or
+    function calls, so OPA passes
+    `var.tfc_aws_dynamic_credentials == null ? ["./aws.cfg"] : [...]`. It does
+    not show variable types either: the plan's variable value omits an
+    attribute that an `optional()` default adds. The exact reference paths
+    close the case where such an attribute is read; the scanner's type check
+    closes the rest. The scanner runs only in CI.
+  - A value set on the workspace (a workspace variable, or an
+    `AWS_CONFIG_FILE` / `AWS_PROFILE` env var) is judged by OPA only as above;
+    tfc-admin's reviewed configuration writes the workspace variables.
+  - `assume_role` is not denied. It is not code execution, but it is an
+    identity swap: a `role_arn` in an account the attacker controls, whose
+    trust policy admits the workspace's role, makes the apply write to that
+    account (exfiltration), if the workspace's identity policy allows
+    `sts:AssumeRole` on that ARN. The roots use a `dynamic "assume_role"`
+    block, which the plan JSON does not render, and the documented stage
+    usage sets a literal ARN, so neither layer judges the role. The controls
+    are the identity policies of the TFC roles and review.
 - **Remote-state `hostname` is not checked.** `terraform_remote_state` must
   use the `cloud` or `remote` backend, but the policy does not check a
   `hostname` in its `config`. When `config` is built from locals or variables
@@ -1671,9 +1684,16 @@ side (all mock-tested, secure defaults):
   `*.tf` and `*.tf.json` files only. `*.tftest.hcl` and `*.tfmock.hcl` files
   are not scanned: `terraform test` runs them in CI with mock providers and in
   the sandbox end-to-end workflow with sandbox credentials, never in an HCP
-  Terraform workspace. The code behind a module source pinned to this
-  repository's release tag (`git::…?ref=vX.Y.Z`) is not scanned either; it
-  was checked when that release was cut.
+  Terraform workspace. A module source pinned to this repository's release
+  tag (`git::…?ref=vX.Y.Z`) is allowed only outside `envs/` (examples and
+  templates, which HCP Terraform does not run); its code is not scanned, and
+  it was checked when that release was cut. Under `envs/` only local module
+  sources pass. The scanner checks literal paths of `file()`,
+  `templatefile()` and the other file readers (they must stay under
+  `path.module` / `path.root` in the repository) and lets a plain reference
+  through without knowing its value (for example the `landing_zone_config_path`
+  variable that every root reads, or a `${n}` part of a literal path). OPA
+  cannot see function calls at all.
 - **Workload SAs keep `workloadIdentityPoolAdmin` (SEC-10).** app-services
   needs it to create the app-deploy pool. `custom.wifProviderTenantPinned` pins
   each GitHub provider condition to the owner. The mandatory OPA policy

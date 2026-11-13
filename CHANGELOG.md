@@ -57,6 +57,17 @@ IDs prefixed `re-audit-3` are this report's; the same IDs in older entries belon
   type. An ephemeral block that nothing references is still invisible to OPA, and the scanner runs
   only in CI; [known gaps](docs/known-gaps.md) records it and recommends running the scanner as an
   HCP Terraform pre-plan run task.
+- **Follow-up bypasses of the credential rule closed (re-audit-3 SEC-1 review).** A committed
+  `*.auto.tfvars` that pointed `tfc_aws_dynamic_credentials` at a committed config file, and an
+  `optional()` attribute with a default inside that variable's type read through a path below the
+  allowed reference, both still ran a `credential_process`. OPA now checks the run's value of each
+  variable an allowed form reads (absolute dynamic-credentials paths outside `/proc`, `/dev` and
+  `/sys`; a service account email; a bool), and both layers match exact reference paths. The
+  scanner also fails on a tracked tfvars file that sets those variables, on another type or a
+  non-null default for them, on override files (a fork's `envs/**/backend_override.tf` with only a
+  backend or cloud block still passes), on non-local module sources under `envs/`, and on
+  `file()` / `templatefile()` reads of absolute paths or paths that leave the repository.
+  `envs/saas` now writes its placeholder tokens inline (same values), so no plan changes.
 
 #### Fixed
 

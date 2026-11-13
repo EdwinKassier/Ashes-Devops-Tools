@@ -94,10 +94,13 @@ endpoint_key_pattern := `^(endpoints?|.*_endpoint|hostname|base_url|api_url|meta
 # allowed_credential_references for that provider type and argument. No
 # provider of this repo sets a credential argument to a literal; a null
 # argument (the provider reads its environment) is allowed.
-# Not listed: aws assume_role. The role it names must trust the workspace's
-# identity, and the documented stage usage sets it to a literal ARN; the
-# repo's roots use a dynamic "assume_role" block, which the plan JSON does
-# not render (docs/known-gaps.md).
+# Not listed: aws assume_role. It runs no code, but it swaps identity: a
+# role_arn in an account an attacker controls, whose trust policy admits the
+# workspace's role, makes the apply write there (exfiltration), if the
+# workspace's identity policy allows sts:AssumeRole on it. The repo's roots
+# use a dynamic "assume_role" block, which the plan JSON does not render, and
+# the documented stage usage sets a literal ARN, so this policy does not judge
+# the role; the TFC roles' identity policies do (docs/known-gaps.md).
 credential_key_pattern := `^(profile|shared_config_files|shared_credentials_files|access_key|secret_key|token|access_token|api_token|assume_role_with_web_identity|web_identity_token|web_identity_token_file|impersonate_service_account|impersonate_service_account_delegates|external_credentials)$`
 
 # Every resource block of the configuration, at any module depth, with its
@@ -324,7 +327,7 @@ deny contains msg if {
 	some attr, expr in object.get(pc, "expressions", {})
 	regex.match(credential_key_pattern, attr)
 	not credential_ok(key, pc, attr, expr)
-	msg := sprintf("provider %s sets %q: a profile, credentials file, token or impersonation argument can run a command or swap the workspace's identity; only the forms on allowed_credential_references may (a variable they read must have a null or bool default)", [key, attr])
+	msg := sprintf("provider %s sets %q: a profile, credentials file, token or impersonation argument can run a command or swap the workspace's identity; only the exact paths on allowed_credential_references may, and the variables they read need a null or bool default and an allowed value", [key, attr])
 }
 
 # ── Ephemeral resources (SEC-2) ────────────────────────────────────────────

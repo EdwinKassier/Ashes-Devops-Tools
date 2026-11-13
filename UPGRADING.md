@@ -78,6 +78,7 @@ added these entries. Read them before the first run on this release:
 - A provider that impersonates a literal service account, as `modules/gcp/network/vpc-sc/examples/basic` and `modules/gcp/stages/workload/examples/basic` did. Use `impersonate_service_account = var.terraform_admin_email` with `default = null` and set the variable on the workspace, as the GCP roots and both examples now do.
 - A provider with `profile`, a credentials file or static keys for local runs. Use `AWS_PROFILE` / `AWS_CONFIG_FILE` in your shell or HCP Terraform dynamic credentials instead.
 - Your own ephemeral resources (for example `random_password` or `aws_secretsmanager_secret_version`).
+- A committed `*.tfvars` / `*.tfvars.json` that sets `tfc_aws_dynamic_credentials`, `terraform_admin_email` or `enable_saas_secret_bridge`, a declaration of one of them with another type or a non-null default, an override file other than `envs/**/backend_override.tf` with only a `backend` or `cloud` block, a `git::` module source under `envs/`, or a `file()` / `templatefile()` that reads an absolute path or a path outside the repository (scanner). Set those variables on the workspace, and keep file reads under `path.module` / `path.root`.
 
 **What to do:** remove the argument or the block. If you need another form, add `"<provider type>/<argument>=<var.|local.><name>"` to `allowed_credential_references`, or the type to `allowed_ephemeral_types`, in a reviewed change to the allowlist file (CODEOWNERS: security team), and record why. Both checks read that file.
 
