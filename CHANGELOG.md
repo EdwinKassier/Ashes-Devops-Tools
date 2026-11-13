@@ -66,6 +66,10 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   `retention_days`, the log buckets and the `app_key_id` output. `cloud-armor`: adaptive
   protection is already on. `vpc-sc`: the `principalSet` pins repository and ref.
   `app-services`: region placeholder and the egress-proxy behaviour.
+- **`examples/aws-landing-zone/aws-organization.tfvars.example` account emails fail until
+  replaced.** The commented `accounts` map used `@acme.test` addresses, which the
+  aws-organization validation accepts. It now uses `REPLACE-...@example.com` placeholders, which
+  the validation rejects, so an uncommented copy fails the plan until each address is real.
 
 ### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
 
