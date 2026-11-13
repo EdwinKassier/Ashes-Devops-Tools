@@ -4,11 +4,10 @@
 # attaches it to the environment's Shared VPC host project, and grants the
 # team's admin group least-privilege IAM roles. In the landing zone
 # stages/environment calls this module once per var.service_teams entry.
-# Replace all locals with real values or remote state.
+# Replace all locals with real values or remote state, and set
+# var.terraform_admin_email to the service account the providers impersonate.
 
 locals {
-  # Service account the providers impersonate (versions.tf).
-  terraform_sa    = "terraform@my-seed-project.iam.gserviceaccount.com"
   org_id          = "123456789012"
   billing_account = "ABCDEF-123456-789012"
 

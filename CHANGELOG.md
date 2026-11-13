@@ -26,6 +26,38 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 ## [Unreleased]
 
+### Re-audit 3 code wave ([2026-11-13 due-diligence re-audit 3](docs/audit/2026-11-13-due-diligence-reaudit-3.md))
+
+IDs prefixed `re-audit-3` are this report's; the same IDs in older entries belong to earlier audits.
+
+#### Security
+
+- **The plan-time execution guard checks provider credential arguments (re-audit-3 SEC-1, breaking).** An
+  aws provider with `profile` and a committed `shared_config_files` whose `credential_process`
+  runs a command ran that command at plan and apply, and both `no_plan_time_code_execution` and
+  `scripts/check-plan-time-exec.py` passed it. Both now deny the provider arguments in the new
+  `credential_key_pattern` (`profile`, `shared_config_files`, `shared_credentials_files`,
+  `access_key`, `secret_key`, `token`, `access_token`, `api_token`,
+  `assume_role_with_web_identity`, `web_identity_token(_file)`,
+  `impersonate_service_account(_delegates)`, `external_credentials`) unless the argument is null
+  or every reference is on the new `allowed_credential_references` list for that provider type
+  and argument, and a root variable it reads has a null or bool default. The scanner also rejects
+  any literal (other than `allowed_credential_literals`), function call or other reference inside
+  such an expression. The repo's forms pass unchanged: the TFC dynamic-credentials file of
+  `aws-security` and `aws-backup`, `var.terraform_admin_email` in the GCP roots, and the
+  placeholder tokens of `envs/saas` and the workload roots' SaaS bridge. The two GCP module
+  examples that impersonated a literal service account now read `var.terraform_admin_email`
+  (default null).
+- **Ephemeral resources are allowlisted (re-audit-3 SEC-2, breaking).** Ephemeral blocks are not in the
+  plan JSON, and the scanner checked `exec_data_types` only for `data` blocks, so
+  `ephemeral "aws_lambda_invocation"` and token-minting ephemerals (`google_client_config`,
+  `google_service_account_access_token`, tfe tokens) passed both layers. The scanner now denies
+  every ephemeral type that is not on the new `allowed_ephemeral_types` (`tfe_outputs`, the SaaS
+  bridge) or is on `exec_data_types`, and the policy denies any reference to another ephemeral
+  type. An ephemeral block that nothing references is still invisible to OPA, and the scanner runs
+  only in CI; [known gaps](docs/known-gaps.md) records it and recommends running the scanner as an
+  HCP Terraform pre-plan run task.
+
 ### Examples audit (2026-11-13)
 
 #### Added

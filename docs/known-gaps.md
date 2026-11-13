@@ -1602,27 +1602,58 @@ side (all mock-tested, secure defaults):
   `var.flag ? tfe_variable_set.c.id : data.tfe_variable_set.x.id`, passes. A
   reference the walk cannot follow (a `local`, a data source, a module
   output) is denied, and the security team overrides it.
-- **Credential-file arguments are not checked.** The policy does not look at
-  the aws provider's `shared_config_files`, `shared_credentials_files` or
-  `profile` (a file can set `credential_process`, which runs a command, or
-  `endpoint_url`), or the google provider's `credentials` /
-  `external_credentials` (an `external_account` file names its own
-  `token_url`). `envs/aws/security` and the other AWS roots legitimately set
-  `shared_config_files` to the TFC dynamic-credential file, so a fix needs
-  value-based rules, not a deny by argument name.
+- **Credential arguments are checked by references, not values (SEC-1).**
+  The policy and `scripts/check-plan-time-exec.py` deny the provider
+  arguments in `credential_key_pattern` (`profile`, `shared_config_files`,
+  `shared_credentials_files`, `access_key`, `secret_key`, `token`,
+  `access_token`, `api_token`, `assume_role_with_web_identity`,
+  `web_identity_token(_file)`, `impersonate_service_account(_delegates)`,
+  `external_credentials`) unless the argument is null or every reference of
+  its expression is on `allowed_credential_references` for that provider
+  type and argument. Before this, an aws provider with `profile` and a
+  committed `shared_config_files` whose `credential_process` ran a command
+  passed both layers, and the command ran at plan and at apply. What is
+  left: the plan JSON shows the references of an expression, not its
+  literals or function calls, so OPA passes
+  `var.tfc_aws_dynamic_credentials == null ? ["./aws.cfg"] : [...]`; the
+  scanner rejects any literal (other than the placeholders on
+  `allowed_credential_literals`), function call or other reference in the
+  expression, but it runs only in CI. Both layers require a root variable
+  that an allowed form reads to have a null or bool default; neither checks
+  what a referenced local evaluates to, so a change to the placeholder locals
+  of `envs/saas` relies on review (CODEOWNERS). A value that HCP Terraform or
+  a person sets on the workspace (`terraform_admin_email`, or an
+  `AWS_CONFIG_FILE` / `AWS_PROFILE` env var) is not checked; tfc-admin's
+  reviewed configuration writes the workspace variables. `assume_role` is not
+  denied: the role it names must trust the workspace's identity, the
+  documented stage usage sets it to a literal ARN, and the roots use a
+  `dynamic "assume_role"` block, which the plan JSON does not render.
 - **Remote-state `hostname` is not checked.** `terraform_remote_state` must
   use the `cloud` or `remote` backend, but the policy does not check a
   `hostname` in its `config`. When `config` is built from locals or variables
   the plan JSON shows only references, so such a check could not be complete.
   No remote-state read in this repo sets `hostname`.
   `scripts/check-plan-time-exec.py` does not check `config.hostname` either.
-- **The supabase `access_token` provider argument is allowed.** The policy and
-  `scripts/check-plan-time-exec.py` deny the inline-credential keys
-  `credentials` and `token_url` in provider blocks, but not `access_token`:
-  `envs/saas` sets the supabase `access_token` to a placeholder when Supabase
-  is off. A change to that argument relies on review.
-  `impersonate_service_account` is also allowed, because every GCP root sets
-  it.
+- **Ephemeral resources are visible to OPA only when referenced (SEC-2).**
+  Terraform does not render an `ephemeral` block in the plan JSON (verified
+  with Terraform 1.17.1), yet it opens the resource during the plan and the
+  apply: an `ephemeral "aws_lambda_invocation"` invokes the function, and
+  `google_client_config`, `google_service_account_access_token` and the tfe
+  token types mint or return tokens. The policy denies a reference
+  (`ephemeral.<type>.…`) to any type not on `allowed_ephemeral_types`
+  (`tfe_outputs`, the SaaS bridge), but an ephemeral block that nothing
+  references, or that is read through a local, does not appear at all.
+  `scripts/check-plan-time-exec.py` denies every ephemeral block whose type is
+  not on `allowed_ephemeral_types` or is on `exec_data_types`, and it is the
+  only layer that sees all of them. It runs only in GitHub CI, before the
+  merge: a CLI or API upload, or a speculative plan HCP Terraform starts on
+  the same pull request, never passes through it, and by the time OPA runs
+  the plan has already opened the resource. Recommended: run the scanner as
+  an HCP Terraform pre-plan run task on every workspace, so it also checks
+  CLI uploads before any provider code runs. Not done here: a run task needs
+  an HTTPS service that receives the configuration version, runs the scanner
+  and calls back, which this repo does not host, and tfc-admin would need to
+  attach it to every workspace.
 - **The plan-time execution gate trusts the pull request's own copy.** CI runs
   `scripts/check-plan-time-exec.py`, the policy files it reads in
   `policies/opa/` and the parser lock in `.github/requirements/` from the pull

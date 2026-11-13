@@ -153,8 +153,8 @@ test_allowed_providers_pass if {
 		"tfe": prov("tfe", "registry.terraform.io/hashicorp/tfe", {"organization": {"references": ["local.org"]}}),
 		"google": prov("google", "registry.terraform.io/hashicorp/google", {"project": {"constant_value": "p"}}),
 		"google-beta": prov("google-beta", "registry.terraform.io/hashicorp/google-beta", {}),
-		"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.x"]}}),
-		"vercel": prov("vercel", "registry.terraform.io/vercel/vercel", {"api_token": {"references": ["local.x"]}}),
+		"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.enable_supabase", "local.supabase_disabled_placeholder_token"]}}),
+		"vercel": prov("vercel", "registry.terraform.io/vercel/vercel", {"api_token": {"references": ["local.enable_vercel", "local.vercel_disabled_placeholder_token"]}}),
 		"random": {"name": "random", "full_name": "registry.terraform.io/hashicorp/random"},
 		"null": {"name": "null", "full_name": "registry.terraform.io/hashicorp/null"},
 		"archive": {"name": "archive", "full_name": "registry.terraform.io/hashicorp/archive"},
@@ -344,14 +344,229 @@ test_google_credentials_denied if {
 
 # envs/saas sets the supabase access_token (a placeholder when Supabase is off).
 test_supabase_access_token_allowed if {
-	count(p.deny) == 0 with input as with_providers({"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.x"]}})})
+	count(p.deny) == 0 with input as with_providers({"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.enable_supabase", "local.supabase_disabled_placeholder_token"]}})})
 }
 
 test_token_url_denied if {
 	count(p.deny) == 1 with input as with_providers({"google": prov("google", "registry.terraform.io/hashicorp/google", {"token_url": {"constant_value": "https://attacker.example/token"}})})
 }
 
-# shared_credentials_files does not match: only the exact key credentials does.
-test_shared_credentials_files_allowed if {
-	count(p.deny) == 0 with input as with_providers({"aws": prov("aws", "registry.terraform.io/hashicorp/aws", {"shared_credentials_files": {"constant_value": ["/x"]}})})
+# A credentials file can name a credential_process too (SEC-1).
+test_shared_credentials_files_denied if {
+	count(p.deny) == 1 with input as with_providers({"aws": prov("aws", "registry.terraform.io/hashicorp/aws", {"shared_credentials_files": {"constant_value": ["/x"]}})})
+}
+
+# ── SEC-1: credential, profile and identity arguments ──────────────────────
+# Fixtures copied from `terraform show -json` of scratch roots planned with
+# Terraform 1.17.1, aws 6.72.0, google 8.10.0, tfe 0.83.0, supabase 1.9.1 and
+# vercel 4.8.2. The plan of the first one ran the credential_process of the
+# committed aws.cfg (it created a marker file), and the policy before this
+# rule returned no deny.
+aws_source := "registry.terraform.io/hashicorp/aws"
+
+with_root(pc, variables) := {"plan": {"configuration": {"root_module": {"variables": variables}, "provider_config": pc}}}
+
+# The reviewer's bypass: profile + a committed shared config file.
+sec1_profile := {"aws": {
+	"name": "aws", "full_name": aws_source, "version_constraint": "6.72.0",
+	"expressions": {
+		"profile": {"constant_value": "pwn"},
+		"shared_config_files": {"constant_value": ["./aws.cfg"]},
+		"skip_credentials_validation": {"constant_value": true},
+		"skip_metadata_api_check": {"constant_value": true},
+		"skip_requesting_account_id": {"constant_value": true},
+	},
+}}
+
+test_sec1_profile_and_shared_config_denied if {
+	msgs := p.deny with input as with_root(sec1_profile, {})
+	count(msgs) == 2
+	some m1 in msgs
+	contains(m1, `"profile"`)
+	some m2 in msgs
+	contains(m2, `"shared_config_files"`)
+}
+
+# The form envs/aws/security and envs/aws/backup use (real plan JSON).
+dynamic_credentials_provider := {
+	"name": "aws", "full_name": aws_source, "alias": "backup", "version_constraint": "6.72.0",
+	"expressions": {
+		"region": {"constant_value": "eu-west-2"},
+		"shared_config_files": {"references": [
+			"var.tfc_aws_dynamic_credentials",
+			"var.tfc_aws_dynamic_credentials.aliases[\"backup\"].shared_config_file",
+			"var.tfc_aws_dynamic_credentials.aliases[\"backup\"]",
+			"var.tfc_aws_dynamic_credentials.aliases",
+			"var.tfc_aws_dynamic_credentials",
+		]},
+	},
+}
+
+test_dynamic_credentials_shared_config_allowed if {
+	count(p.deny) == 0 with input as with_root({"aws.backup": dynamic_credentials_provider}, {"tfc_aws_dynamic_credentials": {"default": null}})
+}
+
+# A default would feed a committed file to the provider whenever HCP Terraform
+# does not inject the variable (local runs, dynamic credentials off).
+test_dynamic_credentials_with_default_denied if {
+	vars := {"tfc_aws_dynamic_credentials": {"default": {"default": {"shared_config_file": "./aws.cfg"}, "aliases": {}}}}
+	count(p.deny) == 1 with input as with_root({"aws.backup": dynamic_credentials_provider}, vars)
+}
+
+test_shared_config_from_another_variable_denied if {
+	pc := {"aws": prov("aws", aws_source, {"shared_config_files": {"references": ["var.tfc_aws_dynamic_credentials", "var.cfg"]}})}
+	count(p.deny) == 1 with input as with_root(pc, {"tfc_aws_dynamic_credentials": {"default": null}, "cfg": {"default": null}})
+}
+
+# A look-alike variable name is not the allowed one.
+test_shared_config_lookalike_variable_denied if {
+	pc := {"aws": prov("aws", aws_source, {"shared_config_files": {"references": ["var.tfc_aws_dynamic_credentials_x"]}})}
+	count(p.deny) == 1 with input as with_root(pc, {"tfc_aws_dynamic_credentials_x": {"default": null}})
+}
+
+# The allowance is per provider and argument: the same reference does not
+# allow shared_credentials_files.
+test_shared_credentials_from_dynamic_credentials_denied if {
+	pc := {"aws": prov("aws", aws_source, {"shared_credentials_files": {"references": ["var.tfc_aws_dynamic_credentials"]}})}
+	count(p.deny) == 1 with input as with_root(pc, {"tfc_aws_dynamic_credentials": {"default": null}})
+}
+
+test_aws_static_keys_denied if {
+	pc := {"aws.legit": prov("aws", aws_source, {
+		"access_key": {"constant_value": "AKIAEXAMPLEEXAMPLE00"},
+		"secret_key": {"constant_value": "x"},
+		"token": {"constant_value": "t"},
+	})}
+	count(p.deny) == 3 with input as with_root(pc, {})
+}
+
+test_aws_web_identity_denied if {
+	pc := {"aws": prov("aws", aws_source, {"assume_role_with_web_identity": [{
+		"role_arn": {"constant_value": "arn:aws:iam::111111111111:role/x"},
+		"web_identity_token_file": {"constant_value": "./token"},
+	}]})}
+	count(p.deny) == 1 with input as with_root(pc, {})
+}
+
+# A null argument (the provider reads its environment) is not an override.
+test_null_credential_allowed if {
+	pc := {"google": prov("google", "registry.terraform.io/hashicorp/google", {"access_token": {"constant_value": null}})}
+	count(p.deny) == 0 with input as with_root(pc, {})
+}
+
+# Every GCP root impersonates var.terraform_admin_email (default null).
+test_gcp_impersonation_from_variable_allowed if {
+	pc := {
+		"google": prov("google", "registry.terraform.io/hashicorp/google", {"impersonate_service_account": {"references": ["var.terraform_admin_email"]}}),
+		"google-beta": prov("google-beta", "registry.terraform.io/hashicorp/google-beta", {"impersonate_service_account": {"references": ["var.terraform_admin_email"]}}),
+	}
+	count(p.deny) == 0 with input as with_root(pc, {"terraform_admin_email": {"default": null}})
+}
+
+test_gcp_impersonation_literal_denied if {
+	pc := {"google.lit": prov("google", "registry.terraform.io/hashicorp/google", {
+		"access_token": {"constant_value": null},
+		"impersonate_service_account": {"constant_value": "evil@attacker.iam.gserviceaccount.com"},
+		"external_credentials": [{
+			"audience": {"constant_value": "//iam.googleapis.com/x"},
+			"identity_token": {"constant_value": "t"},
+			"service_account_email": {"constant_value": "x@y.iam.gserviceaccount.com"},
+		}],
+	})}
+	msgs := p.deny with input as with_root(pc, {})
+	count(msgs) == 2
+}
+
+test_gcp_impersonation_with_default_denied if {
+	pc := {"google": prov("google", "registry.terraform.io/hashicorp/google", {"impersonate_service_account": {"references": ["var.terraform_admin_email"]}})}
+	count(p.deny) == 1 with input as with_root(pc, {"terraform_admin_email": {"default": "evil@attacker.iam.gserviceaccount.com"}})
+}
+
+test_gcp_impersonation_delegates_denied if {
+	pc := {"google": prov("google", "registry.terraform.io/hashicorp/google", {"impersonate_service_account_delegates": {"constant_value": ["a@b.iam.gserviceaccount.com"]}})}
+	count(p.deny) == 1 with input as with_root(pc, {})
+}
+
+# envs/aws/workload and envs/gcp/workload: the bridge token placeholder.
+test_tfe_bridge_token_allowed if {
+	pc := {"tfe": prov("tfe", "registry.terraform.io/hashicorp/tfe", {"token": {"references": ["var.enable_saas_secret_bridge"]}})}
+	count(p.deny) == 0 with input as with_root(pc, {"enable_saas_secret_bridge": {"default": false}})
+}
+
+test_tfe_literal_token_denied if {
+	pc := {"tfe": prov("tfe", "registry.terraform.io/hashicorp/tfe", {"token": {"constant_value": "attacker-token"}})}
+	count(p.deny) == 1 with input as with_root(pc, {})
+}
+
+# The allowance names the provider type: an aws token is not a tfe token.
+test_aws_token_from_bridge_switch_denied if {
+	pc := {"aws": prov("aws", aws_source, {"token": {"references": ["var.enable_saas_secret_bridge"]}})}
+	count(p.deny) == 1 with input as with_root(pc, {"enable_saas_secret_bridge": {"default": false}})
+}
+
+test_vercel_token_from_other_local_denied if {
+	pc := {"vercel": prov("vercel", "registry.terraform.io/vercel/vercel", {"api_token": {"references": ["local.attacker_token"]}})}
+	count(p.deny) == 1 with input as with_root(pc, {})
+}
+
+# A function call with no reference shows neither a constant nor references.
+test_credential_without_references_denied if {
+	pc := {"aws": prov("aws", aws_source, {"shared_config_files": {}})}
+	count(p.deny) == 1 with input as with_root(pc, {})
+}
+
+# A provider block inside a called module gets no allowance.
+test_module_provider_credential_denied if {
+	pc := {"module.m:google": {
+		"name": "google", "full_name": "registry.terraform.io/hashicorp/google", "module_address": "module.m",
+		"expressions": {"impersonate_service_account": {"references": ["var.terraform_admin_email"]}},
+	}}
+	count(p.deny) == 1 with input as with_root(pc, {"terraform_admin_email": {"default": null}})
+}
+
+# ── SEC-2: ephemeral resources ─────────────────────────────────────────────
+# The plan JSON has no entry for an ephemeral block. Its type shows only in the
+# references of the expressions that use it (real plan JSON below). An
+# ephemeral block that nothing references, or that is reached through a local,
+# is invisible here; scripts/check-plan-time-exec.py checks the blocks.
+ephemeral_use(type) := {"plan": {"configuration": {
+	"provider_config": {"aws.role": prov("aws", aws_source, {"region": {"constant_value": "eu-west-2"}})},
+	"root_module": {"resources": [{
+		"address": "aws_secretsmanager_secret_version.v", "mode": "managed", "type": "aws_secretsmanager_secret_version", "name": "v",
+		"provider_config_key": "aws.legit",
+		"expressions": {
+			"secret_id": {"constant_value": "s"},
+			"secret_string_wo": {"references": [sprintf("ephemeral.%s.x.result", [type]), sprintf("ephemeral.%s.x", [type])]},
+			"secret_string_wo_version": {"constant_value": 1},
+		},
+		"schema_version": 0,
+	}]},
+}}}
+
+test_ephemeral_token_minting_denied if {
+	msgs := p.deny with input as ephemeral_use("google_service_account_access_token")
+	count(msgs) == 1
+	some m in msgs
+	contains(m, "google_service_account_access_token")
+}
+
+test_ephemeral_lambda_invocation_denied if count(p.deny) == 1 with input as ephemeral_use("aws_lambda_invocation")
+
+test_ephemeral_random_password_denied if count(p.deny) == 1 with input as ephemeral_use("random_password")
+
+# The SaaS bridge (envs/aws/workload, envs/gcp/workload) reads tfe_outputs
+# through a module argument.
+test_ephemeral_tfe_outputs_allowed if {
+	inp := {"plan": {"configuration": {"root_module": {"module_calls": {"saas_bridge": {
+		"source": "../../modules/x",
+		"expressions": {"values": {"references": ["ephemeral.tfe_outputs.saas[0].values.supabase_api_url", "ephemeral.tfe_outputs.saas[0].values", "ephemeral.tfe_outputs.saas[0]", "ephemeral.tfe_outputs.saas"]}},
+		"module": {},
+	}}}}}}
+	count(p.deny) == 0 with input as inp
+}
+
+test_ephemeral_in_provider_config_denied if {
+	pc := {"aws.role": prov("aws", aws_source, {"region": {"constant_value": "eu-west-2"}, "secret_key": {"references": ["ephemeral.random_password.x.result", "ephemeral.random_password.x"]}})}
+	# one deny for the secret_key argument, one for the ephemeral type
+	count(p.deny) == 2 with input as with_root(pc, {})
 }

@@ -70,6 +70,17 @@ added these entries. Read them before the first run on this release:
 
 ### HCP Terraform and policy
 
+#### Provider credential arguments and ephemeral resources are denied (policies, breaking, re-audit-3 SEC-1 and SEC-2)
+
+**Who:** forks with the policy sets on (`no_plan_time_code_execution` is mandatory) and every fork's CI (`scripts/check-plan-time-exec.py`, run by `make consistency`).
+**What changes:** a provider block that sets `profile`, `shared_config_files`, `shared_credentials_files`, `access_key`, `secret_key`, `token`, `access_token`, `api_token`, `assume_role_with_web_identity`, `web_identity_token(_file)`, `impersonate_service_account(_delegates)` or `external_credentials` fails both checks, unless the value is null or every reference is on `allowed_credential_references` in `policies/opa/no_plan_time_code_execution_allowlist.rego`, and a root variable it reads has a null or bool default. An `ephemeral` block whose type is not `tfe_outputs` fails the scanner, and a reference to one fails the policy. Upstream's roots pass unchanged. What can fail in a fork:
+
+- A provider that impersonates a literal service account, as `modules/gcp/network/vpc-sc/examples/basic` and `modules/gcp/stages/workload/examples/basic` did. Use `impersonate_service_account = var.terraform_admin_email` with `default = null` and set the variable on the workspace, as the GCP roots and both examples now do.
+- A provider with `profile`, a credentials file or static keys for local runs. Use `AWS_PROFILE` / `AWS_CONFIG_FILE` in your shell or HCP Terraform dynamic credentials instead.
+- Your own ephemeral resources (for example `random_password` or `aws_secretsmanager_secret_version`).
+
+**What to do:** remove the argument or the block. If you need another form, add `"<provider type>/<argument>=<var.|local.><name>"` to `allowed_credential_references`, or the type to `allowed_ephemeral_types`, in a reviewed change to the allowlist file (CODEOWNERS: security team), and record why. Both checks read that file.
+
 #### tfc-admin fails when an upstream contract lacks the credential keys
 
 **Who:** forks that set `gcp_bootstrap_outputs_from_tfc` or `aws_organization_outputs_from_tfc` to true.

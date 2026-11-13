@@ -14,8 +14,11 @@ time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
     outside TEST_PROVISIONER_ALLOW;
   - a provisioner in a removed block, anywhere (the plan JSON does not render
     removed blocks, so the policy cannot see these);
-  - a data block whose type is on the policy's exec_data_types (external,
-    http, aws_lambda_invocation), top-level or inside a check block;
+  - a data or ephemeral block whose type is on the policy's exec_data_types
+    (external, http, aws_lambda_invocation), top-level or inside a check block;
+  - an ephemeral block whose type is not on allowed_ephemeral_types (the plan
+    JSON does not render ephemeral blocks, so this is the only layer that sees
+    one that nothing references);
   - an action block whose type is not on allowed_action_types;
   - a data "terraform_remote_state" whose backend is not a literal on the
     policy's allowed_remote_state_backends;
@@ -24,6 +27,13 @@ time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
     provider of every provider, resource, data, ephemeral and action block;
   - a provider argument or nested block (dynamic blocks included) that matches
     the policy's endpoint_key_pattern and is not in endpoint_key_exceptions;
+  - a provider argument that matches credential_key_pattern (profile, shared
+    config / credentials files, static keys and tokens, impersonation) unless
+    it is null or an expression whose only references are on
+    allowed_credential_references for that provider type and argument, whose
+    only string literals are on allowed_credential_literals, and which uses no
+    function; a variable it reads must declare no default other than null or
+    a bool; nested or dynamic credential blocks always fail;
   - a module source that is neither local nor this repository's release tag,
     or a local source into .terraform/ or node_modules/;
   - a drift between allowed_provisioner_chain and the module calls in the code;
@@ -93,6 +103,18 @@ TYPED_BLOCKS = ("resource", "data", "ephemeral", "action")
 # A rego list body this script accepts: string literals, commas, whitespace
 # and comments, nothing else.
 STRING_SET_BODY = re.compile(r'(?:\s|,|"[^"\\\n]*"|#[^\n]*)*')
+# "<provider type>/<argument>=<var.|local.><name>"
+CRED_REF_ENTRY = re.compile(r"([a-z0-9-]+)/([a-z0-9_]+)=((?:var|local)\.[A-Za-z_][A-Za-z0-9_-]*)")
+# A var. or local. reference with its attribute and literal-index path. python-hcl2
+# renders the expression as text; a nested list element as '${...}'.
+REFERENCE = re.compile(
+    r"(?<![\w.])((?:var|local)\.[A-Za-z_][A-Za-z0-9_-]*)"
+    r"(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[(?:\"[^\"\\]*\"|[0-9]+)\])*"
+)
+# What may remain of an allowed credential expression once its references (R)
+# and allowed literals (L) are taken out: null, bools, comparisons,
+# conditionals, brackets. No function call, no other reference, no literal.
+CREDENTIAL_REST = re.compile(r"(?:\s+|R|L|null|true|false|\?|:|==|!=|&&|\|\||!|\[|\]|\(|\)|,)*")
 CHAIN_BODY = re.compile(
     r'(?:\s|,|#[^\n]*|\{"name":\s*"[^"\\\n]*",\s*"source":\s*"[^"\\\n]*"\})*'
 )
@@ -168,15 +190,31 @@ def load_policy() -> dict:
         allow = ALLOWLIST.read_text(encoding="utf-8")
     except OSError as exc:
         setup_error(f"cannot read the OPA policy: {exc}")
-    single_definitions(["exec_data_types", "endpoint_key_pattern", "allowed_provisioner_chain",
-                        "allowed_provider_sources", "endpoint_key_exceptions",
-                        "allowed_remote_state_backends", "allowed_action_types"])
-    m = re.search(r"^endpoint_key_pattern\s*:=\s*`([^`]+)`\s*$", policy, re.M)
-    if not m:
-        setup_error(f"endpoint_key_pattern in {show(POLICY)} must be one raw string")
+    single_definitions(["exec_data_types", "endpoint_key_pattern", "credential_key_pattern",
+                        "allowed_provisioner_chain", "allowed_provider_sources",
+                        "endpoint_key_exceptions", "allowed_remote_state_backends",
+                        "allowed_action_types", "allowed_credential_references",
+                        "allowed_credential_literals", "allowed_ephemeral_types"])
+    patterns = {}
+    for name in ("endpoint_key_pattern", "credential_key_pattern"):
+        m = re.search(rf"^{name}\s*:=\s*`([^`]+)`\s*$", policy, re.M)
+        if not m:
+            setup_error(f"{name} in {show(POLICY)} must be one raw string")
+        patterns[name] = re.compile(m.group(1))
+    cred_refs: dict[tuple[str, str], set[str]] = {}
+    for entry in rego_string_set(allow, "allowed_credential_references", ALLOWLIST):
+        m = CRED_REF_ENTRY.fullmatch(entry)
+        if not m:
+            setup_error(f"allowed_credential_references entry {entry!r} in {show(ALLOWLIST)} must "
+                        'be "<provider type>/<argument>=<var.|local.><name>"')
+        cred_refs.setdefault((m.group(1), m.group(2)), set()).add(m.group(3))
     return {
         "exec_data_types": rego_string_set(policy, "exec_data_types", POLICY),
-        "endpoint_key": re.compile(m.group(1)),
+        "endpoint_key": patterns["endpoint_key_pattern"],
+        "credential_key": patterns["credential_key_pattern"],
+        "credential_refs": cred_refs,
+        "credential_literals": rego_string_set(allow, "allowed_credential_literals", ALLOWLIST),
+        "ephemeral": rego_string_set(allow, "allowed_ephemeral_types", ALLOWLIST, allow_empty=True),
         "chain": rego_chain(policy, POLICY),
         "providers": rego_string_set(allow, "allowed_provider_sources", ALLOWLIST),
         "endpoint_exceptions": rego_string_set(allow, "endpoint_key_exceptions", ALLOWLIST),
@@ -257,7 +295,45 @@ def required_providers(doc: dict):
                 yield str(name), normalise_source(src) if isinstance(src, str) else implied_source(str(name))
 
 
-def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_dir: str) -> list[str]:
+NO_DEFAULT = object()
+
+
+def variable_defaults(doc: dict):
+    """Yield (name, default or NO_DEFAULT) for every variable block."""
+    for name, body in labelled(doc.get("variable")):
+        yield name, body.get("default", NO_DEFAULT)
+
+
+def credential_problem(value, allowed: set[str], pol: dict, dir_vars: dict) -> str | None:
+    """None when a credential argument's value is null or an allowed form, else why not."""
+    if value is None:
+        return None
+    if not (isinstance(value, str) and value.startswith("${") and value.endswith("}")):
+        return "a literal value"
+    if not allowed:
+        return "an expression (no form of this argument is allowed)"
+    expr = value[2:-1]
+    for m in REFERENCE.finditer(expr):
+        root = m.group(1)
+        if root not in allowed:
+            return f"a reference to {root}, which is not on allowed_credential_references"
+        if root.startswith("var."):
+            default = dir_vars.get(root[4:], NO_DEFAULT)
+            if default is not NO_DEFAULT and default is not None and not isinstance(default, bool):
+                return f"{root}, whose default gives it a value of its own"
+    rest = REFERENCE.sub("R", expr)
+    while "'${R}'" in rest:
+        rest = rest.replace("'${R}'", "R")
+    for lit in pol["credential_literals"]:
+        rest = rest.replace(f'"{lit}"', "L")
+    if not CREDENTIAL_REST.fullmatch(rest):
+        return "a literal, function call or other reference beside the allowed references"
+    return None
+
+
+def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_dir: str,
+              dir_vars: dict | None = None) -> list[str]:
+    dir_vars = dir_vars or {}
     out: list[str] = []
 
     def resolve(local: str) -> str:
@@ -282,9 +358,13 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
     for _, check_body in labelled(doc.get("check")):
         typed_blocks += [("data", t) for t in typed(check_body.get("data"))]
     for kind, (rtype, name, body) in typed_blocks:
-        if kind == "data" and rtype in pol["exec_data_types"]:
-            out.append(f'{rel}: data "{rtype}" "{name}" runs code or calls out at plan time '
+        if kind in ("data", "ephemeral") and rtype in pol["exec_data_types"]:
+            out.append(f'{rel}: {kind} "{rtype}" "{name}" runs code or calls out at plan time '
                        "with the workspace's credentials and environment")
+        if kind == "ephemeral" and rtype not in pol["ephemeral"]:
+            out.append(f'{rel}: ephemeral "{rtype}" "{name}" is not on allowed_ephemeral_types '
+                       "(an ephemeral resource runs provider code during the plan and the apply; "
+                       "the plan JSON does not show it, so the OPA policy cannot see it)")
         if kind == "action" and rtype not in pol["actions"]:
             out.append(f'{rel}: action "{rtype}" "{name}" is not on allowed_action_types '
                        "(an action runs provider code at apply time)")
@@ -309,6 +389,24 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
             if pol["endpoint_key"].match(key) and key not in pol["endpoint_exceptions"]:
                 out.append(f'{rel}: provider "{pname}" sets "{key}" (an endpoint, proxy, TLS or '
                            "credential override can send the workspace's credentials to another host)")
+        ptype = src.rsplit("/", 1)[-1]
+        nested = {k for v in body.values() for k in all_keys(v)}
+        for key in sorted((set(body) | nested)):
+            if not pol["credential_key"].match(key):
+                continue
+            value = body.get(key)
+            if key in nested or isinstance(value, dict) or (
+                    isinstance(value, list) and any(isinstance(v, dict) for v in value)):
+                why = "a nested or dynamic block"
+            elif isinstance(value, list):
+                why = "a literal value"
+            else:
+                why = credential_problem(value, pol["credential_refs"].get((ptype, key), set()),
+                                         pol, dir_vars)
+            if why:
+                out.append(f'{rel}: provider "{pname}" sets "{key}" to {why} (a profile, credentials '
+                           "file, token or impersonation argument can run a command or swap the "
+                           "workspace's identity; only the forms on allowed_credential_references may)")
 
     for mname, body in labelled(doc.get("module")):
         src = body.get("source")
@@ -408,10 +506,13 @@ def main() -> int:
 
     # required_providers are module-scoped: one map per directory.
     by_dir: dict[str, dict] = {}
+    vars_by_dir: dict[str, dict] = {}
     for rel, doc in docs.items():
         by_dir.setdefault(posixpath.dirname(rel), {}).update(required_providers(doc))
+        vars_by_dir.setdefault(posixpath.dirname(rel), {}).update(variable_defaults(doc))
     for rel, doc in docs.items():
-        problems += check_doc(rel, doc, by_dir[posixpath.dirname(rel)], pol, provisioner_dir)
+        d = posixpath.dirname(rel)
+        problems += check_doc(rel, doc, by_dir[d], pol, provisioner_dir, vars_by_dir[d])
     problems += check_chain(docs, pol)
 
     for p in problems:

@@ -1,8 +1,11 @@
 # MANDATORY: no provisioners outside the one reviewed module-call chain, no
 # external / http / aws_lambda_invocation data sources anywhere, no action
 # blocks outside allowed_action_types, only allowlisted providers and
-# remote-state backends, and no provider endpoint, proxy, TLS or inline
-# credential (credentials, token_url) overrides.
+# remote-state backends, no provider endpoint, proxy, TLS or inline
+# credential (credentials, token_url) overrides, no provider profile,
+# credentials-file, static-key, token or impersonation argument outside
+# allowed_credential_references, and no reference to an ephemeral type
+# outside allowed_ephemeral_types.
 # The allowlists are in no_plan_time_code_execution_allowlist.rego. A plan runs with the workspace's
 # credentials and environment variables (TFE_TOKEN, SUPABASE_ACCESS_TOKEN, the
 # cloud plan identity). A data "external" or data "http" block and every
@@ -37,6 +40,12 @@
 #   - endpoints set through environment variables, an AWS shared config or
 #     credentials file (endpoint_url, credential_process) or a google
 #     external_account credentials file (token_url) never appear in the plan;
+#   - an `ephemeral` block is not rendered: only the references to it are
+#     (ephemeral.<type>.<name>), so one that nothing references, or that a
+#     local reads, is opened during the plan without this policy seeing it;
+#     scripts/check-plan-time-exec.py checks every ephemeral block in CI;
+#   - the plan JSON shows the references of a credential argument, not its
+#     literals or function calls (the scanner checks those in CI);
 #   - a `removed` block is not rendered at all, so a destroy-time provisioner
 #     in it runs at apply without this policy seeing it. What limits it today:
 #     scripts/check-plan-time-exec.py fails on a provisioner in any removed
@@ -71,9 +80,25 @@ allowed_provisioner_chain := [
 # tfe hostname / ssl_skip_verify, supabase endpoint, azurerm metadata_host.
 # Inline credentials (google credentials, a token_url) swap the workspace's
 # identity or send a token exchange to another host; no provider block in
-# this repo sets them. access_token is not listed: envs/saas sets the supabase
-# access_token to a placeholder when Supabase is off (docs/known-gaps.md).
+# this repo sets them. Tokens, profiles, credential files and impersonation
+# are in credential_key_pattern, which has an allowlist of reference forms.
 endpoint_key_pattern := `^(endpoints?|.*_endpoint|hostname|base_url|api_url|metadata_host|universe_domain|custom_ca_bundle|insecure|ssl_skip_verify|skip_tls_verify|https?_proxy|no_proxy|credentials|token_url)$`
+
+# Provider arguments that pick the identity a provider authenticates as, or
+# make it read a file that can run a command (SEC-1). An AWS profile or shared
+# config / credentials file can set credential_process (runs a command when
+# the provider is configured, at plan and at apply) or endpoint_url; static
+# keys and tokens, web-identity token files, google access tokens, external
+# credentials and impersonation swap the workspace's identity. Each of these
+# is denied unless every reference of its expression is on
+# allowed_credential_references for that provider type and argument. No
+# provider of this repo sets a credential argument to a literal; a null
+# argument (the provider reads its environment) is allowed.
+# Not listed: aws assume_role. The role it names must trust the workspace's
+# identity, and the documented stage usage sets it to a literal ARN; the
+# repo's roots use a dynamic "assume_role" block, which the plan JSON does
+# not render (docs/known-gaps.md).
+credential_key_pattern := `^(profile|shared_config_files|shared_credentials_files|access_key|secret_key|token|access_token|api_token|assume_role_with_web_identity|web_identity_token|web_identity_token_file|impersonate_service_account|impersonate_service_account_delegates|external_credentials)$`
 
 # Every resource block of the configuration, at any module depth, with its
 # walk path.
@@ -171,4 +196,105 @@ deny contains msg if {
 	is_object(a)
 	not object.get(a, "type", "") in allowed_action_types
 	msg := sprintf("%s: action type %q is not on allowed_action_types; an action runs provider code at apply time", [object.get(a, "address", "?"), object.get(a, "type", "?")])
+}
+
+# ── Credential arguments (SEC-1) ───────────────────────────────────────────
+# The provider type is the last part of full_name, so a local name that maps
+# to another provider gets that provider's allowances only.
+provider_type(pc) := t if {
+	parts := split(object.get(pc, "full_name", ""), "/")
+	t := parts[count(parts) - 1]
+}
+
+credential_refs(ptype, attr) := {ref |
+	some entry in allowed_credential_references
+	parts := split(entry, "=")
+	count(parts) == 2
+	parts[0] == sprintf("%s/%s", [ptype, attr])
+	ref := parts[1]
+}
+
+# A reference is allowed when it is an allowed reference or a path below it
+# (var.tfc_aws_dynamic_credentials.aliases["backup"].shared_config_file).
+ref_allowed(r, allowed) if r in allowed
+
+ref_allowed(r, allowed) if {
+	some a in allowed
+	startswith(r, concat("", [a, "."]))
+}
+
+ref_allowed(r, allowed) if {
+	some a in allowed
+	startswith(r, concat("", [a, "["]))
+}
+
+# A root variable that an allowed expression reads must not bring a value of
+# its own: its default is null (HCP Terraform or the workspace sets it) or a
+# bool switch. A default holding a file path or an email would otherwise be
+# used whenever the workspace does not set the variable.
+inert_default(d) if d == null
+
+inert_default(d) if is_boolean(d)
+
+variable_inert(r) if not startswith(r, "var.")
+
+variable_inert(r) if {
+	startswith(r, "var.")
+	name := regex.find_n(`^var\.[A-Za-z_][A-Za-z0-9_-]*`, r, 1)[0]
+	vars := object.get(input.plan.configuration, ["root_module", "variables"], {})
+	inert_default(object.get(vars, [substring(name, 4, -1), "default"], null))
+}
+
+# null: the provider reads its environment, as with no argument at all.
+credential_ok(_, _, _, expr) if {
+	is_object(expr)
+	object.keys(expr) == {"constant_value"}
+	expr.constant_value == null
+}
+
+# Only in the root module (a provider block inside a called module gets no
+# allowance), with no constant and only allowed references. The plan JSON
+# lists references, not literals or function calls: a literal in a branch of
+# a conditional is invisible here and is checked by
+# scripts/check-plan-time-exec.py on the repository source.
+credential_ok(key, pc, attr, expr) if {
+	not contains(key, ":")
+	is_object(expr)
+	not "constant_value" in object.keys(expr)
+	refs := object.get(expr, "references", [])
+	count(refs) > 0
+	allowed := credential_refs(provider_type(pc), attr)
+	every r in refs {
+		ref_allowed(r, allowed)
+		variable_inert(r)
+	}
+}
+
+deny contains msg if {
+	some key, pc in object.get(input.plan.configuration, "provider_config", {})
+	some attr, expr in object.get(pc, "expressions", {})
+	regex.match(credential_key_pattern, attr)
+	not credential_ok(key, pc, attr, expr)
+	msg := sprintf("provider %s sets %q: a profile, credentials file, token or impersonation argument can run a command or swap the workspace's identity; only the forms on allowed_credential_references may (a variable they read must have a null or bool default)", [key, attr])
+}
+
+# ── Ephemeral resources (SEC-2) ────────────────────────────────────────────
+# The plan JSON has no entry for an ephemeral block (verified with Terraform
+# 1.17.1). Its type shows only in the references of an expression that uses
+# it ("ephemeral.<type>.<name>..."), in resources, module calls, outputs and
+# provider configurations. An ephemeral block that nothing references, or
+# that is read through a local, is invisible here although it is opened (its
+# provider code runs) during the plan; scripts/check-plan-time-exec.py
+# checks every ephemeral block in the repository (docs/known-gaps.md).
+deny contains msg if {
+	walk(input.plan.configuration, [path, refs])
+	count(path) > 0
+	path[count(path) - 1] in {"references", "depends_on"}
+	is_array(refs)
+	some r in refs
+	is_string(r)
+	startswith(r, "ephemeral.")
+	etype := split(r, ".")[1]
+	not etype in allowed_ephemeral_types
+	msg := sprintf("ephemeral %q is used: an ephemeral resource runs provider code during the plan and the apply (it can invoke a function or mint a token); only %v may be used", [etype, sort(allowed_ephemeral_types)])
 }
