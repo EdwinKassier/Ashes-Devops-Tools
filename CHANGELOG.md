@@ -678,6 +678,19 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   output `shared_vpc_host_project_id`), not after all of the spoke, because the perimeter lists
   them. An existing perimeter shows an in-place update. Enforced with team projects is PREVIEW
   (`docs/known-gaps.md`); see `UPGRADING.md` before you apply an enforced perimeter.
+- **Federated-trust OPA gates close the re-audit bypasses (SEC-1, breaking).**
+  `aws_iam_federated_trust_pinned` now denies a `*` or `?` anywhere in a subject, a TFC subject
+  without a literal organization, project, workspace and run phase (`plan` or `apply`), and a
+  GitHub subject without a literal repository and a `ref:` or `environment:` value
+  (`repo:owner/app:*`, `repo:owner/app:pull_request`, a `job_workflow_ref`-only template). Any
+  action that matches `sts:AssumeRoleWithWebIdentity` (`sts:AssumeRoleWith*`, `sts:*`, other case,
+  or a `NotAction` that leaves it allowed) counts as web identity. A trust unknown at plan time is
+  now denied, except in a run that also creates an OIDC provider or the AWS organization.
+  `gcp_wif_principalset_pinned` now also denies raw TFC claims (`attribute.terraform_*`, such as
+  `terraform_run_phase/apply`), `attribute.repository_owner/`, `attribute.actor/` and
+  `attribute.aud/` principalSets, and workforce pool members on `roles/iam.workloadIdentityUser`
+  or `roles/iam.serviceAccountTokenCreator`. Every trust and binding the repo builds still passes.
+  See `UPGRADING.md`.
 
 ### Changed
 

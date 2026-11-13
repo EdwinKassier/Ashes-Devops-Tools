@@ -417,7 +417,12 @@ OIDC subject options, in order of precedence:
 `job_workflow_ref`. The default `sub` names the repository, so a renamed or
 deleted-and-recreated `org/repo` would inherit the trust. To pin the immutable
 IDs, or a reusable deploy workflow, put them **into** `sub` using GitHub's OIDC
-customisation API, then set `github.subject` to the resulting string:
+customisation API, then set `github.subject` to the resulting string. The
+template must keep the repository (`repo` or `repository_id`) and the context
+(`context`, `environment` or `ref`). The mandatory OPA policy
+`aws_iam_federated_trust_pinned` denies a subject without a literal repository
+and a `ref:` or `environment:` value, for example one that holds only
+`job_workflow_ref`, which any repository that calls the workflow can match:
 
 ```sh
 gh api -X PUT repos/acme/orders/actions/oidc/customization/sub \

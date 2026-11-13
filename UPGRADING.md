@@ -513,6 +513,52 @@ Aurora cluster, `publicly_accessible` on a new cluster instance). Set each one
 explicitly to a plan-known value. The message ends with "an unknown value
 counts as a violation".
 
+#### Federated-trust policies deny more forms (policies, breaking, SEC-1)
+
+**Breaking: the non-overridable guardrails set now fails runs that passed
+before.** No trust or binding that this repo builds is denied. A fork's own
+code, or an app-services `github.subject` from a customised claim template,
+can be.
+
+`aws_iam_federated_trust_pinned` (every `aws_iam_role` that allows web
+identity) now denies:
+
+- a subject that holds `*` or `?`, under any operator, for example
+  `organization:acme:project:p:workspace:*:run_phase:plan`;
+- a TFC subject that is not the full
+  `organization:<org>:project:<project>:workspace:<ws>:run_phase:<plan|apply>`;
+- a GitHub subject without a literal repository (`repo:<owner>/<repo>:` or
+  `repository_id:<id>`) and a `ref:` or `environment:` value, for example
+  `repo:acme/app:pull_request` or a template that holds only
+  `job_workflow_ref`;
+- a trust that is unknown at plan time, unless the same run creates an
+  `aws_iam_openid_connect_provider` or an `aws_organizations_organization`.
+
+It also treats `sts:AssumeRoleWith*`, `sts:*`, other letter case and a
+`NotAction` that does not exclude `sts:AssumeRoleWithWebIdentity` as web
+identity, so those statements are now checked.
+
+`gcp_wif_principalset_pinned` now also denies the workload identity members
+`attribute.terraform_*/...` (raw TFC claims), `attribute.repository_owner/...`,
+`attribute.actor/...` and `attribute.aud/...`, and any workforce pool member
+(`principal://` or `principalSet://iam.googleapis.com/locations/global/workforcePools/...`)
+on `roles/iam.workloadIdentityUser`, `roles/iam.serviceAccountTokenCreator` or
+a role unknown at plan time.
+
+Before the upgrade:
+
+1. Search your plans and code for the forms above.
+2. Pin each TFC subject to one workspace and one run phase. On GCP, bind
+   `attribute.workspace_id_phase/<ws-id>:<phase>` (gcp-bootstrap does this).
+3. Make each GitHub subject name the repository and a ref or an environment.
+   For a customised claim template, include `repo` or `repository_id` and
+   `context` (or `environment` or `ref`).
+4. Build each trust from values known at plan time. When a trust names a role
+   or account that the same run creates (and no OIDC provider or organization
+   is created in that run), apply the referenced resource in an earlier run.
+5. Grant workforce identities direct roles, not service account
+   impersonation.
+
 #### Wildcard workload identity bindings are denied (policies, breaking)
 
 **Breaking: the non-overridable guardrails set now fails runs that passed

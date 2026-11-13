@@ -105,6 +105,9 @@ variable "services" {
 
     github OIDC subject precedence:
       1. github.subject — an exact sub for any other customised claim template.
+         It must name the repository (repo:<org>/<repo>: or repository_id:<id>)
+         and a ref: or environment: value; the mandatory OPA policy
+         aws_iam_federated_trust_pinned denies any other subject.
       2. github.repository_id + github.repository_owner_id (RECOMMENDED default
          when set) — immutable numeric IDs, so renaming/transferring a repo or
          re-creating a deleted name cannot inherit the trust:

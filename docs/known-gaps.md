@@ -1594,7 +1594,9 @@ side (all mock-tested, secure defaults):
   needs it to create the app-deploy pool. `custom.wifProviderTenantPinned` pins
   each GitHub provider condition to the owner. The mandatory OPA policy
   `gcp_wif_principalset_pinned` denies a principalSet on the whole pool, the
-  owner, a repository name or a bare ref when the run is planned. Two cases
+  owner, a repository name, an actor, a bare ref, the audience or a raw
+  `attribute.terraform_*` claim when the run is planned, and a workforce pool
+  member on a role that impersonates a service account. Two cases
   are advisory only (`gcp_wif_principalset_repo_wide`): a binding whose member
   is unknown at plan time (the pool is created in the same run), and a binding
   on `attribute.repository_id` alone, which trusts every branch and
@@ -1602,6 +1604,25 @@ side (all mock-tested, secure defaults):
   Terraform judges with the policy sets attached; a direct API call with the
   workload apply SA's credentials is not checked. GitLab bindings on
   `attribute.project_path` are not checked.
+- **Unknown AWS trusts in first-apply runs (SEC-1 residual).**
+  `aws_iam_federated_trust_pinned` denies an `aws_iam_role` trust that is
+  unknown at plan time, except in a run that also creates an
+  `aws_iam_openid_connect_provider` or an `aws_organizations_organization`.
+  In such a run every unknown trust passes with only the advisory
+  `aws_iam_federated_trust_unknown` warning, so a wildcard subject hidden
+  behind an apply-time value is not caught. The two cases are the first
+  apply of an app-services GitHub deploy role and a greenfield
+  `aws-organization`. Read the advisory result on those runs, and re-plan
+  after the apply: the trust is then known and checked.
+- **CloudFormation-built web-identity trusts are not read by OPA.** The
+  policy reads `aws_iam_role` resources in the plan. The `tfc-plan` and
+  `tfc-apply` roles that `modules/aws/iam/tfc-oidc-baseline` deploys through a
+  StackSet, and the phase-0 roles in
+  `templates/aws/bootstrap/phase0-management.yaml`, are CloudFormation
+  resources. The module validation keeps the organization and project
+  literal, but `tfc_oidc_allow_workspace_wildcards = true` still writes a
+  `StringLike` workspace wildcard that this policy would deny on an
+  `aws_iam_role`.
 - **Delegable infrastructure roles (SEC-4 residual).** `compute.admin`,
   `dns.admin`, `container.admin` and `cloudsql.admin` stay delegable. A
   projects-apply compromise can grant itself those on an environment folder.
