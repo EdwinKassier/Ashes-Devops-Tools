@@ -493,6 +493,49 @@ run "service_team_registry_fans_out" {
   }
 }
 
+# The team stage takes its Shared VPC host from module.host's
+# shared_vpc_host_project_id output, which waits for the spoke network only.
+# Taking var.host_project.project_id (with a module-wide depends_on) would be a
+# cycle with the perimeter, which lists the team projects (ARC-C1).
+run "service_team_attaches_through_the_net_spoke_output" {
+  command = plan
+
+  variables {
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  override_module {
+    target = module.host
+    outputs = {
+      shared_vpc_host_project_id = "acme-host-from-output"
+      network_id                 = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      network_name               = "acme-dev-vpc"
+      network_self_link          = "https://www.googleapis.com/compute/v1/projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      subnets                    = { private = {}, public = {}, database = {} }
+      vpc_service_controls       = {}
+      vpc_peerings               = {}
+      dns_zones                  = {}
+      cloud_armor                = null
+      security_policy_id         = null
+      security_policy_self_link  = null
+      nat_ip                     = null
+      ncc_spoke_id               = null
+    }
+  }
+
+  assert {
+    condition     = module.service_team["payments"].host_project_id == "acme-host-from-output"
+    error_message = "module.service_team must take shared_vpc_host_project_id from module.host.shared_vpc_host_project_id, not from var.host_project.project_id."
+  }
+}
+
 # service_team = "<key>": the service's project comes from the team module.
 run "service_team_resolves_service_project" {
   command = plan

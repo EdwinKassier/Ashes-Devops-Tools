@@ -1663,7 +1663,9 @@ Steps for an enforced production environment:
 
 1. Apply with `vpc_sc_enable_dry_run = true` and a short
    `production_vpc_sc_dry_run_waiver` `{reason, expires}` in
-   `config/tfc-workspaces.yaml`.
+   `config/tfc-workspaces.yaml`. This also leaves the host project unenforced
+   during the soak, because the enforced status and the dry-run spec share one
+   project list, so keep the soak short.
 2. Let real traffic run. Read the dry-run violation logs
    (`protoPayload.metadata.dryRun = true`) for the team projects. Add a rule for
    each legitimate call.
