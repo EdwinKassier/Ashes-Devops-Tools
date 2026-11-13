@@ -5,12 +5,19 @@
 # and a literal ref or environment lets another tenant, workspace, run phase,
 # branch or pull request assume the role: a persistence backdoor.
 #
+# The pins count only under StringEquals / StringLike (and their ForAnyValue:
+# forms; ForAllValues: is true when the key is absent), with a condition key
+# (case-insensitive) whose issuer is one of the statement's Federated
+# providers. The audience may not hold a wildcard either. A web-identity
+# action on any principal ("*" or AWS "*") is denied outright.
+#
 # A trust document that is unknown at plan time cannot be checked, so it is
-# denied, except in a run that also creates an OIDC provider or the AWS
-# organization. Those runs are the legitimate first applies whose trust is
-# unknown until apply (a GitHub deploy role naming its new provider; the
-# management-account roles of a greenfield organization). The advisory twin
-# (federated_unknown) reports every unknown trust, including those.
+# denied, unless the same run creates an OIDC provider or the AWS organization
+# in the role's own module instance or in a module below it. Those are the
+# legitimate first applies whose trust is unknown until apply (a GitHub deploy
+# role naming its new provider in app-services; the management-account roles
+# of a greenfield organization, one module above module.organization). The
+# advisory twin (federated_unknown) reports every unknown trust.
 package terraform.policies.aws_iam_federated_trust_pinned
 
 import rego.v1
@@ -46,10 +53,13 @@ any_matches_web_identity(actions) if {
 	matches_web_identity(action)
 }
 
+# Federated principals of the statement.
+federated_principals(stmt) := lib.as_list(object.get(object.get(stmt, "Principal", {}), "Federated", null))
+
 # A federated principal other than a SAML provider (which cannot issue a
 # web-identity token).
 web_identity_principal(stmt) if {
-	some p in lib.as_list(object.get(object.get(stmt, "Principal", {}), "Federated", null))
+	some p in federated_principals(stmt)
 	not contains(p, ":saml-provider/")
 }
 
@@ -59,92 +69,119 @@ federated_web_identity(stmt) if {
 	allows_web_identity(stmt)
 }
 
-op_matches(op) if op in {"StringEquals", "StringLike", "ForAnyValue:StringEquals", "ForAnyValue:StringLike", "ForAllValues:StringEquals", "ForAllValues:StringLike"}
+# Any principal: "*" or {"AWS": "*"} (also inside a list).
+any_principal(stmt) if stmt.Principal == "*"
 
-# [key, value] pairs of condition keys under StringEquals / StringLike (incl.
-# the ForAnyValue: / ForAllValues: forms) whose key ends with the suffix.
-cond_pairs(stmt, suffix) := [[key, v] |
+any_principal(stmt) if {
+	some p in lib.as_list(object.get(object.get(stmt, "Principal", {}), "AWS", null))
+	p == "*"
+}
+
+# Issuer host paths of the statement's providers, lowercased: the part after
+# "oidc-provider/" of an IAM OIDC provider ARN, or the bare provider name
+# (accounts.google.com, cognito-identity.amazonaws.com).
+provider_hosts(stmt) := {lower(host) |
+	some p in federated_principals(stmt)
+	is_string(p)
+	host := provider_host(p)
+}
+
+provider_host(p) := substring(p, i + count("oidc-provider/"), -1) if {
+	i := indexof(p, "oidc-provider/")
+	i >= 0
+}
+
+provider_host(p) := p if not contains(p, "oidc-provider/")
+
+# Pins: StringEquals / StringLike and their ForAnyValue: forms. ForAllValues:
+# is true when the key is absent from the request, so it pins nothing.
+op_matches(op) if op in {"StringEquals", "StringLike", "ForAnyValue:StringEquals", "ForAnyValue:StringLike"}
+
+# [issuer, value] pairs of pin conditions whose key (lowercased) is
+# "<issuer><suffix>" for an issuer that is one of the statement's providers.
+cond_pairs(stmt, suffix) := [[issuer, v] |
+	hosts := provider_hosts(stmt)
 	some op, kv in object.get(stmt, "Condition", {})
 	op_matches(op)
-	some key, raw in kv
+	some raw_key, raw in kv
+	key := lower(raw_key)
 	endswith(key, suffix)
+	issuer := substring(key, 0, count(key) - count(suffix))
+	issuer in hosts
 	some v in lib.as_list(raw)
 ]
 
-# ── Subject pinning ─────────────────────────────────────────────────────────
+github_issuer := "token.actions.githubusercontent.com"
+
+# ── Subject and audience pinning ────────────────────────────────────────────
 # Any wildcard anywhere, on any issuer. Under StringEquals a `*` is literal and
 # never matches a real token, so denying it there costs nothing.
-unpinned_subject(_, v) if contains(v, "*")
+wildcard(v) if regex.match(`[*?]`, v)
 
-unpinned_subject(_, v) if contains(v, "?")
+unpinned_subject(_, v) if wildcard(v)
 
-# TFC: organization:<org>:project:<project>:workspace:<ws>:run_phase:<plan|apply>
 unpinned_subject(_, v) if {
 	startswith(v, "organization:")
-	not tfc_pinned(v)
+	not lib.tfc_subject_pinned(v)
 }
 
-tfc_pinned(v) if {
-	parts := split(v, ":")
-	count(parts) == 8
-	parts[0] == "organization"
-	parts[2] == "project"
-	parts[4] == "workspace"
-	parts[6] == "run_phase"
-	parts[7] in {"plan", "apply"}
-	every i in [1, 3, 5] {
-		parts[i] != ""
-	}
+# GitHub subject: the issuer is github.com's, or the value has a GitHub shape
+# (GitHub Enterprise Server and other issuers are recognised by shape only).
+unpinned_subject(issuer, v) if {
+	issuer == github_issuer
+	not lib.github_subject_pinned(v)
 }
 
-# GitHub: repo:<owner>/<repo>:<context> or a customised template that holds
-# repository_id:<id>; the context must hold ref:<ref> or environment:<env>.
-github_subject(key, _) if startswith(key, "token.actions.githubusercontent.com")
-
-github_subject(_, v) if startswith(v, "repo:")
-
-github_subject(_, v) if regex.match(`^repository_owner(_id)?:`, v)
-
-unpinned_subject(key, v) if {
-	github_subject(key, v)
-	not github_pinned(v)
+unpinned_subject(_, v) if {
+	lib.github_subject_shape(v)
+	not lib.github_subject_pinned(v)
 }
-
-github_pinned(v) if {
-	github_repo_pinned(v)
-	regex.match(`(^|:)(ref|environment):[^:]+(:|$)`, v)
-}
-
-github_repo_pinned(v) if regex.match(`^repo:[^/:]+/[^/:]+:`, v)
-
-github_repo_pinned(v) if regex.match(`(^|:)repository_id:[0-9]+(:|$)`, v)
 
 # ── Rules ───────────────────────────────────────────────────────────────────
-federated_statements contains [rc.address, stmt] if {
+trust_statements contains [rc.address, stmt] if {
 	some rc in lib.written_of_type("aws_iam_role")
 	raw := lib.after(rc, "assume_role_policy")
 	raw != null
 	doc := lib.policy_doc(raw)
 	some stmt in lib.statements(doc)
+}
+
+federated_statements contains [address, stmt] if {
+	some [address, stmt] in trust_statements
 	federated_web_identity(stmt)
+}
+
+deny contains msg if {
+	some [address, stmt] in trust_statements
+	stmt.Effect == "Allow"
+	any_principal(stmt)
+	allows_web_identity(stmt)
+	msg := sprintf("%s: trust allows web identity (sts:AssumeRoleWithWebIdentity) to any principal; name one Federated OIDC provider", [address])
 }
 
 deny contains msg if {
 	some [address, stmt] in federated_statements
 	count(cond_pairs(stmt, ":aud")) == 0
-	msg := sprintf("%s: federated (web-identity) trust has no audience (:aud) condition", [address])
+	msg := sprintf("%s: federated (web-identity) trust has no audience (<provider>:aud) condition under StringEquals or StringLike", [address])
 }
 
 deny contains msg if {
 	some [address, stmt] in federated_statements
 	count(cond_pairs(stmt, ":sub")) == 0
-	msg := sprintf("%s: federated (web-identity) trust has no subject (:sub) condition", [address])
+	msg := sprintf("%s: federated (web-identity) trust has no subject (<provider>:sub) condition under StringEquals or StringLike", [address])
 }
 
 deny contains msg if {
 	some [address, stmt] in federated_statements
-	some [key, v] in cond_pairs(stmt, ":sub")
-	unpinned_subject(key, v)
+	some [_, v] in cond_pairs(stmt, ":aud")
+	wildcard(v)
+	msg := sprintf("%s: federated (web-identity) trust has a wildcard audience %q", [address, v])
+}
+
+deny contains msg if {
+	some [address, stmt] in federated_statements
+	some [issuer, v] in cond_pairs(stmt, ":sub")
+	unpinned_subject(issuer, v)
 	msg := sprintf("%s: federated (web-identity) trust has an unpinned subject %q (no wildcards; TFC needs a literal organization, project, workspace and run_phase plan|apply; GitHub needs a literal repository and a ref: or environment: context)", [address, v])
 }
 
@@ -154,17 +191,31 @@ unknown_trust contains rc if {
 	lib.unknown(rc, "assume_role_policy")
 }
 
-# The run creates a resource that legitimately makes a trust unknown until apply.
-first_apply_dependency_created if {
-	some rc in lib.managed
-	rc.type in {"aws_iam_openid_connect_provider", "aws_organizations_organization"}
-	lib.creates(rc)
+module_of(rc) := object.get(rc, "module_address", "")
+
+# dep is in the role's module instance or in a module below it.
+same_or_below(rc, dep) if module_of(rc) == module_of(dep)
+
+same_or_below(rc, _) if module_of(rc) == ""
+
+same_or_below(rc, dep) if {
+	module_of(rc) != ""
+	startswith(module_of(dep), concat("", [module_of(rc), "."]))
+}
+
+# The run creates, in the role's module or below it, a resource that
+# legitimately makes the trust unknown until apply.
+first_apply_dependency(rc) if {
+	some dep in lib.managed
+	dep.type in {"aws_iam_openid_connect_provider", "aws_organizations_organization"}
+	lib.creates(dep)
+	same_or_below(rc, dep)
 }
 
 deny contains msg if {
 	some rc in unknown_trust
-	not first_apply_dependency_created
-	msg := sprintf("%s: assume_role_policy is unknown at plan time, so federated-trust pinning cannot be checked; build the trust from plan-known values (an unknown trust is allowed only in a run that creates an OIDC provider or the organization)", [rc.address])
+	not first_apply_dependency(rc)
+	msg := sprintf("%s: assume_role_policy is unknown at plan time, so federated-trust pinning cannot be checked; build the trust from plan-known values (an unknown trust is allowed only when the same run creates an OIDC provider or the organization in the role's module or below it)", [rc.address])
 }
 
 # Advisory twin: every trust whose policy is unknown at plan time.

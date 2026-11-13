@@ -691,6 +691,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `attribute.aud/` principalSets, and workforce pool members on `roles/iam.workloadIdentityUser`
   or `roles/iam.serviceAccountTokenCreator`. Every trust and binding the repo builds still passes.
   See `UPGRADING.md`.
+- **Federated-trust gate: second review fixes (SEC-1, breaking).** `aws_iam_federated_trust_pinned`
+  no longer counts `ForAllValues:` conditions as pins (they are true when the key is absent), counts
+  only condition keys (compared without case) that name one of the statement's Federated providers,
+  denies a wildcard audience and a web-identity action on any principal (`"*"`, `{"AWS": "*"}`), and
+  exempts an unknown trust only when the provider or organization is created in the role's module
+  or below it. The app-services stage now fails the plan for a `github.subject` without a literal
+  repository and a `ref:` or `environment:` value. See `UPGRADING.md`.
 
 ### Changed
 

@@ -1606,14 +1606,27 @@ side (all mock-tested, secure defaults):
   `attribute.project_path` are not checked.
 - **Unknown AWS trusts in first-apply runs (SEC-1 residual).**
   `aws_iam_federated_trust_pinned` denies an `aws_iam_role` trust that is
-  unknown at plan time, except in a run that also creates an
-  `aws_iam_openid_connect_provider` or an `aws_organizations_organization`.
-  In such a run every unknown trust passes with only the advisory
-  `aws_iam_federated_trust_unknown` warning, so a wildcard subject hidden
-  behind an apply-time value is not caught. The two cases are the first
-  apply of an app-services GitHub deploy role and a greenfield
-  `aws-organization`. Read the advisory result on those runs, and re-plan
-  after the apply: the trust is then known and checked.
+  unknown at plan time, unless the same run creates an
+  `aws_iam_openid_connect_provider` or an `aws_organizations_organization`
+  in the role's own module instance or in a module below it (a role at the
+  root counts every module as below it). Such a role passes with only the
+  advisory `aws_iam_federated_trust_unknown` warning, so a wildcard subject
+  hidden behind an apply-time value is not caught for it. The two cases in
+  this repository are the first apply of an app-services GitHub deploy role
+  (role and provider in `module.app_services`) and a greenfield
+  `aws-organization` (roles in `module.aws_organization`, the organization in
+  `module.aws_organization.module.organization`). Read the advisory result on
+  those runs, and re-plan after the apply: the trust is then known and
+  checked.
+- **Web-identity issuers other than TFC and github.com are checked by shape
+  only.** `aws_iam_federated_trust_pinned` applies the GitHub repository and
+  context rule to every subject on the
+  `token.actions.githubusercontent.com` provider, and to a subject that starts
+  with `repo:` or `repository_owner` on any provider. A GitHub Enterprise
+  Server issuer or a customised claim template that starts with another
+  claim, and every other issuer (EKS, GitLab, Cognito, Google), gets only the
+  wildcard rule and the requirement of a `:sub` and an `:aud` key for one of
+  the statement's providers.
 - **CloudFormation-built web-identity trusts are not read by OPA.** The
   policy reads `aws_iam_role` resources in the plan. The `tfc-plan` and
   `tfc-apply` roles that `modules/aws/iam/tfc-oidc-baseline` deploys through a

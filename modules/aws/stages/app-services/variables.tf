@@ -234,6 +234,19 @@ variable "services" {
   }
 
   validation {
+    # A custom subject must name the repository (repo:<org>/<repo>: or
+    # repository_id:<id>) and a ref: or environment: value, the rule the
+    # mandatory OPA policy aws_iam_federated_trust_pinned applies to the trust.
+    condition = alltrue([
+      for s in values(var.services) : s.github == null || s.github.subject == null || (
+        can(regex("(^repo:[^/:]+/[^/:]+:|(^|:)repository_id:[0-9]+(:|$))", coalesce(s.github.subject, "x"))) &&
+        can(regex("(^|:)(ref|environment):[^:]+(:|$)", coalesce(s.github.subject, "x")))
+      )
+    ])
+    error_message = "services[*].github.subject must name the repository (repo:<org>/<repo>: or repository_id:<id>) and hold a ref:<ref> or environment:<env> value, for example repository_owner_id:<id>:repository_id:<id>:environment:<env>. A pull_request, owner-only or job_workflow_ref-only subject trusts more than one repository or branch."
+  }
+
+  validation {
     condition = alltrue([
       for s in values(var.services) : s.github == null || (
         (s.github.repository_id == null) == (s.github.repository_owner_id == null) &&

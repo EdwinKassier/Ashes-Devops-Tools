@@ -20,6 +20,43 @@ run "wildcard_subject_rejected" {
   }
 }
 
+# A custom subject must name the repository and a ref or environment, as the
+# mandatory OPA policy aws_iam_federated_trust_pinned requires.
+run "subject_pull_request_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    enable_github_oidc = true
+    services           = { orders = { github = { repository = "acme/orders", subject = "repo:acme/orders:pull_request" } } }
+  }
+}
+
+run "subject_job_workflow_ref_only_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    enable_github_oidc = true
+    services           = { orders = { github = { repository = "acme/orders", subject = "job_workflow_ref:acme/wf/.github/workflows/deploy.yml@refs/heads/main" } } }
+  }
+}
+
+run "subject_owner_only_rejected" {
+  command         = plan
+  expect_failures = [var.services]
+  variables {
+    enable_github_oidc = true
+    services           = { orders = { github = { repository = "acme/orders", subject = "repository_owner_id:1:environment:prod" } } }
+  }
+}
+
+run "subject_repo_env_and_workflow_accepted" {
+  command = plan
+  variables {
+    enable_github_oidc = true
+    services           = { orders = { github = { repository = "acme/orders", subject = "repo:acme/orders:environment:prod:job_workflow_ref:acme/wf/.github/workflows/deploy.yml@refs/heads/main" } } }
+  }
+}
+
 run "wildcard_ref_rejected" {
   command         = plan
   expect_failures = [var.services]

@@ -523,8 +523,12 @@ can be.
 `aws_iam_federated_trust_pinned` (every `aws_iam_role` that allows web
 identity) now denies:
 
-- a subject that holds `*` or `?`, under any operator, for example
-  `organization:acme:project:p:workspace:*:run_phase:plan`;
+- a subject or an audience that holds `*` or `?`, under any operator, for
+  example `organization:acme:project:p:workspace:*:run_phase:plan`;
+- a statement whose only `:sub` or `:aud` conditions are under
+  `ForAllValues:` operators, or under keys that do not name one of the
+  statement's Federated providers (keys are compared without case);
+- a web-identity action on any principal (`"*"` or `{"AWS": "*"}`);
 - a TFC subject that is not the full
   `organization:<org>:project:<project>:workspace:<ws>:run_phase:<plan|apply>`;
 - a GitHub subject without a literal repository (`repo:<owner>/<repo>:` or
@@ -532,7 +536,11 @@ identity) now denies:
   `repo:acme/app:pull_request` or a template that holds only
   `job_workflow_ref`;
 - a trust that is unknown at plan time, unless the same run creates an
-  `aws_iam_openid_connect_provider` or an `aws_organizations_organization`.
+  `aws_iam_openid_connect_provider` or an `aws_organizations_organization`
+  in the role's module instance or in a module below it.
+
+The app-services stage also fails the plan for a `github.subject` without a
+literal repository and a `ref:` or `environment:` value.
 
 It also treats `sts:AssumeRoleWith*`, `sts:*`, other letter case and a
 `NotAction` that does not exclude `sts:AssumeRoleWithWebIdentity` as web

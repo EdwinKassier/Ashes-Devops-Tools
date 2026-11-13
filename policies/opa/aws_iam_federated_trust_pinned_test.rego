@@ -4,11 +4,19 @@ import rego.v1
 
 import data.terraform.policies.aws_iam_federated_trust_pinned as p
 
+tfc_provider := "arn:aws:iam::111111111111:oidc-provider/app.terraform.io"
+
+gh_provider := "arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com"
+
 role(cond) := role_stmt("sts:AssumeRoleWithWebIdentity", cond)
 
-role_stmt(action, cond) := role_doc({
+role_stmt(action, cond) := role_on(tfc_provider, action, cond)
+
+gh_role(cond) := role_on(gh_provider, "sts:AssumeRoleWithWebIdentity", cond)
+
+role_on(provider, action, cond) := role_doc({
 	"Effect": "Allow",
-	"Principal": {"Federated": "arn:aws:iam::111111111111:oidc-provider/app.terraform.io"},
+	"Principal": {"Federated": provider},
 	"Action": action,
 	"Condition": cond,
 })
@@ -44,7 +52,7 @@ test_missing_sub_fails if {
 }
 
 test_missing_aud_fails if {
-	count(p.deny) == 1 with input as role({"StringEquals": {"token.actions.githubusercontent.com:sub": "repo:acme/web:ref:refs/heads/main"}})
+	count(p.deny) == 1 with input as gh_role({"StringEquals": {"token.actions.githubusercontent.com:sub": "repo:acme/web:ref:refs/heads/main"}})
 }
 
 test_wildcard_tenant_fails if {
@@ -55,7 +63,7 @@ test_wildcard_tenant_fails if {
 }
 
 test_wildcard_github_owner_fails if {
-	count(p.deny) == 1 with input as role({
+	count(p.deny) == 1 with input as gh_role({
 		"StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"},
 		"StringLike": {"token.actions.githubusercontent.com:sub": "repo:*/web:*"},
 	})
@@ -89,9 +97,9 @@ gh_aud := {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"}
 
 tfc_like(sub) := role({"StringEquals": tfc_aud, "StringLike": {"app.terraform.io:sub": sub}})
 
-gh_like(sub) := role({"StringEquals": gh_aud, "StringLike": {"token.actions.githubusercontent.com:sub": sub}})
+gh_like(sub) := gh_role({"StringEquals": gh_aud, "StringLike": {"token.actions.githubusercontent.com:sub": sub}})
 
-gh_exact(sub) := role({"StringEquals": object.union(gh_aud, {"token.actions.githubusercontent.com:sub": sub})})
+gh_exact(sub) := gh_role({"StringEquals": object.union(gh_aud, {"token.actions.githubusercontent.com:sub": sub})})
 
 # A literal organization followed by wildcards trusts every project,
 # workspace and run phase of the organization.
@@ -190,7 +198,7 @@ test_github_owner_only_id_template_denied if count(p.deny) == 1 with input as gh
 
 # A wildcard is denied on any issuer, not only TFC and GitHub.
 test_other_issuer_wildcard_denied if {
-	count(p.deny) == 1 with input as role({"StringEquals": {"oidc.example.com:aud": "sts"}, "StringLike": {"oidc.example.com:sub": "system:serviceaccount:apps:*"}})
+	count(p.deny) == 1 with input as role_on("arn:aws:iam::111111111111:oidc-provider/oidc.example.com", "sts:AssumeRoleWithWebIdentity", {"StringEquals": {"oidc.example.com:aud": "sts"}, "StringLike": {"oidc.example.com:sub": "system:serviceaccount:apps:*"}})
 }
 
 # ── Allowed: every trust document the repository builds ─────────────────────
@@ -264,7 +272,10 @@ test_unknown_trust_with_existing_provider_denied if {
 # trust names an OIDC provider created in the same run, so it is unknown until
 # apply. Denying it would block that run, so it stays advisory.
 test_unknown_trust_with_new_oidc_provider_is_advisory if {
-	inp := {"plan": {"resource_changes": [unknown_role, created("aws_iam_openid_connect_provider")]}}
+	inp := {"plan": {"resource_changes": [
+		in_module(unknown_role, "module.app_services"),
+		in_module(created("aws_iam_openid_connect_provider"), "module.app_services"),
+	]}}
 	count(p.deny) == 0 with input as inp
 	count(p.federated_unknown) == 1 with input as inp
 }
@@ -273,7 +284,124 @@ test_unknown_trust_with_new_oidc_provider_is_advisory if {
 # roles condition on the management account ID of the organization created in
 # the same run.
 test_unknown_trust_with_new_organization_is_advisory if {
-	inp := {"plan": {"resource_changes": [unknown_role, created("aws_organizations_organization")]}}
+	inp := {"plan": {"resource_changes": [
+		in_module(unknown_role, "module.aws_organization"),
+		in_module(created("aws_organizations_organization"), "module.aws_organization.module.organization"),
+	]}}
 	count(p.deny) == 0 with input as inp
 	count(p.federated_unknown) == 1 with input as inp
+}
+
+# ── Second review of SEC-1 (follow-up bypasses) ─────────────────────────────
+in_module(rc, addr) := object.union(rc, {"module_address": addr, "address": sprintf("%s.%s", [addr, rc.address])})
+
+# C1: ForAllValues is true when the key is absent from the request, so it pins nothing.
+test_for_all_values_is_not_a_pin if {
+	count(p.deny) == 2 with input as gh_role({"ForAllValues:StringEquals": {
+		"app.terraform.io:sub": "organization:o:project:p:workspace:w:run_phase:apply",
+		"app.terraform.io:aud": "aws.workload.identity",
+	}})
+}
+
+# C1: the condition keys must belong to the trusted provider; TFC keys pin
+# nothing on a GitHub provider.
+test_condition_keys_of_another_issuer_denied if {
+	count(p.deny) == 2 with input as gh_role({"StringEquals": {
+		"app.terraform.io:sub": "organization:o:project:p:workspace:w:run_phase:apply",
+		"app.terraform.io:aud": "aws.workload.identity",
+	}})
+}
+
+test_one_issuer_pinned_other_provider_ignored if {
+	count(p.deny) == 0 with input as role_doc({
+		"Effect": "Allow",
+		"Principal": {"Federated": [gh_provider, tfc_provider]},
+		"Action": "sts:AssumeRoleWithWebIdentity",
+		"Condition": {"StringEquals": object.union(tfc_aud, {"app.terraform.io:sub": "organization:o:project:p:workspace:w:run_phase:apply"})},
+	})
+}
+
+# I1: condition keys are case-insensitive in IAM.
+test_mixed_case_github_key_denied if {
+	count(p.deny) == 1 with input as gh_role({"StringEquals": {
+		"token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+		"Token.Actions.GitHubUserContent.com:sub": "workflow:deploy",
+	}})
+}
+
+test_mixed_case_tfc_key_passes if {
+	count(p.deny) == 0 with input as role({"StringEquals": {
+		"App.Terraform.IO:aud": "aws.workload.identity",
+		"APP.TERRAFORM.IO:SUB": "organization:o:project:p:workspace:w:run_phase:plan",
+	}})
+}
+
+# I2: any principal with a web-identity action fails closed.
+any_principal(principal, action) := role_doc({
+	"Effect": "Allow",
+	"Principal": principal,
+	"Action": action,
+	"Condition": {"StringEquals": object.union(tfc_aud, {"app.terraform.io:sub": "organization:o:project:p:workspace:w:run_phase:apply"})},
+})
+
+test_star_principal_web_identity_denied if count(p.deny) == 1 with input as any_principal("*", "sts:AssumeRoleWithWebIdentity")
+
+test_aws_star_principal_web_identity_denied if count(p.deny) == 1 with input as any_principal({"AWS": "*"}, "sts:*")
+
+test_aws_star_in_list_web_identity_denied if count(p.deny) == 1 with input as any_principal({"AWS": ["arn:aws:iam::111111111111:root", "*"]}, "sts:AssumeRoleWith*")
+
+test_star_principal_assume_role_ignored if count(p.deny) == 0 with input as any_principal("*", "sts:AssumeRole")
+
+# M1: the audience must be literal too.
+test_aud_wildcard_denied if {
+	count(p.deny) == 1 with input as role({"StringLike": {"app.terraform.io:aud": "*", "app.terraform.io:sub": "organization:o:project:p:workspace:w:run_phase:apply"}})
+}
+
+test_aud_partial_wildcard_denied if {
+	count(p.deny) == 1 with input as role({"StringLike": {"app.terraform.io:aud": "aws.workload.*", "app.terraform.io:sub": "organization:o:project:p:workspace:w:run_phase:apply"}})
+}
+
+# M2: a GitHub provider makes every subject a GitHub subject.
+test_github_provider_subject_without_repo_denied if {
+	count(p.deny) == 1 with input as gh_exact("environment:prod")
+}
+
+# I3: the unknown-trust exemption needs the created provider or organization
+# in the role's own module instance or below it.
+test_unknown_trust_provider_in_unrelated_module_denied if {
+	inp := {"plan": {"resource_changes": [
+		in_module(unknown_role, "module.attacker"),
+		in_module(created("aws_iam_openid_connect_provider"), "module.app_services"),
+	]}}
+	count(p.deny) == 1 with input as inp
+	count(p.federated_unknown) == 1 with input as inp
+}
+
+test_unknown_trust_update_of_unrelated_role_denied if {
+	rc := json.patch(in_module(unknown_role, "module.other"), [{"op": "replace", "path": "/change/actions", "value": ["update"]}])
+	count(p.deny) == 1 with input as {"plan": {"resource_changes": [rc, in_module(created("aws_iam_openid_connect_provider"), "module.app_services")]}}
+}
+
+# A role in a child module is not exempted by a provider in its parent.
+test_unknown_trust_provider_in_parent_module_denied if {
+	count(p.deny) == 1 with input as {"plan": {"resource_changes": [
+		in_module(unknown_role, "module.app_services.module.inner"),
+		in_module(created("aws_iam_openid_connect_provider"), "module.app_services"),
+	]}}
+}
+
+# A sibling module whose name extends the role's module name is not a descendant.
+test_unknown_trust_provider_in_prefix_sibling_denied if {
+	count(p.deny) == 1 with input as {"plan": {"resource_changes": [
+		in_module(unknown_role, "module.app"),
+		in_module(created("aws_iam_openid_connect_provider"), "module.app_services"),
+	]}}
+}
+
+# A role at the root may name a provider created anywhere below it.
+test_unknown_trust_root_role_child_provider_is_advisory if {
+	count(p.deny) == 0 with input as {"plan": {"resource_changes": [
+		unknown_role,
+		in_module(created("aws_iam_openid_connect_provider"), "module.app_services"),
+	]}}
 }

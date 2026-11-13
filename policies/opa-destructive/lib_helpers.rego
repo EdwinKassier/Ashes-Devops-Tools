@@ -80,3 +80,39 @@ unknown_or_not(rc, attr, expected) if known_and_not(rc, attr, expected)
 
 # Message suffix for a rule that uses unknown_or_not.
 unknown_hint := " (an unknown value counts as a violation: set a plan-known value)"
+
+# ── OIDC subject pinning (shared by the AWS and GCP federated-trust policies) ─
+# TFC: organization:<org>:project:<project>:workspace:<ws>:run_phase:<plan|apply>,
+# every segment literal and non-empty.
+tfc_subject_pinned(v) if {
+	not regex.match(`[*?]`, v)
+	parts := split(v, ":")
+	count(parts) == 8
+	parts[0] == "organization"
+	parts[2] == "project"
+	parts[4] == "workspace"
+	parts[6] == "run_phase"
+	parts[7] in {"plan", "apply"}
+	every i in [1, 3, 5] {
+		parts[i] != ""
+	}
+}
+
+# GitHub: a literal repository (repo:<owner>/<repo>: or repository_id:<id>) and
+# a ref:<ref> or environment:<env> segment. Forms such as
+# repo:<owner>/<repo>:pull_request, repository_owner_id:<id>:environment:<env>
+# or job_workflow_ref:... alone are not pinned.
+github_subject_pinned(v) if {
+	not regex.match(`[*?]`, v)
+	github_repo_pinned(v)
+	regex.match(`(^|:)(ref|environment):[^:]+(:|$)`, v)
+}
+
+github_repo_pinned(v) if regex.match(`^repo:[^/:]+/[^/:]+:`, v)
+
+github_repo_pinned(v) if regex.match(`(^|:)repository_id:[0-9]+(:|$)`, v)
+
+# The subject has a GitHub shape (default or customised claim template).
+github_subject_shape(v) if startswith(v, "repo:")
+
+github_subject_shape(v) if regex.match(`^repository_owner(_id)?:`, v)
