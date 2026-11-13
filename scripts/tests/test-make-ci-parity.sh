@@ -5,9 +5,9 @@
 # target that needs terraform init, pre-commit, git history or the network.
 #   bash scripts/tests/test-make-ci-parity.sh   (make test-scripts)
 #
-# Deliberately CI-only: the sharded validate/test matrices (make validate-all and
-# make test cover the same set), SARIF upload, harden-runner and the Validation
-# Summary gate.
+# Deliberately CI-only: the sharded validate/test/examples-plan matrices (make
+# validate-all, make test and make examples-plan cover the same set), SARIF
+# upload, harden-runner and the Validation Summary gate.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 block() { awk -v t="$1" '$0 ~ "^" t ":" {f=1;next} f&&/^[^\t]/{f=0} f' "${REPO_ROOT}/Makefile"; }
@@ -25,7 +25,7 @@ else
 fi
 for target in fmt-check consistency yamllint markdownlint-check zizmor commit-check module-api codeowners-check \
   scaffold-fixtures-check config-check count-check links examples-refs required-checks \
-  backend-check shellcheck test-scripts docs-check validate-all lint test \
+  backend-check shellcheck test-scripts docs-check validate-all examples-plan lint test \
   opa-test security; do
   if runs "${ci_block}" "${target}" || runs "${quick_block}" "${target}"; then
     printf '  ok   make ci runs %s\n' "${target}"
@@ -35,7 +35,7 @@ for target in fmt-check consistency yamllint markdownlint-check zizmor commit-ch
   fi
 done
 # ci-quick is the offline subset: these need init, pre-commit, git history or the network.
-for target in validate-all lint test security backend-check opa-test yamllint markdownlint-check \
+for target in validate-all examples-plan lint test security backend-check opa-test yamllint markdownlint-check \
   zizmor commit-check module-api codeowners-check; do
   if runs "${quick_block}" "${target}"; then
     printf '  FAIL make ci-quick runs %s, which is not an offline gate\n' "${target}" >&2

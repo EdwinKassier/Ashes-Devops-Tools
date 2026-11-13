@@ -21,6 +21,9 @@ plan.out
 terraform.plan
 tfplan
 
+# Temporary example copies of scripts/plan-module-examples.sh (removed on exit)
+.plan-check-*/
+
 # Agent/worktree scratch directories (never commit)
 .claire/
 .claude/worktrees/

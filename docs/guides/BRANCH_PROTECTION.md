@@ -16,7 +16,7 @@ job in `terraform-plan.yml`).
 | `Validation Summary` | `summary` (fail-closed aggregator) |
 
 `Validation Summary` `needs:` every other PR job — `discover`, `fmt`, `docs`, `validate`,
-`lint`, `meta-lint`, `security`, `test`, `shellcheck`, `opa`, `codeowners` — runs with
+`examples-plan`, `lint`, `meta-lint`, `security`, `test`, `shellcheck`, `opa`, `codeowners` — runs with
 `if: always()`, and fails closed if any of them failed **or was skipped**. One stable
 context therefore gates every check, and adding or renaming a job never needs a
 branch-protection change.
@@ -25,7 +25,8 @@ Do **not** add the individual job contexts. Several emit a different context per
 shape and would block every PR forever if listed verbatim:
 
 - **Sharded matrix jobs** emit one context *per shard*, never a bare name:
-  `Validate (shard N)` (10 shards) and `Terraform Tests (shard N)` (6 shards). A
+  `Validate (shard N)` (10 shards), `Examples Plan (shard N)` (4 shards) and
+  `Terraform Tests (shard N)` (6 shards). A
   required `Terraform Tests` or `validate` context is never reported, so GitHub waits
   on it indefinitely. The shard count can also change.
 - **The `security` job calls a reusable workflow**, so its contexts are
@@ -40,7 +41,8 @@ command below and fails if any listed context is not a non-matrix job `name:` in
 Set via **Settings → Branches → main → Require status checks to pass before merging**.
 
 > **The repo checks validate; they do not plan (audit H6).** `Validation Summary`
-> and every job it gates run `terraform validate -backend=false` and the `mock_provider` tests. None
+> and every job it gates run `terraform validate -backend=false`, the `mock_provider` tests and a
+> `mock_provider` plan of every module example (`make examples-plan`). None
 > runs a real plan against state, so none shows the blast radius of a change. The
 > actual plan is Terraform Cloud's **speculative plan**, posted as its own check
 > (e.g. `Terraform Cloud/<org>/<workspace>`) by the TFC VCS integration. For roots

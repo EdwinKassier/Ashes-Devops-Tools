@@ -30,6 +30,14 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 #### Added
 
+- **New gate: every module example plans under mock providers.** `make examples-plan`
+  (`scripts/plan-module-examples.sh`; in `make ci` and the `Examples Plan (shard N)` CI jobs
+  that `Validation Summary` gates) copies each `modules/**/examples/basic` to a hidden sibling
+  directory, mocks every provider and provider alias it declares, and runs `terraform test` with
+  one `command = plan` run. `terraform validate` alone had passed examples that could not plan.
+  The three tag-pinned examples are planned against the checkout's module code. No credentials
+  are needed.
+
 - **App-service Cloud SQL backup location and PITR log retention from config.** An app service's
   `database` block (`gcp.environments.<env>.services.<name>.database` in
   `config/landing-zone.yaml`, or the `app_services` variable) now accepts `backup_location` (a

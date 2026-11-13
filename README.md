@@ -315,6 +315,7 @@ make ci                    # Every workstation-runnable CI gate (see make -n ci)
 make fmt                   # Format all Terraform files
 make test                  # Run every .tftest.hcl suite (no cloud creds needed)
 make validate-all          # terraform validate across all roots
+make examples-plan         # Plan every modules/**/examples/basic under mock providers (no creds needed)
 make lint                  # TFLint with the GCP + AWS rulesets
 make security              # Trivy (IaC config) + Checkov — tfsec is EOL and no longer used
 make count                 # Live module / root / test-suite counts

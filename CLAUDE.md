@@ -104,13 +104,14 @@ make docs           # terraform-docs on every module and the 15 roots (auto-gene
 make docs-check     # same but exits non-zero if READMEs are stale
 make test           # runs all *.tftest.hcl with mock_provider — no real creds needed
 make validate-all   # terraform validate across all modules
+make examples-plan  # plan every modules/**/examples/basic under mock providers (terraform test); EXAMPLES="dirs" limits it
 make lint           # tflint
 make security       # trivy config + checkov (versions pinned in .tool-versions; tfsec is EOL/removed)
 make count          # print live module/root/test-suite counts (make count-check enforces README/CLAUDE.md)
 make links          # fail on broken repo-relative Markdown links
 make shellcheck     # shellcheck scripts/*.sh
 make ci-quick       # fast offline gates (no terraform init): fmt, consistency, config, fixtures, counts, links, refs, required checks, shellcheck, script tests, docs
-make ci             # ci-quick + yamllint, markdownlint-check, zizmor, commit-check, module-api, codeowners-check, backend-check, validate-all, lint, test, opa-test, security (every workstation-runnable CI gate; needs pre-commit, cz, uv (zizmor), check-jsonschema, opa 1.22.2, a fetched origin/main)
+make ci             # ci-quick + yamllint, markdownlint-check, zizmor, commit-check, module-api, codeowners-check, backend-check, validate-all, examples-plan, lint, test, opa-test, security (every workstation-runnable CI gate; needs pre-commit, cz, uv (zizmor), check-jsonschema, opa 1.22.2, a fetched origin/main)
 ```
 
 ---
@@ -127,7 +128,7 @@ make ci             # ci-quick + yamllint, markdownlint-check, zizmor, commit-ch
 
 - State backend: **Terraform Cloud** (remote).
 - **Never run `terraform apply` locally** against any GCP root — `envs/gcp/bootstrap`, `envs/gcp/organization`, `envs/gcp/guardrails`, `envs/gcp/projects`, `envs/gcp/network-hub` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design). The Makefile `apply-gcp-*` targets deliberately refuse.
-- CI (GitHub Actions) runs `fmt`, `docs-check`, `validate` (10 shards), `lint`, Trivy, `checkov`, `test` and meta-lint (yaml/markdown/commits, counts, links) on PR; `Validation Summary` is the single required check.
+- CI (GitHub Actions) runs `fmt`, `docs-check`, `validate` (10 shards), `examples-plan` (4 shards: every module example planned under mock providers), `lint`, Trivy, `checkov`, `test` and meta-lint (yaml/markdown/commits, counts, links) on PR; `Validation Summary` is the single required check.
 - Terraform Cloud executes the actual apply.
 
 ---

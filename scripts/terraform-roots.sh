@@ -43,6 +43,12 @@ collect_examples() {
   done
 }
 
+# The per-module examples (modules/**/examples/basic with a versions.tf): the
+# set scripts/plan-module-examples.sh plans under mock providers.
+collect_module_examples() {
+  collect_examples | grep -E '^modules/.+/examples/basic$' || true
+}
+
 # Opt-in real-apply e2e roots (tests/e2e/<cloud>). Their *.tftest.hcl suites
 # need real credentials and run only in sandbox-e2e.yml, but the roots
 # themselves must still `terraform init -backend=false && terraform validate`
@@ -92,6 +98,14 @@ case "$mode" in
   e2e)
     collect_e2e
     ;;
+  module-examples)
+    collect_module_examples
+    ;;
+  module-examples-json)
+    dirs=()
+    while IFS= read -r line; do dirs+=("$line"); done < <(collect_module_examples)
+    emit_json ${dirs[@]+"${dirs[@]}"}
+    ;;
   tests)
     collect_test_dirs
     ;;
@@ -121,7 +135,7 @@ case "$mode" in
     emit_json ${roots[@]+"${roots[@]}"}
     ;;
   *)
-    echo "Usage: $0 [modules|envs|examples|e2e|all|all-json|tests|tests-json]" >&2
+    echo "Usage: $0 [modules|envs|examples|module-examples|module-examples-json|e2e|all|all-json|tests|tests-json]" >&2
     exit 1
     ;;
 esac

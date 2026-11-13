@@ -53,6 +53,7 @@ jobs:
     outputs:
       roots: ${{ steps.roots.outputs.roots }}
       test_dirs: ${{ steps.tests.outputs.test_dirs }}
+      examples: ${{ steps.examples.outputs.examples }}
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
       - name: Harden runner
@@ -92,6 +93,20 @@ jobs:
             exit 1
           fi
           echo "test_dirs=${dirs}" >> "$GITHUB_OUTPUT"
+
+      - name: Discover module examples
+        id: examples
+        # Same fail-closed rule: zero examples would make every examples-plan
+        # shard trivially green.
+        run: |
+          dirs="$(./scripts/terraform-roots.sh module-examples-json)"
+          count="$(jq 'length' <<<"$dirs")"
+          echo "Discovered ${count} module examples"
+          if [ "$count" -lt 1 ]; then
+            echo "::error::Module example discovery returned no examples"
+            exit 1
+          fi
+          echo "examples=${dirs}" >> "$GITHUB_OUTPUT"
 
   fmt:
     name: Terraform Format
@@ -257,6 +272,70 @@ jobs:
               printf -- '- %s\n' "${failed[@]}"
             } >> "$GITHUB_STEP_SUMMARY"
             echo "::error::${#failed[@]} root(s) failed in this shard: ${failed[*]}"
+            exit 1
+          fi
+
+  # validate accepts an example that cannot plan (a for_each over an unknown
+  # value, a precondition, a validation that only sees the real input, a
+  # provider alias the module needs). Every modules/**/examples/basic is
+  # planned here under mock providers: scripts/plan-module-examples.sh copies
+  # it beside itself, mocks every provider and alias it declares, and runs
+  # `terraform test` with one `command = plan` run. No credentials.
+  examples-plan:
+    name: Examples Plan (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Restore provider plugin cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            tf-plugins-${{ runner.os }}-
+
+      - name: Plan the module examples in this shard
+        env:
+          EXAMPLES_JSON: ${{ needs.discover.outputs.examples }}
+          SHARD_INDEX: ${{ strategy.job-index }}
+          SHARD_TOTAL: ${{ strategy.job-total }}
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          mapfile -t dirs < <(jq -r --argjson i "$SHARD_INDEX" --argjson n "$SHARD_TOTAL" \
+            'to_entries[] | select(.key % $n == $i) | .value' <<<"$EXAMPLES_JSON")
+          echo "Shard $((SHARD_INDEX + 1))/${SHARD_TOTAL}: ${#dirs[@]} examples"
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "::notice::No examples assigned to this shard (fewer examples than shards)."
+            exit 0
+          fi
+          if ! ./scripts/plan-module-examples.sh "${dirs[@]}" | tee plan-examples.log; then
+            {
+              echo "### Examples plan shard $((SHARD_INDEX + 1)) failures"
+              grep '^FAIL ' plan-examples.log | sed 's/^FAIL /- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::module example(s) failed to plan in this shard"
             exit 1
           fi
 
@@ -703,7 +782,7 @@ jobs:
     name: Validation Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [discover, fmt, docs, validate, lint, meta-lint, security, test, shellcheck, opa, codeowners]
+    needs: [discover, fmt, docs, validate, examples-plan, lint, meta-lint, security, test, shellcheck, opa, codeowners]
     if: always()
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
@@ -723,6 +802,7 @@ jobs:
             echo "| Format | ${{ needs.fmt.result }} |"
             echo "| Docs | ${{ needs.docs.result }} |"
             echo "| Validate | ${{ needs.validate.result }} |"
+            echo "| Examples Plan | ${{ needs.examples-plan.result }} |"
             echo "| TFLint | ${{ needs.lint.result }} |"
             echo "| Meta Lint | ${{ needs.meta-lint.result }} |"
             echo "| Security | ${{ needs.security.result }} |"
@@ -748,6 +828,7 @@ jobs:
             "fmt=${{ needs.fmt.result }}" \
             "docs=${{ needs.docs.result }}" \
             "validate=${{ needs.validate.result }}" \
+            "examples-plan=${{ needs.examples-plan.result }}" \
             "lint=${{ needs.lint.result }}" \
             "meta-lint=${{ needs.meta-lint.result }}" \
             "security=${{ needs.security.result }}" \
