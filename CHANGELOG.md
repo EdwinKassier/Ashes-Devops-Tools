@@ -97,6 +97,14 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   which would have collided with them. The remaining gaps are named: no hourly rule, no locked
   DR-region vault, the workload CMK grant, `transaction_log_retention_days` and
   `backup_location` not in config, and a 6-hour multi-region Cloud SQL plan, still raw.
+- **Production config and hardening in walkthroughs 09, 12, 16 and 17.** The GCP perimeter
+  holds the service-team projects, so `09` now says signed-URL uploads need an ingress rule or
+  buckets outside the environment. Production environments in `12`, `16` and `17` set zones
+  and an egress choice and name the VPC-SC waiver; `16` sets the hub zones for its
+  `org.regions.gcp` and explains why its second region cannot use the hub proxy. `09`'s media
+  buckets get a public access block and versioning, and its CloudFront distribution a Web ACL,
+  access logs and an ACM certificate with a TLS 1.2 floor. `17` says why the per-tenant key
+  cannot use `modules/aws/data/kms-key`.
 
 ### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
 

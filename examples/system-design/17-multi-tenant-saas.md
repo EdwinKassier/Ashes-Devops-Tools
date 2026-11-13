@@ -437,9 +437,11 @@ Two repo facts that shape the design. AWS environment names must match
 ([`envs/aws/workload/variables.tf`](../../envs/aws/workload/variables.tf)),
 so use `acme-prod` as the environment and `tenant_acme_prod` only as the
 account key. And egress differs: an AWS silo's traffic goes through the shared
-inspection VPC in the network account, while each GCP environment has its own
-Cloud NAT, not inspected through the hub. A tenant demanding its own egress
-path gets it on GCP by default.
+inspection VPC in the network account. Each GCP environment with the egress
+proxy off or waived has its own Cloud NAT, not inspected, so a tenant
+demanding its own egress path gets it there. With `egress_proxy` on, every
+environment in the hub region shares the hub Secure Web Proxy and its one
+allowlist.
 
 ## Trade-offs to defend
 
@@ -539,6 +541,9 @@ gcp:
   environments:
     prod:
       cidr_block: 10.30.0.0/16
+      is_production: true
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c] # required when is_production
+      egress_proxy: true # or production_egress_proxy_waiver on the workspace
       service_teams:
         tenant-globex:
           project_admin_group_email: tenant-ops@my-org.example.com
@@ -547,9 +552,11 @@ gcp:
             primary: {region: europe-west2, subnet_name: my-org-prod-vpc-private-europe-west2-a}
           labels: {tenant: globex}
     acme-prod:
-      region: europe-west2
+      region: europe-west2 # the hub region, so the hub proxy can serve it
       cidr_block: 10.70.0.0/16
       is_production: true
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c]
+      egress_proxy: true
       budget_monthly_limit: 3000
 saas:
   workspaces: [web, acme]
@@ -560,7 +567,11 @@ saas:
 ```
 
 A real tenant appears in one cloud; the example shows all three to name the
-keys. Apply `tenant-globex` before the GCP snippet below, which places
+keys. Each production GCP environment also needs an enforced VPC-SC perimeter,
+or a time-boxed `production_vpc_sc_dry_run_waiver` on its `gcp-workload-<env>`
+workspace in `config/tfc-workspaces.yaml`, and `egress_proxy: true` needs
+`secure_web_proxy` on `gcp-network-hub` first
+([production hardening](../../docs/runbooks/production-hardening.md#1-vpc-service-controls-promote-from-dry-run-to-enforced-audit-m2)). Apply `tenant-globex` before the GCP snippet below, which places
 resources in its project.
 
 ### AWS: per-tenant keys and the pool's tenant-access role
@@ -576,7 +587,9 @@ Arguments checked against aws v6.72.0
 checked 2026-11).
 
 ```hcl
-# Gap: no per-tenant key or tenant-access role in the repo; raw resources in the landing zone's conventions.
+# Gap: modules/aws/data/kms-key grants key use to named principals in the key policy and has
+# no IAM delegation, which would bypass the session-tag policy below; the per-tenant key is
+# raw, like the workload key in envs/aws/workload/kms.tf. No module has a tenant-access role.
 locals {
   bridge_tenants = toset(["globex", "initech"]) # exported from the tenant registry; slugs, never names
   arn_prefix     = "arn:${data.aws_partition.current.partition}"

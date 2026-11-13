@@ -522,7 +522,7 @@ account cap.
 |---|---|---|
 | upload-api, transcode-dispatcher, videos DB | `aws-workload-<env>` (`envs/aws/workload`) through app-services | `gcp-workload-<env>` (`envs/gcp/workload`) through app-services in the environment stage |
 | Buckets, events, transcoder, CDN | Raw resources in `envs/aws/workload` | Raw resources in `envs/gcp/workload` |
-| Egress to transcoder APIs | TGW and inspection in `aws-network` | Private Google Access; not inspected |
+| Egress to transcoder APIs | TGW and inspection in `aws-network` | Private Google Access; other internet calls take Cloud NAT, not inspected (egress proxy off or waived), or the hub Secure Web Proxy with `egress_proxy` on |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
 Services sit in `private`, the database in `isolated` (AWS) or on Private
@@ -531,11 +531,18 @@ buckets, queues and transcoders are in no tier. The AWS hub's central endpoints
 omit MediaConvert, so `mediaconvert.<region>.amazonaws.com` must pass
 `aws.network.egress_domain_allowlist`; S3 uses the spoke's gateway endpoint.
 
-**GCP perimeter.** The environment perimeter protects only the host project,
-restricts `storage.googleapis.com`, and starts in dry-run. Before enforcing it,
-move the media buckets into a `gcp.environments.<env>.service_teams` project,
-or internet uploads will fail; **verify before relying on** how Cloud CDN fill
-is evaluated. The org policy `iam.allowedPolicyMemberDomains` can also block
+**GCP perimeter.** The environment perimeter holds the host project and every
+`gcp.environments.<env>.service_teams` project, restricts
+`storage.googleapis.com`, and starts in dry-run. A production plan fails on a
+dry-run perimeter unless `production_vpc_sc_dry_run_waiver` is set on the
+workspace ([production hardening](../../docs/runbooks/production-hardening.md#1-vpc-service-controls-promote-from-dry-run-to-enforced-audit-m2)).
+Signed-URL uploads come from the internet, outside the perimeter, so once it is
+enforced they fail unless a `vpc_sc_ingress_policies` rule on
+`gcp-workload-<env>` admits the signing service account from any source to
+Cloud Storage on the media project, or the media buckets live in a project
+outside the environment (neither the host nor a service-team project).
+**Verify before relying on** both the ingress rule for signed URLs and how
+Cloud CDN fill is evaluated. The org policy `iam.allowedPolicyMemberDomains` can also block
 the `cloud-cdn-fill` grant; Google says to allowlist the organization that owns
 that account
 ([Google Cloud docs](https://docs.cloud.google.com/cdn/docs/using-signed-cookies), checked 2026-11),
@@ -588,7 +595,9 @@ In `envs/aws/workload`, using `local.environment`, `local.aws_region` and
 - A queue policy admits `events.amazonaws.com` only with `aws:SourceArn`
   equal to the rule's ARN, as in the [microservices walkthrough](03-microservices-sync-async.md#aws-the-orders-topic-and-one-consumer-queue).
 - A raw-bucket lifecycle rule aborts incomplete multipart uploads after 7
-  days and moves `sources/` to `STANDARD_IA` after 30.
+  days and moves `sources/` to `STANDARD_IA` after 30. On both buckets a rule
+  expires noncurrent versions after 7 days, so versioning does not double the
+  storage bill.
 - The MediaConvert role `<env>-transcode-mediaconvert` (trusts
   `mediaconvert.amazonaws.com`, carries the `tfc-apply-boundary`) reads raw,
   writes serving, and holds the two KMS actions
@@ -605,6 +614,23 @@ resource "aws_s3_bucket" "media" {
   for_each = toset(["raw", "serving"])
   bucket   = "${local.environment}-media-${each.key}" # <env>-<dataset>-<zone>; add <prefix>- on collision
   tags     = { Service = "media" }
+}
+
+resource "aws_s3_bucket_public_access_block" "media" {
+  for_each                = aws_s3_bucket.media
+  bucket                  = each.value.id
+  block_public_acls       = true
+  block_public_policy     = true # the OAC policy names a service principal, so it is not public
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "media" {
+  for_each = aws_s3_bucket.media
+  bucket   = each.value.id
+  versioning_configuration {
+    status = "Enabled" # recovers an overwritten or deleted source or rendition
+  }
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "media" {
@@ -667,8 +693,11 @@ resource "aws_media_convert_queue" "transcode" {
 ### AWS: the CDN in front of the serving bucket
 
 The repo's [`modules/aws/security/edge-security`](../../modules/aws/security/edge-security/)
-fronts a custom or VPC origin only, so the S3 origin with OAC is raw. Attach its
-style of CloudFront Web ACL through `web_acl_id`.
+fronts a custom or VPC origin only, so the S3 origin with OAC is raw. It
+follows the module's baseline: a `CLOUDFRONT`-scope Web ACL through
+`web_acl_id` (for example edge-security's `web_acl_arn`), access logs, and an
+ACM certificate with TLS 1.2 as the floor. The variables are new inputs of the
+root.
 
 ```hcl
 # Gap: edge-security has no S3 origin with OAC; raw resources in the landing zone's conventions.
@@ -690,7 +719,9 @@ resource "aws_cloudfront_key_group" "media" {
 }
 
 resource "aws_cloudfront_distribution" "media" {
-  enabled = true
+  enabled    = true
+  aliases    = ["media.example.com"] # a registrable domain shared with upload-api, for the cookies
+  web_acl_id = var.media_web_acl_arn # WAFv2 Web ACL ARN, CLOUDFRONT scope (us-east-1)
   origin {
     origin_id                = "serving"
     domain_name              = aws_s3_bucket.media["serving"].bucket_regional_domain_name
@@ -711,15 +742,23 @@ resource "aws_cloudfront_distribution" "media" {
   restrictions {
     geo_restriction { restriction_type = "none" }
   }
-  viewer_certificate { cloudfront_default_certificate = true } # cookies need a custom domain under the API's, with an ACM cert
+  logging_config {
+    bucket = var.cloudfront_log_bucket_domain_name # an ACL-enabled bucket in this account (standard logs)
+    prefix = "cloudfront/media/"
+  }
+  viewer_certificate {
+    acm_certificate_arn      = var.media_certificate_arn # ACM, us-east-1, covers the alias
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
   tags = { Service = "media" }
 }
 ```
 
 The serving bucket's policy admits `cloudfront.amazonaws.com` to
 `s3:GetObject` with `AWS:SourceArn` set to this distribution. Cookies
-set by upload-api reach the CDN only if both share a registrable domain (say
-`media.example.com`), so add an alias and certificate before launch.
+set by upload-api reach the CDN only if both share a registrable domain, which
+is why the distribution has the `media.example.com` alias.
 
 ### GCP: buckets, the upload notification and the CDN backend
 
