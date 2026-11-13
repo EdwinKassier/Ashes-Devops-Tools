@@ -33,8 +33,9 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 - **App-service Cloud SQL backup location and PITR log retention from config.** An app service's
   `database` block (`gcp.environments.<env>.services.<name>.database` in
   `config/landing-zone.yaml`, or the `app_services` variable) now accepts `backup_location` (a
-  region, or `us`, `eu`, `asia`) and `transaction_log_retention_days` (1 to 35; Cloud SQL allows
-  more than 7 only on Enterprise Plus). The schema rejected both keys before, and app-services
+  region, or `us`, `eu`, `asia`) and `transaction_log_retention_days` (1 to 7, or up to 35 with
+  `edition: ENTERPRISE_PLUS`; the schema and `cloud-sql` reject more than 7 on ENTERPRISE, which
+  Cloud SQL would refuse at apply). The schema rejected both keys before, and app-services
   did not forward `transaction_log_retention_days`. Unset, both keep today's values
   (the instance region, 7 days), so no existing plan changes. `cloud-sql` gains a
   `transaction_log_retention_days` output and treats a null value as 7; the app-services

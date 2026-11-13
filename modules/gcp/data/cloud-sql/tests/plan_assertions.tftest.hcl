@@ -223,6 +223,8 @@ run "transaction_log_retention_explicit" {
   command = plan
 
   variables {
+    edition                        = "ENTERPRISE_PLUS"
+    tier                           = "db-perf-optimized-N-2"
     transaction_log_retention_days = 14
   }
 

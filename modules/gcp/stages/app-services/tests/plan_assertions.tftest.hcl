@@ -963,7 +963,7 @@ run "database_backup_location_and_log_retention_forwarded" {
   variables {
     services = {
       api = {
-        database = { backup_location = "eu", transaction_log_retention_days = 21 }
+        database = { edition = "ENTERPRISE_PLUS", tier = "db-perf-optimized-N-2", backup_location = "eu", transaction_log_retention_days = 21 }
       }
       batch = {
         database = {}

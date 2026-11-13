@@ -876,7 +876,7 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 35,
-                          "description": "Days of transaction (WAL) logs kept for point-in-time recovery: 1 to 7 on ENTERPRISE, 1 to 35 on ENTERPRISE_PLUS. Unset = 7."
+                          "description": "Days of transaction (WAL) logs kept for point-in-time recovery: 1 to 7 on ENTERPRISE (the default edition), 1 to 35 with edition: ENTERPRISE_PLUS. Unset = 7."
                         },
                         "encryption_key_name": {
                           "type": "string"
@@ -885,7 +885,26 @@
                           "type": "boolean"
                         }
                       },
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "if": {
+                        "not": {
+                          "properties": {
+                            "edition": {
+                              "const": "ENTERPRISE_PLUS"
+                            }
+                          },
+                          "required": [
+                            "edition"
+                          ]
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "transaction_log_retention_days": {
+                            "maximum": 7
+                          }
+                        }
+                      }
                     },
                     "github": {
                       "type": "object",

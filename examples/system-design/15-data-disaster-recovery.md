@@ -379,7 +379,8 @@ Gaps this design must close, each checked against the code:
    app service's `database.backup_location` (a region, or `us`, `eu`, `asia`;
    default the instance region) and `database.transaction_log_retention_days`
    (PITR logs, default 7; Cloud SQL allows 1 to 7 on Enterprise and 1 to 35 on
-   Enterprise Plus). The GCP Backup and DR vault
+   Enterprise Plus, so more than 7 needs `database.edition: ENTERPRISE_PLUS`,
+   which the schema and the plan check). The GCP Backup and DR vault
    ([`modules/gcp/backup/backup-vault`](../../modules/gcp/backup/backup-vault/),
    `backup_vault`) is regional with a daily plan.
 5. **DynamoDB backups cannot leave the account.** Cross-Region and

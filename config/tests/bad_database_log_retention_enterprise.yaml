@@ -1,0 +1,11 @@
+# Expected to FAIL schema validation: more than 7 days of PITR logs needs
+# database.edition: ENTERPRISE_PLUS (the default edition is ENTERPRISE).
+version: 1
+gcp:
+  environments:
+    dev:
+      is_production: false
+      services:
+        api:
+          database:
+            transaction_log_retention_days: 14

@@ -105,7 +105,21 @@ run "accepts_max_log_retention" {
   command = plan
 
   variables {
+    edition                        = "ENTERPRISE_PLUS"
+    tier                           = "db-perf-optimized-N-2"
     transaction_log_retention_days = 35
+  }
+}
+
+# Cloud SQL keeps at most 7 days of logs on the Enterprise edition.
+run "rejects_log_retention_above_enterprise_max" {
+  command = plan
+
+  expect_failures = [var.transaction_log_retention_days]
+
+  variables {
+    edition                        = "ENTERPRISE"
+    transaction_log_retention_days = 14
   }
 }
 

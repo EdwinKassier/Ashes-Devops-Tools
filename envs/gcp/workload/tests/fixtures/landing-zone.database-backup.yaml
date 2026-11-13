@@ -15,6 +15,8 @@ gcp:
       services:
         api:
           database:
+            edition: ENTERPRISE_PLUS # more than 7 days of PITR logs needs Enterprise Plus
+            tier: db-perf-optimized-N-2
             backup_location: europe-west2
             transaction_log_retention_days: 14
         worker:

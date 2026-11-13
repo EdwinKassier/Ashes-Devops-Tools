@@ -133,6 +133,13 @@ variable "transaction_log_retention_days" {
     condition     = var.transaction_log_retention_days >= 1 && var.transaction_log_retention_days <= 35
     error_message = "transaction_log_retention_days must be between 1 and 35."
   }
+
+  # Google (configure-pitr): "from 1-35 for Cloud SQL Enterprise Plus edition,
+  # or 1-7 for Cloud SQL Enterprise edition".
+  validation {
+    condition     = var.edition != "ENTERPRISE" || var.transaction_log_retention_days <= 7
+    error_message = "transaction_log_retention_days must be at most 7 on edition = ENTERPRISE. Google's configure-pitr limit: \"from 1-35 for Cloud SQL Enterprise Plus edition, or 1-7 for Cloud SQL Enterprise edition\". Set edition = ENTERPRISE_PLUS (with a db-perf-optimized-* tier) for a longer window."
+  }
 }
 
 # -----------------------------------------------------------------------------
