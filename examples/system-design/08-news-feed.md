@@ -475,8 +475,8 @@ times its normal reads. Give it its own capacity plan.
 Per [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)),
 cache traffic stays in the VPC: on AWS from the `private`
 tier to the `isolated` tier; on GCP from Cloud Run's Direct VPC egress to a
-private range, which the app-services default `PRIVATE_RANGES_ONLY` already
-routes into the VPC.
+private range, which both Direct VPC egress settings (`PRIVATE_RANGES_ONLY`
+and `ALL_TRAFFIC`) route into the VPC.
 
 ### Config
 

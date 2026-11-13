@@ -74,6 +74,10 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 #### Fixed
 
+- **The spoke egress proxy endpoint must be in the hub proxy region (ARC-H2).** net-spoke fails the
+  plan when `egress_proxy` is on and the spoke region differs from the region of the hub proxy's
+  service attachment. Google requires a Private Service Connect endpoint in the region of the
+  published service, so this configuration failed at apply before.
 - **Every root's backend now initialises (C1).** All 14 `envs/**/backend.tf`, plus both clone-me
   templates, declared `backend "cloud" {}`. That is not a valid backend type: Terraform rejects
   it, so `terraform init` failed on every root. They are now top-level `cloud {}` blocks.
@@ -720,6 +724,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   custom role `landingZoneLoggingConfigViewer` (input `logging_config_viewer_role_id`) holds only
   the logging configuration get/list permissions the gcp-organization refresh needs. Apply
   gcp-bootstrap to take it. See `UPGRADING.md`.
+- **Cloud Run goes through the hub egress proxy when it is on (ARC-H1, breaking).** App-services
+  `vpc_egress` defaulted to `PRIVATE_RANGES_ONLY`, so Cloud Run internet traffic skipped Cloud
+  NAT and the hub Secure Web Proxy. With the environment egress proxy on, every Cloud Run service
+  and job now defaults to `ALL_TRAFFIC` and gets `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` for
+  the proxy endpoint; production rejects an explicit `PRIVATE_RANGES_ONLY`. The gcp-network-hub
+  contract carries `egress_proxy_port`. With the proxy off nothing changes. See `UPGRADING.md`.
 
 ### Changed
 

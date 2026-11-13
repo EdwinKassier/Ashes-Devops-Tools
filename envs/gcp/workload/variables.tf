@@ -141,13 +141,14 @@ variable "projects_contract" {
 }
 
 variable "network_hub_contract" {
-  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc_hub_id, ncc_spoke_group} it joins when network_connectivity = ncc. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
+  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc_hub_id, ncc_spoke_group} it joins when network_connectivity = ncc, and the optional hub egress proxy {egress_proxy_service_attachment, egress_proxy_port (null = 443)}. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
   type = object({
     vpc_self_link                   = string
     dns_domain                      = string
     ncc_hub_id                      = optional(string)
     ncc_spoke_group                 = optional(string)
     egress_proxy_service_attachment = optional(string)
+    egress_proxy_port               = optional(number)
   })
   default = null
 

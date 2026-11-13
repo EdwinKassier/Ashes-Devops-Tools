@@ -615,8 +615,9 @@ Walkthrough #14 elaborates; this table is the rule.
   org's VPC Block Public Access
   ([`modules/aws/stages/workload/main.tf:262`](../../modules/aws/stages/workload/main.tf)).
 - **GCP `private`:** the environment's Cloud NAT, not inspected through the hub.
-  Cloud Run with `PRIVATE_RANGES_ONLY`, the app-services default
-  ([`modules/gcp/stages/app-services/variables.tf:219`](../../modules/gcp/stages/app-services/variables.tf)),
+  Cloud Run with `PRIVATE_RANGES_ONLY`, the app-services default while the
+  environment egress proxy is off
+  ([`modules/gcp/stages/app-services/variables.tf`](../../modules/gcp/stages/app-services/variables.tf)),
   sends only internal-range traffic into the VPC. Its internet-bound traffic
   bypasses the VPC firewall and Cloud NAT. `ALL_TRAFFIC` sends everything
   through the VPC
@@ -897,7 +898,9 @@ Notes:
   checked 2026-11).
 - Grants for the component's own resources go on those resources, not on the
   project, as in [Per-component identity](#per-component-identity).
-- `ALL_TRAFFIC` differs from the app-services default `PRIVATE_RANGES_ONLY`.
+- `ALL_TRAFFIC` differs from the app-services default `PRIVATE_RANGES_ONLY`
+  (the default while the environment egress proxy is off; with it on, the
+  default is `ALL_TRAFFIC`).
   It is chosen here so that internet-bound traffic meets the VPC's controls. See
   [VPC-tier placement](#vpc-tier-placement).
 

@@ -1714,6 +1714,49 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Cloud Run uses the egress proxy when it is on (gcp-workload, app-services, ARC-H1)
+
+**Who:** every `gcp-workload-<env>` with the egress proxy on
+(`gcp.environments.<env>.egress_proxy: true` or `enable_egress_proxy`) and at
+least one app service or job. Environments with the proxy off see no change.
+**What changes:** `vpc_egress` now defaults to null. With the proxy on, null
+means `ALL_TRAFFIC`; with it off, null means `PRIVATE_RANGES_ONLY`, as before.
+With the proxy on, every Cloud Run service and job also gets `HTTPS_PROXY`,
+`HTTP_PROXY` and `NO_PROXY` (and the lower-case forms) for
+`http://<PSC endpoint>:<port>`. The plan shows an in-place update of each
+service and job (a new revision). Before, Cloud Run sent internet traffic on
+its own path and skipped the proxy.
+**Breaking:** a production environment with the proxy on now fails the plan
+when a service sets `vpc_egress: PRIVATE_RANGES_ONLY`. Remove the key (the
+default is then `ALL_TRAFFIC`) or set `ALL_TRAFFIC`. To keep a service off the
+proxy, turn the proxy off for the environment, which needs
+`production_egress_proxy_waiver`.
+
+Steps:
+
+1. Apply gcp-network-hub once (a refresh is enough). Its contract gains
+   `hub_network.egress_proxy_port`, the proxy's first port. Until then the
+   environments use 443, the hub default. If you set `gcp.contracts.network_hub`
+   in `config/landing-zone.yaml` and the hub proxy listens on another port, add
+   `egress_proxy_port` there.
+2. Check that each service's HTTP clients honour the proxy variables, and that
+   every FQDN a service calls is in `secure_web_proxy.allowed_fqdns`. With the
+   proxy on, the private tier has no Cloud NAT, so a call the proxy does not
+   carry fails.
+3. To extend `NO_PROXY` (for example with an internal host name), set
+   `NO_PROXY` and `no_proxy` in the service's `env_vars`. A service's own
+   `env_vars` win over the injected values, so repeat the defaults you keep
+   (the `egress_proxy_settings` output of the app-services stage lists them).
+
+#### An environment outside the hub region cannot use the hub egress proxy (net-spoke, ARC-H2)
+
+**Who:** a `gcp-workload-<env>` with the egress proxy on whose region differs
+from the hub Secure Web Proxy region. **What changes:** the plan fails with a
+message that names both regions. Google creates a Private Service Connect
+endpoint only in the region of the published service, so this configuration
+already failed at apply. Keep the proxy off for that environment; as production
+it needs `production_egress_proxy_waiver`.
+
 #### The environment perimeter now holds the service-team projects (gcp-workload, ARC-C1)
 
 **Who:** every `gcp-workload-<env>` with a VPC-SC perimeter and at least one

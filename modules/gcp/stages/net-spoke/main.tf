@@ -188,6 +188,16 @@ resource "google_compute_forwarding_rule" "egress_proxy" {
   load_balancing_scheme   = ""
   allow_psc_global_access = var.egress_proxy.global_access
   labels                  = var.labels
+
+  lifecycle {
+    # Google: "Private Service Connect endpoints must be created in the same
+    # region as the published service". global_access only lets clients in
+    # other regions reach the endpoint; it does not lift this rule.
+    precondition {
+      condition     = try(split("/", var.egress_proxy.service_attachment)[3], "") == var.region
+      error_message = "egress_proxy.service_attachment is in region '${try(split("/", var.egress_proxy.service_attachment)[3], "")}' but this spoke is in '${var.region}'. Google requires a Private Service Connect endpoint in the same region as the published service, so an environment outside the hub Secure Web Proxy region cannot use the hub proxy. Keep egress_proxy off for this environment (production then needs production_egress_proxy_waiver) or move the environment to the hub region. See docs/known-gaps.md."
+    }
+  }
 }
 
 module "private_service_access" {

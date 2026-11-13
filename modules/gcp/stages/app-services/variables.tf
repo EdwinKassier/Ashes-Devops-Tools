@@ -235,7 +235,7 @@ variable "services" {
     env_vars                    = optional(map(string), {})
     secrets                     = optional(map(object({ secret = string, version = optional(string, "latest") })), {})
     subnetwork_id               = optional(string)
-    vpc_egress                  = optional(string, "PRIVATE_RANGES_ONLY")
+    vpc_egress                  = optional(string) # null = ALL_TRAFFIC when egress_proxy.enabled, else PRIVATE_RANGES_ONLY
     enable_binary_authorization = optional(bool, false)
     binary_authorization_policy = optional(string)
     enable_unauthenticated      = optional(bool, false)
@@ -409,8 +409,17 @@ variable "services" {
   }
 
   validation {
-    condition     = alltrue([for k, s in var.services : contains(["ALL_TRAFFIC", "PRIVATE_RANGES_ONLY"], s.vpc_egress)])
-    error_message = "services[*].vpc_egress must be ALL_TRAFFIC or PRIVATE_RANGES_ONLY."
+    condition     = alltrue([for k, s in var.services : s.vpc_egress == null || contains(["ALL_TRAFFIC", "PRIVATE_RANGES_ONLY"], coalesce(s.vpc_egress, "-"))])
+    error_message = "services[*].vpc_egress must be ALL_TRAFFIC or PRIVATE_RANGES_ONLY (or unset)."
+  }
+
+  # With PRIVATE_RANGES_ONLY, Cloud Run sends internet traffic on its own path,
+  # outside the VPC, so it skips the hub Secure Web Proxy. Production with the
+  # proxy on may not do that; to opt out, turn the proxy off for the
+  # environment, which needs the reviewed production_egress_proxy_waiver.
+  validation {
+    condition     = !(var.is_production && var.egress_proxy.enabled) || alltrue([for k, s in var.services : s.vpc_egress != "PRIVATE_RANGES_ONLY"])
+    error_message = "services[*].vpc_egress = PRIVATE_RANGES_ONLY is not allowed in production while the environment egress proxy is on: that service's internet traffic would leave outside the VPC and skip the Secure Web Proxy. Remove vpc_egress (the default is then ALL_TRAFFIC) or set ALL_TRAFFIC."
   }
 
   validation {
@@ -539,4 +548,38 @@ variable "gke_master_authorized_networks" {
     display_name = optional(string)
   }))
   default = []
+}
+
+variable "egress_proxy" {
+  description = <<-EOT
+    The environment's central egress proxy (the hub Secure Web Proxy, preview), reached through
+    the PSC endpoint the spoke network creates. enabled = true (set by stages/environment when
+    the environment's egress proxy is on) makes ALL_TRAFFIC the default vpc_egress of every
+    Cloud Run service and job: Cloud Run's PRIVATE_RANGES_ONLY internet path would skip the
+    proxy, and stages/net-spoke drops the private tier from Cloud NAT when the proxy is on. It also injects HTTPS_PROXY,
+    HTTP_PROXY and NO_PROXY (upper and lower case) = http://<address>:<port>. NO_PROXY always
+    holds localhost, the metadata server (metadata.google.internal, 169.254.169.254),
+    .googleapis.com, .run.app and the RFC 1918 ranges, plus no_proxy (for example the PSC
+    endpoint for Google APIs and the internal DNS domains). A service's own env_vars win over
+    the injected values. port is the proxy's listening port (default 443, the hub default).
+    Production rejects an explicit PRIVATE_RANGES_ONLY while enabled.
+  EOT
+  type = object({
+    enabled  = optional(bool, false)
+    address  = optional(string)
+    port     = optional(number, 443)
+    no_proxy = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = !var.egress_proxy.enabled || var.egress_proxy.address != null
+    error_message = "egress_proxy.address (the PSC endpoint address of the hub proxy) is required when egress_proxy.enabled is true."
+  }
+
+  validation {
+    condition     = var.egress_proxy.port == null || (floor(coalesce(var.egress_proxy.port, 0)) == coalesce(var.egress_proxy.port, 0) && coalesce(var.egress_proxy.port, 0) >= 1 && coalesce(var.egress_proxy.port, 0) <= 65535)
+    error_message = "egress_proxy.port must be a whole number from 1 to 65535."
+  }
 }

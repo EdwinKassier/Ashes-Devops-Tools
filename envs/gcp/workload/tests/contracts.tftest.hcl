@@ -40,6 +40,7 @@ override_module {
   target = module.environment.module.host
   outputs = {
     dns_zones            = {}
+    egress_proxy_address = "10.10.16.50"
     nat_ip               = "34.1.2.3"
     network_id           = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
     network_name         = "acme-dev-vpc"
@@ -430,13 +431,39 @@ run "egress_proxy_targets_hub_service_attachment" {
     network_hub_contract = {
       vpc_self_link                   = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
       dns_domain                      = "hub.internal."
-      egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west2/serviceAttachments/swp"
+      egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
+      egress_proxy_port               = 8443
     }
   }
 
   assert {
-    condition     = local.enable_egress_proxy && local.hub_network.egress_proxy_service_attachment == "projects/acme-hub/regions/europe-west2/serviceAttachments/swp"
+    condition     = local.enable_egress_proxy && local.hub_network.egress_proxy_service_attachment == "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
     error_message = "the egress proxy endpoint must target the hub's published service attachment."
+  }
+
+  assert {
+    condition     = local.egress_proxy_port == 8443
+    error_message = "the hub contract's egress_proxy_port must reach the app services."
+  }
+}
+
+# A hub contract without egress_proxy_port (applied before the key existed)
+# falls back to 443, the hub Secure Web Proxy default.
+run "egress_proxy_port_defaults_to_443" {
+  command = plan
+
+  variables {
+    enable_egress_proxy = true
+    network_hub_contract = {
+      vpc_self_link                   = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain                      = "hub.internal."
+      egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
+    }
+  }
+
+  assert {
+    condition     = local.egress_proxy_port == 443
+    error_message = "without egress_proxy_port in the contract, the proxy port must be 443."
   }
 }
 

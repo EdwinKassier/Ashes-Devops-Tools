@@ -135,6 +135,7 @@ locals {
       ncc_spoke_group = try(tostring(local.lz.gcp.contracts.network_hub.ncc_spoke_group), null)
 
       egress_proxy_service_attachment = try(tostring(local.lz.gcp.contracts.network_hub.egress_proxy_service_attachment), null)
+      egress_proxy_port               = try(tonumber(local.lz.gcp.contracts.network_hub.egress_proxy_port), null)
     }
 
     # gcp.environments.<env>.egress_proxy: opt-in central egress (preview).

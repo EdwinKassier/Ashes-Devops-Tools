@@ -58,7 +58,7 @@ gcp:
     # ... existing environments unchanged ...
     staging:
       display_name: Staging
-      region: europe-west1          # optional, default org.regions.gcp
+      region: europe-west1          # optional, default org.regions.gcp; the hub egress proxy needs the hub region
       cidr_block: 10.13.0.0/16      # next free /16 in the GCP block (docs/architecture/cidr-plan.md); tfc-admin fails on any overlap
       budget_monthly_limit: 500
       is_production: false
@@ -85,7 +85,13 @@ put them in the same PR:
 - **Egress.** Set `gcp.environments.<env>.egress_proxy: true` (it needs `secure_web_proxy` on
   `gcp-network-hub`, which is PREVIEW), or set `production_egress_proxy_waiver = { reason, expires }`
   on the `gcp-workload-<env>` workspace in `config/tfc-workspaces.yaml`. A standalone environment
-  (no hub) needs the waiver.
+  (no hub) needs the waiver. The hub proxy serves only environments in the hub region
+  (`org.regions.gcp`): Google requires a Private Service Connect endpoint "in the same region as the
+  published service", and the plan fails otherwise. An environment in another region (for example
+  `europe-west1` with the hub in `europe-west2`) cannot use the hub proxy; as production it needs the
+  waiver ([known-gaps](../known-gaps.md)). With the proxy on, every Cloud Run service and job defaults
+  to `ALL_TRAFFIC` egress and gets `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`; production rejects an
+  explicit `vpc_egress: PRIVATE_RANGES_ONLY`.
 - **VPC-SC.** The perimeter starts in dry-run, and a production plan fails on a dry-run perimeter.
   Enforce it (`vpc_sc_enable_dry_run = false`) or set `production_vpc_sc_dry_run_waiver` on the same
   workspace for a first rollout.

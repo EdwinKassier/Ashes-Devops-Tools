@@ -641,7 +641,7 @@ resource "google_cloud_run_v2_service" "api_r2" {
     service_account = module.environment.app_services["api"].runtime_service_account
     encryption_key  = module.workload_cmek[local.r2].key_ids["api"]
     vpc_access {
-      egress = "PRIVATE_RANGES_ONLY" # app-services default
+      egress = "PRIVATE_RANGES_ONLY" # app-services default with the egress proxy off
       network_interfaces {
         subnetwork = local.r2_subnet
         tags       = ["compute"]

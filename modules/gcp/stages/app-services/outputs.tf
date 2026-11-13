@@ -5,10 +5,11 @@
  */
 
 output "services" {
-  description = "Per-service golden-path facts: runtime, Cloud Run service name, URL, effective minimum instance count and probe path (null for a job; the probe path is also null when probing is off) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user, availability type (REGIONAL or ZONAL) and whether a customer-managed key is required (database_cmek_required); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
+  description = "Per-service golden-path facts: runtime, effective Direct VPC egress (vpc_egress), Cloud Run service name, URL, effective minimum instance count and probe path (null for a job; the probe path is also null when probing is off) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user, availability type (REGIONAL or ZONAL) and whether a customer-managed key is required (database_cmek_required); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
   value = {
     for k, s in var.services : k => {
       runtime                  = s.runtime
+      vpc_egress               = local.vpc_egress[k]
       service_name             = s.runtime == "cloud-run" ? module.service[k].name : null
       url                      = s.runtime == "cloud-run" ? module.service[k].uri : null
       min_instances            = s.runtime == "cloud-run" ? module.service[k].min_instance_count_effective : null
@@ -84,4 +85,14 @@ output "github_actions" {
 output "gke_cluster_name" {
   description = "Name of the environment GKE Autopilot cluster, or null when disabled."
   value       = var.enable_gke_autopilot ? module.gke[0].name : null
+}
+
+output "egress_proxy_settings" {
+  description = "The egress proxy settings injected into every Cloud Run service and job: enabled, the proxy URL (http://<address>:<port>), port and the NO_PROXY entries. url is null and no_proxy is empty when egress_proxy.enabled = false."
+  value = {
+    enabled  = var.egress_proxy.enabled
+    url      = local.egress_proxy_url
+    port     = var.egress_proxy.enabled ? coalesce(var.egress_proxy.port, 443) : null
+    no_proxy = var.egress_proxy.enabled ? split(",", local.egress_no_proxy) : []
+  }
 }

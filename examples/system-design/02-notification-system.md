@@ -526,7 +526,8 @@ google v8.10.0 (the provider's registry docs source), checked 2026-11:
 - **GCP:** the environment's host project, `gcp-workload-<env>` from
   `envs/gcp/workload`, on the first `private` subnet. Egress is the
   environment's own Cloud NAT, **not** inspected through the hub; with the
-  app-services default `PRIVATE_RANGES_ONLY`, provider calls bypass the VPC.
+  app-services default `PRIVATE_RANGES_ONLY` (egress proxy off), provider
+  calls bypass the VPC.
 - **Apply order:** the layers up to `aws-network` and `gcp-network-hub`, then
   the workload root with the config and raw resources below.
 

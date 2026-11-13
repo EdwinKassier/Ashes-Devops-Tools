@@ -790,6 +790,35 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
     renewed when it expires. A regulated environment accepts that waiver too
     (unlike the VPC-SC waiver). Revisit this once the proxy is proven: then
     refuse the egress waiver for `compliance_class: regulated`.
+  - Cloud Run behind the hub proxy (ARC-H1, mock-tested only). With the
+    environment egress proxy on, every app-services Cloud Run service and job
+    defaults to `ALL_TRAFFIC` Direct VPC egress and gets `HTTPS_PROXY`,
+    `HTTP_PROXY` and `NO_PROXY` (both cases) for `http://<PSC endpoint>:<port>`.
+    Prove in the sandbox that a revision reaches an allowlisted FQDN through
+    the proxy, is denied for any other FQDN, still reaches Google APIs (Private
+    Google Access and the PSC endpoint, both in `NO_PROXY`) and the metadata
+    server, and still calls another service's `run.app` URL with internal
+    ingress. Google documents Secure Web Proxy explicit mode for clients that
+    "point directly to the proxy server"; it does not name Cloud Run as a
+    client (checked 2026-11-13). `NO_PROXY` holds the RFC 1918 ranges as CIDRs,
+    and whether a client honours CIDR entries depends on its HTTP library;
+    host names are honoured more widely. Clients that ignore the proxy
+    variables have no internet path from Cloud Run when the proxy is on.
+  - GKE Autopilot behind the hub proxy. GKE nodes sit in the private tier, so
+    with the egress proxy on they have no Cloud NAT and no bypass: their
+    internet egress fails unless the pods set the proxy variables themselves.
+    The app-services stage injects the proxy settings into Cloud Run only, not
+    into GKE workloads.
+- **The hub egress proxy serves only environments in the hub region
+  (ARC-H2).** Google: "Private Service Connect endpoints must be created in
+  the same region as the published service" (Private Service Connect
+  endpoints for published services, checked 2026-11-13). Global access only
+  lets clients in other regions of the spoke VPC reach the endpoint. So the
+  net-spoke plan fails when `egress_proxy` is on and the spoke region differs
+  from the region of the hub proxy's service attachment. An environment in
+  another region keeps `egress_proxy` off; production then needs
+  `production_egress_proxy_waiver`. There is no regional proxy per extra
+  region yet.
 - **An enforced environment perimeter admits the environment's own plan and
   apply SAs (ARC-13).** Mock-tested only. gcp-projects publishes them in
   `environment_config.<env>.automation_identities`, and the environment stage

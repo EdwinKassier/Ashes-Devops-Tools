@@ -117,10 +117,42 @@ locals {
   github_services = { for k, s in local.services_with_github : k => s if s.runtime == "cloud-run" }
   github_jobs     = { for k, s in local.services_with_github : k => s if s.runtime == "cloud-run-job" }
 
-  # Environment of a service or job: its own env_vars plus the injected
-  # database and Pub/Sub coordinates.
+  # Effective Direct VPC egress. With the environment egress proxy on,
+  # stages/net-spoke drops the private tier from Cloud NAT (unless
+  # nat.include_private_subnets), so ALL_TRAFFIC sends every request into the
+  # VPC, where the internet path is the proxy endpoint. Google: with
+  # all-traffic egress "you must set up Cloud NAT to reach the public internet";
+  # PRIVATE_RANGES_ONLY sends "only traffic to internal addresses through the
+  # VPC network", so internet traffic would skip the proxy.
+  vpc_egress = {
+    for k, s in var.services : k => coalesce(s.vpc_egress, var.egress_proxy.enabled ? "ALL_TRAFFIC" : "PRIVATE_RANGES_ONLY")
+  }
+
+  # Explicit-proxy client settings (Secure Web Proxy explicit routing mode: the
+  # client must point at the proxy). NO_PROXY keeps the metadata server, Google
+  # APIs (Private Google Access / the PSC endpoint), Cloud Run URLs (internal
+  # ingress needs the request from this VPC, not from the hub proxy) and the
+  # private ranges off the proxy. CIDR entries in NO_PROXY depend on the client.
+  egress_proxy_url = var.egress_proxy.enabled ? "http://${coalesce(var.egress_proxy.address, "-")}:${coalesce(var.egress_proxy.port, 443)}" : null
+  egress_no_proxy = join(",", distinct(concat(
+    ["localhost", "127.0.0.1", "::1", "metadata.google.internal", "169.254.169.254", ".googleapis.com", ".run.app", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+    var.egress_proxy.no_proxy,
+  )))
+  egress_proxy_env = var.egress_proxy.enabled ? {
+    HTTPS_PROXY = local.egress_proxy_url
+    https_proxy = local.egress_proxy_url
+    HTTP_PROXY  = local.egress_proxy_url
+    http_proxy  = local.egress_proxy_url
+    NO_PROXY    = local.egress_no_proxy
+    no_proxy    = local.egress_no_proxy
+  } : {}
+
+  # Environment of a service or job: the proxy settings (when the egress proxy
+  # is on), then its own env_vars (which win), then the injected database and
+  # Pub/Sub coordinates.
   service_env_vars = {
     for k, s in var.services : k => merge(
+      local.egress_proxy_env,
       s.env_vars,
       s.database == null ? {} : {
         DB_INSTANCE_CONNECTION_NAME = "${local.service_project[k]}:${var.region}:${local.db_instance_name[k]}"
@@ -312,7 +344,7 @@ module "service" {
 
   # Direct VPC egress into the environment Shared VPC subnet (no connector).
   vpc_access = {
-    egress = each.value.vpc_egress
+    egress = local.vpc_egress[each.key]
     network_interfaces = {
       network    = var.network_id
       subnetwork = coalesce(each.value.subnetwork_id, var.subnetwork_id)
@@ -370,7 +402,7 @@ module "job" {
   secret_env_vars = [for name, ref in each.value.secrets : { name = name, secret = ref.secret, version = ref.version }]
 
   vpc_access = {
-    egress = each.value.vpc_egress
+    egress = local.vpc_egress[each.key]
     network_interfaces = {
       network    = var.network_id
       subnetwork = coalesce(each.value.subnetwork_id, var.subnetwork_id)

@@ -84,6 +84,9 @@ locals {
     try(local.cfg.environment_egress_proxy[var.environment], null),
     false,
   )
+  # The hub proxy's listening port, for HTTPS_PROXY in the app services. Null
+  # (a hub contract from before the key existed) = 443, the hub default.
+  egress_proxy_port = coalesce(try(local.hub_network.egress_proxy_port, null), 443)
   hub_ncc = {
     hub_id = try(local.hub_network.ncc_hub_id, null)
     group  = coalesce(try(local.hub_network.ncc_spoke_group, null), "edge")
@@ -236,6 +239,7 @@ module "environment" {
     egress_proxy = {
       enabled            = local.enable_egress_proxy
       service_attachment = try(local.hub_network.egress_proxy_service_attachment, null)
+      port               = local.egress_proxy_port
     }
   }
 
@@ -359,7 +363,8 @@ resource "terraform_data" "production_vpc_sc_enforced" {
 # index-aligned with the zones, so with discovered zones a change in the list
 # GCP returns re-derives the CIDRs and replaces in-use subnets. Egress (ARC-4):
 # without the hub Secure Web Proxy the private tier leaves through Cloud NAT
-# with no destination allowlist, so production needs the proxy or
+# (and Cloud Run with the PRIVATE_RANGES_ONLY egress it then keeps by default
+# leaves on its own internet path) with no destination allowlist, so production needs the proxy or
 # production_egress_proxy_waiver, the explicit, reviewed and time-boxed
 # exception (same shape and expiry rule as production_vpc_sc_dry_run_waiver).
 # The guard stops the plan; it changes no resource.
@@ -381,7 +386,7 @@ resource "terraform_data" "production_network_guard" {
 
     precondition {
       condition     = local.enable_egress_proxy || (local.egress_waiver_until != null && timecmp(plantimestamp(), coalesce(local.egress_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
-      error_message = "Environment '${var.environment}' is production but its private-tier egress does not go through the hub Secure Web Proxy${local.hub_network == null ? " (standalone: there is no hub)" : ""}, so it leaves through Cloud NAT with no destination allowlist${local.egress_waiver_until == null ? "" : ", and production_egress_proxy_waiver expired on ${try(substr(var.production_egress_proxy_waiver.expires, 0, 10), "")}"}. Set gcp.environments.${var.environment}.egress_proxy: true (or enable_egress_proxy) with secure_web_proxy on gcp-network-hub (PREVIEW, docs/known-gaps.md), or set production_egress_proxy_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
+      error_message = "Environment '${var.environment}' is production but its private-tier egress does not go through the hub Secure Web Proxy${local.hub_network == null ? " (standalone: there is no hub)" : ""}, so it leaves through Cloud NAT (Cloud Run services and jobs with PRIVATE_RANGES_ONLY egress: on Cloud Run's own internet path) with no destination allowlist${local.egress_waiver_until == null ? "" : ", and production_egress_proxy_waiver expired on ${try(substr(var.production_egress_proxy_waiver.expires, 0, 10), "")}"}. Set gcp.environments.${var.environment}.egress_proxy: true (or enable_egress_proxy) with secure_web_proxy on gcp-network-hub (PREVIEW, docs/known-gaps.md), or set production_egress_proxy_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
     }
   }
 }

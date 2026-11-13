@@ -150,3 +150,19 @@ run "nat_alerts_can_be_turned_off" {
     error_message = "alerting.enabled = false must create no alert policies."
   }
 }
+
+# Google: "Private Service Connect endpoints must be created in the same region
+# as the published service". An environment outside the hub proxy's region
+# fails the plan instead of the apply.
+run "egress_proxy_rejects_other_region" {
+  command = plan
+
+  variables {
+    egress_proxy = {
+      enabled            = true
+      service_attachment = "projects/mock-hub-project/regions/europe-west2/serviceAttachments/hub-vpc-core-swp-psc"
+    }
+  }
+
+  expect_failures = [google_compute_forwarding_rule.egress_proxy]
+}

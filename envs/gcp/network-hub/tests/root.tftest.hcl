@@ -81,6 +81,42 @@ run "network_hub_output_contract" {
   }
 }
 
+# The contract carries the hub proxy's port, so environments set HTTPS_PROXY
+# to the port the proxy listens on (ARC-H1); null while the proxy is off.
+run "contract_carries_egress_proxy_port" {
+  command = plan
+
+  override_module {
+    target = module.network_hub
+    outputs = {
+      hub_vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub-abcd/global/networks/acme-hub-vpc"
+      hub_vpc_name      = "acme-hub-vpc"
+      dns_zone_name     = "hub-dns"
+      hub_dns_domain    = "hub.internal."
+      secure_web_proxy = {
+        gateway_id            = "projects/acme-hub-abcd/locations/europe-west2/gateways/swp"
+        address               = "10.0.16.10"
+        ports                 = [8443]
+        service_attachment_id = "projects/acme-hub-abcd/regions/europe-west2/serviceAttachments/swp"
+      }
+    }
+  }
+
+  assert {
+    condition     = output.contract.hub_network.egress_proxy_port == 8443 && output.contract.hub_network.egress_proxy_service_attachment == "projects/acme-hub-abcd/regions/europe-west2/serviceAttachments/swp"
+    error_message = "the contract must carry the hub proxy's service attachment and its first port."
+  }
+}
+
+run "contract_egress_proxy_port_null_without_proxy" {
+  command = plan
+
+  assert {
+    condition     = output.contract.hub_network.egress_proxy_port == null
+    error_message = "egress_proxy_port must be null while the hub proxy is off."
+  }
+}
+
 # Estates with no is_production environment do not trip the prod-enforcement check.
 run "no_prod_env_no_vpc_sc_warning" {
   command = plan

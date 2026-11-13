@@ -385,7 +385,19 @@ module "app_services" {
   # Default Cloud Run / GKE subnet: the first private (compute-tier) subnet.
   subnetwork_id = var.app_platform.subnetwork_id != null ? var.app_platform.subnetwork_id : try(values(module.host.subnets.private)[0].id, null)
 
-  services                       = local.app_services
+  services = local.app_services
+  # ARC-H1: with the environment egress proxy on, every Cloud Run service and
+  # job defaults to ALL_TRAFFIC egress and gets the proxy variables. NO_PROXY
+  # adds the PSC endpoint for Google APIs and the hub DNS domains.
+  egress_proxy = {
+    enabled = var.hub.egress_proxy.enabled
+    address = module.host.egress_proxy_address
+    port    = var.hub.egress_proxy.port
+    no_proxy = concat(
+      compact([try(module.host.private_service_connect.address, null)]),
+      [for z in values(var.hub.dns_zones) : ".${trimsuffix(z.dns_name, ".")}"],
+    )
+  }
   bootstrap_image                = var.app_platform.bootstrap_image
   enable_deletion_protection     = local.enable_deletion_protection
   require_database_cmek          = var.app_platform.require_database_cmek

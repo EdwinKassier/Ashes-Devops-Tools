@@ -925,3 +925,54 @@ run "zones_are_discovered_when_not_pinned" {
     error_message = "Without network.explicit_zones the spoke keeps the discovered zones."
   }
 }
+
+# ARC-H1: the environment egress proxy reaches every app service and job. The
+# address is the spoke's PSC endpoint for the hub proxy (unknown until apply
+# under the mock), so the run checks the wiring, not the literal URL.
+run "egress_proxy_reaches_app_services" {
+  command = plan
+
+  variables {
+    is_production                 = true
+    enable_host_project_workloads = true
+    hub = {
+      egress_proxy = {
+        enabled            = true
+        service_attachment = "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
+        port               = 8443
+      }
+      dns_zones = {
+        hub = { dns_name = "hub.internal.", visibility = "private", peering_network = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc" }
+      }
+    }
+    app_services = { api = {}, worker = { runtime = "cloud-run-job" } }
+  }
+
+  assert {
+    condition     = output.app_services["api"].vpc_egress == "ALL_TRAFFIC" && output.app_services["worker"].vpc_egress == "ALL_TRAFFIC"
+    error_message = "with the environment egress proxy on, every app service and job must use ALL_TRAFFIC egress."
+  }
+
+  assert {
+    condition = (
+      module.app_services.egress_proxy_settings.enabled &&
+      module.app_services.egress_proxy_settings.port == 8443 &&
+      contains(module.app_services.egress_proxy_settings.no_proxy, "10.10.255.254") &&
+      contains(module.app_services.egress_proxy_settings.no_proxy, ".hub.internal")
+    )
+    error_message = "the app services must get the hub proxy port and NO_PROXY entries for the PSC endpoint and the hub DNS domain."
+  }
+}
+
+run "egress_proxy_off_leaves_app_services_on_private_ranges" {
+  command = plan
+
+  variables {
+    app_services = { api = {} }
+  }
+
+  assert {
+    condition     = output.app_services["api"].vpc_egress == "PRIVATE_RANGES_ONLY" && !module.app_services.egress_proxy_settings.enabled
+    error_message = "without the egress proxy, app services keep PRIVATE_RANGES_ONLY egress and no proxy settings."
+  }
+}

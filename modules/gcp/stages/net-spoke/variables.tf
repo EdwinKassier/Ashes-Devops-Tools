@@ -494,8 +494,10 @@ variable "egress_proxy" {
     Opt-in central egress (preview): a Private Service Connect endpoint in this VPC for the hub
     Secure Web Proxy (stages/net-hub secure_web_proxy with psc_nat_subnet_cidr). service_attachment
     is the hub output secure_web_proxy.service_attachment_id (this project must be in the hub's
-    consumer_accept_projects). The endpoint takes an address from the first primary-region private
-    subnet (address pins it). global_access lets other regions of this VPC use it. Enabling it also
+    consumer_accept_projects). The service attachment must be in var.region: Google creates a PSC
+    endpoint only in the region of the published service, and the plan fails otherwise. The
+    endpoint takes an address from the first primary-region private subnet (address pins it).
+    global_access lets other regions of this VPC use it. Enabling it also
     drops the private tier from Cloud NAT unless nat.include_private_subnets says otherwise, so
     private-tier workloads reach the internet only through the proxy (HTTPS_PROXY=<endpoint>:<port>).
   EOT

@@ -223,8 +223,11 @@ inspection
 ([`modules/aws/stages/network-hub/main.tf:73`](../../modules/aws/stages/network-hub/main.tf)).
 
 **Egress path (GCP).** A VM or GKE node in `private` leaves through the
-environment's Cloud NAT. Cloud Run with the default `PRIVATE_RANGES_ONLY` sends
-internet traffic straight out, past the VPC firewall and NAT (see the primer).
+environment's Cloud NAT. Cloud Run with `PRIVATE_RANGES_ONLY` (the default
+while the environment egress proxy is off) sends internet traffic straight
+out, past the VPC firewall and NAT (see the primer). With the egress proxy on,
+the default is `ALL_TRAFFIC` and the app services get `HTTPS_PROXY` for the hub
+Secure Web Proxy.
 
 ## Deep dives
 

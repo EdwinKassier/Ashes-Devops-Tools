@@ -1070,3 +1070,85 @@ run "database_cmek_not_required_by_default" {
 
 # The guard itself (require_cmek with no key) is tested in
 # modules/gcp/data/cloud-sql/tests/variables_validation.tftest.hcl.
+
+# ARC-H1: with the environment egress proxy on, every Cloud Run service and job
+# sends ALL traffic into the VPC (the private tier has no Cloud NAT then) and
+# gets the proxy environment variables. Without it, Cloud Run's own internet
+# path would skip the proxy.
+run "egress_proxy_forces_all_traffic_and_proxy_env" {
+  command = plan
+
+  variables {
+    is_production = true
+    egress_proxy = {
+      enabled  = true
+      address  = "10.10.16.50"
+      port     = 443
+      no_proxy = ["10.10.255.254", ".hub.internal"]
+    }
+    services = {
+      api    = {}
+      worker = { runtime = "cloud-run-job" }
+    }
+  }
+
+  assert {
+    condition     = output.services["api"].vpc_egress == "ALL_TRAFFIC" && output.services["worker"].vpc_egress == "ALL_TRAFFIC"
+    error_message = "with the egress proxy on, every Cloud Run service and job must use ALL_TRAFFIC egress."
+  }
+
+  assert {
+    condition = alltrue([for k in ["api", "worker"] : (
+      local.service_env_vars[k]["HTTPS_PROXY"] == "http://10.10.16.50:443" &&
+      local.service_env_vars[k]["HTTP_PROXY"] == "http://10.10.16.50:443" &&
+      local.service_env_vars[k]["https_proxy"] == "http://10.10.16.50:443" &&
+      local.service_env_vars[k]["http_proxy"] == "http://10.10.16.50:443" &&
+      local.service_env_vars[k]["NO_PROXY"] == local.service_env_vars[k]["no_proxy"]
+    )])
+    error_message = "every service and job must get HTTPS_PROXY / HTTP_PROXY (both cases) pointing at the proxy endpoint."
+  }
+
+  assert {
+    condition = alltrue([for entry in ["metadata.google.internal", "169.254.169.254", ".googleapis.com", ".run.app", "10.10.255.254", ".hub.internal"] :
+      contains(split(",", local.service_env_vars["api"]["NO_PROXY"]), entry)
+    ])
+    error_message = "NO_PROXY must cover the metadata server, Google APIs, run.app and the caller's extra entries."
+  }
+}
+
+run "egress_proxy_off_keeps_private_ranges_only" {
+  command = plan
+
+  variables {
+    services = { api = {}, worker = { runtime = "cloud-run-job" } }
+  }
+
+  assert {
+    condition     = output.services["api"].vpc_egress == "PRIVATE_RANGES_ONLY" && output.services["worker"].vpc_egress == "PRIVATE_RANGES_ONLY"
+    error_message = "without the egress proxy, the default egress stays PRIVATE_RANGES_ONLY."
+  }
+
+  assert {
+    condition     = !contains(keys(local.service_env_vars["api"]), "HTTPS_PROXY") && !contains(keys(local.service_env_vars["worker"]), "NO_PROXY")
+    error_message = "without the egress proxy, no proxy variables are injected."
+  }
+}
+
+run "egress_proxy_non_production_override_is_kept" {
+  command = plan
+
+  variables {
+    egress_proxy = { enabled = true, address = "10.10.16.50" }
+    services     = { api = { vpc_egress = "PRIVATE_RANGES_ONLY", env_vars = { NO_PROXY = "custom.example" } } }
+  }
+
+  assert {
+    condition     = output.services["api"].vpc_egress == "PRIVATE_RANGES_ONLY"
+    error_message = "outside production an explicit vpc_egress wins."
+  }
+
+  assert {
+    condition     = local.service_env_vars["api"]["NO_PROXY"] == "custom.example" && local.service_env_vars["api"]["HTTPS_PROXY"] == "http://10.10.16.50:443"
+    error_message = "the service's own env_vars must win over the injected proxy variables; the port defaults to 443."
+  }
+}

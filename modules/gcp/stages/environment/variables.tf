@@ -153,13 +153,14 @@ variable "network" {
 }
 
 variable "hub" {
-  description = "Hub connectivity resolved from the gcp-network-hub contract: connectivity (peering | ncc), ncc (hub_id, group), the hub VPC peerings, the DNS peering zones, and the opt-in egress proxy (preview): egress_proxy.enabled with the hub Secure Web Proxy's service_attachment. Empty maps = standalone (no hub)."
+  description = "Hub connectivity resolved from the gcp-network-hub contract: connectivity (peering | ncc), ncc (hub_id, group), the hub VPC peerings, the DNS peering zones, and the opt-in egress proxy (preview): egress_proxy.enabled with the hub Secure Web Proxy's service_attachment (in the environment's region) and its listening port (default 443). With the proxy on, every app service and job defaults to ALL_TRAFFIC egress and gets HTTPS_PROXY / HTTP_PROXY / NO_PROXY for the proxy endpoint. Empty maps = standalone (no hub)."
   type = object({
     connectivity = optional(string, "peering")
     egress_proxy = optional(object({
       enabled            = optional(bool, false)
       service_attachment = optional(string)
       global_access      = optional(bool, false)
+      port               = optional(number, 443)
     }), {})
     ncc = optional(object({
       hub_id = optional(string)
