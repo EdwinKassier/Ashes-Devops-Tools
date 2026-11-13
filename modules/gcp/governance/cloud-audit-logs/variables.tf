@@ -82,6 +82,13 @@ variable "org_id" {
   }
 }
 
+variable "enable_network_log_export" {
+  description = "With org_id set, add an aggregated org sink that copies firewall rule logs, Cloud NAT logs and Application Load Balancer request logs (with the Cloud Armor verdict) from every project into the audit bucket, under the same retention, lifecycle and lock as the audit logs. Default false. Volume, and so storage cost, grows with traffic and with how many firewall rules and NAT gateways have logging on."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 # =============================================================================
 # BIGQUERY LOG ANALYTICS (Optional)
 # =============================================================================

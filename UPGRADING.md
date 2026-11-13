@@ -1637,6 +1637,41 @@ Plan each workspace. The plan must show no subnet change. If it does, the order 
 verified. Check them with `gcloud compute zones list --filter=region:<region>` before the first
 apply.
 
+#### Network and edge logs go to the audit bucket in regulated and framework estates (gcp-organization, CMP-02)
+
+**Behaviour change, not breaking.** Nothing existing changes or is replaced. When any
+`gcp.environments` entry is `compliance_class: regulated`, or `compliance.frameworks` lists any
+framework, the next `gcp-organization` plan adds three resources:
+
+- the aggregated org sink `org-network-logs`, which copies firewall rule logs, Cloud NAT logs and
+  load balancer request logs (with the Cloud Armor verdict) from every project into the GCS audit
+  bucket;
+- `roles/storage.objectCreator` on the audit bucket for the sink writer identity;
+- `roles/logging.logWriter` on the audit project for the same identity.
+
+The logs then have the audit bucket's retention (`audit_log_retention_days`, at least the
+framework floor) and, when `gcp.enable_audit_bucket_lock` is on, its locked retention. With the
+lock they cannot be deleted before that period ends, so the storage cost is committed. Read the
+cost note in [`docs/architecture/gcp-landing-zone.md`](docs/architecture/gcp-landing-zone.md#cost-of-the-baseline)
+and `docs/compliance/control-matrix.md` LOG-06.
+
+Before you apply:
+
+1. `roles/logging.logWriter` must be in the gcp-bootstrap input
+   `organization_apply_grantable_roles` (it is in the default). The plan fails and names the role
+   if it is not.
+2. If the audit project is in a VPC-SC perimeter, the existing audit sink already needs an ingress
+   rule for sink writers. Check that the rule also admits the new writer identity
+   (`network_log_sink_writer_identity` output of `modules/gcp/governance/cloud-audit-logs`).
+3. To keep the old behaviour, set `gcp.enable_network_log_export: false` in
+   `config/landing-zone.yaml` (or `gcp_overrides.enable_network_log_export = false`). Set it to
+   `true` to turn the export on for any other estate.
+
+With admin containment on, the org IAM deny policy blocks sink update and delete for everyone but
+break-glass. Turning the export off after it was applied, or changing its filter, then needs a
+break-glass apply. Deleting the sink also trips the `destroy_guard` policy
+(`google_logging_organization_sink`), so the security team must override that run.
+
 #### The audit store waiver names a reason and expires (gcp-organization, breaking, CMP-05)
 
 **Breaking: `gcp.audit_store_waived` is removed.** Any value of it (also `false`) now fails the

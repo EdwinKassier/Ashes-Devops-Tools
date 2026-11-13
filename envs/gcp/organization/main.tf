@@ -64,6 +64,8 @@ module "organization" {
     # gcp.restrictTLSVersion (TLS 1.0/1.1 denied on Google APIs): on for the
     # production profile unless gcp_overrides.restrict_tls_versions is set.
     restrict_tls_versions = local.restrict_tls_versions
+    # CMP-02: network and edge logs into the audit bucket (derived in config.tf).
+    enable_network_log_export = local.enable_network_log_export
   })
 
   # Per-environment folder-scoped VPC-SC access policies; each environment's

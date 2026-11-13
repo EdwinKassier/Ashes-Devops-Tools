@@ -44,6 +44,9 @@ locals {
     admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
     principal_access_boundary = try(tobool(local.lz.gcp.principal_access_boundary), null)
     enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
+    # gcp.enable_network_log_export (CMP-02): null = derived (on for a
+    # regulated or framework estate).
+    enable_network_log_export = try(tobool(local.lz.gcp.enable_network_log_export), null)
     logging_project_id        = try(tostring(local.lz.gcp.logging_project_id), null)
     logging_project_number    = try(tostring(local.lz.gcp.logging_project_number), null)
     # SOFTWARE or HSM for the two audit CMEK keys (CMP-12). ForceNew: set it
@@ -134,6 +137,7 @@ locals {
     billing_admin_groups             = local.cfg.billing_admin_groups
     allowed_regions                  = local.cfg.allowed_regions
     enable_audit_bucket_lock         = local.cfg.enable_audit_bucket_lock
+    enable_network_log_export        = local.cfg.enable_network_log_export
     logging_project_id               = local.cfg.logging_project_id
     logging_project_number           = local.cfg.logging_project_number
     audit_key_protection_level       = local.cfg.audit_key_protection_level
@@ -189,6 +193,15 @@ locals {
   audit_store_waiver_valid     = local.cfg.audit_store_waiver == null || (local.audit_store_waiver_reason_ok && local.audit_store_waiver_expiry_ok)
   audit_store_waiver_until     = local.cfg.audit_store_waiver != null && local.audit_store_waiver_valid ? "${local.audit_store_waiver_expires}T23:59:59Z" : null
   audit_store_waived           = local.audit_store_waiver_until != null && timecmp(plantimestamp(), coalesce(local.audit_store_waiver_until, "1970-01-01T00:00:00Z")) <= 0
+
+  # CMP-02: firewall, Cloud NAT and load balancer request (Cloud Armor) logs go
+  # to the audit bucket, with its retention, when the estate is regulated or
+  # names a compliance framework. gcp_overrides > gcp.enable_network_log_export
+  # > derived.
+  enable_network_log_export = coalesce(
+    try(local.gcp.enable_network_log_export, null),
+    length(local.regulated_environment_keys) > 0 || length(local.cfg.compliance_frameworks) > 0,
+  )
   # Cost profile (variable > org.profile > production). The starter profile
   # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
   profile = coalesce(var.profile, local.cfg.profile, "production")

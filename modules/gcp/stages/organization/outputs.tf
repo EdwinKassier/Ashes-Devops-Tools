@@ -182,3 +182,8 @@ output "principal_access_boundary_policy" {
   description = "Name of the automation principal access boundary policy (null when disabled)."
   value       = var.gcp.enable_principal_access_boundary ? module.automation_boundary[0].policy_name : null
 }
+
+output "network_log_sink" {
+  description = "The org sink (org-network-logs) that copies firewall, Cloud NAT and load balancer request logs into the audit bucket: name, destination and filter. Null when gcp.enable_network_log_export is false."
+  value       = module.audit_logs.network_log_sink
+}

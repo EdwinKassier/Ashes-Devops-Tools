@@ -7,6 +7,7 @@ Configures organization-level audit logging with Cloud Storage and optional BigQ
 - GCS bucket for long-term log storage
 - Optional BigQuery dataset for SQL analytics
 - Organization-level audit log sinks
+- Optional org sink (`enable_network_log_export`) that copies firewall, Cloud NAT and load balancer request (Cloud Armor) logs into the same audit bucket, with its retention
 - Configurable retention periods
 
 ## Usage
@@ -92,22 +93,25 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L218)
-- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L266)
-- resource.google_logging_linked_dataset.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L335)
-- resource.google_logging_organization_sink.org_audit_analytics_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L309)
-- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L244)
+- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L285)
+- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L333)
+- resource.google_logging_linked_dataset.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L402)
+- resource.google_logging_organization_sink.org_audit_analytics_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L376)
+- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L311)
 - resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L188)
-- resource.google_logging_project_bucket_config.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L288)
+- resource.google_logging_organization_sink.org_network_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L248)
+- resource.google_logging_project_bucket_config.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L355)
 - resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L130)
 - resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L168)
 - resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L148)
-- resource.google_project_iam_member.audit_analytics_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L321)
+- resource.google_project_iam_member.audit_analytics_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L388)
+- resource.google_project_iam_member.org_network_log_router (modules/gcp/governance/cloud-audit-logs/main.tf#L272)
 - resource.google_storage_bucket.audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L47)
 - resource.google_storage_bucket.audit_logs_access (modules/gcp/governance/cloud-audit-logs/main.tf#L2)
 - resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L40)
 - resource.google_storage_bucket_iam_member.log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L140)
 - resource.google_storage_bucket_iam_member.org_log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L205)
+- resource.google_storage_bucket_iam_member.org_network_log_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L260)
 
 
 ## Inputs
@@ -123,6 +127,7 @@ The following resources are created:
 | <a name="input_enable_bucket_lock"></a> [enable\_bucket\_lock](#input\_enable\_bucket\_lock) | Opt-in WORM lock: apply a LOCKED retention policy of log\_retention\_days to the audit-log bucket, making objects undeletable before the window elapses (even by an admin). Default false preserves the current operator-correctable behaviour. A locked retention policy is IRREVERSIBLE — enable only for compliance regimes that require tamper-proof retention. | `bool` | `false` | no |
 | <a name="input_enable_log_analytics"></a> [enable\_log\_analytics](#input\_enable\_log\_analytics) | With org\_id set, route every org audit log into a Cloud Logging log bucket with Log Analytics enabled (and, with enable\_log\_analytics\_linked\_dataset, a linked read-only BigQuery dataset). Default true. | `bool` | `true` | no |
 | <a name="input_enable_log_analytics_linked_dataset"></a> [enable\_log\_analytics\_linked\_dataset](#input\_enable\_log\_analytics\_linked\_dataset) | Create the linked BigQuery dataset on the Log Analytics bucket (query audit logs from BigQuery without copying them). Default true. | `bool` | `true` | no |
+| <a name="input_enable_network_log_export"></a> [enable\_network\_log\_export](#input\_enable\_network\_log\_export) | With org\_id set, add an aggregated org sink that copies firewall rule logs, Cloud NAT logs and Application Load Balancer request logs (with the Cloud Armor verdict) from every project into the audit bucket, under the same retention, lifecycle and lock as the audit logs. Default false. Volume, and so storage cost, grows with traffic and with how many firewall rules and NAT gateways have logging on. | `bool` | `false` | no |
 | <a name="input_force_destroy_bucket"></a> [force\_destroy\_bucket](#input\_force\_destroy\_bucket) | When deleting the bucket, automatically delete all objects | `bool` | `false` | no |
 | <a name="input_kms_key_name"></a> [kms\_key\_name](#input\_kms\_key\_name) | The KMS key name to encrypt the audit logs bucket (optional). Format: projects/{project}/locations/{location}/keyRings/{keyring}/cryptoKeys/{key} | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
@@ -154,6 +159,8 @@ The following resources are created:
 | <a name="output_log_retention_days"></a> [log\_retention\_days](#output\_log\_retention\_days) | Days the audit-log bucket keeps objects: the age of its lifecycle Delete rule (and of the locked retention policy when enable\_bucket\_lock is true). |
 | <a name="output_log_sink_name"></a> [log\_sink\_name](#output\_log\_sink\_name) | The name of the log sink |
 | <a name="output_log_sink_writer_identity"></a> [log\_sink\_writer\_identity](#output\_log\_sink\_writer\_identity) | The service account that writes audit logs to the storage bucket |
+| <a name="output_network_log_sink"></a> [network\_log\_sink](#output\_network\_log\_sink) | The org sink that copies firewall, Cloud NAT and load balancer request logs into the audit bucket: name, destination and filter. Null when enable\_network\_log\_export is false or org\_id is null. |
+| <a name="output_network_log_sink_writer_identity"></a> [network\_log\_sink\_writer\_identity](#output\_network\_log\_sink\_writer\_identity) | Writer identity of the network log sink (null when the sink is not created). |
 | <a name="output_org_log_sink_name"></a> [org\_log\_sink\_name](#output\_org\_log\_sink\_name) | The name of the organization-level log sink (if created) |
 | <a name="output_org_log_sink_writer_identity"></a> [org\_log\_sink\_writer\_identity](#output\_org\_log\_sink\_writer\_identity) | The service account that writes org-level audit logs to the storage bucket |
 | <a name="output_storage_bucket_name"></a> [storage\_bucket\_name](#output\_storage\_bucket\_name) | The name of the storage bucket where audit logs are exported |

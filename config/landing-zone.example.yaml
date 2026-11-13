@@ -132,6 +132,12 @@ gcp:
   # Opt-in WORM lock on the org audit-log bucket (gcp-organization). IRREVERSIBLE:
   # leave false unless a compliance regime requires tamper-proof retention.
   # enable_audit_bucket_lock: false
+  # Copy firewall rule logs, Cloud NAT logs and load balancer request logs
+  # (with the Cloud Armor verdict) from every project into the audit bucket,
+  # with its retention and lock (gcp-organization). Unset = on when an
+  # environment is compliance_class: regulated or compliance.frameworks is
+  # set. Storage cost grows with traffic (control-matrix.md LOG-06).
+  # enable_network_log_export: true
   # Dedicated logging project for the audit bucket, audit CMEK keys and
   # control-plane alerts (gcp-organization). Create it outside Terraform,
   # directly under the organization node, owned by a group other than the

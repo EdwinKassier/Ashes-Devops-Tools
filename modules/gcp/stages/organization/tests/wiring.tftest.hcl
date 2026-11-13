@@ -75,3 +75,52 @@ run "audit_cmek_in_logging_project" {
     error_message = "the audit store must plan in the logging project with the audit CMEK."
   }
 }
+
+# CMP-02: the network and edge log sink is off unless the root asks for it.
+run "network_log_export_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = module.audit_logs.network_log_sink == null && output.network_log_sink == null
+    error_message = "without gcp.enable_network_log_export the stage must plan no network log sink."
+  }
+}
+
+# On, it writes to the same audit bucket (here in the logging project) and the
+# writer's logging.logWriter grant is checked against organization-apply's
+# hasOnly allow-list.
+run "network_log_export_to_audit_store" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      logging_project_id        = "acme-logging"
+      logging_project_number    = "999999999999"
+      enable_network_log_export = true
+    })
+  }
+
+  assert {
+    condition     = output.network_log_sink.destination == "storage.googleapis.com/acme-logging-audit-logs"
+    error_message = "the network log sink must write to the protected audit bucket in the logging project."
+  }
+
+  assert {
+    condition     = contains(local.organization_apply_granted_roles, "roles/logging.logWriter") && contains(local.organization_apply_granted_roles, "roles/storage.objectCreator")
+    error_message = "the sink writer grants must be listed for the organization-apply hasOnly check."
+  }
+}
+
+run "network_log_export_grant_not_allowed_fails" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      enable_control_plane_alerting = false
+      enable_network_log_export     = true
+    })
+    organization_apply_grantable_roles = ["roles/billing.admin", "roles/logging.bucketWriter"]
+  }
+
+  expect_failures = [terraform_data.organization_apply_grants_allowed]
+}

@@ -25,7 +25,8 @@ that read the key also fail the plan on any other value.
 ## What regulated turns on
 
 Every guard below fails the plan and names the config key or variable to fix.
-A guard does not create or change a resource.
+A guard does not create or change a resource. One row is not a guard: the
+network and edge log export adds an org sink.
 
 | Control | GCP (`gcp-workload-<env>`) | AWS (`aws-network`, `aws-security`) |
 |:--|:--|:--|
@@ -34,6 +35,7 @@ A guard does not create or change a resource.
 | Flow logs | Every flow is sampled (`log_config_flow_sampling = 1`), aggregated at `INTERVAL_5_SEC` (the default), and the export is kept 365 days (`vpc_flow_logs_retention_days`). Lower values fail the plan. | VPC flow logs already record `ALL` traffic to the log-archive bucket (LOG-13). Their retention is the log-archive retention (`aws_overrides.log_archive_retention_days`, else `compliance.audit_log_retention_days`, else 365). `aws-security` fails the plan when it is below 365 days. |
 | Edge | Cloud Armor with the OWASP managed rules. `enable_cloud_armor = false` or `enable_owasp_rules = false` fails the plan. | No change. |
 | Backups | A Backup and DR vault in the host project with enforced retention (default 35 days) and organization-only access, and a daily plan for every app-service database (BCK-07, PREVIEW). `enable_backup_vault = false` fails the plan. The retention lock is never set by the class. | No change. |
+| Network and edge logs | `gcp-organization` adds the org sink `org-network-logs`. It copies firewall, Cloud NAT and load balancer request logs (with the Cloud Armor verdict) from every project into the audit bucket, with the audit retention (LOG-06). A `compliance.frameworks` entry turns it on too. `gcp.enable_network_log_export: false` turns it off. | No change. VPC flow logs already go to the log archive. |
 | Audit store | `gcp-organization` fails the plan until the audit bucket is WORM-locked in a separate logging project, or an unexpired `gcp.audit_store_waiver` `{reason, expires}` is set (LOG-03, LOG-04). | No change. |
 | Database encryption | Every app-service database must set `database.encryption_key_name` (a CMEK in the instance region) and keep deletion protection on, or the plan fails (DP-05). An existing database without a key is never replaced: the plan fails until you migrate it (`UPGRADING.md`). | No change. |
 

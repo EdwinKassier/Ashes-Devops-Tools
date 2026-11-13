@@ -194,6 +194,7 @@ variable "gcp_overrides" {
     prefer_managed_constraints                  = optional(bool)
     enable_log_analytics                        = optional(bool)
     log_analytics_retention_days                = optional(number)
+    enable_network_log_export                   = optional(bool)
     enable_logging_organization_settings        = optional(bool)
     scc_api_version                             = optional(string)
     disable_default_sink                        = optional(bool)

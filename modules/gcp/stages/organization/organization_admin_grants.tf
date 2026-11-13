@@ -9,7 +9,8 @@
 # Grants that need the allow-list:
 #   - roles/billing.admin on the org node (billing admin groups);
 #   - roles/logging.bucketWriter and roles/logging.logWriter on the audit
-#     project (the Log Analytics and control-plane sink writer identities);
+#     project (the Log Analytics, control-plane and network log sink writer
+#     identities);
 #   - with a separate logging project (gcp.logging_project_id), whose IAM
 #     organization-apply does not administer through admin-project roles:
 #     roles/storage.objectCreator on the audit buckets and
@@ -23,7 +24,7 @@ locals {
   organization_apply_granted_roles = sort(distinct(concat(
     length(local.billing_admin_members) > 0 ? ["roles/billing.admin"] : [],
     var.gcp.enable_log_analytics ? ["roles/logging.bucketWriter"] : [],
-    var.gcp.enable_control_plane_alerting ? ["roles/logging.logWriter"] : [],
+    var.gcp.enable_control_plane_alerting || var.gcp.enable_network_log_export ? ["roles/logging.logWriter"] : [],
     local.separate_logging_project ? ["roles/storage.objectCreator", "roles/cloudkms.cryptoKeyEncrypterDecrypter"] : [],
   )))
   organization_apply_missing_roles = var.organization_apply_grantable_roles == null ? [] : sort(tolist(setsubtract(toset(local.organization_apply_granted_roles), toset(var.organization_apply_grantable_roles))))

@@ -246,6 +246,11 @@ variable "gcp" {
     # Retention (days) of the audit Log Analytics bucket. Locked (irreversibly) together with the GCS
     # audit bucket when enable_audit_bucket_lock = true.
     log_analytics_retention_days = optional(number, 400)
+    # Copy firewall rule logs, Cloud NAT logs and Application Load Balancer request logs (with the
+    # Cloud Armor verdict) from every project into the GCS audit bucket through an aggregated org
+    # sink (org-network-logs). They then have the audit bucket's retention, lifecycle, lock and CMEK.
+    # Default false here; the gcp-organization root turns it on for regulated or framework estates.
+    enable_network_log_export = optional(bool, false)
     # Manage the organization's Cloud Logging settings (google_logging_organization_settings): the
     # storage location of the `_Default` and `_Required` log buckets of new projects
     # (logging_settings_storage_location, default default_region) and optionally their CMEK

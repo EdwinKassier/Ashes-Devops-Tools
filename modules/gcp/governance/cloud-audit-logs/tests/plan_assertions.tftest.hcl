@@ -189,3 +189,88 @@ run "retention_output_reads_lifecycle" {
     error_message = "log_retention_days must set the lifecycle Delete age, the output and the locked retention period."
   }
 }
+
+# ── CMP-02: network and edge logs into the protected audit store ───────────────
+
+run "network_log_export_off_by_default" {
+  command = plan
+
+  variables {
+    org_id = "123456789"
+  }
+
+  assert {
+    condition     = length(google_logging_organization_sink.org_network_logs_sink) == 0 && length(google_storage_bucket_iam_member.org_network_log_writer) == 0 && length(google_project_iam_member.org_network_log_router) == 0
+    error_message = "The network log sink and its grants must not be planned unless enable_network_log_export = true."
+  }
+
+  assert {
+    condition     = output.network_log_sink == null
+    error_message = "network_log_sink must be null when the export is off."
+  }
+}
+
+run "network_log_export_needs_org_id" {
+  command = plan
+
+  variables {
+    enable_network_log_export = true
+  }
+
+  assert {
+    condition     = length(google_logging_organization_sink.org_network_logs_sink) == 0
+    error_message = "The network log sink is an org sink: without org_id nothing must be planned."
+  }
+}
+
+run "network_log_export_routes_to_audit_bucket" {
+  command = plan
+
+  variables {
+    org_id                    = "123456789"
+    enable_network_log_export = true
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_network_logs_sink[0].destination == "storage.googleapis.com/${var.project_id}-audit-logs"
+    error_message = "The network log sink must write to the protected audit bucket (<project>-audit-logs), not to a second store."
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_network_logs_sink[0].include_children == true && google_logging_organization_sink.org_network_logs_sink[0].org_id == "123456789"
+    error_message = "The network log sink must be an aggregated org sink (include_children = true)."
+  }
+
+  assert {
+    condition = alltrue([
+      for id in [
+        "compute.googleapis.com%2Ffirewall",
+        "compute.googleapis.com%2Fnat_flows",
+        "requests",
+        "loadbalancing.googleapis.com%2Frequests",
+        "loadbalancing.googleapis.com%2Fexternal_regional_requests",
+      ] : strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "logName:\"/logs/${id}\"")
+    ])
+    error_message = "The filter must select the firewall, Cloud NAT and load balancer request (Cloud Armor) log IDs."
+  }
+
+  assert {
+    condition     = !strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "cloudaudit") && !strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "vpc_flows")
+    error_message = "The filter must not duplicate the audit logs (org-audit-sink) or take the VPC flow logs (exported per environment)."
+  }
+
+  assert {
+    condition     = google_storage_bucket_iam_member.org_network_log_writer[0].bucket == "${var.project_id}-audit-logs" && google_storage_bucket_iam_member.org_network_log_writer[0].role == "roles/storage.objectCreator"
+    error_message = "The sink writer must get objectCreator on the audit bucket only."
+  }
+
+  assert {
+    condition     = google_project_iam_member.org_network_log_router[0].project == var.project_id && google_project_iam_member.org_network_log_router[0].role == "roles/logging.logWriter"
+    error_message = "The sink writer must get logging.logWriter (logging.logEntries.route) on the audit project."
+  }
+
+  assert {
+    condition     = output.network_log_sink.name == "org-network-logs" && output.network_log_sink.destination == "storage.googleapis.com/${var.project_id}-audit-logs"
+    error_message = "network_log_sink must report the sink name and destination."
+  }
+}

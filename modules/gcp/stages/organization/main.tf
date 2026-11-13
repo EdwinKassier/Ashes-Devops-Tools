@@ -170,6 +170,10 @@ module "audit_logs" {
   enable_log_analytics         = var.gcp.enable_log_analytics
   log_analytics_retention_days = var.gcp.log_analytics_retention_days
 
+  # CMP-02: firewall, Cloud NAT and load balancer request (Cloud Armor) logs
+  # into the same audit bucket, with its retention.
+  enable_network_log_export = var.gcp.enable_network_log_export
+
   # Enable BigQuery Analytics for improved security investigation
   enable_bigquery_analytics = true
   bigquery_location         = var.default_region

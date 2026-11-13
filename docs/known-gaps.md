@@ -1057,6 +1057,28 @@ GCP:
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.
 
+- **GCP network and edge log export** (LOG-06, CMP-02,
+  `modules/gcp/governance/cloud-audit-logs` `enable_network_log_export`; on in
+  `gcp-organization` for a regulated or framework estate, else
+  `gcp.enable_network_log_export`). Mock-tested only. Prove in a sandbox:
+  - The sink filter matches. The log IDs come from Google's docs, checked
+    2026-11-13: `compute.googleapis.com/firewall` (firewall rules and firewall
+    policy rules), `compute.googleapis.com/nat_flows` (Cloud NAT), `requests`
+    (global external and internal Application Load Balancers),
+    `loadbalancing.googleapis.com/requests` and
+    `loadbalancing.googleapis.com/external_regional_requests` (listed for the
+    internal and regional external load balancers). Google's pages disagree on
+    the regional log IDs, so the filter takes all of them. Check that objects
+    appear in the audit bucket for a firewall hit, a NAT translation error and
+    a request to a load balancer with a Cloud Armor policy.
+  - The writer grants. The module grants `roles/storage.objectCreator` on the
+    bucket (as for `org-audit-sink`) and `roles/logging.logWriter` on the audit
+    project, which Google's sink guide asks for on every destination.
+    `org-audit-sink` has no `roles/logging.logWriter` grant: confirm whether it
+    needs one.
+  - With the audit project in an enforced VPC-SC perimeter, the ingress rule
+    admits the new writer identity.
+
 - **GCP Backup and DR vault for Cloud SQL** (BCK-07, CMP-8,
   `modules/gcp/backup/backup-vault`; on for `compliance_class: regulated`,
   else `enable_backup_vault` or `gcp.environments.<env>.backup_vault`).

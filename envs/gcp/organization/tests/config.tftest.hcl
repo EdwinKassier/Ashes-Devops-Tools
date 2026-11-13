@@ -249,3 +249,112 @@ run "restrict_tls_versions_off_in_starter" {
     error_message = "the starter profile must not set gcp.restrictTLSVersion."
   }
 }
+
+# ── CMP-02: network and edge logs into the audit store ─────────────────────────
+# Default: off for an estate with no regulated environment and no framework.
+run "network_log_export_off_by_default" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = local.enable_network_log_export == false && module.organization.network_log_sink == null
+    error_message = "without a regulated environment or a compliance framework the network log sink must not be planned."
+  }
+}
+
+# A compliance.frameworks entry turns it on, and the logs land in the audit
+# bucket that has the framework retention floor (hipaa: 2190 days).
+run "network_log_export_on_for_frameworks" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.enable_network_log_export && module.organization.network_log_sink.destination == "storage.googleapis.com/acme-admin-abcd-audit-logs"
+    error_message = "compliance.frameworks must turn on the network log sink into the audit bucket."
+  }
+
+  assert {
+    condition     = module.organization.audit_log_retention_days == 2190
+    error_message = "the audit bucket that receives the network logs must keep the framework retention."
+  }
+}
+
+# A regulated environment turns it on; the sink writes to the logging project.
+run "network_log_export_on_for_regulated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-sod.yaml"
+  }
+
+  override_data {
+    target = data.google_project.logging
+    values = {
+      folder_id = ""
+    }
+  }
+
+  assert {
+    condition     = local.enable_network_log_export && module.organization.network_log_sink.destination == "storage.googleapis.com/acme-logging-prod-audit-logs"
+    error_message = "a compliance_class: regulated environment must turn on the network log sink into the logging project's audit bucket."
+  }
+
+  assert {
+    condition     = strcontains(module.organization.network_log_sink.filter, "logName:\"/logs/compute.googleapis.com%2Ffirewall\"") && strcontains(module.organization.network_log_sink.filter, "logName:\"/logs/requests\"") && strcontains(module.organization.network_log_sink.filter, "logName:\"/logs/compute.googleapis.com%2Fnat_flows\"")
+    error_message = "the root's sink must carry the firewall, request and NAT log filter."
+  }
+}
+
+# gcp.enable_network_log_export: false in config turns it off for a framework estate.
+run "network_log_export_forced_off_in_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.network-logs-off.yaml"
+  }
+
+  assert {
+    condition     = length(local.cfg.compliance_frameworks) > 0 && local.enable_network_log_export == false && module.organization.network_log_sink == null
+    error_message = "gcp.enable_network_log_export: false must win over the compliance.frameworks default."
+  }
+}
+
+# gcp_overrides.enable_network_log_export = true turns it on for any estate.
+run "network_log_export_forced_on_by_override" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    gcp_overrides = {
+      enable_network_log_export = true
+    }
+  }
+
+  assert {
+    condition     = local.enable_network_log_export && module.organization.network_log_sink != null
+    error_message = "gcp_overrides.enable_network_log_export = true must turn on the network log sink."
+  }
+}
+
+# The override also beats the derived default in the other direction.
+run "network_log_export_forced_off_by_override" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    gcp_overrides = {
+      enable_network_log_export = false
+    }
+  }
+
+  assert {
+    condition     = module.organization.network_log_sink == null
+    error_message = "gcp_overrides.enable_network_log_export = false must turn off the network log sink."
+  }
+}
