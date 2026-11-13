@@ -539,7 +539,7 @@ Two differences change the design:
 |---|---|---|
 | Services, databases | `aws-workload-<env>` (`envs/aws/workload`) through `modules/aws/stages/app-services` | `gcp-workload-<env>` (`envs/gcp/workload`) through `modules/gcp/stages/app-services` in the environment stage |
 | Event fan-out | Raw SNS topic and SQS queues in `envs/aws/workload` | Module topic per producer; raw subscriptions in `envs/gcp/workload` |
-| Egress to broker APIs | TGW and inspection in `aws-network` (`envs/aws/network`) | Private Google Access from `private`; not inspected |
+| Egress to broker APIs | TGW and inspection in `aws-network` (`envs/aws/network`) | Private Google Access from `private`; other internet calls take Cloud NAT, not inspected (egress proxy off or waived), or the hub Secure Web Proxy with `egress_proxy` on |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
 Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):

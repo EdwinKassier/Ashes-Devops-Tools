@@ -343,6 +343,10 @@ graph TB
   `aws-security` → `aws-network` → … → `aws-workload-<env>`. GCP:
   `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` →
   `gcp-workload-<env>`.
+- **Policy sets.** Terraform Cloud runs every apply. Once any environment has
+  `is_production: true`, the `tfc-admin` plan fails unless the OPA policy sets
+  are on (the default with `org.tfc.plan: standard` or `premium` and
+  `org.tfc.vcs_repo` set) or a time-boxed `org.tfc.policy_sets_waiver` is set.
 
 ### Hub-spoke and the tiered VPC
 
@@ -373,15 +377,28 @@ graph TB
   [AWS landing zone: network topology](../../docs/architecture/aws-landing-zone.md#network-topology).
   Two caveats from [known gaps](../../docs/known-gaps.md#open--validate-before-relying-on):
   a spoke has no routing until it is listed in `aws.network.spoke_attachments`,
-  and with `enable_network_firewall = false` wired spokes have no egress at all.
-- **GCP:** egress is **not** inspected through the hub. Each environment's host
-  VPC has its own Cloud NAT for the `private` and `database` tiers, the
-  `database` tier's egress is denied by firewall, and VMs cannot have external
-  IPs (`compute.vmExternalIpAccess`). See
+  and with `enable_network_firewall = false` (the `starter` profile) spokes
+  reach the internet through the central NAT without inspection. Use the
+  `production` profile when egress must be inspected.
+- **GCP:** by default each environment's host VPC has its own Cloud NAT for the
+  `private` tier. The `database` tier is not translated and its egress is
+  denied by firewall, and VMs cannot have external IPs
+  (`compute.vmExternalIpAccess`). Cloud NAT translates addresses; it has no
+  destination allowlist. The opt-in hub Secure Web Proxy (preview) adds one:
+  `secure_web_proxy` on `gcp-network-hub` publishes a proxy with an FQDN
+  allowlist over Private Service Connect, and
+  `gcp.environments.<env>.egress_proxy: true` gives that environment an
+  endpoint to it and takes the `private` tier off Cloud NAT. app-services then
+  sends every Cloud Run service and job through the VPC and sets
+  `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` on it. The proxy serves only
+  environments in the hub region, matches host names only (no TLS inspection),
+  and is not yet proven in a sandbox ([known gaps](../../docs/known-gaps.md)).
+  A production environment's plan fails until it turns the proxy on or sets a
+  time-boxed `production_egress_proxy_waiver`
+  ([production hardening](../../docs/runbooks/production-hardening.md#1-vpc-service-controls-promote-from-dry-run-to-enforced-audit-m2)).
+  In the walkthroughs, "Cloud NAT, not inspected" describes an environment with
+  the proxy off or waived. See
   [GCP landing zone: network topology](../../docs/architecture/gcp-landing-zone.md#network-topology).
-  If a design needs inspected egress on GCP, say that it is an addition
-  (for example Cloud NGFW or Secure Web Proxy) and not something this repo
-  provides today.
 
 ### Per-stage identities
 
@@ -614,7 +631,9 @@ Walkthrough #14 elaborates; this table is the rule.
 - **AWS `public`:** to the internet gateway, and only in VPCs excluded from the
   org's VPC Block Public Access
   ([`modules/aws/stages/workload/main.tf`](../../modules/aws/stages/workload/main.tf)).
-- **GCP `private`:** the environment's Cloud NAT, not inspected through the hub.
+- **GCP `private`:** the environment's Cloud NAT, not inspected, while the
+  egress proxy is off or waived; with `egress_proxy` on, no Cloud NAT, only the
+  hub Secure Web Proxy (see [inspected egress](#inspected-egress)).
   Cloud Run with `PRIVATE_RANGES_ONLY`, the app-services default while the
   environment egress proxy is off
   ([`modules/gcp/stages/app-services/variables.tf`](../../modules/gcp/stages/app-services/variables.tf)),
@@ -853,7 +872,8 @@ module "workload_cmek" {
   }
 }
 
-# Gap: a raw Cloud Run service outside app-services, in the landing zone's conventions.
+# Gap: modules/gcp/compute/cloud-run has no encryption_key input, so a CMEK
+# service is a raw resource, in the landing zone's conventions.
 resource "google_service_account" "ingest" {
   project      = local.env_config.host_project_id
   account_id   = "ingest-run" # <component>-run
@@ -873,7 +893,7 @@ resource "google_cloud_run_v2_service" "ingest" {
     encryption_key  = module.workload_cmek.key_ids["ingest"] # full key ID, not key_names
 
     vpc_access {
-      egress = "ALL_TRAFFIC" # internet-bound traffic also goes through the VPC firewall and Cloud NAT
+      egress = "ALL_TRAFFIC" # internet-bound traffic also enters the VPC (see the notes)
       network_interfaces {
         subnetwork = values(module.environment.subnets.private)[0].id
         tags       = ["compute"] # the tiered-vpc compute tier tag
@@ -901,8 +921,17 @@ Notes:
 - `ALL_TRAFFIC` differs from the app-services default `PRIVATE_RANGES_ONLY`
   (the default while the environment egress proxy is off; with it on, the
   default is `ALL_TRAFFIC`).
-  It is chosen here so that internet-bound traffic meets the VPC's controls. See
-  [VPC-tier placement](#vpc-tier-placement).
+  It is chosen here so that internet-bound traffic meets the VPC's controls:
+  the egress firewall and Cloud NAT, or, with the environment's `egress_proxy`
+  on, the hub Secure Web Proxy. See [VPC-tier placement](#vpc-tier-placement).
+- With `egress_proxy` on, the `private` tier has no Cloud NAT, and this raw
+  service does not get the `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`
+  variables that app-services sets. Add them as `env` blocks
+  (`http://<proxy endpoint address>:<port>`, and the app-services `NO_PROXY`
+  list), or the service has no internet path. The endpoint address is the
+  net-spoke output `egress_proxy_address`; the environment stage does not
+  export it. A service that does not need CMEK is simpler through
+  app-services, which sets all of this.
 
 ---
 

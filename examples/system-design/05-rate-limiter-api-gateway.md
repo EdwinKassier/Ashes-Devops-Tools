@@ -470,8 +470,9 @@ Two differences change the design:
 Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)): the
 gateway in `private`, the counter store in `isolated` (AWS) or behind PSC in the
 `database` tier (GCP). On GCP, `ALL_TRAFFIC` sends the gateway's internet-bound
-traffic, if any, through the environment's Cloud NAT, which is not inspected
-through the hub.
+traffic, if any, into the VPC: through the environment's Cloud NAT, not
+inspected, while the egress proxy is off or waived, or through the hub Secure
+Web Proxy with `egress_proxy` on.
 
 ### Config
 

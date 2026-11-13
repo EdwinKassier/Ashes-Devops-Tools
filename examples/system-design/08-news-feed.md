@@ -469,7 +469,7 @@ times its normal reads. Give it its own capacity plan.
 | `post`, `feed`, `fanout`, posts DB, fan-out queue | `aws-workload-<env>` (`envs/aws/workload`) through `modules/aws/stages/app-services` | `gcp-workload-<env>` (`envs/gcp/workload`) through `modules/gcp/stages/app-services` in the environment stage |
 | Timeline cache | Raw ElastiCache in `envs/aws/workload`, `isolated` tier | Raw Memorystore in `envs/gcp/workload`, host project, PSC endpoints in the `database` subnet |
 | CMEK | `local.kms_key_arn` (`workload_kms_key_arn`) | New `module "workload_cmek"` per the [CMEK source](00-primer.md#cmek-source) convention |
-| Egress | TGW and inspection in `aws-network` | Per-environment Cloud NAT, not inspected through the hub |
+| Egress | TGW and inspection in `aws-network` | Per-environment Cloud NAT, not inspected (egress proxy off or waived); with `egress_proxy` on, the hub Secure Web Proxy |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
 Per [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)),

@@ -497,7 +497,8 @@ collectors in `private`, managed stores in no tier. On AWS the hub's interface
 endpoints include `logs` but not `aps` or `xray`, so those calls leave through
 central inspection, and a narrowed `aws.network.egress_domain_allowlist` must
 keep their hostnames. On GCP, egress uses the environment's Cloud NAT,
-uninspected. A cross-account view (CloudWatch OAM, GCP metrics scopes) would
+uninspected, while the egress proxy is off or waived; with `egress_proxy` on,
+any third-party telemetry endpoint must be on the hub proxy's allowlist. A cross-account view (CloudWatch OAM, GCP metrics scopes) would
 sit in `aws-shared-services` or a shared project; the repo builds none.
 
 ### Config

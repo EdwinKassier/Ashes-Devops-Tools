@@ -553,7 +553,7 @@ service by tenant.
 | Orchestrator, ingest worker, pgvector database | `aws-workload-<env>` (`envs/aws/workload`) through app-services | `gcp-workload-<env>` (`envs/gcp/workload`) through app-services in the environment stage |
 | Guardrail, invocation logging, Model Armor | Raw resources in `envs/aws/workload` | Raw resources in `envs/gcp/workload` |
 | GPU serving | No module: EKS or ECS on EC2 is new work | The environment's optional GKE Autopilot cluster |
-| Egress to model APIs | TGW → Network Firewall → NAT in `aws-network` (`envs/aws/network`) | Private Google Access; Cloud Run's internet traffic bypasses Cloud NAT under `PRIVATE_RANGES_ONLY` |
+| Egress to model APIs | TGW → Network Firewall → NAT in `aws-network` (`envs/aws/network`) | Private Google Access. Proxy off or waived: Cloud Run's internet traffic bypasses Cloud NAT under the default `PRIVATE_RANGES_ONLY`. With `egress_proxy` on, it defaults to `ALL_TRAFFIC` through the hub Secure Web Proxy, and production rejects `PRIVATE_RANGES_ONLY` |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
 On AWS, the hub's central interface endpoints do not include Bedrock, and

@@ -523,13 +523,17 @@ has a `JSON_SCHEMA` validator) and roll out every change gradually.
 | Internal entry | Internal ALB in the `private` tier | Cloud Run with internal ingress | The ALB's idle timeout defaults to 60 s ([AWS docs](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/edit-load-balancer-attributes.html), checked 2026-11); raise it for streamed LLM responses |
 | Routing config | AWS AppConfig: validators, gradual rollout, alarm rollback | Parameter Manager: versioned, regional, CMEK, references to secrets | AppConfig ships the canary and rollback; on GCP the pipeline does the ramp |
 | Attempt ledger | Aurora PostgreSQL (app-services `database`) | Cloud SQL PostgreSQL (app-services `database`) | Same model on both |
-| Egress to external backends | Transit Gateway → Network Firewall domain allowlist → central NAT gateway with fixed Elastic IPs | The environment's Cloud NAT; **not inspected** through the hub | AWS gives a stable, allowlistable source IP and SNI filtering. GCP NAT in the default `AUTO_ONLY` mode can add or remove addresses, so you cannot predict the next one; allowlisting needs manual allocation ([Google Cloud docs](https://docs.cloud.google.com/nat/docs/ports-and-addresses), checked 2026-11) |
+| Egress to external backends | Transit Gateway → Network Firewall domain allowlist → central NAT gateway with fixed Elastic IPs | The environment's Cloud NAT, **not inspected** (egress proxy off or waived); with `egress_proxy` on, the hub Secure Web Proxy and its FQDN allowlist | AWS gives a stable, allowlistable source IP and SNI filtering. GCP NAT in the default `AUTO_ONLY` mode can add or remove addresses, so you cannot predict the next one; allowlisting needs manual allocation ([Google Cloud docs](https://docs.cloud.google.com/nat/docs/ports-and-addresses), checked 2026-11) |
 | Managed LLM backends | Amazon Bedrock with cross-Region inference profiles | Vertex AI with the global endpoint or Provisioned Throughput | One more adapter each |
 
 The design-changing difference: AWS egress already filters by SNI and leaves
 from fixed addresses a PSP can allowlist. GCP needs `ALL_TRAFFIC` egress and
-manual NAT addresses for that, and domain filtering is an addition (see
-[inspected egress](00-primer.md#inspected-egress)).
+manual NAT addresses for that. Domain filtering on GCP is the opt-in hub
+Secure Web Proxy (preview): put the PSP hostnames on its allowlist (see
+[inspected egress](00-primer.md#inspected-egress)). The proxy leaves through
+its own Cloud NAT, not the environment's, so a PSP that allowlists source IPs
+needs that NAT's addresses instead; **verify before relying on** them staying
+fixed.
 
 ## Build it here
 
@@ -555,7 +559,10 @@ provider docs sources (checked 2026-11):
   required unless explicitly waived.
 - **GCP:** the environment's host project, workspace `gcp-workload-<env>` from
   `envs/gcp/workload`, on the first `private` subnet. Egress is the
-  environment's own Cloud NAT, not inspected.
+  environment's own Cloud NAT, not inspected, while the egress proxy is off
+  or waived. With `gcp.environments.<env>.egress_proxy: true`, PSP calls go
+  through the hub Secure Web Proxy, so the PSP hostnames go in the hub's
+  `secure_web_proxy.allowed_fqdns` (`gcp-network-hub`).
 - **Apply order:** `aws-network` before `aws-workload-<env>`;
   `gcp-network-hub` before `gcp-workload-<env>`. Later routing changes are
   config rollouts, not applies.
@@ -608,7 +615,7 @@ gcp:
           max_instances: 20
           concurrency: 250 # I/O-bound; see the estimates
           timeout: "10s" # cut stuck calls; the app enforces 3 s
-          vpc_egress: ALL_TRAFFIC # PSP calls through the VPC and Cloud NAT
+          vpc_egress: ALL_TRAFFIC # PSP calls through the VPC: Cloud NAT, or the hub proxy
           env_vars:
             ROUTING_PARAMETER: "projects/<host-project-id>/locations/<region>/parameters/pay-gateway-routing"
           secrets:

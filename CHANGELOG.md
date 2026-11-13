@@ -74,6 +74,15 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   linked `file.tf:NN` lines that had drifted. They now cite the file (and a symbol where it
   helps), and `scripts/check-examples-refs.sh` fails on a `<file>.(tf|hcl|rego|yaml|yml|py|sh):<line>`
   reference anywhere in `examples/system-design`.
+- **The system-design walkthroughs describe GCP egress as built.** The primer and walkthroughs
+  01-06, 08, 10, 13, 18 and 19 said GCP egress is always per-environment Cloud NAT and that the
+  repo has no Secure Web Proxy. They now say Cloud NAT applies with the egress proxy off or
+  waived, and point to the hub Secure Web Proxy (`secure_web_proxy` on `gcp-network-hub`,
+  `gcp.environments.<env>.egress_proxy`, preview, hub region only), with PSP and provider
+  hostnames on its allowlist. The primer also corrects starter-profile AWS egress (NAT without
+  inspection, not no egress), notes the tfc-admin policy-sets guard, and its raw Cloud Run
+  snippet names the real gap (the cloud-run module has no CMEK input) and the proxy variables a
+  raw service must set.
 
 ### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
 
