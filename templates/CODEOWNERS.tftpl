@@ -5,8 +5,13 @@
 #   1. ${platform_team}, ${security_team}, ${app_platform_team} and ${docs_team} exist and each has at least one member.
 #   2. Branch protection on the default branch has "Require review from Code
 #      Owners" enabled (docs/guides/BRANCH_PROTECTION.md).
-#   3. The required teams together have at least two people, so a guardrail
-#      change cannot be self-approved.
+#   3. The security team has at least one member who is not on the platform
+#      team and is not the author of the pull request.
+#   4. Every team is visible (not secret) and has Write access or higher to
+#      this repository. GitHub ignores an owner without it, and a line with
+#      no valid owner needs no code-owner review, so a security-only line
+#      fails open. `gh api repos/{owner}/{repo}/codeowners/errors` must show
+#      no errors.
 #
 # PRECEDENCE: GitHub applies the LAST matching line only, and ONE approval from
 # ANY owner on that line satisfies it. A line that lists the platform and the

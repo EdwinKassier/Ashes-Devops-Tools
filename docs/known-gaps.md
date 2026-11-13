@@ -17,7 +17,17 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   attribute names come from the hashicorp/aws 6.x and hashicorp/google 8.x
   schemas. No real HCP Terraform run has exercised it yet. Run one update
   that sets a `deletion_protection` to `false` in the sandbox and confirm
-  the policy check stops it. Owner: platform team.
+  the policy check stops it. Reversed switches, where `true` removes the
+  protection (`disable_api_termination` on `aws_instance`, `force_destroy`
+  on buckets and other resources), are not checked. Owner: platform team.
+- **tfc_admin_guard's variable set walk needs `input.plan.configuration`.**
+  The rule that passes an attachment of a set created in the same plan reads
+  the plan JSON `configuration`. The HCP Terraform OPA input documentation
+  describes `input.plan` as the JSON plan, but no real run has confirmed that
+  `configuration` is present. If it is absent, the rule fails closed: every
+  such attachment is denied until the security team overrides it. Run one
+  tfc-admin plan in the sandbox that creates and attaches a variable set and
+  confirm the policy check passes. Owner: platform team.
 - **Single-region estate; recovery objectives are design targets.** Both clouds
   deploy to one primary region by default. There is no warm standby, no
   multi-region failover, no Aurora Global Database and no Cloud SQL
@@ -1503,9 +1513,11 @@ side (all mock-tested, secure defaults):
   JSON `configuration` (through `each.value`, module arguments and module
   `for_each`) and passes the attachment if any of them reaches a
   `tfe_variable_set`. The references list does not say which part of an
-  expression a reference feeds, so `{ common = tfe_variable_set.common.id,
-  x = var.other_set_id }` passes. A reference the walk cannot follow (a
-  `local`, a data source) is denied, and the security team overrides it.
+  expression a reference feeds, so an expression that mixes a managed set
+  with another value, such as
+  `var.flag ? tfe_variable_set.c.id : data.tfe_variable_set.x.id`, passes. A
+  reference the walk cannot follow (a `local`, a data source, a module
+  output) is denied, and the security team overrides it.
 - **Credential-file arguments are not checked.** The policy does not look at
   the aws provider's `shared_config_files`, `shared_credentials_files` or
   `profile` (a file can set `credential_process`, which runs a command, or

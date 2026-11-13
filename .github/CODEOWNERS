@@ -15,10 +15,13 @@
 #   1. The teams exist and each has at least one member.
 #   2. Branch protection on the default branch has "Require review from Code
 #      Owners" enabled (docs/guides/BRANCH_PROTECTION.md).
-#   3. The required teams together have at least two people, so a guardrail change
-#      cannot be self-approved. The previous single-owner file made the
-#      "CODEOWNERS review + 1 approval" gate a bus-factor of one; team ownership
-#      with a distinct security team removes that.
+#   3. The security team has at least one member who is not on the platform
+#      team and is not the author of the pull request.
+#   4. Every team is visible (not secret) and has Write access or higher to
+#      this repository. GitHub ignores an owner without it, and a line with
+#      no valid owner needs no code-owner review, so a security-only line
+#      fails open. `gh api repos/{owner}/{repo}/codeowners/errors` must show
+#      no errors.
 #
 # The current maintainer should join @your-org/platform-team (and the security
 # team) rather than being named here, so ownership survives one person leaving.

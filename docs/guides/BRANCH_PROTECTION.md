@@ -84,9 +84,17 @@ and one approval from any owner on that line satisfies it. So:
   `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
   `/.github/requirements/` and `/.github/CODEOWNERS`.
 
-This separation holds only when the security team has at least one member who
-is not on the platform team, and that member is not the pull request author
-(GitHub does not count the author's own approval).
+This separation holds only when all of these are true:
+
+- The security team has at least one member who is not on the platform team
+  and is not the pull request author (GitHub does not count the author's own
+  approval).
+- The security team is visible (not secret) and has Write access or higher to
+  the repository. GitHub ignores an owner that does not meet this, and a line
+  with no valid owner needs no code-owner review, so a security-only line
+  fails open. The same holds for every other team in the file.
+- `gh api repos/{owner}/{repo}/codeowners/errors` shows no errors. Run it
+  after every change to `.github/CODEOWNERS` or to team access.
 
 ### Additional Restrictions
 

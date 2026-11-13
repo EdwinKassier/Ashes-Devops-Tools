@@ -451,9 +451,14 @@ overrides them.** `destroy_guard` (in the overridable
   `"PREVENT"`; and the string switches of `aws_cognito_user_pool`,
   `google_bigtable_table` and `google_firestore_database`.
 
+`aws_backup_selection` has no in-place update: every change to a selection
+(its resources, conditions or IAM role) is a replace, so every such run needs
+an override.
+
 In this repository that includes setting `enable_deletion_protection` to
 `false` on an existing GKE Autopilot cluster, Cloud SQL instance, Cloud Run
-job, Aurora cluster, load balancer or Network Firewall, and changing a
+service or job, Private CA certificate authority, Aurora cluster, load
+balancer or Network Firewall, and changing a
 project's `deletion_policy` from `"PREVENT"` before a teardown. Each such run needs a security-team override, as the
 [teardown runbook](docs/runbooks/teardown.md) describes. No manual step is
 needed before the upgrade.
@@ -467,8 +472,8 @@ same plan created any `tfe_variable_set`. Now its configuration must
 reference a `tfe_variable_set` resource, directly or through `each.value`,
 module arguments and module `for_each`. tfc-admin's own attachments
 (`module.workspace` with `variable_set_ids = { common = tfe_variable_set.common.id }`)
-pass. A fork that passes a new set's ID through a `local` or a data source is
-denied on the plan that creates the set: pass the resource reference
+pass. A fork that passes a new set's ID through a `local`, a data source or a
+module output is denied on the plan that creates the set: pass the resource reference
 directly, or have the security team override that one run.
 
 #### Mandatory OPA controls deny unknown values (policies, breaking)
