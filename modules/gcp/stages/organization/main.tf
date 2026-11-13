@@ -172,7 +172,8 @@ module "audit_logs" {
 
   # CMP-02: firewall, Cloud NAT and load balancer request (Cloud Armor) logs
   # into the same audit bucket, with its retention.
-  enable_network_log_export = var.gcp.enable_network_log_export
+  enable_network_log_export  = var.gcp.enable_network_log_export
+  network_log_writer_granted = var.gcp.network_log_writer_granted
 
   # Enable BigQuery Analytics for improved security investigation
   enable_bigquery_analytics = true

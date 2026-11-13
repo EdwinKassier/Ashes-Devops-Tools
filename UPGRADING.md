@@ -1657,17 +1657,33 @@ cost note in [`docs/architecture/gcp-landing-zone.md`](docs/architecture/gcp-lan
 and `docs/compliance/control-matrix.md` LOG-06.
 
 **Legacy audit sink identity.** If `org-audit-sink` was created before 2023-05-22, it keeps a
-dedicated legacy service account, and the new sink gets the shared one. The apply then fails on a
-postcondition of `org-network-logs` that names both identities. Check before you apply:
+dedicated legacy service account, and the new sink gets the org's shared Logging service account.
+Only the legacy account holds `roles/storage.objectCreator` on the audit bucket, so the new sink
+cannot deliver. Check before you apply: compare the writer identity of `org-audit-sink` with the
+org's shared Logging service account (shown by `gcloud logging sinks describe` for any org sink
+created on or after 2023-05-22). The list below shows every org sink and its identity:
 
 ```sh
-gcloud logging sinks describe org-audit-sink --organization=<ORG_ID> --format='value(writerIdentity)'
+gcloud logging sinks list --organization=<ORG_ID> --format='table(name, writerIdentity)'
 ```
 
-A shared identity has the form `service-org-<ORG_ID>@gcp-sa-logging.iam.gserviceaccount.com`. If
-yours differs, either set `gcp.enable_network_log_export: false`, or grant
-`roles/storage.objectCreator` on the audit bucket to the shared identity as break-glass (admin
-containment denies `setIamPolicy` on the audit bucket to the automation identity), then apply.
+If they differ:
+
+1. Grant `roles/storage.objectCreator` on the audit bucket to the shared identity as break-glass.
+   Admin containment denies `setIamPolicy` on the audit bucket to the automation identity.
+2. Set `gcp.network_log_writer_granted: true` in `config/landing-zone.yaml` (or
+   `gcp_overrides.network_log_writer_granted = true`).
+3. Apply `gcp-organization`.
+
+Or set `gcp.enable_network_log_export: false`.
+
+If you apply without the grant, the apply creates `org-network-logs` and then fails on its
+postcondition, which names both identities. Terraform does not undo the create, and it does not
+taint the sink (checked with Terraform 1.17.1): the sink stays in state, and its writes to the
+bucket fail until the grant exists, so those logs are not exported in that time. Every later plan
+fails on the same postcondition. Recover with the three steps above; the next apply then changes
+nothing on the sink. To back out instead, set `gcp.enable_network_log_export: false`; deleting the
+sink needs break-glass under admin containment and a `destroy_guard` override (see below).
 
 Other steps:
 

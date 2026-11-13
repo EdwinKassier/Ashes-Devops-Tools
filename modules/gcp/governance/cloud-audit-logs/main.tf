@@ -267,7 +267,11 @@ locals {
 # the export is turned off would stop the audit export. A new grant would also
 # be refused: admin containment denies setIamPolicy on the tagged audit bucket.
 # The postcondition catches the one case where the identities differ: an audit
-# sink created before 2023-05-22 keeps its own legacy service account.
+# sink created before 2023-05-22 keeps its own legacy service account. After a
+# break-glass objectCreator grant to the shared identity, the operator sets
+# network_log_writer_granted = true. A failed postcondition does not undo the
+# create: the sink stays in state (not tainted) and every later plan fails
+# until the grant is made and the flag is set, or the export is turned off.
 resource "google_logging_organization_sink" "org_network_logs_sink" {
   count = local.enable_network_log_export ? 1 : 0
 
@@ -281,8 +285,8 @@ resource "google_logging_organization_sink" "org_network_logs_sink" {
   lifecycle {
     # org_audit_sink exists whenever this sink does: both need org_id.
     postcondition {
-      condition     = self.writer_identity == google_logging_organization_sink.org_audit_sink[0].writer_identity
-      error_message = "The org-network-logs sink writes as ${self.writer_identity}, but org-audit-sink writes as ${google_logging_organization_sink.org_audit_sink[0].writer_identity}. org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated service account, so only that account holds roles/storage.objectCreator on the audit bucket. Grant roles/storage.objectCreator on gs://${google_storage_bucket.audit_logs.name} to ${self.writer_identity} as break-glass (admin containment denies setIamPolicy on the audit bucket to the automation identity), or set gcp.enable_network_log_export: false. See UPGRADING.md (CMP-02)."
+      condition     = self.writer_identity == google_logging_organization_sink.org_audit_sink[0].writer_identity || var.network_log_writer_granted
+      error_message = "The org-network-logs sink writes as ${self.writer_identity}, but org-audit-sink writes as ${google_logging_organization_sink.org_audit_sink[0].writer_identity}. org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated service account, so only that account holds roles/storage.objectCreator on the audit bucket, and this sink cannot deliver. Grant roles/storage.objectCreator on gs://${google_storage_bucket.audit_logs.name} to ${self.writer_identity} as break-glass (admin containment denies setIamPolicy on the audit bucket to the automation identity), then set gcp.network_log_writer_granted: true and apply. Or set gcp.enable_network_log_export: false. See UPGRADING.md (CMP-02)."
     }
   }
 }

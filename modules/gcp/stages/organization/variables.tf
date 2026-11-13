@@ -253,6 +253,10 @@ variable "gcp" {
     # service account of the audit sink.
     # Default false here; the gcp-organization root turns it on for regulated or framework estates.
     enable_network_log_export = optional(bool, false)
+    # Set true only after a break-glass grant of roles/storage.objectCreator on the audit bucket to
+    # the network log sink's writer identity, when org-audit-sink has a legacy (pre-2023-05-22)
+    # dedicated identity. Lets the sink's identity postcondition pass. Default false.
+    network_log_writer_granted = optional(bool, false)
     # Manage the organization's Cloud Logging settings (google_logging_organization_settings): the
     # storage location of the `_Default` and `_Required` log buckets of new projects
     # (logging_settings_storage_location, default default_region) and optionally their CMEK

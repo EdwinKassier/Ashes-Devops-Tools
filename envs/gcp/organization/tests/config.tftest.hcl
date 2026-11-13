@@ -358,3 +358,34 @@ run "network_log_export_forced_off_by_override" {
     error_message = "gcp_overrides.enable_network_log_export = false must turn off the network log sink."
   }
 }
+
+# gcp.network_log_writer_granted reaches the module (legacy audit sink identity
+# after the break-glass grant); the override wins over the config file.
+run "network_log_writer_granted_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.network-logs-granted.yaml"
+  }
+
+  assert {
+    condition     = local.enable_network_log_export && local.gcp.network_log_writer_granted == true
+    error_message = "gcp.network_log_writer_granted must flow from config into the stage object."
+  }
+}
+
+run "network_log_writer_granted_override" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.network-logs-granted.yaml"
+    gcp_overrides = {
+      network_log_writer_granted = false
+    }
+  }
+
+  assert {
+    condition     = local.gcp.network_log_writer_granted == false
+    error_message = "gcp_overrides.network_log_writer_granted must win over the config file."
+  }
+}

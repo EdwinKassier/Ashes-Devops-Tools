@@ -47,8 +47,11 @@ locals {
     # gcp.enable_network_log_export (CMP-02): null = derived (on for a
     # regulated or framework estate).
     enable_network_log_export = try(tobool(local.lz.gcp.enable_network_log_export), null)
-    logging_project_id        = try(tostring(local.lz.gcp.logging_project_id), null)
-    logging_project_number    = try(tostring(local.lz.gcp.logging_project_number), null)
+    # gcp.network_log_writer_granted: set after the break-glass grant for a
+    # legacy audit sink identity (UPGRADING.md, CMP-02).
+    network_log_writer_granted = try(tobool(local.lz.gcp.network_log_writer_granted), null)
+    logging_project_id         = try(tostring(local.lz.gcp.logging_project_id), null)
+    logging_project_number     = try(tostring(local.lz.gcp.logging_project_number), null)
     # SOFTWARE or HSM for the two audit CMEK keys (CMP-12). ForceNew: set it
     # only where the audit keys are created fresh.
     audit_key_protection_level = try(tostring(local.lz.gcp.audit_key_protection_level), null)
@@ -138,6 +141,7 @@ locals {
     allowed_regions                  = local.cfg.allowed_regions
     enable_audit_bucket_lock         = local.cfg.enable_audit_bucket_lock
     enable_network_log_export        = local.cfg.enable_network_log_export
+    network_log_writer_granted       = local.cfg.network_log_writer_granted
     logging_project_id               = local.cfg.logging_project_id
     logging_project_number           = local.cfg.logging_project_number
     audit_key_protection_level       = local.cfg.audit_key_protection_level

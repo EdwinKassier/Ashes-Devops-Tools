@@ -93,18 +93,18 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L295)
-- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L343)
-- resource.google_logging_linked_dataset.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L412)
-- resource.google_logging_organization_sink.org_audit_analytics_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L386)
-- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L321)
+- resource.google_bigquery_dataset.audit_logs_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L299)
+- resource.google_bigquery_dataset_iam_member.bq_sink_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L347)
+- resource.google_logging_linked_dataset.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L416)
+- resource.google_logging_organization_sink.org_audit_analytics_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L390)
+- resource.google_logging_organization_sink.org_audit_bq_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L325)
 - resource.google_logging_organization_sink.org_audit_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L188)
-- resource.google_logging_organization_sink.org_network_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L271)
-- resource.google_logging_project_bucket_config.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L365)
+- resource.google_logging_organization_sink.org_network_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L275)
+- resource.google_logging_project_bucket_config.audit_analytics (modules/gcp/governance/cloud-audit-logs/main.tf#L369)
 - resource.google_logging_project_sink.audit_logs_sink (modules/gcp/governance/cloud-audit-logs/main.tf#L130)
 - resource.google_organization_iam_audit_config.org_audit_config (modules/gcp/governance/cloud-audit-logs/main.tf#L168)
 - resource.google_project_iam_audit_config.project_audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L148)
-- resource.google_project_iam_member.audit_analytics_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L398)
+- resource.google_project_iam_member.audit_analytics_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L402)
 - resource.google_storage_bucket.audit_logs (modules/gcp/governance/cloud-audit-logs/main.tf#L47)
 - resource.google_storage_bucket.audit_logs_access (modules/gcp/governance/cloud-audit-logs/main.tf#L2)
 - resource.google_storage_bucket_iam_member.audit_logs_access_writer (modules/gcp/governance/cloud-audit-logs/main.tf#L40)
@@ -135,6 +135,7 @@ The following resources are created:
 | <a name="input_log_analytics_location"></a> [log\_analytics\_location](#input\_log\_analytics\_location) | Location of the Log Analytics bucket (a region, or global/us/eu). Null = bucket\_location (lower-cased). | `string` | `null` | no |
 | <a name="input_log_analytics_retention_days"></a> [log\_analytics\_retention\_days](#input\_log\_analytics\_retention\_days) | Retention of the Log Analytics bucket in days (1-3650). Default 400 (CIS GCP 2.x recommends at least a year). | `number` | `400` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | The number of days to retain audit logs in the storage bucket (minimum 1) | `number` | `365` | no |
+| <a name="input_network_log_writer_granted"></a> [network\_log\_writer\_granted](#input\_network\_log\_writer\_granted) | Set true only after a break-glass grant of roles/storage.objectCreator on the audit bucket to the network log sink's writer identity. Needed only when org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated identity: the sink's postcondition then accepts writer identities that differ. Default false. | `bool` | `false` | no |
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Organization ID for org-level log sink (optional). When provided, creates an org-level sink that captures audit logs from all projects. | `string` | `null` | no |
 | <a name="input_sink_name"></a> [sink\_name](#input\_sink\_name) | Name of the project-level log sink. Override when calling the module more than once in the same project. | `string` | `"audit-logs-sink"` | no |
 | <a name="input_soft_delete_retention_days"></a> [soft\_delete\_retention\_days](#input\_soft\_delete\_retention\_days) | Soft-delete retention (days) on the audit-log buckets: deleted or overwritten objects stay restorable for this window. GCS accepts 7-90 days, or 0 to disable. Default 30. | `number` | `30` | no |

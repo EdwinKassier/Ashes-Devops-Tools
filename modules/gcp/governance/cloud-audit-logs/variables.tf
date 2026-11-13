@@ -89,6 +89,13 @@ variable "enable_network_log_export" {
   nullable    = false
 }
 
+variable "network_log_writer_granted" {
+  description = "Set true only after a break-glass grant of roles/storage.objectCreator on the audit bucket to the network log sink's writer identity. Needed only when org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated identity: the sink's postcondition then accepts writer identities that differ. Default false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 # =============================================================================
 # BIGQUERY LOG ANALYTICS (Optional)
 # =============================================================================

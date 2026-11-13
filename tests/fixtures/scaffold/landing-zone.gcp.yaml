@@ -141,6 +141,10 @@ gcp:
   # environment is compliance_class: regulated or compliance.frameworks is
   # set. Storage cost grows with traffic (control-matrix.md LOG-06).
   # enable_network_log_export: true
+  # Only for an org-audit-sink created before 2023-05-22 (legacy writer
+  # identity): grant roles/storage.objectCreator on the audit bucket to the
+  # network log sink's identity by break-glass, then set this (UPGRADING.md).
+  # network_log_writer_granted: true
   # Dedicated logging project for the audit bucket, audit CMEK keys and
   # control-plane alerts (gcp-organization). Create it outside Terraform,
   # directly under the organization node, owned by a group other than the

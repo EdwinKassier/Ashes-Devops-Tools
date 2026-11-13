@@ -1080,7 +1080,9 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
     and `org-audit-sink` already grants it `roles/storage.objectCreator`. A
     postcondition fails the apply when the two identities differ (an
     `org-audit-sink` created before 2023-05-22 keeps a legacy dedicated
-    account); the fix is a break-glass grant, see `UPGRADING.md`. Confirm on a
+    account); the fix is a break-glass grant and then
+    `gcp.network_log_writer_granted: true`, see `UPGRADING.md`. A failed
+    postcondition leaves the created sink in state, not tainted. Confirm on a
     real org that the identities match and that `roles/storage.objectCreator`
     alone delivers to a Cloud Storage bucket (Google's sink guide also lists
     `roles/logging.logWriter` "for all destinations"; neither org sink to the

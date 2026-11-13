@@ -384,6 +384,13 @@ dp_new="$(printf '%s\n' "${dp}" | while IFS=: read -r f n _; do
 done || true)"
 [[ -z "${dp_new}" ]] || note "deletion-protection input without the enable_ prefix and no deprecated marker: ${dp_new}"
 
+echo "==> The network log sink (CMP-02) has no IAM binding of its own"
+# It shares the org Logging service account with org-audit-sink. A binding of
+# its writer identity would duplicate the audit sink's grant (and remove it when
+# the export is turned off), and containment denies setIamPolicy on the bucket.
+nlgrant="$(awk '/^resource "google_[a-z_]*iam_(member|binding|policy)"/ { inres = 1; hdr = $0 } inres && /org_network_logs_sink/ { print hdr } /^}/ { inres = 0 }' modules/gcp/governance/cloud-audit-logs/*.tf)"
+[[ -z "${nlgrant}" ]] || note "IAM resource bound to org_network_logs_sink in modules/gcp/governance/cloud-audit-logs: ${nlgrant}"
+
 echo "==> An example's provider constraints equal its module's"
 # provider_pin <versions.tf> <name>: the version string of required_providers.<name>.
 provider_pin() {

@@ -655,7 +655,8 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   sink, `org-network-logs` (`modules/gcp/governance/cloud-audit-logs` input
   `enable_network_log_export`), copies them into the GCS audit bucket with its retention, lock and
   CMEK. It adds no IAM grant: it shares the org Logging service account that already writes the
-  audit logs, and a postcondition fails the apply when a legacy audit sink identity differs.
+  audit logs, and a postcondition fails the apply when a legacy audit sink identity differs
+  (`gcp.network_log_writer_granted` accepts it after a break-glass grant).
   gcp-organization turns it on when an environment is `compliance_class: regulated` or
   `compliance.frameworks` is set; `gcp.enable_network_log_export` forces it on or off. Control
   matrix LOG-06 (PREVIEW). See `UPGRADING.md`.

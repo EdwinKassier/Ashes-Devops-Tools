@@ -353,3 +353,66 @@ run "network_log_sink_legacy_audit_identity_fails" {
 
   expect_failures = [google_logging_organization_sink.org_network_logs_sink]
 }
+
+# Legacy audit sink identity after the break-glass grant: the operator sets
+# network_log_writer_granted and the differing identities are accepted.
+run "network_log_sink_legacy_identity_with_grant_flag_passes" {
+  command = plan
+
+  variables {
+    org_id                     = "123456789"
+    enable_network_log_export  = true
+    network_log_writer_granted = true
+  }
+
+  override_resource {
+    target          = google_logging_organization_sink.org_audit_sink
+    override_during = plan
+    values = {
+      writer_identity = "serviceAccount:o123456789-111111@gcp-sa-logging.iam.gserviceaccount.com"
+    }
+  }
+
+  override_resource {
+    target          = google_logging_organization_sink.org_network_logs_sink
+    override_during = plan
+    values = {
+      writer_identity = "serviceAccount:service-org-123456789@gcp-sa-logging.iam.gserviceaccount.com"
+    }
+  }
+
+  assert {
+    condition     = length(google_logging_organization_sink.org_network_logs_sink) == 1
+    error_message = "With network_log_writer_granted the sink must plan despite a legacy audit sink identity."
+  }
+}
+
+# The export adds no IAM binding: the module's IAM resources are the same with
+# the export off and on (scripts/check-consistency.sh also fails on any IAM
+# resource that binds the network sink's writer identity).
+run "iam_bindings_with_export_off" {
+  command = plan
+
+  variables {
+    org_id = "123456789"
+  }
+
+  assert {
+    condition     = length(google_storage_bucket_iam_member.org_log_writer) == 1 && length(google_project_iam_member.audit_analytics_writer) == 1 && length(google_bigquery_dataset_iam_member.bq_sink_writer) == 0
+    error_message = "Baseline IAM bindings with the export off."
+  }
+}
+
+run "iam_bindings_unchanged_with_export_on" {
+  command = plan
+
+  variables {
+    org_id                    = "123456789"
+    enable_network_log_export = true
+  }
+
+  assert {
+    condition     = length(google_storage_bucket_iam_member.org_log_writer) == 1 && length(google_project_iam_member.audit_analytics_writer) == 1 && length(google_bigquery_dataset_iam_member.bq_sink_writer) == 0
+    error_message = "Turning the export on must not add or remove an IAM binding."
+  }
+}

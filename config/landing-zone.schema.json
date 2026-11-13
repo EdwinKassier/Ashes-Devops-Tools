@@ -168,6 +168,10 @@
           "type": "boolean",
           "description": "Copy firewall rule logs, Cloud NAT logs, Application Load Balancer request logs (with the Cloud Armor verdict), Secure Web Proxy request logs and Cloud NGFW threat logs from every project into the org audit bucket through an aggregated org sink, org-network-logs (gcp-organization). They then have the audit bucket's retention (compliance.audit_log_retention_days), lifecycle, lock and CMEK. Unset = on when any gcp.environments entry is compliance_class: regulated or compliance.frameworks lists a framework, else off. Storage cost grows with traffic (docs/compliance/control-matrix.md LOG-06)."
         },
+        "network_log_writer_granted": {
+          "type": "boolean",
+          "description": "Set true only after a break-glass grant of roles/storage.objectCreator on the audit bucket to the org-network-logs sink's writer identity (gcp-organization). Needed only when org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated identity, so the network log sink's identity check fails. Default false."
+        },
         "logging_project_id": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
