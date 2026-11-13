@@ -76,8 +76,8 @@ entry and one hub apply.
 
 **Address plan.** Each spoke gets a /16, and both clouds carve one /24 per
 tier per zone by default
-([`modules/aws/stages/workload/variables.tf:110`](../../modules/aws/stages/workload/variables.tf),
-[`modules/gcp/network/tiered-vpc/main.tf:31`](../../modules/gcp/network/tiered-vpc/main.tf)).
+([`modules/aws/stages/workload/variables.tf`](../../modules/aws/stages/workload/variables.tf),
+[`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)).
 
 - AWS reserves 5 addresses per subnet
   ([AWS docs](https://docs.aws.amazon.com/vpc/latest/userguide/subnet-sizing.html),
@@ -95,7 +95,7 @@ tier per zone by default
   ([Google Cloud docs](https://docs.cloud.google.com/run/docs/configuring/vpc-direct-vpc),
   checked 2026-11). The environment stage puts every Cloud Run service in the
   *first* private subnet
-  ([`modules/gcp/stages/environment/main.tf:378`](../../modules/gcp/stages/environment/main.tf)).
+  ([`modules/gcp/stages/environment/main.tf`](../../modules/gcp/stages/environment/main.tf)).
   252 / 2 = 126 instances. Keep half free for a full redeploy's overlap and the
   real ceiling is about 63 instances for all services together.
 
@@ -164,8 +164,8 @@ tiers enforce, and the **cross-root outputs** that let a spoke find its hub.
 | Operators → VMs | 22 | SSM Session Manager, no inbound | IAP range `35.235.240.0/20` in the VPC rules, but the hub's hierarchical deny blocks it first (see deep dive 1) |
 | Prod ↔ nonprod | none | Separate TGW tables; each blackholes the other segment's spoke CIDRs | Peering is non-transitive; no route |
 
-Sources: [`modules/aws/stages/app-services/main.tf:509`](../../modules/aws/stages/app-services/main.tf),
-[`modules/gcp/network/tiered-vpc/main.tf:258`](../../modules/gcp/network/tiered-vpc/main.tf).
+Sources: [`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf),
+[`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf).
 
 ### Cross-root contracts
 
@@ -220,7 +220,7 @@ allowlist, and hands the flow back to the TGW. The `inspection` table forwards
 it to the egress VPC, and a same-AZ NAT gateway sends it out. The reply comes
 back through the firewall because the `shared` table routes the org supernet to
 inspection
-([`modules/aws/stages/network-hub/main.tf:73`](../../modules/aws/stages/network-hub/main.tf)).
+([`modules/aws/stages/network-hub/main.tf`](../../modules/aws/stages/network-hub/main.tf)).
 
 **Egress path (GCP).** A VM or GKE node in `private` leaves through the
 environment's Cloud NAT. Cloud Run with `PRIVATE_RANGES_ONLY` (the default
@@ -242,7 +242,7 @@ each boundary keyed on identity. The landing zone does (c) on both clouds.
 cluster. The `-db` group admits 5432 only from that service's `-svc` group and
 has no egress rules. The `-svc` group admits the container port only from the
 ALB's group, and sends 443 anywhere plus 5432 to its own database
-([`modules/aws/stages/app-services/main.tf:509`](../../modules/aws/stages/app-services/main.tf)).
+([`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf)).
 A reference is an identity, not an address, so it survives task churn and
 needs no CIDR bookkeeping. The route table adds a second wall: the `isolated`
 tier has no route off the VPC except the S3 and DynamoDB gateway endpoints, so
@@ -281,13 +281,13 @@ checked 2026-11). So in `both`, the legacy deny-all decides all ingress and the
 policy's ingress rules never fire. Only `policy` mode proves them. The module
 derives `BEFORE_CLASSIC_FIREWALL` for `policy` and raises a `check` warning
 unless you set it explicitly
-([`modules/gcp/network/tiered-vpc/main.tf:57`](../../modules/gcp/network/tiered-vpc/main.tf)).
+([`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)).
 Policy rules cannot use network tags, only secure tags or service accounts, so
 ingress rules pick their tier by destination range. The policy has no trailing
 deny-all, so unmatched traffic falls through to GKE's automatic VPC rules and
 then the implied deny. A hierarchical policy on every folder denies tcp 22
 and 3389 from `0.0.0.0/0` at priority 500
-([`modules/gcp/stages/network-hub/main.tf:86`](../../modules/gcp/stages/network-hub/main.tf)).
+([`modules/gcp/stages/network-hub/main.tf`](../../modules/gcp/stages/network-hub/main.tf)).
 Hierarchical policies are evaluated first and a matching deny ends evaluation
 (evaluation-order docs above). The rule has no allow or `goto_next` for the
 IAP range `35.235.240.0/20`, which falls inside `0.0.0.0/0`, so IAP TCP
@@ -368,7 +368,7 @@ host. The options, from weakest to strongest:
 `STRICT_ORDER`: the managed `AttackInfrastructure`, `MalwareDomains` and
 `BotNetCommandAndControlDomains` groups, then optional custom Suricata rules,
 then an egress domain allowlist, with `HOME_NET` set to the org supernet
-([`modules/aws/stages/network-hub/main.tf:400`](../../modules/aws/stages/network-hub/main.tf)).
+([`modules/aws/stages/network-hub/main.tf`](../../modules/aws/stages/network-hub/main.tf)).
 The default action is `aws:alert_established`: log but pass, so day one never
 blackholes. A production estate must fail closed. With `enforce_egress_allowlist`
 set, which `aws-network` derives from `org.profile` and a production workload,
@@ -401,7 +401,7 @@ Neither exists in this repo.
 
 **A routing catch on GCP.** `tiered-vpc` creates every VPC with
 `delete_default_routes_on_create = true`
-([`modules/gcp/network/tiered-vpc/main.tf:105`](../../modules/gcp/network/tiered-vpc/main.tf)),
+([`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)),
 and no module in the repo recreates a `0.0.0.0/0` route. Public NAT can use only
 routes whose next hop is the default internet gateway
 ([Google Cloud docs](https://docs.cloud.google.com/nat/docs/nat-product-interactions),
@@ -420,7 +420,7 @@ Three patterns, each with different reach.
 
 - **Gateway endpoints (AWS S3 and DynamoDB).** A route-table entry, free, on
   every non-public tier of the spoke, including `isolated`
-  ([`modules/aws/stages/workload/main.tf:120`](../../modules/aws/stages/workload/main.tf)).
+  ([`modules/aws/stages/workload/main.tf`](../../modules/aws/stages/workload/main.tf)).
   They are the only way out of `isolated`, so put a bucket-scoped endpoint
   policy on them if exfiltration to someone else's bucket matters.
 - **Interface endpoints (AWS PrivateLink).** An ENI per AZ, billed per AZ-hour
@@ -428,7 +428,7 @@ Three patterns, each with different reach.
   ([pricing](https://aws.amazon.com/privatelink/pricing/), checked 2026-11).
   The hub centralises `ec2`, `ssm`, `ssmmessages`, `ec2messages`, `kms`,
   `logs` and `sts` in the egress VPC with an org-scoped policy
-  ([`modules/aws/network/vpc-endpoints/variables.tf:34`](../../modules/aws/network/vpc-endpoints/variables.tf)).
+  ([`modules/aws/network/vpc-endpoints/variables.tf`](../../modules/aws/network/vpc-endpoints/variables.tf)).
   The catch: `private_dns_enabled` answers only inside the egress VPC, and the
   module leaves cross-account zone association out of scope. A spoke therefore
   resolves those names to the public endpoints and reaches them through
@@ -437,7 +437,7 @@ Three patterns, each with different reach.
 - **GCP Private Service Access.** An allocated range peered to Google's
   producer network, which Cloud SQL and Memorystore private IPs come from. It
   is on by default with a /16
-  ([`modules/gcp/stages/net-spoke/variables.tf:160`](../../modules/gcp/stages/net-spoke/variables.tf)).
+  ([`modules/gcp/stages/net-spoke/variables.tf`](../../modules/gcp/stages/net-spoke/variables.tf)).
   It exchanges subnet routes only and is not transitive, so peered networks
   cannot reach it, and on-premises needs an exported custom route
   ([Google Cloud docs](https://docs.cloud.google.com/vpc/docs/private-services-access),

@@ -6,9 +6,10 @@
 #   - module `source` paths resolve to a directory under modules/
 #   - top-level module arguments are declared as variables in that module
 #   - yaml key paths (first two levels) exist in config/landing-zone.schema.json
-# and every backticked `envs/<path>` (prose or fence) resolves to a directory.
+# and every backticked `envs/<path>` (prose or fence) resolves to a directory,
+# and no `<file>.(tf|hcl|rego|yaml|yml|py|sh):<line>` line reference appears.
 # Raw `resource` blocks are not checked. Prints `file:line: <kind> <ref> not
-# found` per problem; exit 0 when clean, 1 otherwise.
+# found` (or `line-reference <ref>`) per problem; exit 0 when clean, 1 otherwise.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -156,6 +157,13 @@ check_file() {
     ref="${ref%/}"
     [[ -e "${REPO_ROOT}/${ref}" ]] || report "${rel}" "${ln}" "envs-path" "${ref}"
   done < <(grep -noE '`envs/[A-Za-z0-9_./-]+`' "${f}" || true)
+
+  # file:NN line references (prose or fence) drift as code moves: cite the
+  # file path, optionally with a symbol name, never a line number.
+  while IFS=: read -r ln ref; do
+    printf '%s:%s: line-reference %s (cite the file path, not a line number)\n' "${rel}" "${ln}" "${ref}"
+    problems=$((problems + 1))
+  done < <(grep -noE '[A-Za-z0-9_.-]*\.(tf|hcl|rego|yaml|yml|py|sh):[0-9]+' "${f}" || true)
 }
 
 while IFS= read -r f; do

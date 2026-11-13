@@ -70,6 +70,10 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   replaced.** The commented `accounts` map used `@acme.test` addresses, which the
   aws-organization validation accepts. It now uses `REPLACE-...@example.com` placeholders, which
   the validation rejects, so an uncommented copy fails the plan until each address is real.
+- **The system-design walkthroughs cite files, not line numbers.** `00-primer`, `07` and `14`
+  linked `file.tf:NN` lines that had drifted. They now cite the file (and a symbol where it
+  helps), and `scripts/check-examples-refs.sh` fails on a `<file>.(tf|hcl|rego|yaml|yml|py|sh):<line>`
+  reference anywhere in `examples/system-design`.
 
 ### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
 

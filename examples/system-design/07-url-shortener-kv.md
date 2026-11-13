@@ -492,7 +492,7 @@ regions never mint the same code.
 Per [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)), services sit in
 `private`; the serverless store is in no tier. On AWS the spoke's DynamoDB **gateway endpoint** keeps table
 traffic off the Transit Gateway and the inspection firewall
-([`modules/aws/stages/workload/main.tf:120`](../../modules/aws/stages/workload/main.tf)).
+([`modules/aws/stages/workload/main.tf`](../../modules/aws/stages/workload/main.tf)).
 On GCP, Cloud Run with `PRIVATE_RANGES_ONLY` egress (the default while the
 environment egress proxy is off) reaches
 Firestore over Google's network, not through the VPC or Cloud NAT.

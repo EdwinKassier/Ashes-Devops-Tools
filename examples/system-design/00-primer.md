@@ -279,7 +279,7 @@ These are the gaps that move boxes, not just rename them. Each walkthrough's
   regional. A multi-region design on AWS needs a VPC per region and a transit
   path between them; on GCP one VPC can span regions. This repo's GCP
   `tiered-vpc` adds extra regions to the same VPC through `additional_regions`
-  ([`modules/gcp/network/tiered-vpc/main.tf:13`](../../modules/gcp/network/tiered-vpc/main.tf)).
+  ([`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)).
 - **Messaging.** Pub/Sub topics are global and scale without shards. Kinesis
   shards are regional and, in provisioned mode, sized by you. SQS and Pub/Sub
   both serve as work queues, but only Pub/Sub also serves as a fan-out stream.
@@ -349,14 +349,14 @@ graph TB
 - **AWS:** a Transit Gateway hub in the network account, with separate prod and
   nonprod route tables. Each workload spoke VPC has `private`, `isolated` and
   `tgw` tiers by default, and an optional `public` tier
-  ([`modules/aws/stages/workload/variables.tf:117`](../../modules/aws/stages/workload/variables.tf),
-  [`modules/aws/stages/workload/main.tf:69`](../../modules/aws/stages/workload/main.tf)).
+  ([`modules/aws/stages/workload/variables.tf`](../../modules/aws/stages/workload/variables.tf),
+  [`modules/aws/stages/workload/main.tf`](../../modules/aws/stages/workload/main.tf)).
   Built by [`modules/aws/stages/workload`](../../modules/aws/stages/workload/)
   on [`modules/aws/network/vpc`](../../modules/aws/network/vpc/).
 - **GCP:** a Shared VPC host per environment that peers to the hub VPC in
   `shared-hub`. Its subnets come in three tiers per zone, `public`, `private`
   and `database`
-  ([`modules/gcp/network/tiered-vpc/main.tf:6`](../../modules/gcp/network/tiered-vpc/main.tf)),
+  ([`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)),
   built by [`modules/gcp/network/tiered-vpc`](../../modules/gcp/network/tiered-vpc/)
   through [`modules/gcp/stages/net-spoke`](../../modules/gcp/stages/net-spoke/).
 - Topology diagrams and the subnet layout are in
@@ -367,7 +367,7 @@ graph TB
 
 - **AWS:** spokes have no NAT of their own. The private tier routes `0.0.0.0/0`
   to the Transit Gateway
-  ([`modules/aws/stages/workload/variables.tf:166`](../../modules/aws/stages/workload/variables.tf)),
+  ([`modules/aws/stages/workload/variables.tf`](../../modules/aws/stages/workload/variables.tf)),
   the hub sends it through AWS Network Firewall in the inspection VPC, and then
   out through a central NAT gateway. See
   [AWS landing zone: network topology](../../docs/architecture/aws-landing-zone.md#network-topology).
@@ -389,7 +389,7 @@ graph TB
   least-privilege apply identity. On GCP these are `<prefix>-<stage>-plan|apply`
   and, per environment, `<prefix>-wl-<env>-plan|apply`, bound per TFC
   `workspace:run_phase`
-  ([`modules/gcp/stages/bootstrap/service_accounts.tf:154`](../../modules/gcp/stages/bootstrap/service_accounts.tf),
+  ([`modules/gcp/stages/bootstrap/service_accounts.tf`](../../modules/gcp/stages/bootstrap/service_accounts.tf),
   [GCP automation identity](../../docs/architecture/gcp-landing-zone.md#automation-identity--break-glass)).
   On AWS each account has `tfc-plan` and `tfc-apply` roles from
   [`modules/aws/iam/tfc-oidc-baseline`](../../modules/aws/iam/tfc-oidc-baseline/),
@@ -457,17 +457,17 @@ Use the pattern of the nearest existing resource of the same class.
 
 | Resource class | AWS pattern | GCP pattern | Source |
 |---|---|---|---|
-| Account or project | Account key, e.g. `workload_dev` | `<prefix>-<folder>-<name>-<suffix>` | [`modules/gcp/stages/projects/main.tf:41`](../../modules/gcp/stages/projects/main.tf) |
-| VPC | `workload-<env>` | `<prefix>-<env>-vpc` | [`modules/aws/stages/workload/main.tf:83`](../../modules/aws/stages/workload/main.tf), [`modules/gcp/stages/environment/main.tf:88`](../../modules/gcp/stages/environment/main.tf) |
-| Subnet | Per tier, built by the `vpc` module | `<vpc>-public-<zone>`, `<vpc>-private-<zone>`, `<vpc>-db-<zone>` | [`modules/gcp/network/tiered-vpc/main.tf:116`](../../modules/gcp/network/tiered-vpc/main.tf) (and :132, :150) |
-| Component (service, queue, function, cache) | `<env>-<component>` | `<component>`; the project already scopes the environment | [`modules/aws/stages/app-services/main.tf:59`](../../modules/aws/stages/app-services/main.tf), [`modules/gcp/stages/app-services/main.tf:768`](../../modules/gcp/stages/app-services/main.tf) |
-| Dead-letter queue | `<env>-<component>-dlq` | `<component>-dlq` | [`modules/aws/stages/app-services/main.tf:115`](../../modules/aws/stages/app-services/main.tf), [`modules/gcp/stages/app-services/main.tf:779`](../../modules/gcp/stages/app-services/main.tf) |
-| Runtime identity | Role `<env>-<component>-exec` (platform) and `<env>-<component>-task` (application) | Service account `<component>-run` | [`modules/aws/stages/app-services/main.tf:245`](../../modules/aws/stages/app-services/main.tf) (and :315), [`modules/gcp/stages/app-services/main.tf:247`](../../modules/gcp/stages/app-services/main.tf) |
-| Deploy identity | Role `<env>-<component>-deploy` | Service account `<component>-deploy` | [`modules/aws/stages/app-services/main.tf:407`](../../modules/aws/stages/app-services/main.tf), [`modules/gcp/stages/app-services/main.tf:539`](../../modules/gcp/stages/app-services/main.tf) |
-| Security group | `<env>-<component>-svc`, `<env>-<component>-db` | Not applicable (firewall by tier) | [`modules/aws/stages/app-services/main.tf:513`](../../modules/aws/stages/app-services/main.tf) (and :565) |
-| Database instance | Created by the Aurora module per service | `<component>-db` | [`modules/gcp/stages/app-services/main.tf:52`](../../modules/gcp/stages/app-services/main.tf) |
-| Log group | `/ecs/<env>/<component>` (ECS) | Not applicable | [`modules/aws/stages/app-services/main.tf:60`](../../modules/aws/stages/app-services/main.tf) |
-| KMS key or key ring | Alias `alias/workload-<env>` | Key ring `<prefix>-<purpose>`, e.g. `<prefix>-org-cmek`, `<prefix>-flow-logs` | [`envs/aws/workload/kms.tf:135`](../../envs/aws/workload/kms.tf), [`modules/gcp/stages/organization/main.tf:101`](../../modules/gcp/stages/organization/main.tf), [`modules/gcp/stages/net-spoke/main.tf:271`](../../modules/gcp/stages/net-spoke/main.tf) |
+| Account or project | Account key, e.g. `workload_dev` | `<prefix>-<folder>-<name>-<suffix>` | [`modules/gcp/stages/projects/main.tf`](../../modules/gcp/stages/projects/main.tf) |
+| VPC | `workload-<env>` | `<prefix>-<env>-vpc` | [`modules/aws/stages/workload/main.tf`](../../modules/aws/stages/workload/main.tf), [`modules/gcp/stages/environment/main.tf`](../../modules/gcp/stages/environment/main.tf) |
+| Subnet | Per tier, built by the `vpc` module | `<vpc>-public-<zone>`, `<vpc>-private-<zone>`, `<vpc>-db-<zone>` | [`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf) |
+| Component (service, queue, function, cache) | `<env>-<component>` | `<component>`; the project already scopes the environment | [`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf), [`modules/gcp/stages/app-services/main.tf`](../../modules/gcp/stages/app-services/main.tf) |
+| Dead-letter queue | `<env>-<component>-dlq` | `<component>-dlq` | [`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf), [`modules/gcp/stages/app-services/main.tf`](../../modules/gcp/stages/app-services/main.tf) |
+| Runtime identity | Role `<env>-<component>-exec` (platform) and `<env>-<component>-task` (application) | Service account `<component>-run` | [`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf), [`modules/gcp/stages/app-services/main.tf`](../../modules/gcp/stages/app-services/main.tf) |
+| Deploy identity | Role `<env>-<component>-deploy` | Service account `<component>-deploy` | [`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf), [`modules/gcp/stages/app-services/main.tf`](../../modules/gcp/stages/app-services/main.tf) |
+| Security group | `<env>-<component>-svc`, `<env>-<component>-db` | Not applicable (firewall by tier) | [`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf) |
+| Database instance | Created by the Aurora module per service | `<component>-db` | [`modules/gcp/stages/app-services/main.tf`](../../modules/gcp/stages/app-services/main.tf) |
+| Log group | `/ecs/<env>/<component>` (ECS) | Not applicable | [`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf) |
+| KMS key or key ring | Alias `alias/workload-<env>` | Key ring `<prefix>-<purpose>`, e.g. `<prefix>-org-cmek`, `<prefix>-flow-logs` | [`envs/aws/workload/kms.tf`](../../envs/aws/workload/kms.tf), [`modules/gcp/stages/organization/main.tf`](../../modules/gcp/stages/organization/main.tf), [`modules/gcp/stages/net-spoke/main.tf`](../../modules/gcp/stages/net-spoke/main.tf) |
 
 Two consequences:
 
@@ -484,12 +484,12 @@ The provider sets them, so a raw resource normally adds nothing but a
 component key.
 
 - **AWS `default_tags`** in every provider of the workload root
-  ([`envs/aws/workload/providers.tf:65`](../../envs/aws/workload/providers.tf)):
+  ([`envs/aws/workload/providers.tf`](../../envs/aws/workload/providers.tf)):
   `ManagedBy = "terraform"`, `LandingZone = <org.name>`,
   `Workspace = "aws-workload-<env>"`, `Environment = <env>`, plus
   `CostCenter` and `Owner` from `org.cost_center` and `org.owner`.
 - **GCP `default_labels`** in every provider of the workload root
-  ([`envs/gcp/workload/providers.tf:26`](../../envs/gcp/workload/providers.tf)):
+  ([`envs/gcp/workload/providers.tf`](../../envs/gcp/workload/providers.tf)):
   `managed-by = "terraform"`, `landing-zone = <org.prefix>`,
   `workspace = "gcp-workload-<env>"`, `environment = <env>`.
 - **The shared keys** are managed-by, landing-zone, workspace, environment,
@@ -499,9 +499,9 @@ component key.
   `org.name` on AWS and `landing-zone` from `org.prefix` on GCP.
 - **Component key.** Add the component name the way app-services does: AWS
   `tags = { Service = "<component>" }`
-  ([`modules/aws/stages/app-services/main.tf:250`](../../modules/aws/stages/app-services/main.tf)),
+  ([`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf)),
   GCP `labels = merge(local.labels, { service = "<component>" })`
-  ([`modules/gcp/stages/app-services/main.tf:770`](../../modules/gcp/stages/app-services/main.tf)).
+  ([`modules/gcp/stages/app-services/main.tf`](../../modules/gcp/stages/app-services/main.tf)).
 - **Enforcement.** [`policies/opa/require_labels.rego`](../../policies/opa/require_labels.rego)
   checks that each covered resource type carries managed-by, environment,
   cost-center and owner (AWS: `ManagedBy`, `Environment`, `CostCenter`,
@@ -526,9 +526,9 @@ component key.
 
 - **AWS: `workload_kms_key_arn`.** The `aws-workload-<env>` root outputs the
   CMK it uses as `workload_kms_key_arn`
-  ([`envs/aws/workload/outputs.tf:56`](../../envs/aws/workload/outputs.tf)).
+  ([`envs/aws/workload/outputs.tf`](../../envs/aws/workload/outputs.tf)).
   Inside the root it is `local.kms_key_arn`
-  ([`envs/aws/workload/kms.tf:117`](../../envs/aws/workload/kms.tf)): a key the
+  ([`envs/aws/workload/kms.tf`](../../envs/aws/workload/kms.tf)): a key the
   root creates as `alias/workload-<env>`, unless `kms_key_arn` supplies one.
   Its key policy already grants the account root (IAM delegation), CloudWatch
   Logs in the region and ECR. A new service that encrypts through a grant or
@@ -539,16 +539,16 @@ component key.
   [`modules/gcp/stages/environment/outputs.tf`](../../modules/gcp/stages/environment/outputs.tf)
   outputs a key. What exists today:
   - the organization stage's `cmek_key_names` output
-    ([`modules/gcp/stages/organization/outputs.tf:41`](../../modules/gcp/stages/organization/outputs.tf)),
+    ([`modules/gcp/stages/organization/outputs.tf`](../../modules/gcp/stages/organization/outputs.tf)),
     which holds org-scoped keys for audit logs, billing and SCC in the admin or
     logging project, not keys for workloads;
   - optional per-service inputs in app-services, `artifact_registry_kms_key_name`
     and `pubsub_kms_key_name`
-    ([`modules/gcp/stages/app-services/variables.tf:118`](../../modules/gcp/stages/app-services/variables.tf),
+    ([`modules/gcp/stages/app-services/variables.tf`](../../modules/gcp/stages/app-services/variables.tf),
     [`:464`](../../modules/gcp/stages/app-services/variables.tf)), which default
     to Google-managed encryption when unset;
   - the flow-logs key ring that `net-spoke` creates for its own export
-    ([`modules/gcp/stages/net-spoke/main.tf:266`](../../modules/gcp/stages/net-spoke/main.tf)).
+    ([`modules/gcp/stages/net-spoke/main.tf`](../../modules/gcp/stages/net-spoke/main.tf)).
 - **What GCP walkthroughs use.** Add a key ring per environment in
   `gcp-workload-<env>` with the existing
   [`modules/gcp/governance/kms`](../../modules/gcp/governance/kms/) module:
@@ -558,9 +558,9 @@ component key.
   Reference keys as `module.workload_cmek.key_ids["<component>"]`. That output
   is the full `projects/…/cryptoKeys/<name>` ID. `key_names` holds the short
   name only, which resource `kms_key_name` arguments do not accept
-  ([`modules/gcp/governance/kms/outputs.tf:11`](../../modules/gcp/governance/kms/outputs.tf)).
+  ([`modules/gcp/governance/kms/outputs.tf`](../../modules/gcp/governance/kms/outputs.tf)).
   The workload apply identity already holds `roles/cloudkms.admin`
-  ([`modules/gcp/stages/bootstrap/variables.tf:235`](../../modules/gcp/stages/bootstrap/variables.tf)).
+  ([`modules/gcp/stages/bootstrap/variables.tf`](../../modules/gcp/stages/bootstrap/variables.tf)).
   This is a gap in the repo: every GCP walkthrough that uses it says so.
 - **Key location.** Most Google services need the key in the same location as
   the resource. Cloud Run, for example, requires a key in the service's region
@@ -577,16 +577,16 @@ Walkthrough #14 elaborates; this table is the rule.
 
 | Component class | AWS spoke tier | GCP tier | Source |
 |---|---|---|---|
-| Internet-facing load balancer | `public`, only with `app_ingress_mode = "public_alb"`; otherwise CloudFront reaches an internal ALB through a VPC origin | None: Google's external Application Load Balancer is not in a subnet; its serverless or instance backends sit in `private` | [`envs/aws/workload/main.tf:154`](../../envs/aws/workload/main.tf), [`modules/gcp/network/app-ingress`](../../modules/gcp/network/app-ingress/) |
-| Internal load balancer | `private` (`app_alb_subnet_tier`, default `private`) | `private` | [`envs/aws/workload/variables.tf:487`](../../envs/aws/workload/variables.tf) |
-| Reverse proxies, API-gateway targets, NAT-less edge VMs | `public` only if they must receive internet traffic directly; prefer `private` behind a load balancer | `public` (network tag `public`; reachable from the API-gateway tag on 443/80) | [`modules/gcp/network/tiered-vpc/main.tf:258`](../../modules/gcp/network/tiered-vpc/main.tf) |
-| Compute: containers, functions, VMs | `private` (`app_service_subnet_tier`, default `private`) | `private` (network tag `compute`; Cloud Run uses Direct VPC egress into the first private subnet) | [`envs/aws/workload/variables.tf:481`](../../envs/aws/workload/variables.tf), [`modules/gcp/stages/environment/main.tf:378`](../../modules/gcp/stages/environment/main.tf) |
-| Managed relational databases | `isolated` (`app_database_subnet_tier`, default `isolated`: no route off the VPC) | Private IP through Private Service Access, not a tier subnet. Self-managed databases go in `database` (tag `database`) | [`envs/aws/workload/variables.tf:493`](../../envs/aws/workload/variables.tf), [`modules/gcp/network/tiered-vpc/main.tf:300`](../../modules/gcp/network/tiered-vpc/main.tf) |
+| Internet-facing load balancer | `public`, only with `app_ingress_mode = "public_alb"`; otherwise CloudFront reaches an internal ALB through a VPC origin | None: Google's external Application Load Balancer is not in a subnet; its serverless or instance backends sit in `private` | [`envs/aws/workload/main.tf`](../../envs/aws/workload/main.tf), [`modules/gcp/network/app-ingress`](../../modules/gcp/network/app-ingress/) |
+| Internal load balancer | `private` (`app_alb_subnet_tier`, default `private`) | `private` | [`envs/aws/workload/variables.tf`](../../envs/aws/workload/variables.tf) |
+| Reverse proxies, API-gateway targets, NAT-less edge VMs | `public` only if they must receive internet traffic directly; prefer `private` behind a load balancer | `public` (network tag `public`; reachable from the API-gateway tag on 443/80) | [`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf) |
+| Compute: containers, functions, VMs | `private` (`app_service_subnet_tier`, default `private`) | `private` (network tag `compute`; Cloud Run uses Direct VPC egress into the first private subnet) | [`envs/aws/workload/variables.tf`](../../envs/aws/workload/variables.tf), [`modules/gcp/stages/environment/main.tf`](../../modules/gcp/stages/environment/main.tf) |
+| Managed relational databases | `isolated` (`app_database_subnet_tier`, default `isolated`: no route off the VPC) | Private IP through Private Service Access, not a tier subnet. Self-managed databases go in `database` (tag `database`) | [`envs/aws/workload/variables.tf`](../../envs/aws/workload/variables.tf), [`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf) |
 | Caches and other stateful data stores | `isolated` | Private Service Access or PSC for managed stores; `database` for self-managed | Convention: same as databases |
 | Message brokers you run or that live in your VPC (Kafka, MSK, RabbitMQ) | `isolated` | `database` for self-managed; PSC endpoints for managed Kafka | Convention: stateful, needs no internet |
 | Serverless brokers (SQS, SNS, Pub/Sub, Kinesis) | No tier: reached over endpoints | No tier: reached over Private Google Access or PSC | See [Private access](#private-access) |
-| Interface endpoints to cloud APIs | Centralised in the network account's endpoints VPC and shared over the TGW; S3 and DynamoDB gateway endpoints on the spoke's non-public route tables | Private Google Access on `private` and `database`; PSC for Google APIs | [`modules/aws/stages/workload/main.tf:120`](../../modules/aws/stages/workload/main.tf), [`modules/gcp/network/tiered-vpc/main.tf:141`](../../modules/gcp/network/tiered-vpc/main.tf) |
-| Transit Gateway attachment ENIs | `tgw` only | Not applicable | [`modules/aws/stages/workload/variables.tf:111`](../../modules/aws/stages/workload/variables.tf) |
+| Interface endpoints to cloud APIs | Centralised in the network account's endpoints VPC and shared over the TGW; S3 and DynamoDB gateway endpoints on the spoke's non-public route tables | Private Google Access on `private` and `database`; PSC for Google APIs | [`modules/aws/stages/workload/main.tf`](../../modules/aws/stages/workload/main.tf), [`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf) |
+| Transit Gateway attachment ENIs | `tgw` only | Not applicable | [`modules/aws/stages/workload/variables.tf`](../../modules/aws/stages/workload/variables.tf) |
 
 **How traffic flows between tiers.**
 
@@ -597,10 +597,10 @@ Walkthrough #14 elaborates; this table is the rule.
   public → compute on `compute_tier_ports` (default 8080, 8443, 3000), and
   compute → database on `database_ports`; it denies all egress from the
   database tier, and a logged deny-all catches the rest of ingress
-  ([`modules/gcp/network/tiered-vpc/main.tf:258`](../../modules/gcp/network/tiered-vpc/main.tf)).
+  ([`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)).
   With `firewall_mode = "policy"` the same rules select tiers by subnet CIDR
   instead of network tag
-  ([`modules/gcp/network/tiered-vpc/main.tf:406`](../../modules/gcp/network/tiered-vpc/main.tf)).
+  ([`modules/gcp/network/tiered-vpc/main.tf`](../../modules/gcp/network/tiered-vpc/main.tf)).
 
 **How egress works.**
 
@@ -608,12 +608,12 @@ Walkthrough #14 elaborates; this table is the rule.
   inspection VPC → central NAT. This is inspected egress.
 - **AWS `isolated`:** no route off the VPC, except the S3 and DynamoDB gateway
   endpoints, which by default attach to every non-public tier
-  ([`modules/aws/stages/workload/variables.tf:166`](../../modules/aws/stages/workload/variables.tf),
+  ([`modules/aws/stages/workload/variables.tf`](../../modules/aws/stages/workload/variables.tf),
   [AWS gateway endpoints](https://docs.aws.amazon.com/vpc/latest/privatelink/gateway-endpoints.html),
   checked 2026-11).
 - **AWS `public`:** to the internet gateway, and only in VPCs excluded from the
   org's VPC Block Public Access
-  ([`modules/aws/stages/workload/main.tf:262`](../../modules/aws/stages/workload/main.tf)).
+  ([`modules/aws/stages/workload/main.tf`](../../modules/aws/stages/workload/main.tf)).
 - **GCP `private`:** the environment's Cloud NAT, not inspected through the hub.
   Cloud Run with `PRIVATE_RANGES_ONLY`, the app-services default while the
   environment egress proxy is off
@@ -660,18 +660,18 @@ rebuilt from the one before it.
 
 - **No public IPs by default.** On GCP, `compute.vmExternalIpAccess` is denied
   org-wide
-  ([`modules/gcp/stages/organization/main.tf:387`](../../modules/gcp/stages/organization/main.tf)).
+  ([`modules/gcp/stages/organization/main.tf`](../../modules/gcp/stages/organization/main.tf)).
   On AWS, the org's declarative EC2 policy enforces VPC Block Public Access on
   every member VPC, and only a workload that chooses `public_alb` ingress gets
   an exclusion
-  ([`modules/aws/stages/workload/main.tf:262`](../../modules/aws/stages/workload/main.tf)).
+  ([`modules/aws/stages/workload/main.tf`](../../modules/aws/stages/workload/main.tf)).
 - **Private service access.** On AWS, reach AWS APIs through interface endpoints
   ([AWS PrivateLink](https://docs.aws.amazon.com/vpc/latest/privatelink/what-is-privatelink.html),
   checked 2026-11), centralised in the network account by
   [`modules/aws/network/vpc-endpoints`](../../modules/aws/network/vpc-endpoints/),
   plus S3 and DynamoDB gateway endpoints in each spoke. On GCP, Private Service
   Access and Private Service Connect are on by default in the host stage
-  ([`modules/gcp/stages/environment/main.tf:106`](../../modules/gcp/stages/environment/main.tf),
+  ([`modules/gcp/stages/environment/main.tf`](../../modules/gcp/stages/environment/main.tf),
   [Private Service Connect](https://docs.cloud.google.com/vpc/docs/private-service-connect),
   [Private services access](https://docs.cloud.google.com/vpc/docs/private-services-access),
   checked 2026-11).
@@ -685,7 +685,7 @@ rebuilt from the one before it.
   - KMS key rotation on AWS keys.
 - **Ingress defaults.** On GCP, app-services defaults Cloud Run to
   `INGRESS_TRAFFIC_INTERNAL_ONLY`
-  ([`modules/gcp/stages/app-services/variables.tf:209`](../../modules/gcp/stages/app-services/variables.tf)).
+  ([`modules/gcp/stages/app-services/variables.tf`](../../modules/gcp/stages/app-services/variables.tf)).
   On AWS, the shared ALB is internal unless `app_ingress_mode` says otherwise.
 
 ### Per-component identity
@@ -693,18 +693,18 @@ rebuilt from the one before it.
 One least-privilege identity per component, created in the workload root that
 owns the component. Never share one identity between components.
 
-- **AWS** ([`modules/aws/stages/app-services/main.tf:242`](../../modules/aws/stages/app-services/main.tf)):
+- **AWS** ([`modules/aws/stages/app-services/main.tf`](../../modules/aws/stages/app-services/main.tf)):
   - a role per component, assumable only by its service principal;
   - an inline policy scoped to that component's own resources (its log group,
     its secrets, its queue);
   - `permissions_boundary` set to the account's `tfc-apply-boundary` policy,
     because the member-account `tfc-apply` role may only create roles that carry
-    it ([`modules/aws/stages/app-services/variables.tf:439`](../../modules/aws/stages/app-services/variables.tf),
+    it ([`modules/aws/stages/app-services/variables.tf`](../../modules/aws/stages/app-services/variables.tf),
     [AWS docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html),
     checked 2026-11);
   - for containers, the platform role (`-exec`) is separate from the
     application role (`-task`).
-- **GCP** ([`modules/gcp/stages/app-services/main.tf:243`](../../modules/gcp/stages/app-services/main.tf)):
+- **GCP** ([`modules/gcp/stages/app-services/main.tf`](../../modules/gcp/stages/app-services/main.tf)):
   - a `<component>-run` service account per component;
   - grants on the narrowest resource rather than the project, for example
     `secretAccessor` on its own secrets
@@ -829,7 +829,7 @@ It lives in `envs/gcp/workload` (workspace `gcp-workload-<env>`) and uses that
 root's existing `local.env_config`, `local.project_prefix`, `local.labels`,
 `var.environment` and `module.environment`. The region is
 `local.env_config.region`, the region the root builds the environment's
-subnets in ([`envs/gcp/workload/main.tf:192`](../../envs/gcp/workload/main.tf)).
+subnets in ([`envs/gcp/workload/main.tf`](../../envs/gcp/workload/main.tf)).
 `local.region` only sets the provider default, so do not use it here: Direct VPC
 egress needs a subnet in the service's region, and Cloud Run CMEK needs the key
 in that region too.
