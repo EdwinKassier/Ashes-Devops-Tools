@@ -14,6 +14,7 @@ bad() { failures=$((failures + 1)); printf '  FAIL %s\n' "$1" >&2; }
 expect() {
   local want="$1" desc="$2" tfl="$3" regol="$4" got=0
   printf 'locals {\n  code_exec_env_pattern = "^(%s)$"\n}\n' "${tfl}" >"${workdir}/main.tf"
+  # shellcheck disable=SC2016 # the backticks are literal Rego raw-string quotes.
   printf 'package x\n\nsteering_env_pattern := `^((TFC_|TF_CLI_ARGS|TFE_|TF_TOKEN_).*|%s)$`\n' "${regol}" >"${workdir}/guard.rego"
   bash "${SCRIPT}" "${workdir}/main.tf" "${workdir}/guard.rego" >/dev/null 2>&1 || got=$?
   if [[ "${got}" == "${want}" ]]; then ok "${desc}"; else bad "${desc} (wanted exit ${want}, got ${got})"; fi

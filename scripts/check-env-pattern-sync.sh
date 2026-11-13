@@ -14,6 +14,7 @@ rego="${2:-${REPO_ROOT}/policies/opa-destructive/tfc_admin_guard.rego}"
 # code_exec_env_pattern = "^(<list>)$"
 tf_list=$(sed -n 's/^[[:space:]]*code_exec_env_pattern[[:space:]]*=[[:space:]]*"\^(\(.*\))\$"[[:space:]]*$/\1/p' "${tf}")
 # steering_env_pattern := `^((TFC_|TF_CLI_ARGS|TFE_|TF_TOKEN_).*|<list>)$`
+# shellcheck disable=SC2016 # the backticks are literal Rego raw-string quotes.
 rego_list=$(sed -n 's/^steering_env_pattern[[:space:]]*:=[[:space:]]*`\^((TFC_|TF_CLI_ARGS|TFE_|TF_TOKEN_)\.\*|\(.*\))\$`[[:space:]]*$/\1/p' "${rego}")
 
 if [[ -z "${tf_list}" || $(printf '%s\n' "${tf_list}" | wc -l) -ne 1 ]]; then
