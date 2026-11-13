@@ -66,7 +66,7 @@ override_module {
 
 override_module {
   target  = module.organization
-  outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+  outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
 }
 
 run "default_audit_store_and_org_policies" {

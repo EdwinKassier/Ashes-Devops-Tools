@@ -24,12 +24,19 @@ variable "admin_project_id" {
 }
 
 variable "folders" {
-  description = "Map of folder objects keyed by environment name, as output by the organization stage"
+  description = "Map of folder objects keyed by environment name, as output by the organization stage: id is the bare folder number, name the resource name folders/<number>. Projects are created under name, and the folder grants are made on name."
   type = map(object({
     id           = string
     name         = string
     display_name = string
   }))
+
+  validation {
+    # An empty name is the root's placeholder for an environment the contract
+    # lacks; the root's contract guard reports that case by name.
+    condition     = alltrue([for f in values(var.folders) : f.name == "" || can(regex("^folders/[0-9]+$", f.name))])
+    error_message = "Every folders entry's name must be the folder resource name folders/<number> (the gcp-organization contract's folders.<key>.name); id is the bare number."
+  }
 }
 
 variable "environments" {

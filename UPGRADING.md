@@ -1802,6 +1802,28 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### gcp-projects creates projects under the folder name (gcp-projects)
+
+**Who:** forks that pass the gcp-organization contract to gcp-projects by hand
+(`organization_contract`, or `gcp.contracts.organization` in
+`config/landing-zone.yaml`). A contract read from the gcp-organization
+workspace already has the right shape.
+**What changes:** gcp-projects now creates projects and makes its folder grants
+on `folders.<key>.name` (`folders/<number>`), not on `folders.<key>.id`, which
+gcp-organization emits as the bare folder number. Before, every gcp-projects
+plan from the workspace contract failed on the project parent. A
+`organization_contract` variable whose folder `name` is not `folders/<number>`
+now fails the plan with an error that names the field. In the config file,
+`id` may be the bare number or `folders/<number>`, and `name` is derived from
+`id` when you leave it out. `environment_config.<env>.folder_id` in the
+gcp-projects contract is now always the bare number; gcp-workload accepts
+either form, so its plan does not change.
+
+Steps:
+
+1. If you pass `organization_contract` by variable, set each folder's `name`
+   to `folders/<number>` and `id` to the bare number.
+
 #### Cloud Run uses the egress proxy when it is on (gcp-workload, app-services, breaking, ARC-H1)
 
 **Who:** every `gcp-workload-<env>` with the egress proxy on

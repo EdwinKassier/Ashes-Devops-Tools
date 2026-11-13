@@ -146,11 +146,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_folder_iam_member.network_sa_env_viewer (modules/gcp/stages/projects/main.tf#L153)
-- resource.google_folder_iam_member.network_sa_folder_roles (modules/gcp/stages/projects/main.tf#L145)
-- resource.google_folder_iam_member.workload_dns_peer (modules/gcp/stages/projects/main.tf#L161)
-- resource.google_folder_iam_member.workload_sa_folder_roles (modules/gcp/stages/projects/main.tf#L136)
-- resource.google_monitoring_monitored_project.projects (modules/gcp/stages/projects/main.tf#L68)
+- resource.google_folder_iam_member.network_sa_env_viewer (modules/gcp/stages/projects/main.tf#L155)
+- resource.google_folder_iam_member.network_sa_folder_roles (modules/gcp/stages/projects/main.tf#L147)
+- resource.google_folder_iam_member.workload_dns_peer (modules/gcp/stages/projects/main.tf#L163)
+- resource.google_folder_iam_member.workload_sa_folder_roles (modules/gcp/stages/projects/main.tf#L138)
+- resource.google_monitoring_monitored_project.projects (modules/gcp/stages/projects/main.tf#L70)
 
 
 ## Inputs
@@ -160,7 +160,7 @@ The following resources are created:
 | <a name="input_admin_project_id"></a> [admin\_project\_id](#input\_admin\_project\_id) | Project ID of the bootstrap admin project used as the metrics scope for monitoring | `string` | n/a | yes |
 | <a name="input_default_billing_account"></a> [default\_billing\_account](#input\_default\_billing\_account) | Default GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX, used when a project does not specify its own billing account | `string` | n/a | yes |
 | <a name="input_environments"></a> [environments](#input\_environments) | Map of environment definitions keyed by environment name. Each environment must have at least one project. | <pre>map(object({<br/>    display_name = string<br/>    description  = string<br/>    projects = map(object({<br/>      name            = string<br/>      billing_account = optional(string)<br/>      labels          = map(string)<br/>      # Resource-manager tag bindings on this project: static key => tag<br/>      # value ID (tagValues/<n>). gcp-projects binds data-classification to<br/>      # each environment host project.<br/>      tag_bindings = optional(map(string), {})<br/>    }))<br/>  }))</pre> | n/a | yes |
-| <a name="input_folders"></a> [folders](#input\_folders) | Map of folder objects keyed by environment name, as output by the organization stage | <pre>map(object({<br/>    id           = string<br/>    name         = string<br/>    display_name = string<br/>  }))</pre> | n/a | yes |
+| <a name="input_folders"></a> [folders](#input\_folders) | Map of folder objects keyed by environment name, as output by the organization stage: id is the bare folder number, name the resource name folders/<number>. Projects are created under name, and the folder grants are made on name. | <pre>map(object({<br/>    id           = string<br/>    name         = string<br/>    display_name = string<br/>  }))</pre> | n/a | yes |
 | <a name="input_organization_name"></a> [organization\_name](#input\_organization\_name) | Organization name applied as a label on all created projects | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Short prefix applied to all project IDs for global uniqueness (e.g., 'my-org') | `string` | n/a | yes |
 | <a name="input_suffix"></a> [suffix](#input\_suffix) | Random suffix from bootstrap module appended to project IDs for uniqueness | `string` | n/a | yes |

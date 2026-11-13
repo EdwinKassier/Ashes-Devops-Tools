@@ -89,11 +89,14 @@ locals {
 
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
+    # folders: id is the bare folder number (google_folder.folder_id) and name is
+    # folders/<number>, the shape gcp-organization emits. An id given as
+    # folders/<number> is accepted, and name is derived from id when absent.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
       org_id                   = tostring(local.lz.gcp.contracts.organization.org_id)
       billing_account          = tostring(local.lz.gcp.contracts.organization.billing_account)
       admin_project_number     = tostring(local.lz.gcp.contracts.organization.admin_project_number)
-      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
+      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = trimprefix(tostring(f.id), "folders/"), name = tostring(try(f.name, "folders/${trimprefix(tostring(f.id), "folders/")}")), display_name = tostring(try(f.display_name, k)) } }
       tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }
       scoped_access_policy_ids = { for k, v in try(local.lz.gcp.contracts.organization.scoped_access_policy_ids, {}) : k => tostring(v) }
     }

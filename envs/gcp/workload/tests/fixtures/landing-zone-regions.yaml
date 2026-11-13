@@ -15,7 +15,7 @@ gcp:
     projects:
       environment_config:
         dev:
-          folder_id: folders/111
+          folder_id: "111"
           host_project_id: cfgco-dev-host
           host_project_number: "222222222222"
           region: europe-west1

@@ -20,7 +20,7 @@ variables {
   org_id                 = "organizations/123456789"
   folders = {
     shared = {
-      id           = "folders/111111111"
+      id           = "111111111"
       name         = "folders/111111111"
       display_name = "Shared"
     }

@@ -66,8 +66,8 @@ override_data {
       contract = {
         billing_account = "000000-111111-222222"
         folders = {
-          shared = { id = "folders/100", name = "folders/100", display_name = "Shared" }
-          dev    = { id = "folders/111", name = "folders/111", display_name = "Development" }
+          shared = { id = "100", name = "folders/100", display_name = "Shared" }
+          dev    = { id = "111", name = "folders/111", display_name = "Development" }
         }
         tag_values = {
           "environment-dev"              = "tagValues/123"

@@ -25,7 +25,7 @@ variables {
   projects_contract = {
     environment_config = {
       dev = {
-        folder_id           = "folders/111"
+        folder_id           = "111"
         host_project_id     = "acme-dev-host-abcd"
         host_project_number = "222222222222"
         is_production       = false
@@ -111,7 +111,7 @@ run "projects_contract_carries_pipeline_identities" {
     projects_contract = {
       environment_config = {
         dev = {
-          folder_id               = "folders/111"
+          folder_id               = "111"
           host_project_id         = "acme-dev-host-abcd"
           host_project_number     = "222222222222"
           is_production           = false

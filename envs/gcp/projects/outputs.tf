@@ -13,7 +13,8 @@ locals {
     project_numbers = module.projects.project_numbers
     environment_config = {
       for env_key, env in local.environments : env_key => {
-        folder_id           = try(local.org.folders[env_key].id, null)
+        # The bare folder number, whichever id form the organization contract carried.
+        folder_id           = try(trimprefix(local.org.folders[env_key].id, "folders/"), null)
         folder_name         = try(local.org.folders[env_key].display_name, null)
         host_project_id     = module.projects.project_ids["${env_key}-host"]
         host_project_number = module.projects.project_numbers["${env_key}-host"]

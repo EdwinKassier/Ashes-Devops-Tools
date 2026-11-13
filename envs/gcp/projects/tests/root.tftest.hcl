@@ -45,7 +45,7 @@ override_data {
       contract = {
         billing_account = "billingAccounts/000000-111111-222222"
         folders = {
-          dev = { id = "folders/111", display_name = "Development" }
+          dev = { id = "111", name = "folders/111", display_name = "Development" }
         }
         tag_values = {
           "environment-dev"                = "tagValues/123"
@@ -131,7 +131,7 @@ run "environment_config_tolerates_pre_scoped_org_state" {
         contract = {
           billing_account = "billingAccounts/000000-111111-222222"
           folders = {
-            dev = { id = "folders/111", display_name = "Development" }
+            dev = { id = "111", name = "folders/111", display_name = "Development" }
           }
           tag_values = {
             "environment-dev"              = "tagValues/123"
@@ -160,7 +160,7 @@ run "contracts_skip_remote_state" {
     }
     organization_contract = {
       billing_account = "billingAccounts/000000-111111-222222"
-      folders         = { dev = { id = "folders/999", name = "folders/999", display_name = "Development" } }
+      folders         = { dev = { id = "999", name = "folders/999", display_name = "Development" } }
       tag_values      = { "environment-dev" = "tagValues/999", "data-classification-internal" = "tagValues/998" }
     }
   }
@@ -169,7 +169,7 @@ run "contracts_skip_remote_state" {
     condition = (
       length(data.terraform_remote_state.gcp_bootstrap) == 0 &&
       length(data.terraform_remote_state.gcp_organization) == 0 &&
-      output.environment_config["dev"].folder_id == "folders/999" &&
+      output.environment_config["dev"].folder_id == "999" &&
       output.environment_config["dev"].tag_value_ids.environment == "tagValues/999" &&
       output.environment_config["dev"].vpc_sc_access_policy_id == null
     )
@@ -185,7 +185,7 @@ run "organization_contract_missing_env_folder_fails" {
   variables {
     organization_contract = {
       billing_account = "billingAccounts/000000-111111-222222"
-      folders         = { shared = { id = "folders/100", name = "folders/100", display_name = "Shared" } }
+      folders         = { shared = { id = "100", name = "folders/100", display_name = "Shared" } }
       tag_values      = {}
     }
     bootstrap_contract = { admin_project_id = "acme-admin-abcd", suffix = "abcd" }
@@ -291,7 +291,7 @@ run "organization_contract_missing_classification_fails" {
   variables {
     organization_contract = {
       billing_account = "billingAccounts/000000-111111-222222"
-      folders         = { dev = { id = "folders/999", name = "folders/999", display_name = "Development" } }
+      folders         = { dev = { id = "999", name = "folders/999", display_name = "Development" } }
       tag_values      = { "environment-dev" = "tagValues/999" }
     }
     bootstrap_contract = { admin_project_id = "acme-admin-abcd", suffix = "abcd" }

@@ -125,7 +125,7 @@ locals {
   # not a bare lookup error, fails the plan. It can never be applied.
   env_config_map = local.read_projects ? local.projects_remote.environment_config : local.projects_contract.environment_config
   env_config = try(local.env_config_map[var.environment], {
-    folder_id               = "folders/0"
+    folder_id               = "0"
     host_project_id         = "contract-missing-env"
     host_project_number     = "0"
     region                  = "us-central1"

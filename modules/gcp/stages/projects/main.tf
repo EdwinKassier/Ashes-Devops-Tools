@@ -40,7 +40,9 @@ module "project" {
   # Use the shared suffix to ensure ID stability
   project_id      = "${var.project_prefix}-${each.value.ou}-${each.value.proj.name}-${var.suffix}"
   billing_account = coalesce(each.value.proj.billing_account, var.default_billing_account)
-  parent          = var.folders[each.value.ou].id
+  # The folder's resource name (folders/<number>): the contract's .id is the
+  # bare number (google_folder.folder_id), which the project parent rejects.
+  parent = var.folders[each.value.ou].name
 
   labels = merge(
     local.project_labels,
@@ -90,7 +92,7 @@ locals {
     for env, sas in var.workload_service_accounts : merge([
       for phase in ["plan", "apply"] : {
         for role in setsubtract(toset(var.workload_folder_roles[phase]), toset(var.non_delegable_workload_folder_roles)) : "${env}|${phase}|${role}" => {
-          folder = var.folders[env].id
+          folder = var.folders[env].name
           role   = role
           member = "serviceAccount:${sas[phase]}"
         }
@@ -101,7 +103,7 @@ locals {
   network_folder_grants = var.network_service_accounts == null ? {} : merge([
     for phase in ["plan", "apply"] : {
       for role in var.network_folder_roles[phase] : "${phase}|${role}" => {
-        folder = var.folders[var.network_folder_key].id
+        folder = var.folders[var.network_folder_key].name
         role   = role
         member = "serviceAccount:${var.network_service_accounts[phase]}"
       }
@@ -115,7 +117,7 @@ locals {
   network_env_viewer_grants = var.network_service_accounts == null ? {} : merge([
     for env in sort(keys(var.environments)) : {
       for phase in ["plan", "apply"] : "${env}|${phase}" => {
-        folder = var.folders[env].id
+        folder = var.folders[env].name
         member = "serviceAccount:${var.network_service_accounts[phase]}"
       }
     } if env != var.network_folder_key
@@ -127,7 +129,7 @@ locals {
   # Only the apply SA creates the zone, so the plan SAs get nothing here.
   workload_dns_peer_grants = contains(keys(var.folders), var.network_folder_key) ? {
     for env, sas in var.workload_service_accounts : env => {
-      folder = var.folders[var.network_folder_key].id
+      folder = var.folders[var.network_folder_key].name
       member = "serviceAccount:${sas.apply}"
     } if env != var.network_folder_key
   } : {}

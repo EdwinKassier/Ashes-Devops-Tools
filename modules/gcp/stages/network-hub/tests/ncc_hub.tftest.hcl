@@ -16,7 +16,7 @@ variables {
   org_id                 = "organizations/123456789"
   internal_domain        = "internal.example.com"
   folders = {
-    shared = { id = "folders/111111111", name = "folders/111111111", display_name = "Shared" }
+    shared = { id = "111111111", name = "folders/111111111", display_name = "Shared" }
   }
 }
 

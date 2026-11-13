@@ -78,7 +78,7 @@ override_data {
       contract = {
         environment_config = {
           dev = {
-            folder_id           = "folders/111"
+            folder_id           = "111"
             folder_name         = "Development"
             host_project_id     = "acme-dev-host-abcd"
             host_project_number = "222222222222"
@@ -132,7 +132,7 @@ run "workload_consumes_cross_root_contract" {
 
   # The host project is looked up from gcp-projects' environment_config.
   assert {
-    condition     = output.host_project_id == "acme-dev-host-abcd" && output.folder_id == "folders/111"
+    condition     = output.host_project_id == "acme-dev-host-abcd" && output.folder_id == "111"
     error_message = "workload must resolve the host project from gcp-projects' environment_config[<env>].host_project_id"
   }
 
@@ -168,7 +168,7 @@ run "perimeter_admits_pipeline_from_projects_contract" {
         contract = {
           environment_config = {
             dev = {
-              folder_id               = "folders/111"
+              folder_id               = "111"
               folder_name             = "Development"
               host_project_id         = "acme-dev-host-abcd"
               host_project_number     = "222222222222"
@@ -478,7 +478,7 @@ run "projects_contract_missing_environment_fails" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id           = "folders/222"
+          folder_id           = "222"
           host_project_id     = "acme-prod-host-abcd"
           host_project_number = "444444444444"
           is_production       = true
@@ -501,7 +501,7 @@ run "projects_contract_without_is_production_fails" {
     projects_contract = {
       environment_config = {
         dev = {
-          folder_id           = "folders/111"
+          folder_id           = "111"
           host_project_id     = "acme-dev-host-abcd"
           host_project_number = "222222222222"
           region              = "europe-west1"

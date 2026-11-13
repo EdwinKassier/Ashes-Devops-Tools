@@ -38,9 +38,9 @@ override_data {
       contract = {
         org_id = "123456789012"
         folders = {
-          shared = { id = "folders/100", name = "folders/100", display_name = "Shared" }
-          dev    = { id = "folders/111", name = "folders/111", display_name = "Development" }
-          qa     = { id = "folders/112", name = "folders/112", display_name = "QA" }
+          shared = { id = "100", name = "folders/100", display_name = "Shared" }
+          dev    = { id = "111", name = "folders/111", display_name = "Development" }
+          qa     = { id = "112", name = "folders/112", display_name = "QA" }
         }
       }
     }
@@ -141,7 +141,7 @@ run "spoke_network_name_comes_from_the_projects_contract" {
       project_numbers = { shared-hub = "1", shared-dns = "2", dev-host = "3", qa-host = "4" }
       environment_config = {
         dev = {
-          folder_id = "folders/1", host_project_id = "p-dev", host_project_number = "3"
+          folder_id = "1", host_project_id = "p-dev", host_project_number = "3"
           region    = "europe-west2", cidr_block = "10.10.0.0/16", spoke_network_name = "custom-dev-vpc"
         }
       }

@@ -48,7 +48,7 @@ override_data {
       contract = {
         environment_config = {
           dev = {
-            folder_id           = "folders/111"
+            folder_id           = "111"
             folder_name         = "Development"
             host_project_id     = "cfgco-dev-host-abcd"
             host_project_number = "222222222222"

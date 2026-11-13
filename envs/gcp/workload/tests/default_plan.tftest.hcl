@@ -61,7 +61,7 @@ override_data {
       contract = {
         environment_config = {
           dev = {
-            folder_id           = "folders/111"
+            folder_id           = "111"
             folder_name         = "Development"
             host_project_id     = "acme-dev-host-abcd"
             host_project_number = "222222222222"
@@ -162,7 +162,7 @@ run "prod_without_enforced_perimeter_fails" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -201,7 +201,7 @@ run "prod_dry_run_waiver_allows_plan" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -242,7 +242,7 @@ run "prod_expired_waiver_fails" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -278,7 +278,7 @@ run "prod_enforced_perimeter_plans" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -329,7 +329,7 @@ run "prod_without_pinned_zones_fails" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -367,7 +367,7 @@ run "prod_zones_from_config" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -440,7 +440,7 @@ run "prod_without_egress_proxy_fails" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -477,7 +477,7 @@ run "prod_with_egress_proxy_plans" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -531,7 +531,7 @@ run "prod_egress_waiver_allows_plan" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -580,7 +580,7 @@ run "prod_waivers_accept_the_yaml_midnight_form" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -623,7 +623,7 @@ run "prod_standalone_egress_proxy_without_waiver_fails" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -662,7 +662,7 @@ run "prod_expired_egress_waiver_fails" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
@@ -771,7 +771,7 @@ run "spoke_network_name_from_projects_contract" {
         contract = {
           environment_config = {
             dev = {
-              folder_id           = "folders/111"
+              folder_id           = "111"
               folder_name         = "Development"
               host_project_id     = "acme-dev-host-abcd"
               host_project_number = "222222222222"

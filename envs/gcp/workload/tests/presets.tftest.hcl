@@ -30,7 +30,7 @@ variables {
   projects_contract = {
     environment_config = {
       prod = {
-        folder_id           = "folders/333"
+        folder_id           = "333"
         host_project_id     = "acme-prod-host-abcd"
         host_project_number = "333333333333"
         region              = "europe-west2"
@@ -96,7 +96,7 @@ run "preset_does_not_apply_to_other_environments" {
     projects_contract = {
       environment_config = {
         dev = {
-          folder_id           = "folders/111"
+          folder_id           = "111"
           host_project_id     = "acme-dev-host-abcd"
           host_project_number = "222222222222"
           is_production       = false
@@ -122,7 +122,7 @@ run "top_level_presets_apply_to_every_environment" {
     projects_contract = {
       environment_config = {
         dev = {
-          folder_id           = "folders/111"
+          folder_id           = "111"
           host_project_id     = "acme-dev-host-abcd"
           host_project_number = "222222222222"
           is_production       = false
@@ -189,7 +189,7 @@ run "regulated_env_applies_regulated_preset" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"
@@ -240,7 +240,7 @@ run "regulated_env_rejects_dry_run_perimeter" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"
@@ -280,7 +280,7 @@ run "regulated_env_refuses_the_production_waiver" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"
@@ -305,7 +305,7 @@ run "regulated_env_refuses_reduced_flow_log_sampling" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"
@@ -329,7 +329,7 @@ run "regulated_env_refuses_short_flow_log_retention" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"
@@ -353,7 +353,7 @@ run "standard_env_in_a_regulated_estate_is_unchanged" {
     projects_contract = {
       environment_config = {
         dev = {
-          folder_id           = "folders/111"
+          folder_id           = "111"
           host_project_id     = "acme-dev-host-abcd"
           host_project_number = "222222222222"
           is_production       = false
@@ -391,7 +391,7 @@ run "regulated_env_refuses_disabled_cloud_armor" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"
@@ -415,7 +415,7 @@ run "regulated_env_refuses_disabled_owasp_rules" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"
@@ -440,7 +440,7 @@ run "regulated_env_refuses_disabled_backup_vault" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"
@@ -466,7 +466,7 @@ run "backup_vault_from_config" {
     projects_contract = {
       environment_config = {
         dev = {
-          folder_id           = "folders/111"
+          folder_id           = "111"
           host_project_id     = "acme-dev-host-abcd"
           host_project_number = "222222222222"
           is_production       = false
@@ -501,7 +501,7 @@ run "backup_vault_variable_wins" {
     projects_contract = {
       environment_config = {
         dev = {
-          folder_id           = "folders/111"
+          folder_id           = "111"
           host_project_id     = "acme-dev-host-abcd"
           host_project_number = "222222222222"
           is_production       = false
@@ -536,7 +536,7 @@ run "regulated_preset_yaml_matches_tfvars" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id               = "folders/333"
+          folder_id               = "333"
           host_project_id         = "acme-prod-host-abcd"
           host_project_number     = "333333333333"
           region                  = "europe-west2"

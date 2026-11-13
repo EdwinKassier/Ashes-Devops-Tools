@@ -16,7 +16,7 @@ variables {
   admin_project_id        = "mock-admin-project"
   suffix                  = "abcd1234"
   folders = {
-    dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" }
+    dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }
   }
   environments = {
     dev = {
@@ -45,7 +45,7 @@ run "project_id_follows_prefix_env_name_suffix_convention" {
 
   assert {
     condition     = module.project["dev-host"].parent == "folders/111111111"
-    error_message = "the project must be wired to the folder_id of its owning environment (var.folders[ou].id)"
+    error_message = "the project must be created under its environment folder's resource name (var.folders[ou].name)"
   }
 }
 
@@ -175,5 +175,23 @@ run "project_tag_bindings_and_owner_label" {
       module.project["dev-host"].labels["owner"] == "data-team"
     )
     error_message = "a project's tag_bindings must reach the project primitive (only that project), and var.owner must set the owner label."
+  }
+}
+
+run "project_parent_is_folder_name_not_numeric_id" {
+  # The gcp-organization contract carries the real google_folder shape: id is
+  # the bare number (folder_id), name is folders/<number>. The project parent
+  # needs folders/<number>, so it must come from name, never from id.
+  command = plan
+
+  variables {
+    folders = {
+      dev = { id = "222222222", name = "folders/222222222", display_name = "Development" }
+    }
+  }
+
+  assert {
+    condition     = module.project["dev-host"].parent == "folders/222222222"
+    error_message = "A numeric folder id must still yield the project parent folders/<number>"
   }
 }

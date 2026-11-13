@@ -23,7 +23,7 @@ variables {
   internal_domain        = "internal.example.com"
   folders = {
     shared = {
-      id           = "folders/111111111"
+      id           = "111111111"
       name         = "folders/111111111"
       display_name = "Shared"
     }
@@ -130,9 +130,9 @@ run "ssh_rdp_deny_associated_with_every_folder" {
 
   variables {
     folders = {
-      shared = { id = "folders/111111111", name = "folders/111111111", display_name = "Shared" }
-      dev    = { id = "folders/222222222", name = "folders/222222222", display_name = "Development" }
-      prod   = { id = "folders/333333333", name = "folders/333333333", display_name = "Production" }
+      shared = { id = "111111111", name = "folders/111111111", display_name = "Shared" }
+      dev    = { id = "222222222", name = "folders/222222222", display_name = "Development" }
+      prod   = { id = "333333333", name = "folders/333333333", display_name = "Production" }
     }
   }
 

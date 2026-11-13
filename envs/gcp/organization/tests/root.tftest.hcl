@@ -113,14 +113,14 @@ override_module {
     folder_iam_members                 = {}
     enabled_apis                       = []
     organizational_units = {
-      shared = { id = "folders/100", name = "folders/100", display_name = "Shared Services" }
-      dev    = { id = "folders/200", name = "folders/200", display_name = "Development" }
-      prod   = { id = "folders/300", name = "folders/300", display_name = "Production" }
+      shared = { id = "100", name = "folders/100", display_name = "Shared Services" }
+      dev    = { id = "200", name = "folders/200", display_name = "Development" }
+      prod   = { id = "300", name = "folders/300", display_name = "Production" }
     }
     folders = {
-      shared = { id = "folders/100", name = "folders/100", display_name = "Shared Services" }
-      dev    = { id = "folders/200", name = "folders/200", display_name = "Development" }
-      prod   = { id = "folders/300", name = "folders/300", display_name = "Production" }
+      shared = { id = "100", name = "folders/100", display_name = "Shared Services" }
+      dev    = { id = "200", name = "folders/200", display_name = "Development" }
+      prod   = { id = "300", name = "folders/300", display_name = "Production" }
     }
   }
 }

@@ -35,7 +35,7 @@ override_data {
       contract = {
         org_id = "123456789012"
         folders = {
-          dev = { id = "folders/111", display_name = "Development" }
+          dev = { id = "111", name = "folders/111", display_name = "Development" }
         }
       }
     }
@@ -244,7 +244,7 @@ run "contracts_skip_remote_state" {
   variables {
     organization_contract = {
       org_id  = "123456789012"
-      folders = { dev = { id = "folders/111", name = "folders/111", display_name = "Development" } }
+      folders = { dev = { id = "111", name = "folders/111", display_name = "Development" } }
     }
     projects_contract = {
       project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "dev-host" = "acme-dev-host-abcd" }
@@ -284,7 +284,7 @@ run "pre_contract_upstream_states_still_plan" {
     values = {
       outputs = {
         org_id  = "999999999999"
-        folders = { dev = { id = "folders/111", display_name = "Development" } }
+        folders = { dev = { id = "111", name = "folders/111", display_name = "Development" } }
       }
     }
   }

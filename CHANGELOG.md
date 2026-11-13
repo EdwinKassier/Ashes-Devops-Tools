@@ -65,6 +65,16 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   before) and a `forensics_kms_grant_enabled` output. The security stage sets it to true. A new
   stage suite plans with no module overrides, so every CMK ARN is unknown as on a real first plan.
   Existing deployments keep the grant and see no plan change.
+- **gcp-projects plans with the real gcp-organization folder contract.** The contract's
+  `folders.<key>.id` is the bare folder number (`google_folder.folder_id`) and `name` is
+  `folders/<number>`, but the projects stage passed `id` as the project parent, which the project
+  module requires as `folders/<number>`, so every gcp-projects plan from a real contract failed.
+  The stage now reads `name` for the project parent and for the workload and network folder
+  grants, and validates it. The config-file contract in gcp-projects, gcp-network-hub and
+  gcp-workload accepts either `id` form and derives `name` when absent, and
+  `environment_config.<env>.folder_id` is always the bare number. Test fixtures now use the real
+  shape (`id = "111"`, `name = "folders/111"`); a new gcp-projects suite plans the real projects
+  stage from a numeric folder id. The contract outputs are unchanged.
 
 #### Security
 

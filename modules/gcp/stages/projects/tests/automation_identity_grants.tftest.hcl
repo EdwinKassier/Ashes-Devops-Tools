@@ -13,9 +13,9 @@ variables {
   admin_project_id        = "mock-admin-project"
   suffix                  = "abcd1234"
   folders = {
-    shared = { id = "folders/100", name = "folders/100", display_name = "Shared" }
-    dev    = { id = "folders/111", name = "folders/111", display_name = "Development" }
-    prod   = { id = "folders/222", name = "folders/222", display_name = "Production" }
+    shared = { id = "100", name = "folders/100", display_name = "Shared" }
+    dev    = { id = "111", name = "folders/111", display_name = "Development" }
+    prod   = { id = "222", name = "folders/222", display_name = "Production" }
   }
   environments = {
     dev = {
