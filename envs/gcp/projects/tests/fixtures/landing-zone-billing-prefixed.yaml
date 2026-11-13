@@ -1,0 +1,41 @@
+# Test fixture: organization contract from the config file whose billing_account
+# is the billingAccounts/ resource name (billing_contract.tftest.hcl); the root
+# must pass the projects stage the bare ID.
+version: 1
+org:
+  prefix: cfgco
+  display_name: Config Co
+  regions:
+    gcp: europe-west2
+  tfc:
+    organization: cfg-tfc
+gcp:
+  environments:
+    dev:
+      is_production: false
+      cidr_block: 10.10.0.0/16
+    prod:
+      region: europe-west1
+      cidr_block: 10.30.0.0/16
+      is_production: true
+  contracts:
+    bootstrap:
+      admin_project_id: cfgco-admin-abcd
+      suffix: abcd
+    organization:
+      billing_account: billingAccounts/000000-111111-222222
+      folders:
+        shared:
+          id: "100"
+          name: folders/100
+          display_name: Shared
+        dev:
+          id: "111"
+        prod:
+          id: folders/222
+          name: folders/222
+          display_name: Production
+      tag_values:
+        environment-dev: tagValues/1
+        environment-prod: tagValues/2
+        data-classification-internal: tagValues/902

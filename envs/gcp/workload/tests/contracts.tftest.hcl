@@ -191,7 +191,7 @@ run "contracts_from_config_file" {
       length(data.terraform_remote_state.projects) == 0 &&
       length(data.terraform_remote_state.network_hub) == 0 &&
       output.host_project_id == "cfgco-dev-host" &&
-      local.billing_account == "billingAccounts/000000-111111-222222" &&
+      local.billing_account == "000000-111111-222222" &&
       local.hub_network.dns_domain == "hub.internal." &&
       module.environment.components.vpc_sc_pipeline_identities == tolist(["serviceAccount:cfgco-wl-dev-apply@cfgco-admin.iam.gserviceaccount.com"])
     )

@@ -81,9 +81,10 @@ locals {
 module "projects" {
   source = "../../../modules/gcp/stages/projects"
 
-  project_prefix          = local.project_prefix
-  organization_name       = local.organization_name
-  default_billing_account = local.org.billing_account
+  project_prefix    = local.project_prefix
+  organization_name = local.organization_name
+  # The contract may carry billingAccounts/<ID>; the stage takes the bare ID.
+  default_billing_account = trimprefix(local.org.billing_account, "billingAccounts/")
   admin_project_id        = local.bootstrap.admin_project_id
   # A missing environment folder is filled with an inert placeholder so that
   # terraform_data.organization_contract_guard reports the gap.

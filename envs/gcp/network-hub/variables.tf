@@ -316,7 +316,7 @@ variable "projects_workspace_name" {
 # Stage contract overrides (FAST-style): when set (here or as gcp.contracts.<layer>
 # in config/landing-zone.yaml) the matching remote-state read is skipped.
 variable "organization_contract" {
-  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, folders. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (the bare ID XXXXXX-XXXXXX-XXXXXX that gcp-organization emits, or billingAccounts/XXXXXX-XXXXXX-XXXXXX), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, folders. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
     org_id               = optional(string)
     billing_account      = optional(string)

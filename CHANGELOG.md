@@ -108,6 +108,14 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   after the generated docs, and `make consistency` now fails when a module with
   `examples/basic/` lacks that link.
 
+- **gcp-projects plans with a `billingAccounts/` billing account in the organization contract.**
+  The contract descriptions allowed `billing_account` as `billingAccounts/XXXXXX-XXXXXX-XXXXXX`,
+  but the projects stage accepts only the bare ID, so such a contract failed the plan.
+  gcp-projects, gcp-workload and gcp-network-hub now strip the prefix where they read
+  `gcp.contracts.organization` from `config/landing-zone.yaml`, and gcp-projects also strips it
+  from the `organization_contract` variable and the remote-state contract. gcp-organization
+  still emits the bare ID (`data.google_billing_account.id`), so no existing plan changes.
+
 #### Security
 
 - **The app-delivery example workflows start with harden-runner.** Each job in

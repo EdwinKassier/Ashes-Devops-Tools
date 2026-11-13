@@ -98,7 +98,7 @@ locals {
     # folders/<number> is accepted, and name is derived from id when absent.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
       org_id                   = try(tostring(local.lz.gcp.contracts.organization.org_id), null)
-      billing_account          = tostring(local.lz.gcp.contracts.organization.billing_account)
+      billing_account          = trimprefix(tostring(local.lz.gcp.contracts.organization.billing_account), "billingAccounts/")
       admin_project_number     = try(tostring(local.lz.gcp.contracts.organization.admin_project_number), null)
       folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = trimprefix(tostring(f.id), "folders/"), name = tostring(try(f.name, "folders/${trimprefix(tostring(f.id), "folders/")}")), display_name = tostring(try(f.display_name, k)) } }
       tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }

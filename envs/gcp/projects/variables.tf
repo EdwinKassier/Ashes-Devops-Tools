@@ -153,7 +153,7 @@ variable "bootstrap_contract" {
 }
 
 variable "organization_contract" {
-  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: billing_account, folders, tag_values (environment-<env>). Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (the bare ID XXXXXX-XXXXXX-XXXXXX that gcp-organization emits, or billingAccounts/XXXXXX-XXXXXX-XXXXXX; the root strips the prefix), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: billing_account, folders, tag_values (environment-<env>). Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
     org_id               = optional(string)
     billing_account      = optional(string)
