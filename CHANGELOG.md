@@ -669,6 +669,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   `scripts/tests/test-init-landing-zone.sh` checks the last match for each path and that the template
   and the upstream file carry the same rules. A fork that rendered its file earlier makes the same
   line changes in its own `.github/CODEOWNERS`.
+- **destroy_guard covers clusters, databases, caches and backup plans, and deletion protection
+  turned off (CICD-8, breaking).** A delete or replace of `google_container_cluster`,
+  `google_spanner_instance`, `google_spanner_database`, `google_bigtable_instance`,
+  `google_filestore_instance`, `google_sql_database`, `aws_rds_global_cluster`,
+  `aws_elasticache_replication_group`, `aws_elasticache_cluster`, `aws_backup_plan` or
+  `aws_backup_selection` now stops the run. So does an in-place update, on any resource type, that
+  turns a deletion-protection switch off (for example `deletion_protection` true to false, or
+  `deletion_policy` away from `"PREVENT"`). The security team overrides an intended change. See
+  `UPGRADING.md`.
 
 ### Changed
 

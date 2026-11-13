@@ -432,6 +432,32 @@ dataset, or a renamed DNS zone) now needs a security-team override on the
 run, as the [teardown runbook](docs/runbooks/teardown.md) describes. No
 manual step is needed before the upgrade.
 
+#### destroy_guard covers clusters and backup plans, and deletion protection turned off (policies, breaking)
+
+**Breaking: runs that passed before now stop until the security team
+overrides them.** `destroy_guard` (in the overridable
+`<prefix>destructive-change-guard` set) now also denies:
+
+- a delete or replace of `google_container_cluster`, `google_spanner_instance`,
+  `google_spanner_database`, `google_bigtable_instance`,
+  `google_filestore_instance`, `google_sql_database`, `aws_rds_global_cluster`,
+  `aws_elasticache_replication_group`, `aws_elasticache_cluster`,
+  `aws_backup_plan` and `aws_backup_selection`;
+- an in-place update, on any resource type, that turns a deletion-protection
+  switch off: `deletion_protection`, `deletion_protection_enabled`,
+  `enable_deletion_protection`, `delete_protection`,
+  `termination_protection_enabled` or `enable_drop_protection` from `true`
+  to `false`, null or an unknown value; `deletion_policy` away from
+  `"PREVENT"`; and the string switches of `aws_cognito_user_pool`,
+  `google_bigtable_table` and `google_firestore_database`.
+
+In this repository that includes setting `enable_deletion_protection` to
+`false` on an existing GKE Autopilot cluster, Cloud SQL instance, Cloud Run
+job, Aurora cluster, load balancer or Network Firewall, and changing a
+project's `deletion_policy` from `"PREVENT"` before a teardown. Each such run needs a security-team override, as the
+[teardown runbook](docs/runbooks/teardown.md) describes. No manual step is
+needed before the upgrade.
+
 #### Mandatory OPA controls deny unknown values (policies, breaking)
 
 **Breaking: the non-overridable guardrails set now fails runs that passed

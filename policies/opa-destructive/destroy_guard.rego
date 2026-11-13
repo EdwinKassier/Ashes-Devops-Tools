@@ -6,6 +6,10 @@
 # trail; replacing a StackSet instance removes the AWS Config recorders
 # org-wide. The set is overridable: the security team overrides an intended
 # destroy on the run.
+#
+# It also denies an in-place update that turns a deletion-protection switch
+# off, on any resource type: that is the first step of a two-run destroy, and
+# the second run may delete a type that is not on the list.
 package terraform.policies.destroy_guard
 
 import rego.v1
@@ -77,6 +81,89 @@ protected_types := {
 	# DNS zones: a delete and re-create changes the delegated name servers.
 	"aws_route53_zone",
 	"google_dns_managed_zone",
+	# Clusters and databases: a delete loses the data (GKE: the workloads and
+	# their persistent volumes).
+	"google_container_cluster",
+	"google_spanner_instance",
+	"google_spanner_database",
+	"google_bigtable_instance",
+	"google_filestore_instance",
+	"google_sql_database",
+	"aws_rds_global_cluster",
+	"aws_elasticache_replication_group",
+	"aws_elasticache_cluster",
+	# Backup plans: a delete stops every future recovery point it schedules.
+	"aws_backup_plan",
+	"aws_backup_selection",
+}
+
+# Deletion-protection switches and their protected value, by attribute name in
+# the provider schemas (hashicorp/aws 6.x, hashicorp/google 8.x; checked with
+# `terraform providers schema -json` on 2026-11-13). Matched on every resource
+# type that has the attribute. Examples:
+#   deletion_protection             aws_rds_cluster, aws_rds_global_cluster,
+#                                   aws_db_instance, aws_docdb_cluster,
+#                                   aws_neptune_cluster, aws_eks_cluster,
+#                                   google_container_cluster,
+#                                   google_sql_database_instance,
+#                                   google_spanner_database,
+#                                   google_bigtable_instance, google_folder,
+#                                   google_secret_manager_secret,
+#                                   google_cloud_run_v2_service and _job
+#   deletion_protection_enabled     aws_dynamodb_table, aws_cloudwatch_log_group,
+#                                   aws_dsql_cluster, google_filestore_instance,
+#                                   google_redis_cluster
+#   enable_deletion_protection      aws_lb, aws_alb, google_workbench_instance
+#   delete_protection               aws_networkfirewall_firewall
+#   termination_protection_enabled  aws_cloudtrail_event_data_store
+#   enable_drop_protection          google_spanner_database
+#   deletion_policy = "PREVENT"     google 8.x resources (google_project, ...)
+#   deletion_protection = "ACTIVE"  aws_cognito_user_pool (a string)
+#   deletion_protection = "PROTECTED"         google_bigtable_table (a string)
+#   delete_protection_state = "DELETE_PROTECTION_ENABLED"  google_firestore_database
+# aws_elasticache_* and aws_backup_* have no such switch; the delete rule
+# above covers them.
+protection_on(attr, value) if {
+	attr in {
+		"deletion_protection",
+		"deletion_protection_enabled",
+		"enable_deletion_protection",
+		"delete_protection",
+		"termination_protection_enabled",
+		"enable_drop_protection",
+	}
+	value == true
+}
+
+protection_on("deletion_policy", "PREVENT")
+
+protection_on("deletion_protection", "ACTIVE")
+
+protection_on("deletion_protection", "PROTECTED")
+
+protection_on("delete_protection_state", "DELETE_PROTECTION_ENABLED")
+
+# The planned value no longer protects: absent, null or any other value. The
+# plan JSON leaves an unknown value out of `after` (after_unknown marks it), so
+# an unknown value also counts as off: it cannot be checked.
+turned_off contains [rc, attr] if {
+	some rc in lib.managed
+	"update" in rc.change.actions
+	is_object(rc.change.before)
+	some attr, before in rc.change.before
+	protection_on(attr, before)
+	object.get(object.get(rc.change, "after", {}), attr, null) != before
+}
+
+# google_sql_database_instance keeps a second switch in settings[0].
+turned_off contains [rc, "settings.deletion_protection_enabled"] if {
+	some rc in lib.managed
+	rc.type == "google_sql_database_instance"
+	"update" in rc.change.actions
+	some i, s in object.get(rc.change.before, "settings", [])
+	s.deletion_protection_enabled == true
+	after_settings := object.get(object.get(rc.change, "after", {}), "settings", [])
+	not after_settings[i].deletion_protection_enabled == true
 }
 
 action_verb(rc) := "replaces" if lib.creates(rc)
@@ -89,4 +176,9 @@ deny contains msg if {
 	rc.type in protected_types
 	verb := action_verb(rc)
 	msg := sprintf("%s: plan %s a stateful %s; the security team must override this run if it is intended", [rc.address, verb, rc.type])
+}
+
+deny contains msg if {
+	some [rc, attr] in turned_off
+	msg := sprintf("%s: plan turns off %s on %s; the security team must override this run if it is intended", [rc.address, attr, rc.type])
 }

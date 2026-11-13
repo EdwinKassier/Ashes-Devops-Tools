@@ -11,6 +11,13 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 ## OPEN — validate before relying on
 
+- **destroy_guard's deletion-protection rule is proven by OPA unit tests
+  only (CICD-8).** It reads `change.before` and `change.after` of each
+  update from the plan JSON that HCP Terraform passes as `input.plan`. The
+  attribute names come from the hashicorp/aws 6.x and hashicorp/google 8.x
+  schemas. No real HCP Terraform run has exercised it yet. Run one update
+  that sets a `deletion_protection` to `false` in the sandbox and confirm
+  the policy check stops it. Owner: platform team.
 - **Single-region estate; recovery objectives are design targets.** Both clouds
   deploy to one primary region by default. There is no warm standby, no
   multi-region failover, no Aurora Global Database and no Cloud SQL
