@@ -50,6 +50,12 @@ variable "forensics_kms_key_arn" {
   }
 }
 
+variable "enable_forensics_kms_grant" {
+  description = "Grant the forensics snapshot-sharing role kms:Decrypt/DescribeKey/CreateGrant on forensics_kms_key_arn with a plan-safe count. Use true when forensics_kms_key_arn comes from a key created in the same plan (its ARN is unknown until apply); a precondition then requires the ARN to be non-empty. Null (default) grants when forensics_kms_key_arn is non-empty, which needs the ARN known at plan. False creates no grant."
+  type        = bool
+  default     = null
+}
+
 variable "permissions_boundary_arn" {
   description = "Permissions-boundary managed policy ARN set on every IAM role this module creates. Required when the roles are created by a member-account tfc-apply role with boundary propagation on (tfc-oidc-baseline enable_apply_boundary_propagation): pass arn:PARTITION:iam::ACCOUNT_ID:policy/tfc-apply-boundary. Null (default) = no boundary."
   type        = string

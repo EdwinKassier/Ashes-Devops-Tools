@@ -458,8 +458,11 @@ module "incident_response" {
   forensics_account_id     = var.forensics_account_id
   org_id                   = var.org_id
   # Let the forensics role decrypt snapshots encrypted with the forensics CMK.
-  forensics_kms_key_arn = module.forensics_cmk.key_arn
-  quarantine_vpc_id     = var.quarantine_vpc_id
+  # The CMK is created in this plan, so its ARN is unknown: the grant is gated
+  # by the plan-known flag, not by the ARN.
+  forensics_kms_key_arn      = module.forensics_cmk.key_arn
+  enable_forensics_kms_grant = true
+  quarantine_vpc_id          = var.quarantine_vpc_id
   # Both IR roles are created in the security-tooling account.
   permissions_boundary_arn = local.security_tooling_boundary_arn
 }

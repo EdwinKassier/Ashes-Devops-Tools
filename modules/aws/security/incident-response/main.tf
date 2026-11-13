@@ -169,10 +169,15 @@ resource "aws_iam_role" "forensics_snapshot" {
 # aws:SourceOrgID is absent on principal-initiated calls). Shared encrypted EBS snapshots
 # are unusable in the forensics account without kms:Decrypt / kms:CreateGrant on
 # the key that encrypted them, so this closes the "shared but unreadable" gap.
+# The count reads enable_forensics_kms_grant when it is set, never the ARN: a
+# key created in the same plan has an unknown ARN, and a count cannot depend on
+# an unknown value.
 resource "aws_iam_role_policy" "forensics_kms" {
-  count = var.enable_incident_response && var.forensics_kms_key_arn != "" ? 1 : 0
-  name  = "ir-forensics-kms"
-  role  = aws_iam_role.forensics_snapshot[0].id
+  count = var.enable_incident_response && (
+    var.enable_forensics_kms_grant != null ? var.enable_forensics_kms_grant : var.forensics_kms_key_arn != ""
+  ) ? 1 : 0
+  name = "ir-forensics-kms"
+  role = aws_iam_role.forensics_snapshot[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -187,4 +192,11 @@ resource "aws_iam_role_policy" "forensics_kms" {
       Condition = { StringEquals = { "aws:PrincipalOrgID" = var.org_id } }
     }]
   })
+
+  lifecycle {
+    precondition {
+      condition     = var.forensics_kms_key_arn != ""
+      error_message = "enable_forensics_kms_grant = true needs forensics_kms_key_arn: the ARN of the key the forensics role may use."
+    }
+  }
 }

@@ -189,3 +189,49 @@ run "archive_written_under_root" {
     error_message = "The Lambda must deploy the archive written under path.root"
   }
 }
+
+run "forensics_kms_grant_flag_true" {
+  # enable_forensics_kms_grant = true gates the grant without reading the ARN,
+  # so a caller can pass the ARN of a key created in the same plan.
+  command = plan
+
+  variables {
+    forensics_kms_key_arn      = "arn:aws:kms:eu-west-2:333333333333:key/forensics-0000"
+    enable_forensics_kms_grant = true
+  }
+
+  assert {
+    condition     = length(aws_iam_role_policy.forensics_kms) == 1 && output.forensics_kms_grant_enabled
+    error_message = "enable_forensics_kms_grant = true must create the forensics KMS grant"
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.forensics_kms[0].policy).Statement[0].Resource == "arn:aws:kms:eu-west-2:333333333333:key/forensics-0000"
+    error_message = "The grant must name forensics_kms_key_arn"
+  }
+}
+
+run "forensics_kms_grant_flag_false" {
+  # False turns the grant off even when an ARN is passed.
+  command = plan
+
+  variables {
+    forensics_kms_key_arn      = "arn:aws:kms:eu-west-2:333333333333:key/forensics-0000"
+    enable_forensics_kms_grant = false
+  }
+
+  assert {
+    condition     = length(aws_iam_role_policy.forensics_kms) == 0 && !output.forensics_kms_grant_enabled
+    error_message = "enable_forensics_kms_grant = false must create no forensics KMS grant"
+  }
+}
+
+run "forensics_kms_grant_flag_true_needs_arn" {
+  command = plan
+
+  variables {
+    enable_forensics_kms_grant = true
+  }
+
+  expect_failures = [aws_iam_role_policy.forensics_kms]
+}

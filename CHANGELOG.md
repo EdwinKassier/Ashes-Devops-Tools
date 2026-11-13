@@ -57,6 +57,14 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   now encoded on its own. `dashboard_widgets` is now `any` (still a list, checked by a validation)
   so text and metric widgets can sit in the same dashboard. Callers that pass no widgets see no
   plan change.
+- **A first `aws-security` plan no longer fails with "Invalid count argument".** The
+  incident-response forensics KMS grant was counted on `forensics_kms_key_arn != ""`, and the
+  stage passes the ARN of the forensics CMK it creates in the same plan, which is unknown until
+  apply. `incident-response` gains `enable_forensics_kms_grant` (true: grant, with a precondition
+  that the ARN is set; false: no grant; null, the default: grant when the ARN is non-empty, as
+  before) and a `forensics_kms_grant_enabled` output. The security stage sets it to true. A new
+  stage suite plans with no module overrides, so every CMK ARN is unknown as on a real first plan.
+  Existing deployments keep the grant and see no plan change.
 
 #### Security
 
