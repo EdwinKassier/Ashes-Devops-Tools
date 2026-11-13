@@ -1812,3 +1812,12 @@ side (all mock-tested, secure defaults):
   treated as Checkov parser limits. Checkov does not scan those three files, so a
   misconfiguration in them would not be caught by Checkov. Trivy and CI validation
   still cover them. They do not fail the gate. Re-check after each Checkov upgrade.
+- **Example module attribute check follows literals only.**
+  `scripts/check-example-module-attrs.py` (run by `make consistency`) fails when
+  a Terraform root under `examples/` passes a module an object attribute the
+  variable type does not declare, which Terraform drops without an error. It
+  follows literal objects, maps and lists through `object`, `map`, `list`,
+  `set` and `optional` types. It does not follow a value given as an expression
+  (a local, a `for` expression or a function call), and it does not check
+  `tuple(...)` or `any` types. Snippets in `examples/system-design/` are checked
+  by `scripts/check-examples-refs.sh` for top-level inputs only.

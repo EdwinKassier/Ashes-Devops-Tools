@@ -9,18 +9,18 @@ rotate automatically every 90 days.
 | Resource | Notes |
 |----------|-------|
 | `google_kms_key_ring` | Keyring in the specified location |
-| `app-data-key` | 90-day auto-rotation; `cryptoKeyEncrypterDecrypter` granted to app SA |
-| `log-encryption-key` | 90-day auto-rotation; no IAM bindings (grant separately per use case) |
+| `app-data-key` | 90-day auto-rotation; `roles/cloudkms.cryptoKeyEncrypterDecrypter` granted to the app SA through `encrypter_decrypters` |
+| `log-encryption-key` | 90-day auto-rotation; no grant (add members to its `encrypter_decrypters` per use case) |
 
 ## Prerequisites
 
 - A GCP project with the **Cloud KMS** API enabled (`cloudkms.googleapis.com`).
-- The service accounts that will use the keys created before you apply (to add IAM bindings).
+- The service accounts that will use the keys created before you apply (to grant them the key).
 
 ## Usage
 
 ```bash
-# 1. Edit main.tf — set project_id, location, and the service account in iam_bindings
+# 1. Edit main.tf — set project_id, location, and the service account in encrypter_decrypters
 # 2. Initialise
 terraform -chdir=examples/kms init
 
@@ -54,7 +54,7 @@ module "storage" {
 | Parameter | What to change |
 |-----------|---------------|
 | `rotation_period` | Format `<N>s`. The module accepts `86400s` (1 day) to `31536000s` (365 days). Keep software keys at `7776000s` (90 days) or less (NIST SP 800-57 guidance); use a longer period only with a documented reason, for example HSM-backed keys |
-| `iam_bindings` | Add one entry per role × SA combination |
+| `encrypter_decrypters` | Members granted `roles/cloudkms.cryptoKeyEncrypterDecrypter` on that key (the only role the module grants; grant other roles outside the module) |
 | `labels` | Add cost-centre, team, and environment labels |
 
 ## Key destruction protection

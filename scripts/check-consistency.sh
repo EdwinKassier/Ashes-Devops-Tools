@@ -361,6 +361,11 @@ python3 -I scripts/check-any-allowlists.py >/dev/null || note "an any-typed inpu
 echo "==> Example tfvars set no identity or placement inputs (scripts/check-example-tfvars.sh)"
 ./scripts/check-example-tfvars.sh >/dev/null || note "examples/*.tfvars.example sets an input config/landing-zone.yaml owns"
 
+echo "==> Example roots pass only attributes the module types declare (scripts/check-example-module-attrs.py)"
+# Terraform drops an object attribute the variable type does not declare, so
+# terraform validate passes an example whose setting never takes effect.
+python3 -I scripts/check-example-module-attrs.py >/dev/null || note "an example root passes a module attribute the module does not declare (run python3 scripts/check-example-module-attrs.py)"
+
 echo "==> Compliance matrices cite existing paths and unique IDs (scripts/check-matrix-paths.sh)"
 ./scripts/check-matrix-paths.sh || note "docs/compliance matrices cite a missing path or repeat a control ID"
 

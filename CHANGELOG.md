@@ -26,6 +26,18 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 ## [Unreleased]
 
+### Examples audit (2026-11-13)
+
+#### Fixed
+
+- **`examples/kms` grants the app service account the key.** The example passed `iam_bindings`
+  inside each `keys` entry, an attribute the kms module does not declare, so Terraform dropped it
+  and no grant was made. It now uses `encrypter_decrypters`, and the README documents that input.
+- **New gate: example roots pass only attributes the module types declare.**
+  `scripts/check-example-module-attrs.py` (python-hcl2, run by `make consistency`) fails when a
+  Terraform root under `examples/` passes a module argument or a nested object attribute that the
+  module variable does not declare. The limits are in `docs/known-gaps.md`.
+
 ### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
 
 IDs prefixed `re-audit-2` are this report's; the same IDs in older entries belong to earlier audits.

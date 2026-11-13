@@ -448,7 +448,8 @@ jobs:
           python -m pip install --no-deps --require-hashes -r .github/requirements/zizmor.txt
           zizmor --offline --format github --config .github/zizmor.yml .github/workflows
 
-      # python-hcl2 for scripts/check-plan-time-exec.py (run by the consistency
+      # python-hcl2 for scripts/check-plan-time-exec.py and
+      # scripts/check-example-module-attrs.py (run by the consistency
       # guards and by its script test below), hash-locked like commitizen.
       # Regenerate after bumping .github/requirements/hcl2.in:
       #   uv pip compile --generate-hashes --universal --python-version 3.12 \
