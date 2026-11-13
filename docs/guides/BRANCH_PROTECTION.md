@@ -68,8 +68,25 @@ name**. Whoever can create or rename a workspace can assume those roles. So:
 
 - **Required approvals:** 1 (raise to 2 for teams larger than 4)
 - **Dismiss stale reviews:** enabled (new commits invalidate prior approval)
-- **Require CODEOWNERS review:** enabled (`.github/CODEOWNERS` enforced)
+- **Require CODEOWNERS review:** must be enabled (`require_code_owner_reviews`).
+  Without it, `.github/CODEOWNERS` only requests reviews and enforces nothing.
 - **Restrict who can bypass:** disable bypass for administrators
+
+#### What code-owner review enforces
+
+GitHub uses the last line in `.github/CODEOWNERS` that matches a changed file,
+and one approval from any owner on that line satisfies it. So:
+
+- A line that lists the platform team and the security team accepts a platform
+  approval alone.
+- A line that lists only the security team requires a security approval. The
+  guardrail paths have such lines: `/policies/`, `/envs/gcp/guardrails/`,
+  `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
+  `/.github/requirements/` and `/.github/CODEOWNERS`.
+
+This separation holds only when the security team has at least one member who
+is not on the platform team, and that member is not the pull request author
+(GitHub does not count the author's own approval).
 
 ### Additional Restrictions
 

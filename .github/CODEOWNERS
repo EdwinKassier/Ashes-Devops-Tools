@@ -23,17 +23,19 @@
 # The current maintainer should join @your-org/platform-team (and the security
 # team) rather than being named here, so ownership survives one person leaving.
 #
-# PRECEDENCE: GitHub applies the LAST matching line only, and every owner on that
-# line is required. General areas are listed first; security-sensitive paths come
-# LATER so they win and require BOTH the platform and the security team. Keep that
-# order when editing.
+# PRECEDENCE: GitHub applies the LAST matching line only, and ONE approval from
+# ANY owner on that line satisfies it. A line that lists the platform and the
+# security team therefore accepts a platform approval alone. Only a line that
+# lists the security team ALONE makes a security approval required. General
+# areas come first; more specific paths come LATER so they win. Keep that order
+# when editing.
 
 # ── Default ──────────────────────────────────────────────────────────────────
 * @your-org/platform-team
 
 # ── CI/CD, supply-chain, and security gates ──────────────────────────────────
 # The scanners and the pipeline are a security control, so the security team is
-# a required reviewer alongside platform.
+# listed alongside platform (either approval satisfies a two-team line).
 /.github/                 @your-org/platform-team @your-org/security-team
 /scripts/                 @your-org/platform-team
 /Makefile                 @your-org/platform-team
@@ -60,29 +62,26 @@
 SECURITY.md    @your-org/security-team
 CHANGELOG.md   @your-org/platform-team
 
-# ── Control-plane and security roots (platform + security REQUIRED) ──────────
-# Listed after the general /envs/ line so they take precedence. A change to the
-# org structure, guardrails, audit logging, the TFC workspace layer, or the
-# identity plane needs a second, security-team approval.
+# ── Control-plane and security roots (platform or security) ────────────────
+# Listed after the general /envs/ line so they take precedence. The security
+# team is listed so it can approve; a platform approval alone also satisfies
+# these lines. envs/tfc-admin also wires the policy sets (main.tf), which is not
+# a separate file, so it stays a two-team line.
 /envs/gcp/bootstrap/      @your-org/platform-team @your-org/security-team
 /envs/gcp/organization/   @your-org/platform-team @your-org/security-team
-# gcp-guardrails: the org IAM deny policies, including the committed
-# guardrails.auto.tfvars that holds iam_deny_policies.
-/envs/gcp/guardrails/     @your-org/platform-team @your-org/security-team
 /envs/aws/organization/   @your-org/platform-team @your-org/security-team
 /envs/aws/security/       @your-org/platform-team @your-org/security-team
 /envs/aws/identity/       @your-org/platform-team @your-org/security-team
 /envs/aws/backup/         @your-org/platform-team @your-org/security-team
 /envs/tfc-admin/          @your-org/platform-team @your-org/security-team
 
-# ── Security-sensitive modules (platform + security REQUIRED) ────────────────
+# ── Security-sensitive modules (platform or security) ──────────────────────
 # IAM, governance/guardrails, KMS, deny policies, break-glass, and the whole AWS
 # security baseline. Listed after the general /modules/ lines so they win.
 /modules/gcp/governance/  @your-org/platform-team @your-org/security-team
 /modules/gcp/iam/         @your-org/platform-team @your-org/security-team
 /modules/gcp/stages/organization/  @your-org/platform-team @your-org/security-team
 /modules/gcp/stages/bootstrap/    @your-org/platform-team @your-org/security-team
-/modules/gcp/stages/guardrails/  @your-org/platform-team @your-org/security-team
 /modules/aws/governance/  @your-org/platform-team @your-org/security-team
 /modules/aws/iam/         @your-org/platform-team @your-org/security-team
 /modules/aws/security/    @your-org/platform-team @your-org/security-team
@@ -92,16 +91,23 @@ CHANGELOG.md   @your-org/platform-team
 /modules/aws/stages/security/      @your-org/platform-team @your-org/security-team
 /modules/aws/stages/backup/        @your-org/platform-team @your-org/security-team
 
-# ── Policy-as-code and the configuration file ────────────────────────────────
-# The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root;
+# ── Consistency gate and the configuration files (platform or security) ──────
+# landing-zone.yaml feeds every root (gcp-guardrails included);
 # tfc-workspaces.yaml sets per-workspace variables (credential env vars included).
-/policies/                   @your-org/platform-team @your-org/security-team
-/scripts/check-plan-time-exec.py  @your-org/platform-team @your-org/security-team
 /scripts/check-consistency.sh     @your-org/platform-team @your-org/security-team
 /config/landing-zone.yaml    @your-org/platform-team @your-org/security-team
 /config/tfc-workspaces.yaml  @your-org/platform-team @your-org/security-team
 /config/sandbox/             @your-org/platform-team @your-org/security-team
 
-# ── This file ────────────────────────────────────────────────────────────────
-# Changing ownership itself needs both teams.
-/.github/CODEOWNERS  @your-org/platform-team @your-org/security-team
+# ── Guardrails (security team ONLY: a security approval is REQUIRED) ──────────
+# Listed last so these lines win over every broader line above. The OPA policy
+# sets, the org IAM deny policies (including the committed
+# guardrails.auto.tfvars that holds iam_deny_policies), the plan-time execution
+# gate and its parser lock, and this file. The security team must have at least
+# one member who is not on the platform team.
+/policies/                        @your-org/security-team
+/envs/gcp/guardrails/             @your-org/security-team
+/modules/gcp/stages/guardrails/   @your-org/security-team
+/scripts/check-plan-time-exec.py  @your-org/security-team
+/.github/requirements/            @your-org/security-team
+/.github/CODEOWNERS               @your-org/security-team

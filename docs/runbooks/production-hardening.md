@@ -331,8 +331,8 @@ a security-team apply of that workspace:
   tag and the principal access boundary. Extra deny policies
   (`iam_deny_policies`) are authored in the committed
   `envs/gcp/guardrails/guardrails.auto.tfvars`, which CODEOWNERS assigns to the
-  platform and security teams, so a change is a PR the security team approves
-  and then applies. They are never workspace variables: the security team's
+  security team alone, so a change is a PR the security team approves and then
+  applies. They are never workspace variables: the security team's
   grant has variables read-only, and tfc-admin attaches no shared variable set
   to `gcp-guardrails`. The root never reads gcp-organization state; it looks
   up the org and the tag directly.
@@ -356,8 +356,9 @@ org IAM), so it could grant itself `denyAdmin` or impersonation on the
 guardrails SA. IAM deny can't condition on the role being granted, so the
 CRITICAL `guardrail_role_grant` and `guardrail_identity_change` watches alert
 on both. tfc-admin can also repoint `gcp-guardrails` (working directory, VCS
-branch, team access), so separation of duties also rests on CODEOWNERS for
-`envs/tfc-admin/**` ([known gaps](../known-gaps.md)).
+branch, team access), so separation of duties also rests on review of
+`envs/tfc-admin/**`. Its CODEOWNERS line lists the platform and the security
+team, so a platform approval alone satisfies it ([known gaps](../known-gaps.md)).
 `guardrail_owner_mode = "organization"` restores the legacy in-stage apply
 (and `denyAdmin` on the organization apply SA); do not apply `gcp-guardrails`
 then. Migrating an existing deployment: see [UPGRADING.md](../../UPGRADING.md).

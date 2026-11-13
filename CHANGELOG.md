@@ -660,6 +660,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   gcp-organization turns it on when an environment is `compliance_class: regulated` or
   `compliance.frameworks` is set; `gcp.enable_network_log_export` forces it on or off. Control
   matrix LOG-06 (PREVIEW). See `UPGRADING.md`.
+- **CODEOWNERS requires a security approval on the guardrail paths (CICD-2).** GitHub accepts one
+  approval from any owner on the last matching line, so the old platform-and-security lines let a
+  platform approval alone change the guardrails. `.github/CODEOWNERS` and
+  `templates/CODEOWNERS.tftpl` now list the security team alone on `/policies/`,
+  `/envs/gcp/guardrails/`, `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
+  `/.github/requirements/` and `/.github/CODEOWNERS`, and the comments state the real rule.
+  `scripts/tests/test-init-landing-zone.sh` checks the last match for each path and that the template
+  and the upstream file carry the same rules. A fork that rendered its file earlier makes the same
+  line changes in its own `.github/CODEOWNERS`.
 
 ### Changed
 

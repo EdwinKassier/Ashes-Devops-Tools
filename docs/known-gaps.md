@@ -563,10 +563,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `guardrail_identity_change` alert as defence in depth). And **tfc-admin can still repoint
   `gcp-guardrails`** (working directory, VCS branch, team access, variables):
   whoever can apply tfc-admin can undo the security-team-only boundary, so the
-  separation of duties also rests on CODEOWNERS for `envs/tfc-admin/**` and
-  `config/tfc-workspaces.yaml` (both security co-owned; the committed file
-  cannot set `gcp-guardrails` variables) and on keeping tfc-admin's own
-  approvers apart from the platform team;
+  separation of duties also rests on review of `envs/tfc-admin/**` and
+  `config/tfc-workspaces.yaml` (the committed file cannot set `gcp-guardrails`
+  variables) and on keeping tfc-admin's own approvers apart from the platform
+  team. Both CODEOWNERS lines list the platform and the security team, so a
+  platform approval alone satisfies them (CICD-2 residual in the WS3 section);
   (2) **containment additions** (all on the deny-supported list, re-verified
   2026-11): `accessLevels.update/delete/replaceAll`,
   `authorizedOrgsDescs.create/update/delete`, `policies.update/setIamPolicy`
@@ -1517,11 +1518,13 @@ side (all mock-tested, secure defaults):
   request's head. One pull request can widen an allowlist (or weaken the
   script) and use the wider list in the same change. The intended control is
   CODEOWNERS review on `/policies/`, `/scripts/check-plan-time-exec.py` and
-  `/.github/requirements/`. `.github/CODEOWNERS` gives the security team
-  `/policies/`, `/.github/` (which includes `.github/requirements/`),
-  `/scripts/check-plan-time-exec.py` and `/scripts/check-consistency.sh`. Other
-  files in `/scripts/` have the platform team only. The teams are placeholders
-  until a fork sets its own (`scripts/init-landing-zone.sh --codeowners`).
+  `/.github/requirements/`. `.github/CODEOWNERS` lists the security team ALONE
+  on those three paths, so a security approval is required there once
+  code-owner review is required. `/.github/` (the workflows that run the gate)
+  and `/scripts/check-consistency.sh` list the platform and the security team,
+  so a platform approval alone satisfies them. Other files in `/scripts/` have
+  the platform team only. The teams are placeholders until a fork sets its own
+  (`scripts/init-landing-zone.sh --codeowners`).
 - **What the plan-time execution gate does not scan.** It parses tracked
   `*.tf` and `*.tf.json` files only. `*.tftest.hcl` and `*.tfmock.hcl` files
   are not scanned: `terraform test` runs them in CI with mock providers and in
@@ -1587,6 +1590,23 @@ side (all mock-tested, secure defaults):
     audit-config changes passes it, and that `folderCreator` + `folderEditor` +
     `folderIamAdmin` cover a real gcp-organization apply. Owner: platform team
     (sandbox apply).
+- **CODEOWNERS separates duties only on security-only lines (CICD-2
+  residual).** GitHub uses the last matching line, and one approval from any
+  owner on it satisfies the line. `.github/CODEOWNERS` lists the security team
+  alone on `/policies/`, `/envs/gcp/guardrails/`,
+  `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
+  `/.github/requirements/` and `/.github/CODEOWNERS`, so those need a security
+  approval. Every other security-sensitive line (`/envs/tfc-admin/`, which also
+  wires the policy sets in `main.tf`, `/.github/` workflows, the control-plane
+  roots, the IAM and governance modules, `config/landing-zone.yaml` and
+  `config/tfc-workspaces.yaml`) lists the platform and the security team, so a
+  platform approval alone satisfies it. A platform engineer can therefore
+  change, for example, the workflow that runs the plan-time gate, or
+  `gcp.admin_containment` in `config/landing-zone.yaml`, without a security
+  approval. All of this holds only when code-owner review is required on the
+  default branch and the security team has a member outside the platform team
+  (`docs/guides/BRANCH_PROTECTION.md`). Owner: security team (decide whether
+  more paths must be security-only).
 
 ## DECISION — needs a human call
 

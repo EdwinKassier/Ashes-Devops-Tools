@@ -21,7 +21,8 @@ step that `guardrail_owner_mode = "separate"` used to need.
   `gcp.break_glass_group`, `gcp.principal_access_boundary`). Extra deny
   policies (`iam_deny_policies`) live in a committed
   `envs/gcp/guardrails/guardrails.auto.tfvars`, which CODEOWNERS assigns to
-  the platform and security teams (and `.gitignore` exempts). Do not set them
+  the security team alone, so a change needs a security approval (and
+  `.gitignore` exempts it). Do not set them
   as workspace variables: the security team's grant is variables read-only,
   and tfc-admin attaches no shared variable set here, so platform-controlled
   values cannot reach this workspace. The root never reads gcp-organization

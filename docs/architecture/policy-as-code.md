@@ -150,7 +150,10 @@ one plan is not caught by that rule (the deletion and repointing rules still
 apply). The rule judges `tfe_*` resources in any workspace, but only tfc-admin
 declares them. Organization owners keep their implicit access, and a policy
 override is itself an org-wide permission, so separation of duties still rests
-on CODEOWNERS for `envs/tfc-admin/**` and `policies/**`.
+on CODEOWNERS. `policies/**` lists the security team alone, so a policy change
+needs a security approval. `envs/tfc-admin/**` lists the platform and the
+security team, so a platform approval alone satisfies it
+([branch protection](../guides/BRANCH_PROTECTION.md#what-code-owner-review-enforces)).
 
 ## Adding a policy
 

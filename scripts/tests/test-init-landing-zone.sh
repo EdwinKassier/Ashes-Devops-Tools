@@ -335,19 +335,57 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
   assert_line "${co}" '^\* @acme-gh/platform-team$' "default owner is the platform team"
   assert_line "${co}" '^/envs/tfc-admin/ +@acme-gh/platform-team @acme-gh/sec$' "tfc-admin needs platform + security"
   assert_line "${co}" '^/config/landing-zone.yaml +@acme-gh/platform-team @acme-gh/sec$' "landing-zone.yaml is security-owned"
-  # Every security-sensitive path routes to platform + security (last match wins).
+  # Security-sensitive paths list platform and security (last match wins; one
+  # approval from either team satisfies the line).
   for path in /modules/aws/iam/ /modules/aws/governance/ /modules/gcp/iam/ \
-    /modules/gcp/stages/organization/ /modules/gcp/stages/bootstrap/ /modules/gcp/stages/guardrails/ \
+    /modules/gcp/stages/organization/ /modules/gcp/stages/bootstrap/ \
     /modules/aws/stages/organization/ /modules/aws/stages/security/ /modules/aws/stages/backup/ \
     /config/tfc-workspaces.yaml \
-    /envs/tfc-admin/ /envs/gcp/guardrails/ /policies/ /.github/ \
-    /scripts/check-plan-time-exec.py /scripts/check-consistency.sh; do
-    assert_line "${co}" "^${path} +@acme-gh/platform-team @acme-gh/sec\$" "${path} needs platform + security"
+    /envs/tfc-admin/ /.github/ \
+    /scripts/check-consistency.sh; do
+    assert_line "${co}" "^${path} +@acme-gh/platform-team @acme-gh/sec\$" "${path} lists platform + security"
+  done
+  # Guardrail paths list the security team ONLY, so a security approval is
+  # required: GitHub accepts one approval from any owner on the matching line.
+  for path in /policies/ /envs/gcp/guardrails/ /modules/gcp/stages/guardrails/ \
+    /scripts/check-plan-time-exec.py /.github/requirements/ /.github/CODEOWNERS; do
+    assert_line "${co}" "^${path} +@acme-gh/sec\$" "${path} is security-team only"
+  done
+  # Each security-only line must come after every broader line that matches it,
+  # or the broader line wins. The last line matching each probe path must be
+  # security-only.
+  for probe in policies/opa/x.rego envs/gcp/guardrails/main.tf modules/gcp/stages/guardrails/main.tf \
+    scripts/check-plan-time-exec.py .github/requirements/plan-time-exec.txt .github/CODEOWNERS; do
+    last="$(awk -v p="/${probe}" '
+      /^[^#[:space:]]/ {
+        pat = $1
+        if (pat == "*" || index(p, pat) == 1) line = $0
+      }
+      END { print line }' "${co}")"
+    if [[ "${last}" =~ ^[^[:space:]]+[[:space:]]+@acme-gh/sec$ ]]; then
+      pass "last match for /${probe} is security-only"
+    else
+      fail "last match for /${probe} is security-only (got '${last}')"
+    fi
   done
   assert_no_line "${co}" '\$\{|your-org' "no unrendered variables or placeholders"
   assert_no_line "${co}" '^[^#]*@acme-gh/(sec|platform-team|app-platform-team|docs-team)@' "no malformed owners"
 else
   fail "codeowners run exits 0"; cat "${log}" >&2
+fi
+echo "==> templates/CODEOWNERS.tftpl and .github/CODEOWNERS carry the same rules"
+co_up="${workdir}/CODEOWNERS.upstream"
+if bash "${SCRIPT}" --non-interactive --output "${workdir}/co-up.yaml" --org-name acme --clouds aws \
+  --aws-management-account 123456789012 --github-owner your-org --codeowners --codeowners-output "${co_up}" \
+  </dev/null >"${log}" 2>&1; then
+  rules() { grep -vE '^[[:space:]]*(#|$)' "$1" | awk '{$1=$1; print}'; }
+  if diff <(rules "${co_up}") <(rules "${REPO_ROOT}/.github/CODEOWNERS") >"${workdir}/co.diff"; then
+    pass "template rules match .github/CODEOWNERS"
+  else
+    fail "template rules match .github/CODEOWNERS"; cat "${workdir}/co.diff" >&2
+  fi
+else
+  fail "upstream codeowners render exits 0"; cat "${log}" >&2
 fi
 expect_reject "--codeowners needs a GitHub owner" --output "${workdir}/co2.yaml" --org-name acme --clouds aws \
   --codeowners --codeowners-output "${workdir}/CODEOWNERS2"
