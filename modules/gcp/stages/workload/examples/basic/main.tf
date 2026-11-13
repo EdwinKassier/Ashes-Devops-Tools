@@ -7,6 +7,8 @@
 # Replace all locals with real values or remote state.
 
 locals {
+  # Service account the providers impersonate (versions.tf).
+  terraform_sa    = "terraform@my-seed-project.iam.gserviceaccount.com"
   org_id          = "123456789012"
   billing_account = "ABCDEF-123456-789012"
 
