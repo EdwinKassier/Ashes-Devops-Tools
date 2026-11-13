@@ -96,7 +96,12 @@ Options:
                                 and ask for confirmation. production also writes
                                 compliance.backup.copy_to_central_vault: true (an AWS
                                 Vault Lock that becomes irreversible; UPGRADING.md).
-                                starter requires --monthly-budget.
+                                starter requires --monthly-budget. starter writes
+                                org.tfc.plan only with --tfc-plan, and it keeps the GCP and
+                                AWS prod environments (is_production: true), so the
+                                tfc-admin plan fails until --tfc-plan standard (or premium)
+                                and --vcs-repo are set, or org.tfc.policy_sets_waiver, or
+                                you remove those environments.
   --monthly-budget USD          Monthly budget in USD (org.monthly_budget_usd); required with
                                 --profile starter.
   --yes                         Skip the production-profile cost confirmation.
@@ -503,7 +508,9 @@ trap 'rm -f "${tmp}"' EXIT
     printf "%s", email_notes
     print "  emails:"
     n = split(emails, list, ",")
-    for (i = 1; i <= n; i++) print "    - " list[i]
+    # Double-quoted: a local part may start with %, which YAML cannot start a
+    # plain scalar with. The address rule allows no quote or backslash.
+    for (i = 1; i <= n; i++) print "    - \"" list[i] "\""
     notify = 0
   }
   notify {

@@ -661,7 +661,7 @@ notifications:
   # topics, the org-guard-alerts topic, AWS budget emails (all) and Cost Anomaly Detection
   # (first address only: the module takes one subscriber).
   emails:
-    - secops@acme-corp.io
+    - "secops@acme-corp.io"
 
 # compliance: estate-wide compliance knobs. Absent = today's behaviour.
 compliance:

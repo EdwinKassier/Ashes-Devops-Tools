@@ -491,12 +491,12 @@ expect_reject "rejects an unknown --tfc-plan" --output "${workdir}/p.yaml" --org
 echo "==> ADO-21: --notification-emails writes notifications.emails"
 out9="${workdir}/notify.yaml"
 if bash "${SCRIPT}" --non-interactive --yes --output "${out9}" --org-name acme --clouds aws \
-  --aws-management-account 123456789012 --notification-emails 'secops@acme.io, netops@acme.io' \
+  --aws-management-account 123456789012 --notification-emails 'secops@acme.io, %netops@acme.io' \
   </dev/null >"${log}" 2>&1; then
   assert_line "${out9}" '^notifications:$' "notifications uncommented"
   assert_line "${out9}" '^  emails:$' "notifications.emails uncommented"
-  assert_line "${out9}" '^    - secops@acme\.io$' "first notification email"
-  assert_line "${out9}" '^    - netops@acme\.io$' "second notification email"
+  assert_line "${out9}" '^    - "secops@acme\.io"$' "first notification email, quoted"
+  assert_line "${out9}" '^    - "%netops@acme\.io"$' "second notification email (local part starts with %), quoted"
   assert_line "${out9}" '^  # hcp_email_user_ids:$' "hcp_email_user_ids stays commented"
   awk '/^notifications:$/ { c = 1; print; next } c && /^[^ ]/ { c = 0 } c' "${out9}" >"${workdir}/notifications-block"
   assert_no_line "${workdir}/notifications-block" '@my-org|@example' "the example address is gone from notifications"
@@ -505,7 +505,7 @@ if bash "${SCRIPT}" --non-interactive --yes --output "${out9}" --org-name acme -
   schema_check "${out9}" "notifications scaffold"
   if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out9}"; then pass "notifications scaffold is yamllint-clean"; else fail "notifications scaffold is yamllint-clean"; fi
   if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' 2>/dev/null; then
-    if python3 -c 'import sys, yaml; d = yaml.safe_load(open(sys.argv[1])); assert d["notifications"] == {"emails": ["secops@acme.io", "netops@acme.io"]}, d["notifications"]' "${out9}"; then
+    if python3 -c 'import sys, yaml; d = yaml.safe_load(open(sys.argv[1])); assert d["notifications"] == {"emails": ["secops@acme.io", "%netops@acme.io"]}, d["notifications"]' "${out9}"; then
       pass "notifications parses to exactly the given emails"
     else
       fail "notifications parses to exactly the given emails"

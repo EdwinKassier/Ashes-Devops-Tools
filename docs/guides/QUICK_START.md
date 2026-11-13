@@ -114,6 +114,8 @@ The script validates the inputs the same way the Terraform variables do. It writ
 
 `--tfc-plan` writes `org.tfc.plan` (default `standard` with `--profile production`). With `--vcs-repo`, `standard` and `premium` turn on the OPA policy sets. A production environment without them fails the tfc-admin plan unless `org.tfc.policy_sets_waiver` is set, and the script lists this under "Still required for production".
 
+`--profile starter` writes `org.tfc.plan` only with `--tfc-plan`, and it keeps the example's `prod` environments (GCP and AWS), which set `is_production: true`. So a starter scaffold fails the tfc-admin plan until you set `org.tfc.plan` (`standard` or `premium`) and `org.tfc.vcs_repo`, or `org.tfc.policy_sets_waiver`, or remove the production environments.
+
 `--notification-emails` writes `notifications.emails`, a comma-separated list of real, staffed addresses. A production AWS estate needs it: `aws-security` uses it as the security contact and `aws-network` as the hub alarm subscribers, and both plans fail without it. Without the flag the script lists the key under "Still required for production".
 
 **Production environments** (`is_production: true`, such as the scaffolded GCP `prod`) fail the plan until you choose their egress (hub proxy or a waiver) and their VPC-SC mode: see [production hardening](../runbooks/production-hardening.md) for these prerequisites.
