@@ -90,6 +90,13 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   `egress_proxy`; spokes resolve the central AWS endpoints through the org Route 53 Profile,
   so the spoke-local SQS endpoint is justified by the inspection charge; the sandbox spoke uses
   a valid project ID.
+- **`15-data-disaster-recovery` uses the backup features that exist.** The member-account vault
+  (created by the aws-organization StackSet), the cross-account and DR-region copies
+  (`compliance.backup`), per-database selection (`enable_org_backup`) and the GCP Backup and DR
+  vault (`gcp.environments.<env>.backup_vault`) replace the raw vault, key and policy snippets,
+  which would have collided with them. The remaining gaps are named: no hourly rule, no locked
+  DR-region vault, the workload CMK grant, `transaction_log_retention_days` and
+  `backup_location` not in config, and a 6-hour multi-region Cloud SQL plan, still raw.
 
 ### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
 
