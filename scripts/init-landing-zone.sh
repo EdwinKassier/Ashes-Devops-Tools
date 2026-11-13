@@ -41,6 +41,7 @@ MONTHLY_BUDGET=""
 VCS_REPO=""
 VCS_APP_ID=""
 TFC_PLAN=""
+NOTIFICATION_EMAILS=""
 CODEOWNERS=false
 CODEOWNERS_OUTPUT="${REPO_ROOT}/.github/CODEOWNERS"
 PLATFORM_TEAM=""
@@ -109,6 +110,11 @@ Options:
                                 written. With --vcs-repo, standard and premium turn on the OPA
                                 policy sets; a production environment without them fails the
                                 tfc-admin plan unless org.tfc.policy_sets_waiver is set.
+  --notification-emails LIST    Comma-separated alert addresses (notifications.emails): the
+                                aws-security security contact and the aws-network alarm
+                                subscribers, among others. A production AWS estate fails both
+                                plans without one; without the flag the key is reported as
+                                still required.
   --codeowners                  Also render templates/CODEOWNERS.tftpl to .github/CODEOWNERS.
                                 Needs --github-owner (or the team flags below).
   --codeowners-output PATH      Where to write it. Default .github/CODEOWNERS (needs --force
@@ -158,6 +164,7 @@ while [[ $# -gt 0 ]]; do
     --vcs-repo) need_arg "$@"; VCS_REPO="$2"; shift 2 ;;
     --vcs-github-app-installation-id) need_arg "$@"; VCS_APP_ID="$2"; shift 2 ;;
     --tfc-plan) need_arg "$@"; TFC_PLAN="$2"; shift 2 ;;
+    --notification-emails) need_arg "$@"; NOTIFICATION_EMAILS="$2"; shift 2 ;;
     --codeowners) CODEOWNERS=true; shift ;;
     --codeowners-output) need_arg "$@"; CODEOWNERS_OUTPUT="$2"; shift 2 ;;
     --platform-team) need_arg "$@"; PLATFORM_TEAM="$2"; shift 2 ;;
@@ -251,6 +258,7 @@ fi
 if has_cloud aws; then
   prompt AWS_MGMT_ACCOUNT "AWS management account ID (12 digits, blank to fill in later)"
   prompt AWS_REGION "Default AWS region" "eu-west-2"
+  prompt NOTIFICATION_EMAILS "Security contact and alarm emails, comma-separated (blank to fill in later)"
 fi
 GCP_REGION="${GCP_REGION:-europe-west2}"
 AWS_REGION="${AWS_REGION:-eu-west-2}"
@@ -330,6 +338,21 @@ case "${TFC_PLAN}" in
   "" | free | essentials | standard | premium) ;;
   *) die "--tfc-plan must be free, essentials, standard or premium" ;;
 esac
+# notifications.emails: the same placeholder-domain rule as the aws-security
+# and aws-network guards (example, .invalid, .localhost and .test are rejected).
+notification_list=()
+if [[ -n "${NOTIFICATION_EMAILS}" ]]; then
+  IFS=',' read -r -a raw_emails <<<"$(printf '%s' "${NOTIFICATION_EMAILS}" | tr -d ' ')"
+  for e in ${raw_emails[@]+"${raw_emails[@]}"}; do
+    [[ -n "${e}" ]] || continue
+    [[ "${e}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+$ ]] || die "--notification-emails: '${e}' is not a valid email address"
+    host="$(printf '%s' "${e#*@}" | tr '[:upper:]' '[:lower:]')"
+    [[ ! "${host}" =~ (^|\.)(example\.(com|net|org)|example|invalid|localhost|test)$ ]] ||
+      die "--notification-emails: '${e}' uses a placeholder domain; give a real, staffed address"
+    notification_list+=("${e}")
+  done
+  [[ "${#notification_list[@]}" -gt 0 ]] || die "--notification-emails: no address given"
+fi
 if [[ "${CODEOWNERS}" == true ]]; then
   [[ -n "${PLATFORM_TEAM}" && -n "${SECURITY_TEAM}" || -n "${GITHUB_OWNER}" ]] ||
     die "--codeowners needs --github-owner (or both --platform-team and --security-team)"
@@ -468,8 +491,30 @@ trap 'rm -f "${tmp}"' EXIT
 } | awk -v gcp="$(has_cloud gcp && echo true || echo false)" \
   -v aws="$(has_cloud aws && echo true || echo false)" \
   -v saas="$(has_cloud saas && echo true || echo false)" \
-  -v org_id="${GCP_ORG_ID}" -v budget="${MONTHLY_BUDGET}" -v profile="${PROFILE}" '
+  -v org_id="${GCP_ORG_ID}" -v budget="${MONTHLY_BUDGET}" -v profile="${PROFILE}" \
+  -v emails="$(IFS=,; printf '%s' "${notification_list[*]-}")" '
   /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  # --notification-emails: uncomment notifications: and emails: with the given
+  # addresses. The comments move in to the content indent; hcp_email_user_ids
+  # stays commented. emails: and its comments go last, so no comment follows
+  # the deeper list (yamllint comments-indentation).
+  emails != "" && $0 == "# notifications:" { notify = 1; seen_emails = 0; email_notes = ""; print "notifications:"; next }
+  notify && !/^#/ {
+    printf "%s", email_notes
+    print "  emails:"
+    n = split(emails, list, ",")
+    for (i = 1; i <= n; i++) print "    - " list[i]
+    notify = 0
+  }
+  notify {
+    if ($0 == "#   emails:") { in_emails = 1; seen_emails = 1; next }
+    if (in_emails && $0 ~ /^#     - /) next
+    in_emails = 0
+    line = ($0 ~ /^#   # /) ? "  # " substr($0, 7) : "  # " substr($0, 5)
+    if (!seen_emails) email_notes = email_notes line "\n"
+    else print line
+    next
+  }
   # Production profile (decision D3): uncomment compliance: with only
   # backup.copy_to_central_vault set. The other keys stay commented, one level
   # deeper, and the backup: block moves last so every comment is indented like
@@ -596,6 +641,11 @@ production_envs="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(h
   /^[[:space:]]*#/ { next }
   /is_production: true/ && ((section == "gcp" && gcp) || (section == "aws" && aws)) { n++ }
   END { print n + 0 }' "${OUTPUT}")"
+aws_production=false
+if has_cloud aws && { [[ "${PROFILE}" == production ]] ||
+  awk '/^[a-z_]+:/ { s = $1 } s == "aws:" && !/^[[:space:]]*#/ && /is_production: true/ { f = 1 } END { exit !f }' "${OUTPUT}"; }; then
+  aws_production=true
+fi
 required=()
 if [[ "${production_envs}" -gt 0 ]]; then
   policy_off=""
@@ -605,6 +655,9 @@ if [[ "${production_envs}" -gt 0 ]]; then
     policy_off="org.tfc.plan is ${TFC_PLAN:-unset}, not standard or premium (--tfc-plan)"
   fi
   [[ -z "${policy_off}" ]] || required+=("OPA policy sets are off: ${policy_off}. With a production environment the tfc-admin plan fails until they are on, or until org.tfc.policy_sets_waiver: { reason, expires } is set.")
+fi
+if [[ "${aws_production}" == true && "${#notification_list[@]}" -eq 0 ]]; then
+  required+=("notifications.emails: the aws-security security contact and the aws-network alarm subscribers. Both production plans fail without a real address (--notification-emails).")
 fi
 if [[ "${#required[@]}" -gt 0 ]]; then
   printf '     Still required for production (the plans fail until set):\n'

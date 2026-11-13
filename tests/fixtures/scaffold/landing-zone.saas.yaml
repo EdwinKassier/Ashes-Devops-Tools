@@ -643,23 +643,25 @@ saas:
         production_branch: main
 
 # One place for alert recipients. Optional: absent = today's behaviour, except
-# aws-security: a production estate (org.profile production, or an AWS workload
-# environment with is_production: true) fails its plan without a real security
-# contact here or in aws_overrides.notification_subscribers. Example, .invalid,
-# .localhost and .test domains are rejected.
+# aws-security and aws-network: a production estate (org.profile production, or
+# an AWS workload environment with is_production: true) fails both plans without
+# a real address here (or aws_overrides.notification_subscribers on
+# aws-security, alarm_subscriber_emails on aws-network). Example, .invalid,
+# .localhost and .test domains are rejected. The scaffolder writes it from
+# --notification-emails.
 # Precedence everywhere: explicit variable > the specific key (gcp.alert_emails,
 # aws.guard_alert_emails) > notifications.emails > the root's built-in default.
-# notifications:
-#   # GCP control-plane alert channels, aws-security notification + CIS alarm
-#   # topics, the org-guard-alerts topic, AWS budget emails (all) and Cost Anomaly Detection
-#   # (first address only: the module takes one subscriber).
-#   emails:
-#     - secops@acme.example
-#   # HCP Terraform user IDs (not addresses: HCP email notifications take user
-#   # IDs) emailed on failed runs and on health-assessment drift / check
-#   # failures, on every workspace tfc-admin manages.
-#   hcp_email_user_ids:
-#     - user-REPLACE_WITH_HCP_USER_ID
+notifications:
+  # HCP Terraform user IDs (not addresses: HCP email notifications take user
+  # IDs) emailed on failed runs and on health-assessment drift / check
+  # failures, on every workspace tfc-admin manages.
+  # hcp_email_user_ids:
+  #   - user-REPLACE_WITH_HCP_USER_ID
+  # GCP control-plane alert channels, aws-security notification + CIS alarm
+  # topics, the org-guard-alerts topic, AWS budget emails (all) and Cost Anomaly Detection
+  # (first address only: the module takes one subscriber).
+  emails:
+    - secops@acme-corp.io
 
 # compliance: estate-wide compliance knobs. Absent = today's behaviour.
 compliance:

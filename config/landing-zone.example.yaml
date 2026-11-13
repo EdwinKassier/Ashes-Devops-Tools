@@ -641,10 +641,12 @@ saas:
   #       production_branch: main
 
 # One place for alert recipients. Optional: absent = today's behaviour, except
-# aws-security: a production estate (org.profile production, or an AWS workload
-# environment with is_production: true) fails its plan without a real security
-# contact here or in aws_overrides.notification_subscribers. Example, .invalid,
-# .localhost and .test domains are rejected.
+# aws-security and aws-network: a production estate (org.profile production, or
+# an AWS workload environment with is_production: true) fails both plans without
+# a real address here (or aws_overrides.notification_subscribers on
+# aws-security, alarm_subscriber_emails on aws-network). Example, .invalid,
+# .localhost and .test domains are rejected. The scaffolder writes it from
+# --notification-emails.
 # Precedence everywhere: explicit variable > the specific key (gcp.alert_emails,
 # aws.guard_alert_emails) > notifications.emails > the root's built-in default.
 # notifications:

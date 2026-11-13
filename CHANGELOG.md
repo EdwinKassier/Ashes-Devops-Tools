@@ -74,6 +74,12 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 #### Fixed
 
+- **A production AWS scaffold plans (ADO-21).** The scaffolder left `notifications.emails`
+  commented, so a fresh production scaffold failed the `aws-security` (security contact) and
+  `aws-network` (hub alarm subscribers) plans. The new `--notification-emails` flag writes it,
+  rejecting example, `.invalid`, `.localhost` and `.test` domains as both roots do. Without the
+  flag, a production AWS scaffold lists `notifications.emails` under "Still required for
+  production". The scaffold matrix now plans both roots with no test-supplied contact.
 - **The spoke egress proxy endpoint must be in the hub proxy region (ARC-H2).** net-spoke fails the
   plan when `egress_proxy` is on and the spoke region differs from the region of the hub proxy's
   service attachment. Google requires a Private Service Connect endpoint in the region of the

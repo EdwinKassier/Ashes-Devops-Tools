@@ -131,7 +131,9 @@ With Option A, retire the static key after run #1 and move the workspace to Opti
 
 Do not hand-create workspaces. [`envs/tfc-admin`](../../envs/tfc-admin/README.md) declares every AWS workspace (`aws-organization`, `aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup`, one `aws-workload-<env>` per `aws.workload_environments` key) with VCS wiring, working directories, trigger patterns, remote-state sharing and dynamic-credential env vars. Hand-create only the `tfc-admin` workspace itself (working directory `envs/tfc-admin`, a `TFE_TOKEN` sensitive env var).
 
-The cloud flag, the workload environments and their account keys come from the committed `config/landing-zone.yaml` (`scripts/init-landing-zone.sh --clouds aws ...`, or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml)):
+A production estate (`org.profile: production`, or an `aws.workload_environments` entry with `is_production: true`) needs a real, staffed address in `notifications.emails`: `aws-security` uses it as the security contact and `aws-network` as the hub alarm subscribers, and both plans fail without it. Pass it to the scaffolder with `--notification-emails` (comma-separated); without the flag the scaffolder lists the key as still required.
+
+The cloud flag, the workload environments and their account keys come from the committed `config/landing-zone.yaml` (`scripts/init-landing-zone.sh --clouds aws --notification-emails secops@acme.com ...`, or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml)):
 
 ```yaml
 aws:

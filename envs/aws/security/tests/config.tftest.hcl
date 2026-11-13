@@ -5,8 +5,9 @@
 
 mock_provider "aws" {}
 
-# CMP-6: a production scaffold needs a real security contact (notifications.emails,
-# commented out in the scaffold); it is operator-supplied, so it is passed here.
+# CMP-6: a production estate needs a real security contact. The other fixtures
+# have no notifications.emails, so the suite passes one here. The scaffold runs
+# clear it (aws_overrides = {}): the scaffolder writes notifications.emails.
 variables {
   aws_overrides = {
     notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
@@ -54,6 +55,14 @@ run "scaffold_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+    aws_overrides            = {}
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied contact.
+  assert {
+    condition     = [for s in values(local.notification_subscribers) : s.endpoint] == ["secops@acme-corp.io"]
+    error_message = "the scaffold's notifications.emails must be the aws-security security contact."
   }
 }
 
@@ -62,6 +71,14 @@ run "scaffold_gcp_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+    aws_overrides            = {}
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied contact.
+  assert {
+    condition     = [for s in values(local.notification_subscribers) : s.endpoint] == ["secops@acme-corp.io"]
+    error_message = "the scaffold's notifications.emails must be the aws-security security contact."
   }
 }
 
@@ -70,6 +87,14 @@ run "scaffold_gcp_aws_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    aws_overrides            = {}
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied contact.
+  assert {
+    condition     = [for s in values(local.notification_subscribers) : s.endpoint] == ["secops@acme-corp.io"]
+    error_message = "the scaffold's notifications.emails must be the aws-security security contact."
   }
 }
 

@@ -102,7 +102,8 @@ scripts/init-landing-zone.sh --org-name acme --tfc-org acme --clouds gcp,aws \
   --domain acme.com --billing-account 0A1B2C-3D4E5F-6A7B8C \
   --gcp-admin-email admin@acme.com --aws-management-account 123456789012 \
   --aws-email-pattern 'aws+{key}@acme.com' --github-owner acme \
-  --vcs-repo acme/landing-zone --tfc-plan standard
+  --vcs-repo acme/landing-zone --tfc-plan standard \
+  --notification-emails secops@acme.com
 # SaaS: add --clouds saas --supabase-org <id> --vercel-team <id> --github-repo acme/web
 # or interactively: scripts/init-landing-zone.sh
 # or by hand:       cp config/landing-zone.example.yaml config/landing-zone.yaml
@@ -112,6 +113,8 @@ git add config/landing-zone.yaml && git commit -m "chore(config): landing zone"
 The script validates the inputs the same way the Terraform variables do. It writes `config/landing-zone.yaml` and lists the placeholders still left for the clouds you enabled, such as admin groups. `--rebrand` also renames the README title. Review the environments, CIDRs and groups before you commit.
 
 `--tfc-plan` writes `org.tfc.plan` (default `standard` with `--profile production`). With `--vcs-repo`, `standard` and `premium` turn on the OPA policy sets. A production environment without them fails the tfc-admin plan unless `org.tfc.policy_sets_waiver` is set, and the script lists this under "Still required for production".
+
+`--notification-emails` writes `notifications.emails`, a comma-separated list of real, staffed addresses. A production AWS estate needs it: `aws-security` uses it as the security contact and `aws-network` as the hub alarm subscribers, and both plans fail without it. Without the flag the script lists the key under "Still required for production".
 
 **Production environments** (`is_production: true`, such as the scaffolded GCP `prod`) fail the plan until you choose their egress (hub proxy or a waiver) and their VPC-SC mode: see [production hardening](../runbooks/production-hardening.md) for these prerequisites.
 

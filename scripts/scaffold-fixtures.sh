@@ -28,6 +28,7 @@ for combo in gcp aws saas gcp,aws gcp,aws,saas; do
     --aws-email-pattern 'aws+{key}@acme.example' --github-owner acme \
     --supabase-org sbacmeorg1 --vercel-team team_acme0001 --github-repo acme/web \
     --vcs-repo acme/landing-zone --vcs-github-app-installation-id ghain-AAAA0001 \
+    --notification-emails secops@acme-corp.io \
     --output "${OUT}/landing-zone.${name}.yaml" >/dev/null
 done
 

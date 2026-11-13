@@ -16,8 +16,9 @@ mock_provider "aws" {
 }
 
 variables {
-  # The production scaffold has no notifications.emails: the alarm contact is
-  # an operator-supplied value, as in the aws-security suite.
+  # A production estate needs a real alarm contact. The other fixtures have no
+  # notifications.emails, so the suite passes one here. The scaffold runs clear
+  # it (null): the scaffolder writes notifications.emails.
   alarm_subscriber_emails = ["netops@acme-corp.io"]
 }
 
@@ -42,6 +43,14 @@ run "scaffold_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+    alarm_subscriber_emails  = null
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied alarm subscriber.
+  assert {
+    condition     = local.alarm_subscriber_emails == tolist(["secops@acme-corp.io"])
+    error_message = "the scaffold's notifications.emails must be the hub network alarm subscriber."
   }
 
   assert {
@@ -70,6 +79,14 @@ run "scaffold_gcp_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+    alarm_subscriber_emails  = null
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied alarm subscriber.
+  assert {
+    condition     = local.alarm_subscriber_emails == tolist(["secops@acme-corp.io"])
+    error_message = "the scaffold's notifications.emails must be the hub network alarm subscriber."
   }
 
   assert {
@@ -98,6 +115,14 @@ run "scaffold_gcp_aws_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    alarm_subscriber_emails  = null
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied alarm subscriber.
+  assert {
+    condition     = local.alarm_subscriber_emails == tolist(["secops@acme-corp.io"])
+    error_message = "the scaffold's notifications.emails must be the hub network alarm subscriber."
   }
 
   assert {

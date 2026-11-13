@@ -484,6 +484,54 @@ else
 fi
 expect_reject "rejects an unknown --tfc-plan" --output "${workdir}/p.yaml" --org-name acme --clouds aws --tfc-plan business
 
+echo "==> ADO-21: --notification-emails writes notifications.emails"
+out9="${workdir}/notify.yaml"
+if bash "${SCRIPT}" --non-interactive --yes --output "${out9}" --org-name acme --clouds aws \
+  --aws-management-account 123456789012 --notification-emails 'secops@acme.io, netops@acme.io' \
+  </dev/null >"${log}" 2>&1; then
+  assert_line "${out9}" '^notifications:$' "notifications uncommented"
+  assert_line "${out9}" '^  emails:$' "notifications.emails uncommented"
+  assert_line "${out9}" '^    - secops@acme\.io$' "first notification email"
+  assert_line "${out9}" '^    - netops@acme\.io$' "second notification email"
+  assert_line "${out9}" '^  # hcp_email_user_ids:$' "hcp_email_user_ids stays commented"
+  awk '/^notifications:$/ { c = 1; print; next } c && /^[^ ]/ { c = 0 } c' "${out9}" >"${workdir}/notifications-block"
+  assert_no_line "${workdir}/notifications-block" '@my-org|@example' "the example address is gone from notifications"
+  assert_no_line "${workdir}/notifications-block" '^  # # ' "notifications comments are not double-commented"
+  assert_no_line "${log}" 'notifications\.emails' "no missing-contact warning when the flag is given"
+  schema_check "${out9}" "notifications scaffold"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out9}"; then pass "notifications scaffold is yamllint-clean"; else fail "notifications scaffold is yamllint-clean"; fi
+  if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' 2>/dev/null; then
+    if python3 -c 'import sys, yaml; d = yaml.safe_load(open(sys.argv[1])); assert d["notifications"] == {"emails": ["secops@acme.io", "netops@acme.io"]}, d["notifications"]' "${out9}"; then
+      pass "notifications parses to exactly the given emails"
+    else
+      fail "notifications parses to exactly the given emails"
+    fi
+  fi
+else
+  fail "notification-emails run exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --yes --force --output "${out9}" --org-name acme --clouds aws \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_no_line "${out9}" '^notifications:' "without the flag notifications stays commented"
+  assert_line "${log}" 'notifications\.emails' "a production AWS scaffold without the flag lists notifications.emails"
+  assert_line "${log}" 'aws-security' "the report names aws-security"
+  assert_line "${log}" 'aws-network' "the report names aws-network"
+else
+  fail "aws run without notification emails exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --force --output "${out9}" --org-name acme --tfc-org acme-tfc --clouds gcp --domain acme.com \
+  </dev/null >"${log}" 2>&1; then
+  assert_no_line "${log}" 'notifications\.emails' "a gcp-only scaffold does not require notifications.emails"
+else
+  fail "gcp-only run without notification emails exits 0"; cat "${log}" >&2
+fi
+expect_reject "rejects a malformed --notification-emails" --output "${workdir}/n1.yaml" --org-name acme --clouds aws \
+  --notification-emails 'not-an-email'
+expect_reject "rejects a placeholder-domain --notification-emails" --output "${workdir}/n2.yaml" --org-name acme --clouds aws \
+  --notification-emails 'secops@acme.example.com'
+expect_reject "rejects a .test --notification-emails" --output "${workdir}/n3.yaml" --org-name acme --clouds aws \
+  --notification-emails 'secops@acme.io,ops@corp.test'
+
 echo
 echo "test-init-landing-zone: ${passes} passed, ${failures} failed"
 [[ "${failures}" -eq 0 ]]
