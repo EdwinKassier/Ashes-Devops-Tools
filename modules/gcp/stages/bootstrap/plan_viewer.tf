@@ -35,6 +35,8 @@ resource "google_organization_iam_custom_role" "plan_viewer" {
 # project). It holds no logging.logEntries.list, logging.privateLogEntries.list,
 # logging.views.access or logging.logs.list. Unconditional: organization-plan
 # needs it even with enable_plan_viewer_role = false.
+# logging.views.getIamPolicy and logging.locations.* are left out on purpose:
+# add them if the repo manages log view IAM or reads a logging locations data source.
 locals {
   logging_config_viewer_role = "organizations/${var.org_id}/roles/${var.logging_config_viewer_role_id}"
   logging_config_viewer_permissions = [

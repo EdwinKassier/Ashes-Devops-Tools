@@ -105,7 +105,7 @@ The following resources are created:
 
 - resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L431)
 - resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L421)
-- resource.google_organization_iam_custom_role.logging_config_viewer (modules/gcp/stages/bootstrap/plan_viewer.tf#L59)
+- resource.google_organization_iam_custom_role.logging_config_viewer (modules/gcp/stages/bootstrap/plan_viewer.tf#L61)
 - resource.google_organization_iam_custom_role.plan_viewer (modules/gcp/stages/bootstrap/plan_viewer.tf#L14)
 - resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L522)
 - resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L548)

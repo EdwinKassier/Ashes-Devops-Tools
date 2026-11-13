@@ -1304,6 +1304,12 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   dataset IAM: BigQuery datasets ignore the `modifiedGrantsByRole` attribute,
   and organization-apply holds `bigquery.admin` only on the admin project. A
   sandbox apply must prove the grant before LOG-04 leaves PREVIEW.
+  gcp-bootstrap binds organization-plan's `cloudkms.viewer`, `monitoring.viewer`,
+  `pubsub.viewer` and `bigquery.metadataViewer` roles on the admin project only.
+  In the logging project they come only from the manual grants in
+  production-hardening.md step 3, so without them a gcp-organization plan may
+  not read the control-plane alerts, the audit dataset or the audit keys there.
+  A sandbox plan with `gcp.logging_project_id` set must confirm this.
 - **G5 — VPC-SC perimeter expansion** (`vpc_sc_additional_restricted_services`,
   `vpc_sc_ingress_identities`, `modules/gcp/stages/network-hub`). Set the ingress
   identity BEFORE expanding services or an enforced apply is blocked.

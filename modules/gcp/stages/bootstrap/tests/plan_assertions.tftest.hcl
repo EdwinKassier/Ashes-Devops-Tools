@@ -943,7 +943,17 @@ run "plan_identities_read_no_log_entries" {
         "roles/logging.admin", "roles/logging.configWriter", "roles/viewer",
       ], v.role)
     ]) == 0
-    error_message = "no plan identity may hold a role that reads log entries (logging.viewer, privateLogViewer, viewAccessor, admin, viewer) at the org node."
+    error_message = "no plan identity may hold a role that reads log entries (logging.viewer, privateLogViewer, viewAccessor, logging.admin, viewer) or writes logging configuration (logging.configWriter) at the org node."
+  }
+
+  assert {
+    condition = length([
+      for k, v in google_project_iam_member.stage_admin_project_roles :
+      k if endswith(split("|", k)[0], "-plan") && contains([
+        "roles/logging.viewer", "roles/logging.privateLogViewer", "roles/logging.viewAccessor", "roles/logging.admin",
+      ], v.role)
+    ]) == 0
+    error_message = "no plan identity may hold a role that reads log entries (logging.viewer, privateLogViewer, viewAccessor, logging.admin) on the admin project."
   }
 
   assert {
