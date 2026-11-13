@@ -8,6 +8,16 @@
 # plan on a dry-run or absent perimeter, and it does not accept
 # production_vpc_sc_dry_run_waiver.
 # PREREQUISITES: clean dry-run violation logs.
+#
+# Also required for a regulated environment, outside this preset:
+#   - gcp-organization: a hardened audit store (gcp.logging_project_id,
+#     gcp.logging_project_number and gcp.enable_audit_bucket_lock: true, which
+#     is IRREVERSIBLE), or gcp.audit_store_waiver { reason, expires }.
+#   - database.encryption_key_name (a CMEK) on every app-service database.
+#   - The Backup and DR vault stays on (it defaults to on for regulated; do not
+#     set enable_backup_vault = false or backup_vault.enabled: false).
+#   - The production prerequisites in prod-gcp-workload.tfvars when the
+#     environment is also is_production.
 vpc_sc_enable_dry_run = false
 
 # Cloud Armor WAF on the environment edge, with the OWASP managed rule set.

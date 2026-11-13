@@ -38,6 +38,26 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   Terraform root under `examples/` passes a module argument or a nested object attribute that the
   module variable does not declare. The limits are in `docs/known-gaps.md`.
 
+#### Documentation
+
+- **Presets list the production prerequisites they do not set.** `examples/presets/README.md`
+  and the `prod-gcp-workload`, `prod-gcp-network-hub` and `regulated-gcp-workload` presets now
+  name every plan a production or regulated environment fails without: pinned zones (workload
+  and hub), an egress choice (`egress_proxy` with `secure_web_proxy`, or
+  `production_egress_proxy_waiver`), `service_team` on app services, the tfc-admin policy sets or
+  `org.tfc.policy_sets_waiver`, and for regulated the audit store, database CMEK and backup vault.
+  `nonprod-aws-security` notes that replacing `aws_overrides` drops `notification_subscribers`.
+- **`examples/aws-landing-zone` names the production notification and policy-set requirements.**
+  `notifications.emails` (a real domain) for aws-security and aws-network, the tfc-admin
+  policy-set guard, and a commented `notification_subscribers` example.
+- **Example READMEs match the code.** `examples/workloads` and `examples/README.md`: the
+  environment subnets come from `gcp-workload-<env>`, and a team project belongs in
+  `service_teams` to be inside the environment perimeter; the Terraform example folders are
+  standalone sandboxes. `cloud-storage`: read-only `objectViewer` grant, expiry only with
+  `retention_days`, the log buckets and the `app_key_id` output. `cloud-armor`: adaptive
+  protection is already on. `vpc-sc`: the `principalSet` pins repository and ref.
+  `app-services`: region placeholder and the egress-proxy behaviour.
+
 ### Re-audit 2 code wave ([2026-11-13 due-diligence re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))
 
 IDs prefixed `re-audit-2` are this report's; the same IDs in older entries belong to earlier audits.

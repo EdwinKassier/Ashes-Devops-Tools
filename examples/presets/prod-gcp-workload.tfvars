@@ -1,6 +1,21 @@
 # Production hardening overlay for envs/gcp/workload (per prod environment). Apply IN
 # ADDITION to your own tfvars.
 #
+# PRODUCTION PREREQUISITES. This preset does not set them, but a production
+# environment (is_production: true) fails its plan without each one
+# (docs/runbooks/production-hardening.md):
+#   - Pinned zones: gcp.environments.<env>.zones in config/landing-zone.yaml
+#     (or the zones variable), in the order of the spoke subnet CIDRs.
+#   - An egress choice: gcp.environments.<env>.egress_proxy: true, which needs
+#     secure_web_proxy (PREVIEW) on gcp-network-hub, or
+#     production_egress_proxy_waiver = { reason, expires = "YYYY-MM-DD" } for
+#     this workspace in config/tfc-workspaces.yaml.
+#   - A service_team on every app service (its own service project), unless
+#     enable_host_project_workloads = true allows the Shared VPC host project.
+#   - On tfc-admin: the OPA policy sets (org.tfc.plan standard or premium and
+#     org.tfc.vcs_repo), or org.tfc.policy_sets_waiver { reason, expires }.
+#     This one fails the tfc-admin plan, not this root's.
+#
 # ENFORCE the environment VPC-SC perimeter (the default is dry-run).
 # The perimeter is built in the environment's own folder-scoped access policy
 # (gcp-organization creates it; gcp-projects passes its ID through

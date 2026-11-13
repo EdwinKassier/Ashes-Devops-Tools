@@ -33,9 +33,9 @@ commented, deliberate opt-in. See [`docs/runbooks/production-hardening.md`](../.
 |---|---|---|
 | `prod-gcp-bootstrap.tfvars` | `envs/gcp/bootstrap` | Keeps the GitHub WIF pool off (`enable_github_wif = false`); per-stage identities are default |
 | `prod-gcp-organization.tfvars` | `envs/gcp/organization` | `gcp_overrides`: `enable_cmek_org_policy`; WORM lock left commented |
-| `prod-gcp-network-hub.tfvars` | `envs/gcp/network-hub` | VPC-SC enforced (`vpc_sc_enable_dry_run = false`) |
-| `prod-gcp-workload.tfvars` | `envs/gcp/workload` | Environment VPC-SC enforced, Cloud Armor + OWASP rules |
-| `regulated-gcp-workload.tfvars` | `envs/gcp/workload` | Applied automatically to a `compliance_class: regulated` environment: VPC-SC enforced, Cloud Armor + OWASP rules, every flow logged, 365-day flow-log retention ([Regulated environments](../../docs/architecture/regulated-environments.md)) |
+| `prod-gcp-network-hub.tfvars` | `envs/gcp/network-hub` | VPC-SC enforced (`vpc_sc_enable_dry_run = false`). See [production prerequisites](#production-prerequisites-the-presets-do-not-set) |
+| `prod-gcp-workload.tfvars` | `envs/gcp/workload` | Environment VPC-SC enforced, Cloud Armor + OWASP rules. See [production prerequisites](#production-prerequisites-the-presets-do-not-set) |
+| `regulated-gcp-workload.tfvars` | `envs/gcp/workload` | Applied automatically to a `compliance_class: regulated` environment: VPC-SC enforced, Cloud Armor + OWASP rules, every flow logged, 365-day flow-log retention ([Regulated environments](../../docs/architecture/regulated-environments.md)). See [production prerequisites](#production-prerequisites-the-presets-do-not-set) |
 | `prod-aws-security.tfvars` | `envs/aws/security` | `aws_overrides`: CloudWatch Logs + CIS alarms, full Config/GuardDuty |
 
 ```bash
@@ -46,6 +46,30 @@ terraform -chdir=envs/gcp/network-hub plan \
 
 `scripts/check-consistency.sh` (run in CI) fails if a preset sets a variable its root
 does not declare, or if any doc references a preset that does not exist.
+
+### Production prerequisites the presets do not set
+
+A preset turns controls on; it does not make a production plan pass on its own.
+Once an environment has `is_production: true`, these plans also fail until you
+act ([`docs/runbooks/production-hardening.md`](../../docs/runbooks/production-hardening.md)):
+
+| Plan that fails | What it needs |
+|---|---|
+| `gcp-workload-<env>` | Pinned zones: `gcp.environments.<env>.zones` (or the `zones` variable), in the order of the spoke subnet CIDRs |
+| `gcp-workload-<env>` | An egress choice: `gcp.environments.<env>.egress_proxy: true` (needs `secure_web_proxy`, PREVIEW, on `gcp-network-hub`), or `production_egress_proxy_waiver = { reason, expires }` for the workspace in `config/tfc-workspaces.yaml` |
+| `gcp-workload-<env>` | A `service_team` on every app service (its own service project), unless `enable_host_project_workloads = true` allows the Shared VPC host project |
+| `gcp-workload-<env>` | An enforced VPC-SC perimeter (`prod-gcp-workload` sets it), or `production_vpc_sc_dry_run_waiver` during a first rollout |
+| `gcp-network-hub` | Pinned hub zones: `gcp.network.zones` (or the `hub_zones` variable) |
+| `tfc-admin` | The OPA policy sets (`org.tfc.plan: standard` or `premium` and `org.tfc.vcs_repo`), or `org.tfc.policy_sets_waiver: { reason, expires }` |
+
+A `compliance_class: regulated` environment, production or not, needs:
+
+| Plan that fails | What it needs |
+|---|---|
+| `gcp-organization` | A hardened audit store (`gcp.logging_project_id`, `gcp.logging_project_number` and `gcp.enable_audit_bucket_lock: true`, IRREVERSIBLE), or `gcp.audit_store_waiver: { reason, expires }` |
+| `gcp-workload-<env>` | `database.encryption_key_name` (a CMEK) on every app-service database |
+| `gcp-workload-<env>` | The Backup and DR vault on (the default for regulated: do not set `enable_backup_vault = false`) |
+| `gcp-workload-<env>` | An enforced perimeter with no waiver: a regulated environment refuses `production_vpc_sc_dry_run_waiver` |
 
 ### The same presets in `config/tfc-workspaces.yaml`
 
@@ -112,7 +136,9 @@ along with prod.
 
 Read each preset's comments first: some controls have prerequisites (CMEK keys
 before CMEK enforcement, clean dry-run logs before VPC-SC enforcement, a
-logs-granted KMS key for CloudWatch Logs).
+logs-granted KMS key for CloudWatch Logs), and a production environment needs
+the [production prerequisites](#production-prerequisites-the-presets-do-not-set)
+the presets do not set.
 
 ## Cost presets (audit F2)
 
