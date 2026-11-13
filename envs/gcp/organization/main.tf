@@ -176,7 +176,7 @@ resource "terraform_data" "regulated_audit_store_guard" {
     }
     precondition {
       condition     = length(local.regulated_environment_keys) == 0 || local.audit_store_hardened || local.audit_store_waived
-      error_message = "Regulated environments (${join(", ", local.regulated_environment_keys)}) need a hardened audit store: gcp.logging_project_id + gcp.logging_project_number (a project other than the admin project, directly under the organization; decide before the first apply because the audit keys cannot be moved) and gcp.enable_audit_bucket_lock: true (IRREVERSIBLE).${local.audit_store_waiver_until == null ? "" : " gcp.audit_store_waiver expired on ${try(tostring(local.cfg.audit_store_waiver.expires), "")}."} Or set gcp.audit_store_waiver: { reason, expires: \"YYYY-MM-DD\" } and record the risk. See docs/runbooks/production-hardening.md."
+      error_message = "Regulated environments (${join(", ", local.regulated_environment_keys)}) need a hardened audit store: gcp.logging_project_id + gcp.logging_project_number (a project other than the admin project, directly under the organization; decide before the first apply because the audit keys cannot be moved) and gcp.enable_audit_bucket_lock: true (IRREVERSIBLE).${local.audit_store_waiver_until == null ? "" : " gcp.audit_store_waiver expired on ${try(substr(local.audit_store_waiver_until, 0, 10), "")}."} Or set gcp.audit_store_waiver: { reason, expires: \"YYYY-MM-DD\" } and record the risk. See docs/runbooks/production-hardening.md."
     }
   }
 }

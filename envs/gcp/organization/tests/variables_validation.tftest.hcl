@@ -205,6 +205,32 @@ run "removed_audit_store_waived_key_fails" {
   expect_failures = [terraform_data.regulated_audit_store_guard]
 }
 
+# A bare key (null value) is still the removed key.
+run "removed_audit_store_waived_bare_key_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/schema-invalid-audit-store-waived-bare.yaml"
+  }
+
+  expect_failures = [terraform_data.regulated_audit_store_guard]
+}
+
+# yamldecode reads an unquoted date as its midnight timestamp; the waiver
+# takes the first 10 characters and still waives through that day.
+run "unquoted_waiver_date_still_waives" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/schema-unquoted-audit-store-waiver-date.yaml"
+  }
+
+  assert {
+    condition     = local.audit_store_waived && local.audit_store_waiver_until == "2099-12-31T23:59:59Z"
+    error_message = "An unquoted expiry (yamldecode midnight form) must waive through that UTC day."
+  }
+}
+
 run "malformed_audit_store_waiver_fails" {
   command = plan
 

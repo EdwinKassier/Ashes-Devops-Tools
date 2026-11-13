@@ -645,6 +645,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   hardened-audit-store requirement (LOG-03, LOG-04) only until `expires` (UTC), the
   `production_vpc_sc_dry_run_waiver` rule. The old key fails the gcp-organization plan and the
   schema (`make config-check`), and both name the new key. See `UPGRADING.md`.
+- **Waiver dates accept the YAML midnight form.** `gcp.audit_store_waiver`,
+  `production_egress_proxy_waiver` and `production_vpc_sc_dry_run_waiver` read `expires` from its
+  first 10 characters, so `YYYY-MM-DDT00:00:00Z` (what `yamldecode` makes of an unquoted YAML date)
+  waives through that day instead of failing. The schema still asks for a quoted date.
 
 ### Changed
 

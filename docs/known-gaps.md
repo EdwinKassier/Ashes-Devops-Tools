@@ -734,7 +734,9 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
     and a spoke private tier with no Cloud NAT. A production gcp-workload now
     needs the proxy or `production_egress_proxy_waiver` (ARC-4), so until the
     proxy is proven every production environment runs on a waiver that must be
-    renewed when it expires.
+    renewed when it expires. A regulated environment accepts that waiver too
+    (unlike the VPC-SC waiver). Revisit this once the proxy is proven: then
+    refuse the egress waiver for `compliance_class: regulated`.
 - **An enforced environment perimeter admits the environment's own plan and
   apply SAs (ARC-13).** Mock-tested only. gcp-projects publishes them in
   `environment_config.<env>.automation_identities`, and the environment stage

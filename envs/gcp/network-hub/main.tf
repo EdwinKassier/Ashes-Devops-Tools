@@ -103,7 +103,7 @@ resource "terraform_data" "production_hub_zones_guard" {
   lifecycle {
     precondition {
       condition     = length(local.hub_zones) > 0
-      error_message = "A production environment (is_production = true) is present, so the hub zones must be pinned: set gcp.network.zones in config/landing-zone.yaml (or the hub_zones variable), such as [${local.default_region}-a, ${local.default_region}-b, ${local.default_region}-c]. The same list sets the hub VPC and the DNS anchor VPC. Subnet i of each tier takes the i-th CIDR, so for an existing hub list the zones in the order of its subnet CIDRs (UPGRADING.md), and the plan must show no subnet change."
+      error_message = "A production environment (is_production = true) is present, so the hub zones must be pinned. Set gcp.network.zones in config/landing-zone.yaml (or the hub_zones variable) to zones of the region, as gcloud compute zones list --filter=region:${local.default_region} shows them, for example [${join(", ", [for z in(contains(["us-east1", "europe-west1"], local.default_region) ? ["b", "c", "d"] : ["a", "b", "c"]) : "${local.default_region}-${z}"])}]. The same list sets the hub VPC and the DNS anchor VPC. Subnet i of each tier takes the i-th CIDR. For an existing hub, list the zones in the order of its subnet CIDRs (UPGRADING.md), and check that the plan shows no subnet change."
     }
   }
 }

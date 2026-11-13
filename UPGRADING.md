@@ -1601,13 +1601,22 @@ A non-production environment may still leave its zones unset.
 ```sh
 gcloud compute networks subnets list --project=<host-project> \
   --filter="network~/<vpc-name>$ AND name~-public-" \
-  --format="value(name,ipCidrRange)" --sort-by=ipCidrRange
+  --format="value(ipCidrRange,name)" | sort -V
 ```
 
-The zone is the end of each subnet name (`<vpc>-public-<zone>`). Skip additional-region subnets:
-their name ends in a region, not a zone. List the zones in the order of their CIDRs, lowest
-first (for a `/16` block: `x.y.0.0/24`, then `x.y.1.0/24`, and so on). Do the same for the
-hub (`hub-vpc-core` in the hub project) and the DNS anchor (`dns-vpc-core` in the DNS project). The
+Sort the CIDRs as numbers (`sort -V` above), not as text: `gcloud --sort-by=ipCidrRange` sorts
+text, which puts `x.y.z.128/26` before `x.y.z.64/26`. The zone is the end of each subnet name
+(`<vpc>-public-<zone>`). Skip additional-region subnets: their name ends in a region, not a
+zone. List the zones in the order of their CIDRs, lowest first (for a `/16` block: `x.y.0.0/24`,
+then `x.y.1.0/24`, and so on).
+
+Cross-check: the google provider's `google_compute_zones` data source sorts the zone names before
+it returns them (`sort.Strings` in `data_source_google_compute_zones.go`, checked on the
+provider's main branch on 2026-11-13). So a network built from discovered zones normally has its
+zones in alphabetical order. If the CIDR order you found is not alphabetical, find out why (for
+example, an older provider or zones pinned earlier) before you set the list.
+
+Do the same for the hub (`hub-vpc-core` in the hub project) and the DNS anchor (`dns-vpc-core` in the DNS project). The
 hub and DNS anchor take one list, so they must have the same zones in the same order. If they
 differ, keep the hub's order and plan: the DNS anchor holds no workloads, but its subnets are then
 replaced, so review that plan first. Then set, for example:

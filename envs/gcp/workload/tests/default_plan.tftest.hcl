@@ -553,6 +553,95 @@ run "prod_egress_waiver_allows_plan" {
   }
 }
 
+# yamldecode turns an unquoted YAML date into its midnight timestamp
+# (2099-12-31T00:00:00Z). Both waivers accept that form and still waive
+# through the whole day.
+run "prod_waivers_accept_the_yaml_midnight_form" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = true
+    production_vpc_sc_dry_run_waiver = {
+      reason  = "First rollout: reading the dry-run violation logs."
+      expires = "2099-12-31T00:00:00Z"
+    }
+    production_egress_proxy_waiver = {
+      reason  = "Hub egress proxy not yet proven."
+      expires = "2099-12-31T00:00:00Z"
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.vpc_sc_waiver_until == "2099-12-31T23:59:59Z" && local.egress_waiver_until == "2099-12-31T23:59:59Z" && length(terraform_data.production_network_guard) == 1 && length(terraform_data.production_vpc_sc_enforced) == 1
+    error_message = "Both waivers must take the first 10 characters of a midnight timestamp and waive through that UTC day."
+  }
+}
+
+# Standalone production (no hub) cannot use the egress proxy: turning it on
+# changes nothing, so without a waiver the plan fails.
+run "prod_standalone_egress_proxy_without_waiver_fails" {
+  command = plan
+
+  variables {
+    environment                    = "prod"
+    vpc_sc_access_policy_name      = "1234567890"
+    vpc_sc_enable_dry_run          = false
+    enable_network_hub             = false
+    enable_egress_proxy            = true
+    production_egress_proxy_waiver = null
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_network_guard]
+}
+
 run "prod_expired_egress_waiver_fails" {
   command = plan
 
@@ -597,6 +686,16 @@ run "rejects_egress_waiver_without_reason" {
 
   variables {
     production_egress_proxy_waiver = { reason = " ", expires = "2099-12-31" }
+  }
+
+  expect_failures = [var.production_egress_proxy_waiver]
+}
+
+run "rejects_egress_waiver_with_non_midnight_time" {
+  command = plan
+
+  variables {
+    production_egress_proxy_waiver = { reason = "First rollout.", expires = "2099-12-31T12:00:00Z" }
   }
 
   expect_failures = [var.production_egress_proxy_waiver]

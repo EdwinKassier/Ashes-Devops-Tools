@@ -62,7 +62,10 @@ workspaces:
 ```
 
 The waiver stops working after its `expires` date (UTC), and the plan fails
-again.
+again. `envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`)
+emits a plan **warning** for the hub perimeter. Production is the explicit
+`is_production = true` attribute on the shared `environments` map (surfaced to
+gcp-workload as `environment_config[<env>].is_production`), not a name match.
 
 **Egress guard.** `envs/gcp/workload` also fails a production plan
 (`terraform_data.production_network_guard`) when the private tier does not
@@ -84,10 +87,7 @@ workspaces:
 ```
 
 A standalone environment (no hub) cannot use the proxy, so it needs the
-waiver. The scaffolder writes neither choice. `envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`)
-emits a plan **warning** for the hub perimeter. Production is the explicit
-`is_production = true` attribute on the shared `environments` map (surfaced to
-gcp-workload as `environment_config[<env>].is_production`), not a name match.
+waiver. The scaffolder writes neither choice.
 
 **One access policy per environment.** By default (`enable_scoped_access_policies
 = true` in gcp-bootstrap and gcp-organization) gcp-organization creates a

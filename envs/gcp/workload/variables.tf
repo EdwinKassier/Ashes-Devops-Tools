@@ -344,7 +344,7 @@ variable "vpc_sc_enable_dry_run" {
 }
 
 variable "production_vpc_sc_dry_run_waiver" {
-  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its VPC-SC perimeter is in dry-run or absent. reason says why; expires (YYYY-MM-DD, UTC) is the last day it waives. Null (default) fails such a plan, because dry-run gives no exfiltration protection. Set it only for a first rollout while you read the violation logs, through config/tfc-workspaces.yaml (reviewed), then remove it."
+  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its VPC-SC perimeter is in dry-run or absent. reason says why; expires (YYYY-MM-DD, UTC; the midnight form YYYY-MM-DDT00:00:00Z is read as that day) is the last day it waives. Null (default) fails such a plan, because dry-run gives no exfiltration protection. Set it only for a first rollout while you read the violation logs, through config/tfc-workspaces.yaml (reviewed), then remove it."
   type = object({
     reason  = string
     expires = string
@@ -357,13 +357,13 @@ variable "production_vpc_sc_dry_run_waiver" {
   }
 
   validation {
-    condition     = var.production_vpc_sc_dry_run_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", var.production_vpc_sc_dry_run_waiver.expires)) && can(formatdate("YYYY", "${var.production_vpc_sc_dry_run_waiver.expires}T00:00:00Z")), false)
-    error_message = "production_vpc_sc_dry_run_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC)."
+    condition     = var.production_vpc_sc_dry_run_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", var.production_vpc_sc_dry_run_waiver.expires)) && can(formatdate("YYYY", "${substr(var.production_vpc_sc_dry_run_waiver.expires, 0, 10)}T00:00:00Z")), false)
+    error_message = "production_vpc_sc_dry_run_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC). The midnight form YYYY-MM-DDT00:00:00Z, which yamldecode makes of an unquoted YAML date, is accepted."
   }
 }
 
 variable "production_egress_proxy_waiver" {
-  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its private-tier egress does not go through the hub Secure Web Proxy (enable_egress_proxy / gcp.environments.<env>.egress_proxy off, or no hub). reason says why; expires (YYYY-MM-DD, UTC) is the last day it waives. Null (default) fails such a plan, because Cloud NAT egress has no destination allowlist. Set it through config/tfc-workspaces.yaml (reviewed)."
+  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its private-tier egress does not go through the hub Secure Web Proxy (enable_egress_proxy / gcp.environments.<env>.egress_proxy off, or no hub). reason says why; expires (YYYY-MM-DD, UTC; the midnight form YYYY-MM-DDT00:00:00Z is read as that day) is the last day it waives. Null (default) fails such a plan, because Cloud NAT egress has no destination allowlist. Set it through config/tfc-workspaces.yaml (reviewed)."
   type = object({
     reason  = string
     expires = string
@@ -376,8 +376,8 @@ variable "production_egress_proxy_waiver" {
   }
 
   validation {
-    condition     = var.production_egress_proxy_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", var.production_egress_proxy_waiver.expires)) && can(formatdate("YYYY", "${var.production_egress_proxy_waiver.expires}T00:00:00Z")), false)
-    error_message = "production_egress_proxy_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC)."
+    condition     = var.production_egress_proxy_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", var.production_egress_proxy_waiver.expires)) && can(formatdate("YYYY", "${substr(var.production_egress_proxy_waiver.expires, 0, 10)}T00:00:00Z")), false)
+    error_message = "production_egress_proxy_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC). The midnight form YYYY-MM-DDT00:00:00Z, which yamldecode makes of an unquoted YAML date, is accepted."
   }
 }
 

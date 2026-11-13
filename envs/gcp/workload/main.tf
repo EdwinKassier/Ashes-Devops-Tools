@@ -341,7 +341,7 @@ check "hub_peering_active" {
 # resource.
 locals {
   vpc_sc_prod_enforced = local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run
-  vpc_sc_waiver_until  = try("${var.production_vpc_sc_dry_run_waiver.expires}T23:59:59Z", null)
+  vpc_sc_waiver_until  = try("${substr(var.production_vpc_sc_dry_run_waiver.expires, 0, 10)}T23:59:59Z", null)
 }
 
 resource "terraform_data" "production_vpc_sc_enforced" {
@@ -350,7 +350,7 @@ resource "terraform_data" "production_vpc_sc_enforced" {
   lifecycle {
     precondition {
       condition     = local.vpc_sc_prod_enforced || (local.vpc_sc_waiver_until != null && timecmp(plantimestamp(), coalesce(local.vpc_sc_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
-      error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}${local.vpc_sc_waiver_until == null ? "" : ", and production_vpc_sc_dry_run_waiver expired on ${try(var.production_vpc_sc_dry_run_waiver.expires, "")}"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false. For a first rollout only, set production_vpc_sc_dry_run_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
+      error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}${local.vpc_sc_waiver_until == null ? "" : ", and production_vpc_sc_dry_run_waiver expired on ${try(substr(var.production_vpc_sc_dry_run_waiver.expires, 0, 10), "")}"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false. For a first rollout only, set production_vpc_sc_dry_run_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
     }
   }
 }
@@ -364,7 +364,10 @@ resource "terraform_data" "production_vpc_sc_enforced" {
 # exception (same shape and expiry rule as production_vpc_sc_dry_run_waiver).
 # The guard stops the plan; it changes no resource.
 locals {
-  egress_waiver_until = try("${var.production_egress_proxy_waiver.expires}T23:59:59Z", null)
+  # Example zones for the guard message: us-east1 and europe-west1 have no -a
+  # zone (Google "Regions and zones", checked 2026-11-13).
+  zone_example        = join(", ", [for z in(contains(["us-east1", "europe-west1"], local.env_config.region) ? ["b", "c", "d"] : ["a", "b", "c"]) : "${local.env_config.region}-${z}"])
+  egress_waiver_until = try("${substr(var.production_egress_proxy_waiver.expires, 0, 10)}T23:59:59Z", null)
 }
 
 resource "terraform_data" "production_network_guard" {
@@ -373,12 +376,12 @@ resource "terraform_data" "production_network_guard" {
   lifecycle {
     precondition {
       condition     = length(local.zones) > 0
-      error_message = "Environment '${var.environment}' is production, so its zones must be pinned: set gcp.environments.${var.environment}.zones in config/landing-zone.yaml (or the zones variable), such as [${local.env_config.region}-a, ${local.env_config.region}-b, ${local.env_config.region}-c]. Subnet i of each tier takes the i-th CIDR, so for an existing network list the zones in the order of its subnet CIDRs (UPGRADING.md), and the plan must show no subnet change."
+      error_message = "Environment '${var.environment}' is production, so its zones must be pinned. Set gcp.environments.${var.environment}.zones in config/landing-zone.yaml (or the zones variable) to zones of the region, as gcloud compute zones list --filter=region:${local.env_config.region} shows them, for example [${local.zone_example}]. Subnet i of each tier takes the i-th CIDR. For an existing network, list the zones in the order of its subnet CIDRs (UPGRADING.md), and check that the plan shows no subnet change."
     }
 
     precondition {
       condition     = local.enable_egress_proxy || (local.egress_waiver_until != null && timecmp(plantimestamp(), coalesce(local.egress_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
-      error_message = "Environment '${var.environment}' is production but its private-tier egress does not go through the hub Secure Web Proxy${local.hub_network == null ? " (standalone: there is no hub)" : ""}, so it leaves through Cloud NAT with no destination allowlist${local.egress_waiver_until == null ? "" : ", and production_egress_proxy_waiver expired on ${try(var.production_egress_proxy_waiver.expires, "")}"}. Set gcp.environments.${var.environment}.egress_proxy: true (or enable_egress_proxy) with secure_web_proxy on gcp-network-hub (PREVIEW, docs/known-gaps.md), or set production_egress_proxy_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
+      error_message = "Environment '${var.environment}' is production but its private-tier egress does not go through the hub Secure Web Proxy${local.hub_network == null ? " (standalone: there is no hub)" : ""}, so it leaves through Cloud NAT with no destination allowlist${local.egress_waiver_until == null ? "" : ", and production_egress_proxy_waiver expired on ${try(substr(var.production_egress_proxy_waiver.expires, 0, 10), "")}"}. Set gcp.environments.${var.environment}.egress_proxy: true (or enable_egress_proxy) with secure_web_proxy on gcp-network-hub (PREVIEW, docs/known-gaps.md), or set production_egress_proxy_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
     }
   }
 }

@@ -53,8 +53,9 @@ locals {
     # malformed waiver fails regulated_audit_store_guard instead of being
     # dropped. The boolean gcp.audit_store_waived it replaced fails the same
     # guard, naming the new key.
-    audit_store_waiver         = try(local.lz.gcp.audit_store_waiver, null)
-    audit_store_waived_removed = try(local.lz.gcp.audit_store_waived, null) != null
+    audit_store_waiver = try(local.lz.gcp.audit_store_waiver, null)
+    # Presence, not value: a bare key (null) is still the removed key.
+    audit_store_waived_removed = try(contains(keys(local.lz.gcp), "audit_store_waived"), false)
     hub_vpc_cidr_block         = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     dns_hub_vpc_cidr_block     = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
     audit_log_retention_days   = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
@@ -181,9 +182,12 @@ locals {
   # The waiver needs a reason and a real YYYY-MM-DD expiry, and waives through
   # that UTC day (the production_vpc_sc_dry_run_waiver rule in gcp-workload).
   audit_store_waiver_reason_ok = try(length(trimspace(tostring(local.cfg.audit_store_waiver.reason))) > 0, false)
-  audit_store_waiver_expiry_ok = try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", tostring(local.cfg.audit_store_waiver.expires))) && can(formatdate("YYYY", "${tostring(local.cfg.audit_store_waiver.expires)}T00:00:00Z")), false)
+  # yamldecode reads an unquoted YAML date as YYYY-MM-DDT00:00:00Z: accept it
+  # and use the first 10 characters.
+  audit_store_waiver_expires   = try(substr(tostring(local.cfg.audit_store_waiver.expires), 0, 10), null)
+  audit_store_waiver_expiry_ok = try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", tostring(local.cfg.audit_store_waiver.expires))) && can(formatdate("YYYY", "${local.audit_store_waiver_expires}T00:00:00Z")), false)
   audit_store_waiver_valid     = local.cfg.audit_store_waiver == null || (local.audit_store_waiver_reason_ok && local.audit_store_waiver_expiry_ok)
-  audit_store_waiver_until     = local.cfg.audit_store_waiver != null && local.audit_store_waiver_valid ? "${tostring(local.cfg.audit_store_waiver.expires)}T23:59:59Z" : null
+  audit_store_waiver_until     = local.cfg.audit_store_waiver != null && local.audit_store_waiver_valid ? "${local.audit_store_waiver_expires}T23:59:59Z" : null
   audit_store_waived           = local.audit_store_waiver_until != null && timecmp(plantimestamp(), coalesce(local.audit_store_waiver_until, "1970-01-01T00:00:00Z")) <= 0
   # Cost profile (variable > org.profile > production). The starter profile
   # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
