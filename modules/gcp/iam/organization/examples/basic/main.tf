@@ -18,6 +18,6 @@ module "org_iam" {
 
   billing_admin_members = [
     "group:gcp-billing-admins@example.com",
-    "user:finance-lead@example.com",
+    "group:gcp-finance-leads@example.com",
   ]
 }

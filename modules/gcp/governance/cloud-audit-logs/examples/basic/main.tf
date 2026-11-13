@@ -1,5 +1,6 @@
 # Example: configure Cloud Audit Logs export to GCS for an organization.
-# Audit logs are stored in an encrypted GCS bucket with a 2-year retention.
+# Audit logs are stored in a regional, CMEK-encrypted GCS bucket with a 2-year
+# retention, as stages/organization configures it.
 
 locals {
   project_id = "my-security-project"
@@ -11,6 +12,13 @@ module "audit_logs" {
 
   project_id         = local.project_id
   org_id             = local.org_id
-  bucket_location    = "US"
+  bucket_location    = "europe-west2"
   log_retention_days = 730 # 2 years
+
+  # Customer-managed key in the bucket's region.
+  kms_key_name = "projects/my-security-project/locations/europe-west2/keyRings/audit/cryptoKeys/audit-logs"
+
+  # Set enable_bucket_lock = true only where compliance requires WORM retention:
+  # the lock is irreversible.
+  enable_bucket_lock = false
 }

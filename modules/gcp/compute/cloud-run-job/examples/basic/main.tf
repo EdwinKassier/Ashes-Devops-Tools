@@ -32,6 +32,10 @@ module "cloud_run_job" {
     { name = "DB_PASSWORD", secret = "orders-db-password", version = "latest" },
   ]
 
+  # PRIVATE_RANGES_ONLY sends only internal traffic through the VPC; internet
+  # traffic leaves directly. Behind the environment egress proxy (hub Secure Web
+  # Proxy) use ALL_TRAFFIC, as stages/app-services does: production with the
+  # proxy on rejects PRIVATE_RANGES_ONLY.
   vpc_access = {
     egress = "PRIVATE_RANGES_ONLY"
     network_interfaces = {

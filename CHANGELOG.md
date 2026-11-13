@@ -76,6 +76,19 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   shape (`id = "111"`, `name = "folders/111"`); a new gcp-projects suite plans the real projects
   stage from a numeric folder id. The contract outputs are unchanged.
 
+- **GCP module examples plan and match the modules.** Every `modules/gcp/**/examples/basic`
+  that failed a plan under a mock provider now plans: `vpc-flow-logs` uses a
+  `storage.googleapis.com/<bucket>` sink destination, `dns` record names are fully qualified,
+  `internal-lb` (L7) sets host rules, a path matcher and the proxy-only range, `stages/bootstrap`
+  sets `tfc_organization`, `stages/network-hub` passes the `shared` folder, `stages/organization`
+  sets an alert recipient, and `stages/guardrails` takes the break-glass group from a variable
+  (the module rejects placeholder domains). Wrong values that planned are fixed too: `vpn` BGP
+  peers are link-local, `stages/workload` passes the bare admin-group email,
+  `identity-group-memberships` uses `groups/<id>` names with `MEMBER` on every membership,
+  `kms` sets no rotation on the signing key, `alert-policy` reads the Slack webhook from a
+  sensitive variable, and `cdn`, `cloud-audit-logs` and `scc` attach Cloud Armor or a CMEK as
+  the stages do. Comments that described rules the examples do not create are corrected.
+
 #### Security
 
 - **The app-delivery example workflows start with harden-runner.** Each job in

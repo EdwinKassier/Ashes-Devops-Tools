@@ -1,5 +1,7 @@
-# Example: configure Security Command Center notification routing to Pub/Sub.
-# SCC findings are streamed to a topic so SIEM/alerting systems can consume them.
+# Example: route Security Command Center findings to Pub/Sub by severity.
+# SCC findings are streamed to CMEK-encrypted topics so SIEM/alerting systems
+# can consume them. (stages/organization uses the single-config form instead:
+# pubsub_topic_name, config_id and filter, without notification_configs.)
 
 locals {
   org_id     = "123456789012"
@@ -11,13 +13,13 @@ module "scc_notifications" {
 
   org_id     = local.org_id
   project_id = local.project_id
-  config_id  = "high-severity-findings"
 
-  description = "Stream HIGH and CRITICAL findings to Pub/Sub"
+  # Customer-managed key for the notification topics.
+  kms_key_name = "projects/my-security-project/locations/europe-west2/keyRings/security/cryptoKeys/scc-notifications"
 
-  # Filter expression uses SCC's CEL syntax.
-  filter = "severity = \"HIGH\" OR severity = \"CRITICAL\""
-
+  # When notification_configs is set, the single-config inputs (config_id,
+  # description, filter) are ignored. Filters use the SCC findings filter
+  # syntax.
   notification_configs = {
     "high-critical" = {
       pubsub_topic_name = "scc-findings"

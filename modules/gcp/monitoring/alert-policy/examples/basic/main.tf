@@ -14,8 +14,8 @@ module "alerts" {
   ]
 
   notification_webhook_urls = {
-    # Replace with your real Slack incoming webhook URL.
-    "slack-ops-channel" = "https://hooks.slack.com/services/T00000000/B00000000/xxxx"
+    # The webhook URL is a secret: it comes from a sensitive variable.
+    "slack-ops-channel" = var.slack_webhook_url
   }
 
   # Thresholds — tune to match your service SLOs.

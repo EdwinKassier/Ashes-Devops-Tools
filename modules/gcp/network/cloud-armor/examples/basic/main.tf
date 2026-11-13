@@ -1,6 +1,6 @@
 # Example: create a Cloud Armor policy with OWASP ModSecurity rules enabled,
-# adaptive protection, a geo-block for high-risk regions, and a rate-limit
-# rule for authenticated API endpoints.
+# adaptive protection, an IP-range block, a per-client-IP rate limit on all
+# traffic, and a CEL rule that blocks scraper User-Agents.
 #
 # Two match types are supported in custom_rules.match_conditions — use exactly one:
 #
@@ -63,7 +63,7 @@ module "cloud_armor" {
       }
     }
 
-    # ── Example 3: CEL expression match (header/path/geo rule) ─────────────────
+    # ── Example 3: CEL expression match (here a header rule) ───────────────────
     block_scraper_user_agents = {
       action      = "deny(403)"
       priority    = 300

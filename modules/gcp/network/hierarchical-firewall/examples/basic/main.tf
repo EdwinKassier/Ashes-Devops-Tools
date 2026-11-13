@@ -1,5 +1,6 @@
-# Example: apply a hierarchical firewall policy to an organization with rules
-# that allow Google health checks and deny RFC-1918 egress to the internet.
+# Example: apply a hierarchical firewall policy to an organization with a rule
+# that allows Google health checks and a catch-all that delegates everything
+# else to the VPC firewall rules.
 
 locals {
   org_id = "organizations/123456789012"
@@ -13,7 +14,7 @@ module "org_firewall" {
   description = "Baseline security rules inherited by all projects in the org"
 
   rules = [
-    # Allow GCP health checker ingress to tagged instances.
+    # Allow Google health checker ingress to every VM under the org.
     {
       priority    = 1000
       action      = "allow"
@@ -24,7 +25,8 @@ module "org_firewall" {
       ]
       src_ip_ranges = ["35.191.0.0/16", "130.211.0.0/22"]
     },
-    # Default deny; remaining traffic falls through to VPC firewall rules.
+    # Not a deny: goto_next hands the remaining traffic to the VPC firewall
+    # rules (and their implied deny-ingress).
     {
       priority    = 65534
       action      = "goto_next"

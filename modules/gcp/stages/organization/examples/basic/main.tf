@@ -56,5 +56,7 @@ module "organization" {
     security_contact_email                = "security@example.com"
     billing_contact_email                 = "billing@example.com"
     budget_currency                       = "USD"
+    # Control-plane (guardrail-change) alerts are on by default and need a recipient.
+    alert_notification_emails = ["secops@example.com"]
   }
 }

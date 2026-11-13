@@ -1,19 +1,21 @@
 # Example: onboard a new service team project into the landing zone.
 #
 # This example creates a GCP project for a service team, enables common APIs,
-# attaches it to the Shared VPC host project, and grants the team's admin group
-# least-privilege IAM roles. Replace all locals with real values or remote state.
+# attaches it to the environment's Shared VPC host project, and grants the
+# team's admin group least-privilege IAM roles. In the landing zone
+# stages/environment calls this module once per var.service_teams entry.
+# Replace all locals with real values or remote state.
 
 locals {
-  terraform_sa    = "terraform@my-seed-project.iam.gserviceaccount.com"
   org_id          = "123456789012"
   billing_account = "ABCDEF-123456-789012"
 
   # Folder for the service team environment (created by envs/gcp/organization)
   folder_id = "987654321098"
 
-  # Hub network project and subnet details (from envs/gcp/organization outputs or remote state)
-  hub_project_id = "my-hub-project"
+  # The environment's Shared VPC host project (gcp-projects environment_config
+  # host project) and the subnets the team may use.
+  host_project_id = "myorg-dev-host"
   subnets = {
     private = {
       region      = "us-central1"
@@ -21,8 +23,9 @@ locals {
     }
   }
 
-  # IAM admin group for this service team
-  team_admin_group = "group:team-backend-admins@example.com"
+  # IAM admin group for this service team: the bare email (the module adds the
+  # "group:" prefix).
+  team_admin_group = "team-backend-admins@example.com"
 }
 
 module "backend_service_project" {
@@ -47,7 +50,7 @@ module "backend_service_project" {
 
   # Shared VPC attachment
   enable_shared_vpc_attachment = true
-  shared_vpc_host_project_id   = local.hub_project_id
+  shared_vpc_host_project_id   = local.host_project_id
   shared_vpc_subnets           = local.subnets
 
   # Grant least-privilege roles to the team admin group.

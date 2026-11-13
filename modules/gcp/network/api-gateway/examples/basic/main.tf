@@ -1,5 +1,12 @@
 # Example: deploy an API Gateway backed by a Cloud Run service.
 # The OpenAPI spec routes all traffic to the Cloud Run backend.
+#
+# API Gateway calls the run.app URL from outside the VPC, so the backend needs
+# ingress INGRESS_TRAFFIC_ALL (keep IAM auth on and grant the gateway service
+# account roles/run.invoker). The landing zone's Cloud Run default (internal
+# load-balancer ingress) and the run.allowedIngress org policy reject that;
+# network/app-ingress (external HTTPS load balancer + Cloud Armor) is the
+# golden path for public Cloud Run services.
 
 locals {
   project_id = "my-workload-project"
