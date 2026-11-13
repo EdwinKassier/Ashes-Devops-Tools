@@ -451,6 +451,39 @@ else
   fail "saas run with IDs exits 0"; cat "${log}" >&2
 fi
 
+echo "==> ADO-20: --tfc-plan writes org.tfc.plan (production default standard)"
+out8="${workdir}/tfc-plan.yaml"
+if bash "${SCRIPT}" --non-interactive --yes --output "${out8}" --org-name acme --clouds aws --profile production \
+  --aws-management-account 123456789012 --vcs-repo acme/landing-zone \
+  </dev/null >"${log}" 2>&1; then
+  assert_line "${out8}" '^    plan: standard$' "production profile writes org.tfc.plan: standard"
+  assert_no_line "${log}" 'policy sets' "policy sets on (standard + vcs_repo): no policy-set warning"
+  schema_check "${out8}" "production tfc-plan scaffold"
+else
+  fail "production tfc-plan run exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --yes --force --output "${out8}" --org-name acme --clouds aws --profile production \
+  --aws-management-account 123456789012 --tfc-plan essentials --vcs-repo acme/landing-zone </dev/null >"${log}" 2>&1; then
+  assert_line "${out8}" '^    plan: essentials$' "--tfc-plan essentials is written"
+  assert_line "${log}" 'org\.tfc\.plan is essentials' "a production estate on essentials is told the policy sets are off"
+  assert_line "${log}" 'org\.tfc\.policy_sets_waiver' "the report names the waiver key"
+else
+  fail "essentials run exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --yes --force --output "${out8}" --org-name acme --clouds aws --profile production \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_line "${log}" 'no org\.tfc\.vcs_repo' "a production scaffold without --vcs-repo is told the policy sets are off"
+else
+  fail "no-vcs run exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --force --output "${out8}" --org-name acme --clouds aws --profile starter \
+  --monthly-budget 750 </dev/null >"${log}" 2>&1; then
+  assert_line "${out8}" '^    # plan: standard$' "starter leaves org.tfc.plan commented when --tfc-plan is not given"
+else
+  fail "starter tfc-plan run exits 0"; cat "${log}" >&2
+fi
+expect_reject "rejects an unknown --tfc-plan" --output "${workdir}/p.yaml" --org-name acme --clouds aws --tfc-plan business
+
 echo
 echo "test-init-landing-zone: ${passes} passed, ${failures} failed"
 [[ "${failures}" -eq 0 ]]

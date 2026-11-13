@@ -571,7 +571,7 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create the two OPA policy sets, both sourced from the VCS repo and attached to every managed workspace: <prefix>opa-guardrails from policies/opa (mixed mandatory/advisory, not overridable unless policy_set_overridable = true) and <prefix>destructive-change-guard from policies/opa-destructive (the mandatory destroy_guard, tfc_admin_guard and tfc_vcs_run_only, overridable by a user with Manage Policy Overrides). Null = on when vcs_repo is set and tfc_plan (org.tfc.plan) is standard or premium, else off (a check then warns that destructive changes are unguarded)."
+  description = "Create the two OPA policy sets, both sourced from the VCS repo and attached to every managed workspace: <prefix>opa-guardrails from policies/opa (mixed mandatory/advisory, not overridable unless policy_set_overridable = true) and <prefix>destructive-change-guard from policies/opa-destructive (the mandatory destroy_guard, tfc_admin_guard and tfc_vcs_run_only, overridable by a user with Manage Policy Overrides). Null = on when vcs_repo is set and tfc_plan (org.tfc.plan) is standard or premium, else off (a check then warns that destructive changes are unguarded). Off with a production environment (gcp.environments or aws.workload_environments is_production) fails the plan unless policy_sets_waiver is set."
   type        = bool
   default     = null
 }
@@ -590,6 +590,25 @@ variable "tfc_plan" {
   validation {
     condition     = contains(["free", "essentials", "standard", "premium"], coalesce(var.tfc_plan, local.cfg.tfc_plan, "free"))
     error_message = "tfc_plan (or org.tfc.plan in config/landing-zone.yaml) must be free, essentials, standard or premium."
+  }
+}
+
+variable "policy_sets_waiver" {
+  description = "Explicit, time-boxed waiver: let an estate with a production environment (any gcp.environments or aws.workload_environments entry with is_production true) plan while the OPA policy sets are off (enable_policy_sets false, no vcs_repo, or a tfc_plan without VCS policy sets). reason says why; expires (YYYY-MM-DD, UTC; the midnight form YYYY-MM-DDT00:00:00Z is read as that day) is the last day it waives. Null = org.tfc.policy_sets_waiver from config/landing-zone.yaml, else none: such a plan fails, because no destroy_guard or guardrail policy then checks a production run."
+  type = object({
+    reason  = string
+    expires = string
+  })
+  default = null
+
+  validation {
+    condition     = var.policy_sets_waiver == null || try(length(trimspace(var.policy_sets_waiver.reason)) > 0, false)
+    error_message = "policy_sets_waiver.reason must not be empty: say why the production estate runs without policy sets."
+  }
+
+  validation {
+    condition     = var.policy_sets_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", var.policy_sets_waiver.expires)) && can(formatdate("YYYY", "${substr(var.policy_sets_waiver.expires, 0, 10)}T00:00:00Z")), false)
+    error_message = "policy_sets_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC). The midnight form YYYY-MM-DDT00:00:00Z, which yamldecode makes of an unquoted YAML date, is accepted."
   }
 }
 

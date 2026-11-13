@@ -87,7 +87,17 @@ org:
     # (policies/opa guardrails + the mandatory destroy_guard in
     # policies/opa-destructive); otherwise a tfc-admin check warns that
     # destructive changes are unguarded. Override: tfc-admin enable_policy_sets.
+    # With any production environment (is_production: true) and the policy
+    # sets off, the tfc-admin plan fails unless policy_sets_waiver is set.
+    # The scaffolder writes plan: standard for the production profile
+    # (--tfc-plan).
     # plan: standard
+    # Explicit, time-boxed waiver for a production estate without policy sets
+    # (for example on the free or essentials plan). reason: why, for the risk
+    # register. expires: the last day it waives, YYYY-MM-DD (UTC), quoted.
+    # policy_sets_waiver:
+    #   reason: essentials plan until the Standard upgrade
+    #   expires: "2027-03-31"
     # Optional VCS connection for every tfc-admin workspace (IDs, not secrets).
     # vcs_repo:
     #   identifier: my-org/landing-zone

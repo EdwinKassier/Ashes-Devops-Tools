@@ -73,7 +73,7 @@ The landing zone uses these HCP Terraform features. Tiers were checked against H
 | Agent pools | Node.js for Supabase vault secrets | `execution_mode = "agent"` | The documentation does not name a tier. Concurrent agent runs are listed on every tier (1 on Free and Essentials). Confirm on the pricing page |
 | Audit trail API | Daily export to WORM storage ([state backup](../runbooks/state-backup.md)) | `tfc-audit-trail` workflow | Standard or Premium (the [audit trails API page](https://developer.hashicorp.com/terraform/cloud-docs/api-docs/audit-trails)). HCP Terraform keeps 14 days of audit trail, so the export must not stop for longer than that |
 
-**Minimum for a production estate: Standard.** Free and Essentials can run the roots with `enable_policy_sets = false` and `enable_health_assessments = false`, but then no policy blocks a destructive change, and the Free tier has no teams at all. That is not a supported production setup. Set `org.tfc.plan` so tfc-admin picks the right defaults.
+**Minimum for a production estate: Standard.** Free and Essentials can run the roots with `enable_policy_sets = false` and `enable_health_assessments = false`, but then no policy blocks a destructive change, and the Free tier has no teams at all. That is not a supported production setup. Set `org.tfc.plan` so tfc-admin picks the right defaults. With any production environment (`is_production: true`) and the policy sets off, the tfc-admin plan fails unless you set `org.tfc.policy_sets_waiver: { reason, expires: "YYYY-MM-DD" }` and record the risk.
 
 **Cost.** Paid tiers bill per resource under management (RUM), rated per hour. The pricing page lists "starting at" prices of $0.10 (Essentials), $0.47 (Standard) and $0.99 (Premium) per resource per month, as checked on 2026-11-12. The Free tier is limited to 500 managed resources. Count your own resources from a sandbox apply: `terraform state list | wc -l` in each workspace. Until a sandbox has been applied the count is unknown ([known gaps](../known-gaps.md)).
 
@@ -101,7 +101,8 @@ make pre-commit-install
 scripts/init-landing-zone.sh --org-name acme --tfc-org acme --clouds gcp,aws \
   --domain acme.com --billing-account 0A1B2C-3D4E5F-6A7B8C \
   --gcp-admin-email admin@acme.com --aws-management-account 123456789012 \
-  --aws-email-pattern 'aws+{key}@acme.com' --github-owner acme
+  --aws-email-pattern 'aws+{key}@acme.com' --github-owner acme \
+  --vcs-repo acme/landing-zone --tfc-plan standard
 # SaaS: add --clouds saas --supabase-org <id> --vercel-team <id> --github-repo acme/web
 # or interactively: scripts/init-landing-zone.sh
 # or by hand:       cp config/landing-zone.example.yaml config/landing-zone.yaml
@@ -109,6 +110,8 @@ git add config/landing-zone.yaml && git commit -m "chore(config): landing zone"
 ```
 
 The script validates the inputs the same way the Terraform variables do. It writes `config/landing-zone.yaml` and lists the placeholders still left for the clouds you enabled, such as admin groups. `--rebrand` also renames the README title. Review the environments, CIDRs and groups before you commit.
+
+`--tfc-plan` writes `org.tfc.plan` (default `standard` with `--profile production`). With `--vcs-repo`, `standard` and `premium` turn on the OPA policy sets. A production environment without them fails the tfc-admin plan unless `org.tfc.policy_sets_waiver` is set, and the script lists this under "Still required for production".
 
 **Production environments** (`is_production: true`, such as the scaffolded GCP `prod`) fail the plan until you choose their egress (hub proxy or a waiver) and their VPC-SC mode: see [production hardening](../runbooks/production-hardening.md) for these prerequisites.
 

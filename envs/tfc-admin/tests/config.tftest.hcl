@@ -16,6 +16,10 @@ variables {
   # Policy sets are off in most runs; the policy_sets_* runs turn the
   # unguarded-destroy warning back on and expect it.
   enable_unguarded_destroy_warning = false
+  # The estate has a production environment and policy sets are off in most
+  # runs: an unexpired waiver keeps the policy_sets_guard quiet. The
+  # production_policy_sets_* runs unset it.
+  policy_sets_waiver = { reason = "test estate without VCS policy sets", expires = "2099-12-31" }
 }
 
 run "workspaces_derived_from_config" {
@@ -275,6 +279,14 @@ run "scaffold_gcp_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -283,6 +295,14 @@ run "scaffold_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -291,6 +311,14 @@ run "scaffold_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.saas.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -299,6 +327,14 @@ run "scaffold_gcp_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -307,6 +343,14 @@ run "scaffold_gcp_aws_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -632,4 +676,42 @@ run "aws_layers_without_network_keeps_hub_mode_with_a_network_contract" {
     condition     = !contains(keys(local.workspaces), "aws-network") && !contains(keys(local.workspace_vars["aws-workload-staging"]), "enable_network_hub")
     error_message = "With aws.contracts.network tfc-admin must not force standalone mode."
   }
+}
+
+# ADO-20: org.tfc.policy_sets_waiver { reason, expires } in the config file
+# waives the policy_sets_guard for a production estate without policy sets.
+run "production_policy_sets_off_fails_from_config" {
+  command = plan
+
+  variables {
+    tfc_plan           = "free"
+    policy_sets_waiver = null
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
+}
+
+run "config_policy_sets_waiver_passes" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/policy-sets-waiver-unquoted-date.yaml"
+    policy_sets_waiver       = null
+  }
+
+  assert {
+    condition     = !local.enable_policy_sets && local.policy_sets_waived && local.policy_sets_waiver_until == "2099-12-31T23:59:59Z"
+    error_message = "org.tfc.policy_sets_waiver (unquoted YAML date) must waive the guard through its expiry day."
+  }
+}
+
+run "config_policy_sets_waiver_expired_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-policy-sets-waiver-expired.yaml"
+    policy_sets_waiver       = null
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
 }

@@ -81,6 +81,13 @@ locals {
     }
     split_workload_projects = try(tobool(local.lz.org.tfc.split_workload_projects), null)
     tfc_plan                = try(tostring(local.lz.org.tfc.plan), null)
+    # org.tfc.policy_sets_waiver: { reason, expires } (ADO-20). Normalised to
+    # strings; a missing or malformed field becomes null and fails the
+    # policy_sets_guard instead of being dropped.
+    policy_sets_waiver = try(local.lz.org.tfc.policy_sets_waiver, null) == null ? null : {
+      reason  = try(tostring(local.lz.org.tfc.policy_sets_waiver.reason), null)
+      expires = try(tostring(local.lz.org.tfc.policy_sets_waiver.expires), null)
+    }
     vcs_repo = try({
       identifier                 = tostring(local.lz.org.tfc.vcs_repo.identifier)
       branch                     = tostring(try(local.lz.org.tfc.vcs_repo.branch, "main"))
@@ -156,6 +163,19 @@ locals {
   enable_policy_sets = var.enable_policy_sets != null ? var.enable_policy_sets : (
     local.vcs_repo != null && contains(["standard", "premium"], coalesce(local.tfc_plan, "unknown"))
   )
+
+  # Policy-sets waiver (ADO-20): explicit variable > org.tfc.policy_sets_waiver.
+  # It needs a reason and a real YYYY-MM-DD expiry, and waives through that UTC
+  # day (the rule of the gcp-workload production waivers). yamldecode reads an
+  # unquoted YAML date as YYYY-MM-DDT00:00:00Z: accept it and use the first 10
+  # characters.
+  policy_sets_waiver           = var.policy_sets_waiver != null ? var.policy_sets_waiver : local.cfg.policy_sets_waiver
+  policy_sets_waiver_reason_ok = try(length(trimspace(local.policy_sets_waiver.reason)) > 0, false)
+  policy_sets_waiver_expires   = try(substr(local.policy_sets_waiver.expires, 0, 10), null)
+  policy_sets_waiver_expiry_ok = try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", local.policy_sets_waiver.expires)) && can(formatdate("YYYY", "${local.policy_sets_waiver_expires}T00:00:00Z")), false)
+  policy_sets_waiver_valid     = local.policy_sets_waiver == null || (local.policy_sets_waiver_reason_ok && local.policy_sets_waiver_expiry_ok)
+  policy_sets_waiver_until     = local.policy_sets_waiver != null && local.policy_sets_waiver_valid ? "${local.policy_sets_waiver_expires}T23:59:59Z" : null
+  policy_sets_waived           = local.policy_sets_waiver_until != null && timecmp(plantimestamp(), coalesce(local.policy_sets_waiver_until, "1970-01-01T00:00:00Z")) <= 0
 
   # TFC project per cloud: an explicit org.tfc.<cloud>_project wins over
   # <project_name_prefix><cloud>. aws-organization derives its OIDC-trust

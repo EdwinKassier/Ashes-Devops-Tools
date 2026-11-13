@@ -732,6 +732,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   contract carries `egress_proxy_port`. With the proxy off nothing changes. See `UPGRADING.md`.
   A per-service `no_proxy` list and any `NO_PROXY` in a service's `env_vars` are appended to the
   default `NO_PROXY`, and `NODE_USE_ENV_PROXY=1` makes Node.js 24+ use the proxy.
+- **A production estate needs the OPA policy sets or a waiver (ADO-20, breaking).** tfc-admin now
+  fails its plan (`terraform_data.policy_sets_guard`) when a managed workspace is production
+  (`is_production: true` in `gcp.environments` or `aws.workload_environments`) and the policy sets
+  are off: no `vcs_repo`, an `org.tfc.plan` below `standard`, or `enable_policy_sets = false`.
+  The new `org.tfc.policy_sets_waiver` `{ reason, expires }` (tfc-admin `policy_sets_waiver`)
+  waives it through the `expires` day (UTC). The scaffolder's new `--tfc-plan` flag writes
+  `org.tfc.plan`, `standard` by default with `--profile production`, and the scaffolder lists the
+  policy sets as still required when they would be off. See `UPGRADING.md`.
 
 ### Changed
 

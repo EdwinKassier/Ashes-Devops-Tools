@@ -44,7 +44,12 @@ looked up by name. So `tfc_admin_guard` judges the plan that would detach it.
   second set or the extra policies, so do not set it there. Essentials support
   is unverified ([known gaps](../known-gaps.md)). While the sets are off,
   the `destructive_changes_guarded` check warns on every tfc-admin plan that
-  destructive changes are unguarded. Drift on tiers without health assessments
+  destructive changes are unguarded. With a production environment
+  (`is_production: true` on either cloud) the sets must be on: tfc-admin fails
+  its plan (`policy_sets_guard`) unless `org.tfc.policy_sets_waiver`
+  (`{ reason, expires: "YYYY-MM-DD" }`, tfc-admin `policy_sets_waiver`) is set
+  and not expired. The production scaffold writes `org.tfc.plan: standard`
+  (`--tfc-plan`). Drift on tiers without health assessments
   is caught by `.github/workflows/drift-detection.yml`, which fails rather than
   skips.
 

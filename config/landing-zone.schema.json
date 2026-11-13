@@ -87,6 +87,26 @@
                 "premium"
               ]
             },
+            "policy_sets_waiver": {
+              "type": "object",
+              "description": "Let an estate with a production environment (any gcp.environments or aws.workload_environments entry with is_production: true) plan tfc-admin while the OPA policy sets are off (no vcs_repo, a plan below standard, or enable_policy_sets = false) until expires. reason: why, for the risk register. expires: the last day it waives, YYYY-MM-DD (UTC), quoted; after it the tfc-admin plan fails again.",
+              "required": [
+                "reason",
+                "expires"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "pattern": "\\S"
+                },
+                "expires": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                }
+              },
+              "additionalProperties": false
+            },
             "gcp_workloads_project": {
               "type": "string"
             },

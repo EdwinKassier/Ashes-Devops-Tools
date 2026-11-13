@@ -24,6 +24,7 @@ variables {
   manage_tfc_admin_workspace       = false
   security_team_id                 = "team-security1"
   enable_unguarded_destroy_warning = false
+  policy_sets_waiver               = { reason = "test estate without VCS policy sets", expires = "2099-12-31" }
 }
 
 # Default test config (the root.tftest.hcl estate) with every team input set.

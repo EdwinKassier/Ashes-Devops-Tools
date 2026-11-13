@@ -40,6 +40,7 @@ PROFILE=""
 MONTHLY_BUDGET=""
 VCS_REPO=""
 VCS_APP_ID=""
+TFC_PLAN=""
 CODEOWNERS=false
 CODEOWNERS_OUTPUT="${REPO_ROOT}/.github/CODEOWNERS"
 PLATFORM_TEAM=""
@@ -103,6 +104,11 @@ Options:
   --vcs-github-app-installation-id ID
                                 GitHub App installation ID for vcs_repo (ghain-...). Without it
                                 the placeholder stays and is reported as still to fill in.
+  --tfc-plan PLAN               HCP Terraform plan (org.tfc.plan): free, essentials, standard or
+                                premium. Default standard with --profile production, else not
+                                written. With --vcs-repo, standard and premium turn on the OPA
+                                policy sets; a production environment without them fails the
+                                tfc-admin plan unless org.tfc.policy_sets_waiver is set.
   --codeowners                  Also render templates/CODEOWNERS.tftpl to .github/CODEOWNERS.
                                 Needs --github-owner (or the team flags below).
   --codeowners-output PATH      Where to write it. Default .github/CODEOWNERS (needs --force
@@ -151,6 +157,7 @@ while [[ $# -gt 0 ]]; do
     --monthly-budget) need_arg "$@"; MONTHLY_BUDGET="$2"; shift 2 ;;
     --vcs-repo) need_arg "$@"; VCS_REPO="$2"; shift 2 ;;
     --vcs-github-app-installation-id) need_arg "$@"; VCS_APP_ID="$2"; shift 2 ;;
+    --tfc-plan) need_arg "$@"; TFC_PLAN="$2"; shift 2 ;;
     --codeowners) CODEOWNERS=true; shift ;;
     --codeowners-output) need_arg "$@"; CODEOWNERS_OUTPUT="$2"; shift 2 ;;
     --platform-team) need_arg "$@"; PLATFORM_TEAM="$2"; shift 2 ;;
@@ -218,6 +225,12 @@ prompt DISPLAY_NAME "Organization display name" "${ORG_NAME}"
 DISPLAY_NAME="${DISPLAY_NAME:-${ORG_NAME}}"
 prompt TFC_ORG "Terraform Cloud organization" "${ORG_NAME}"
 TFC_ORG="${TFC_ORG:-${ORG_NAME}}"
+# org.tfc.plan: standard by default for production (the lowest plan with VCS
+# policy sets); a starter scaffold leaves it commented unless given.
+default_tfc_plan=""
+[[ "${PROFILE}" == production ]] && default_tfc_plan="standard"
+prompt TFC_PLAN "HCP Terraform plan (free|essentials|standard|premium)" "${default_tfc_plan}"
+TFC_PLAN="${TFC_PLAN:-${default_tfc_plan}}"
 
 if has_cloud gcp; then
   prompt DOMAIN "GCP organization domain (e.g. acme.com)"
@@ -313,6 +326,10 @@ fi
 if [[ -n "${VCS_APP_ID}" ]]; then
   [[ "${VCS_APP_ID}" =~ ^[A-Za-z0-9_-]+$ ]] || die "--vcs-github-app-installation-id is not a valid ID"
 fi
+case "${TFC_PLAN}" in
+  "" | free | essentials | standard | premium) ;;
+  *) die "--tfc-plan must be free, essentials, standard or premium" ;;
+esac
 if [[ "${CODEOWNERS}" == true ]]; then
   [[ -n "${PLATFORM_TEAM}" && -n "${SECURITY_TEAM}" || -n "${GITHUB_OWNER}" ]] ||
     die "--codeowners needs --github-owner (or both --platform-team and --security-team)"
@@ -404,6 +421,7 @@ if [[ -n "${AWS_EMAIL_PATTERN}" ]]; then
   sed_args+=(-e "s|aws+\([a-z0-9-]*\)@example\.com|$(esc "${email_lhs}")\1$(esc "${email_rhs}")|g")
 fi
 sed_args+=(-e "s|^  profile: production\$|  profile: ${PROFILE}|")
+[[ -z "${TFC_PLAN}" ]] || sed_args+=(-e "s|^    # plan: standard\$|    plan: ${TFC_PLAN}|")
 if [[ -n "${VCS_REPO}" ]]; then
   sed_args+=(
     -e "/^    # vcs_repo:\$/,/^    #   github_app_installation_id:/{s|^    #   |      |;s|^    # vcs_repo:|    vcs_repo:|;}"
@@ -570,6 +588,27 @@ EOF
 if [[ -n "${remaining}" ]]; then
   printf '     Still placeholders (the plan rejects them until replaced):\n'
   printf '%s\n' "${remaining}" | sed 's/^/       line /'
+fi
+# Production prerequisites the plans enforce but the scaffold cannot fill in.
+# A production environment is an is_production: true entry in an enabled cloud.
+production_envs="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_cloud aws && echo 1 || echo 0)" '
+  /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  /^[[:space:]]*#/ { next }
+  /is_production: true/ && ((section == "gcp" && gcp) || (section == "aws" && aws)) { n++ }
+  END { print n + 0 }' "${OUTPUT}")"
+required=()
+if [[ "${production_envs}" -gt 0 ]]; then
+  policy_off=""
+  if [[ -z "${VCS_REPO}" ]]; then
+    policy_off="no org.tfc.vcs_repo (--vcs-repo)"
+  elif [[ "${TFC_PLAN}" != standard && "${TFC_PLAN}" != premium ]]; then
+    policy_off="org.tfc.plan is ${TFC_PLAN:-unset}, not standard or premium (--tfc-plan)"
+  fi
+  [[ -z "${policy_off}" ]] || required+=("OPA policy sets are off: ${policy_off}. With a production environment the tfc-admin plan fails until they are on, or until org.tfc.policy_sets_waiver: { reason, expires } is set.")
+fi
+if [[ "${#required[@]}" -gt 0 ]]; then
+  printf '     Still required for production (the plans fail until set):\n'
+  printf '       - %s\n' "${required[@]}"
 fi
 if [[ -n "${derived}" ]]; then
   printf '     Derived, not verified (before the first apply each group must exist in\n'

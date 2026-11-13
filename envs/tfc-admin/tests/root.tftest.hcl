@@ -30,6 +30,10 @@ variables {
   # Policy sets are off in most runs; the policy_sets_* runs turn the
   # unguarded-destroy warning back on and expect it.
   enable_unguarded_destroy_warning = false
+  # The estate has a production environment and policy sets are off in most
+  # runs: an unexpired waiver keeps the policy_sets_guard quiet. The
+  # production_policy_sets_* runs unset it.
+  policy_sets_waiver = { reason = "test estate without VCS policy sets", expires = "2099-12-31" }
 }
 
 run "declares_every_workspace" {
@@ -2676,4 +2680,151 @@ run "aws_organization_contract_missing_keys_fails" {
   }
 
   expect_failures = [data.tfe_outputs.aws_organization]
+}
+
+# ADO-20: a production environment on either cloud needs the OPA policy sets.
+# With them off (no vcs_repo, a plan without VCS policy sets, or an explicit
+# enable_policy_sets = false) the plan fails unless an unexpired
+# policy_sets_waiver { reason, expires } is set.
+run "production_policy_sets_off_fails" {
+  command = plan
+
+  variables {
+    policy_sets_waiver = null
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
+}
+
+run "production_policy_sets_off_fails_aws_only" {
+  command = plan
+
+  variables {
+    enable_gcp         = false
+    enable_saas        = false
+    policy_sets_waiver = null
+  }
+
+  assert {
+    condition     = contains(local.managed_production_workloads, "aws-workload-prod") && !contains(output.workspace_names, "gcp-workload-prod")
+    error_message = "the AWS-only estate has aws-workload-prod as its only production workspace."
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
+}
+
+run "production_policy_sets_off_fails_gcp_only" {
+  command = plan
+
+  variables {
+    enable_aws         = false
+    enable_saas        = false
+    policy_sets_waiver = null
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
+}
+
+run "production_policy_sets_explicit_off_fails" {
+  command = plan
+
+  variables {
+    enable_policy_sets         = false
+    tfc_plan                   = "standard"
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    policy_sets_waiver         = null
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
+}
+
+run "production_policy_sets_on_passes" {
+  command = plan
+
+  variables {
+    tfc_plan                   = "standard"
+    vcs_repo                   = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
+    manage_tfc_admin_workspace = true
+    import_tfc_admin_workspace = false
+    policy_sets_waiver         = null
+  }
+
+  assert {
+    condition     = local.enable_policy_sets && length(tfe_policy_set.destructive) == 1
+    error_message = "the standard plan with vcs_repo turns the policy sets on, so no waiver is needed."
+  }
+}
+
+run "no_production_no_policy_sets_guard" {
+  command = plan
+
+  variables {
+    environments       = { dev = { is_production = false } }
+    policy_sets_waiver = null
+  }
+
+  assert {
+    condition     = length(local.managed_production_workloads) == 0 && !local.enable_policy_sets
+    error_message = "an estate without a production environment plans with the policy sets off and no waiver."
+  }
+}
+
+run "production_policy_sets_waiver_passes" {
+  command = plan
+
+  variables {
+    policy_sets_waiver = { reason = "free plan until the Standard upgrade", expires = "2099-12-31" }
+  }
+
+  assert {
+    condition     = local.policy_sets_waived && local.policy_sets_waiver_until == "2099-12-31T23:59:59Z"
+    error_message = "an unexpired waiver waives through the end of its expiry day (UTC)."
+  }
+}
+
+# yamldecode turns an unquoted YAML date into the midnight form; it is read as
+# that day.
+run "production_policy_sets_waiver_midnight_form" {
+  command = plan
+
+  variables {
+    policy_sets_waiver = { reason = "free plan until the Standard upgrade", expires = "2099-12-31T00:00:00Z" }
+  }
+
+  assert {
+    condition     = local.policy_sets_waived && local.policy_sets_waiver_until == "2099-12-31T23:59:59Z"
+    error_message = "the midnight form YYYY-MM-DDT00:00:00Z waives through that day."
+  }
+}
+
+run "production_policy_sets_waiver_expired_fails" {
+  command = plan
+
+  variables {
+    policy_sets_waiver = { reason = "free plan until the Standard upgrade", expires = "2020-01-31" }
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
+}
+
+run "policy_sets_waiver_needs_reason" {
+  command = plan
+
+  variables {
+    policy_sets_waiver = { reason = " ", expires = "2099-12-31" }
+  }
+
+  expect_failures = [var.policy_sets_waiver]
+}
+
+run "policy_sets_waiver_needs_real_date" {
+  command = plan
+
+  variables {
+    policy_sets_waiver = { reason = "free plan", expires = "2099-02-30" }
+  }
+
+  expect_failures = [var.policy_sets_waiver]
 }

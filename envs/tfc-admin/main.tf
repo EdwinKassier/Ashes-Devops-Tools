@@ -1623,6 +1623,26 @@ check "destructive_changes_guarded" {
   }
 }
 
+# ADO-20: a production estate must not run without the policy sets. Off means
+# no destroy_guard, no tfc_admin_guard and no OPA guardrail checks any run of a
+# production workspace, so the plan fails. An explicit, time-boxed waiver
+# (policy_sets_waiver / org.tfc.policy_sets_waiver: { reason, expires }) lets an
+# estate on a plan without VCS policy sets proceed and records the risk.
+resource "terraform_data" "policy_sets_guard" {
+  input = sort(tolist(local.managed_production_workloads))
+
+  lifecycle {
+    precondition {
+      condition     = local.policy_sets_waiver_valid
+      error_message = "org.tfc.policy_sets_waiver (or policy_sets_waiver) needs a non-empty reason and expires as a real calendar date, YYYY-MM-DD (UTC), quoted in YAML."
+    }
+    precondition {
+      condition     = length(local.managed_production_workloads) == 0 || local.enable_policy_sets || local.policy_sets_waived
+      error_message = "Production workspaces (${join(", ", sort(tolist(local.managed_production_workloads)))}) need the OPA policy sets, but they are off (${var.enable_policy_sets == false ? "enable_policy_sets = false" : (local.vcs_repo == null ? "no vcs_repo / org.tfc.vcs_repo" : "org.tfc.plan / tfc_plan is ${coalesce(local.tfc_plan, "unset")}, not standard or premium")}): no destroy_guard or guardrail policy checks their runs.${local.policy_sets_waiver_until == null ? "" : " The policy-sets waiver expired on ${try(substr(local.policy_sets_waiver_until, 0, 10), "")}."} Set org.tfc.plan: standard (or premium) and org.tfc.vcs_repo in config/landing-zone.yaml, or enable_policy_sets = true on a plan that supports VCS policy sets. Or set org.tfc.policy_sets_waiver: { reason, expires: \"YYYY-MM-DD\" } and record the risk (UPGRADING.md)."
+    }
+  }
+}
+
 # Overrides of the destructive-change guard need a team holding Manage Policy
 # Overrides (org-wide; granted by an owner in the HCP UI, never by this root).
 check "destructive_override_team" {

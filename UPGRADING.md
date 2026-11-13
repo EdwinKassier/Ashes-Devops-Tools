@@ -616,6 +616,41 @@ A member bound on `attribute.repository_id/<id>` alone, or a member that is
 unknown at plan time, is reported by the advisory
 `gcp_wif_principalset_repo_wide` and does not block the run.
 
+#### A production estate needs the policy sets or a waiver (tfc-admin, ADO-20)
+
+**Who:** forks with a production environment (`is_production: true` in
+`gcp.environments` or `aws.workload_environments`, for a cloud that is enabled)
+whose OPA policy sets are off: no `org.tfc.vcs_repo`, `org.tfc.plan` unset,
+`free` or `essentials`, or `enable_policy_sets = false`.
+**What changes:** **Breaking.** tfc-admin now fails its plan
+(`terraform_data.policy_sets_guard`). Before, the `destructive_changes_guarded`
+check only warned, so production ran with no `destroy_guard`,
+`tfc_admin_guard` or guardrail policy. The error names the production
+workspaces and why the sets are off. Estates on `standard` or `premium` with
+`vcs_repo` set see no change.
+
+Before you plan tfc-admin, do one of these:
+
+1. Set `org.tfc.plan: standard` (or `premium`) and `org.tfc.vcs_repo` in
+   `config/landing-zone.yaml`. This creates both policy sets. Set
+   `security_team_id` too, or only organization owners can override the
+   destructive-change guard.
+2. On a plan without VCS policy sets, record the risk with a time-boxed waiver:
+
+   ```yaml
+   org:
+     tfc:
+       policy_sets_waiver:
+         reason: essentials plan until the Standard upgrade
+         expires: "2027-03-31"   # last day it waives (UTC), quoted
+   ```
+
+   After `expires` the plan fails again. A waiver with an empty reason or a
+   date that does not exist also fails the plan.
+
+New scaffolds: `scripts/init-landing-zone.sh --tfc-plan` writes `org.tfc.plan`
+(`standard` by default with `--profile production`).
+
 ### AWS
 
 #### Production hub network alarms need a subscriber (aws-network)

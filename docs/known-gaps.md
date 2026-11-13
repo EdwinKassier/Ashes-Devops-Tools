@@ -425,7 +425,9 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   Free policy set, so the two sources disagree. **Validate:** on an Essentials organization, create both
   sets; if they work, add `essentials` to the default list. Until then an
   Essentials estate sets `enable_policy_sets = true` itself, or runs without
-  the destroy guard (the `destructive_changes_guarded` check warns).
+  the destroy guard (the `destructive_changes_guarded` check warns). With a
+  production environment, running without the policy sets also needs an
+  unexpired `org.tfc.policy_sets_waiver`, or the tfc-admin plan fails.
 
 - **StackSet stack deny is mock-tested only (SEC-2).** The deny-tamper SCP
   (`DenyStackSetStackTampering`) and the `tfc-apply` boundary deny writes to
@@ -1753,8 +1755,8 @@ side (all mock-tested, secure defaults):
   change, for example, the workflow that runs the plan-time gate, or
   `gcp.admin_containment` in `config/landing-zone.yaml`, without a security
   approval. The same holds for the waivers, which live in those two files:
-  `gcp.audit_store_waiver` and `aws.network.egress_alert_only_waived` in
-  `config/landing-zone.yaml`, and `production_vpc_sc_dry_run_waiver` and
+  `gcp.audit_store_waiver`, `aws.network.egress_alert_only_waived` and
+  `org.tfc.policy_sets_waiver` in `config/landing-zone.yaml`, and `production_vpc_sc_dry_run_waiver` and
   `production_egress_proxy_waiver` on a `gcp-workload-<env>` workspace in
   `config/tfc-workspaces.yaml`. All of this holds only when code-owner review is required on the
   default branch and the security team has a member outside the platform team
