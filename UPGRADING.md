@@ -105,6 +105,21 @@ The new `state-backup.yml` exports each workspace's current state daily to a ver
 
 Renovate and Dependabot now commit as `fix(deps):`, so provider and package bumps appear in the changelog. Each bump now produces a patch release. Dependabot also updates the `pg` package of `vault-secrets`, which is pinned to an exact version.
 
+#### Guardrail paths need a security approval (CODEOWNERS, CICD-2)
+
+**Who:** every fork. Your `.github/CODEOWNERS` is fork-owned, so a merge does not change it.
+**What changes:** GitHub uses the last matching CODEOWNERS line, and one approval from any owner on
+that line satisfies it. A line that lists the platform and the security team therefore accepts a
+platform approval alone. `templates/CODEOWNERS.tftpl` now ends with a section that lists the
+security team alone on `/policies/`, `/envs/gcp/guardrails/`, `/modules/gcp/stages/guardrails/`,
+`/scripts/check-plan-time-exec.py`, `/.github/requirements/`, `/.github/CODEOWNERS`,
+`/templates/aws/bootstrap/` and `/templates/CODEOWNERS.tftpl`, so a change there needs a security
+approval. Copy that section ("Guardrails (security team ONLY ...)") to the end of your
+`.github/CODEOWNERS` and replace `${security_team}` with your security team. Do not re-run the
+scaffolder over an existing `config/landing-zone.yaml`: its `--force` overwrites that file too. Keep
+the section last, or a broader line after it wins. It takes effect only when code-owner review is required on the default
+branch ([branch protection](docs/guides/BRANCH_PROTECTION.md)).
+
 #### Platform team cannot queue plans where static secrets live; one SaaS reader team per stack (tfc-admin)
 
 **Breaking.** A plan runs code with the workspace's environment variables, and
@@ -371,9 +386,10 @@ Also in this release (no manual step):
   naming the entry. The only allowed entry is `landing_zone_config_path` set to
   this estate's own landing-zone file (as `config/sandbox/tfc-workspaces.yaml`
   does). Move any other value into `envs/gcp/guardrails` (security-owned) or the
-  security team's `workspace_variables`. CODEOWNERS now also requires the
+  security team's `workspace_variables`. CODEOWNERS now also lists the
   security team on `config/tfc-workspaces.yaml` and
-  `modules/aws/stages/{organization,security,backup}/`; copy those lines from
+  `modules/aws/stages/{organization,security,backup}/`, beside the platform
+  team, so either team's approval satisfies those lines; copy them from
   `templates/CODEOWNERS.tftpl` into a CODEOWNERS you scaffolded earlier.
 - tfc-admin now triggers `aws-organization` after each of its applies. It
   triggers `gcp-bootstrap` too once that runs remotely
@@ -2329,8 +2345,8 @@ applied by hand from `guardrail_deny_policy_specs`):
    `security_team_id`. Apply `tfc-admin`.
 2. Apply `gcp-bootstrap` (it picks up the `gcp-guardrails` ID).
 3. Move any `iam_deny_policies` from the gcp-organization variables to a
-   committed `envs/gcp/guardrails/guardrails.auto.tfvars` (CODEOWNERS: platform +
-   security; `.gitignore` exempts it). Do not set them as `gcp-guardrails`
+   committed `envs/gcp/guardrails/guardrails.auto.tfvars` (CODEOWNERS: the
+   security team alone, so a security approval is required; `.gitignore` exempts it). Do not set them as `gcp-guardrails`
    workspace variables: the security team's grant is variables read-only, and
    the workspace gets no shared variable set.
    - If gcp-organization runs with `enable_principal_access_boundary = true`,

@@ -1626,15 +1626,20 @@ side (all mock-tested, secure defaults):
   owner on it satisfies the line. `.github/CODEOWNERS` lists the security team
   alone on `/policies/`, `/envs/gcp/guardrails/`,
   `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
-  `/.github/requirements/` and `/.github/CODEOWNERS`, so those need a security
-  approval. Every other security-sensitive line (`/envs/tfc-admin/`, which also
+  `/.github/requirements/`, `/.github/CODEOWNERS`, `/templates/aws/bootstrap/`
+  and `/templates/CODEOWNERS.tftpl`, so those need a security approval. Every
+  other security-sensitive line (`/envs/tfc-admin/`, which also
   wires the policy sets in `main.tf`, `/.github/` workflows, the control-plane
   roots, the IAM and governance modules, `config/landing-zone.yaml` and
   `config/tfc-workspaces.yaml`) lists the platform and the security team, so a
   platform approval alone satisfies it. A platform engineer can therefore
   change, for example, the workflow that runs the plan-time gate, or
   `gcp.admin_containment` in `config/landing-zone.yaml`, without a security
-  approval. All of this holds only when code-owner review is required on the
+  approval. The same holds for the waivers, which live in those two files:
+  `gcp.audit_store_waiver` and `aws.network.egress_alert_only_waived` in
+  `config/landing-zone.yaml`, and `production_vpc_sc_dry_run_waiver` and
+  `production_egress_proxy_waiver` on a `gcp-workload-<env>` workspace in
+  `config/tfc-workspaces.yaml`. All of this holds only when code-owner review is required on the
   default branch and the security team has a member outside the platform team
   (`docs/guides/BRANCH_PROTECTION.md`). Owner: security team (decide whether
   more paths must be security-only).

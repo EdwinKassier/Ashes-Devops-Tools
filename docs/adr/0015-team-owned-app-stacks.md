@@ -5,7 +5,7 @@
 
 ## Context
 
-Today one `gcp-workload-<env>` (or `aws-workload-<env>`) root owns the environment network, the VPC-SC perimeter, the budget and every app service in that environment. The services are listed in `config/landing-zone.yaml` (`gcp.environments.<env>.services`, `aws.workload_environments.<env>.services`). That file needs platform and security approval in CODEOWNERS.
+Today one `gcp-workload-<env>` (or `aws-workload-<env>`) root owns the environment network, the VPC-SC perimeter, the budget and every app service in that environment. The services are listed in `config/landing-zone.yaml` (`gcp.environments.<env>.services`, `aws.workload_environments.<env>.services`). Its CODEOWNERS line lists the platform and the security team, so an approval from either team satisfies it. (Corrected 2026-11-13: the text said both approvals were needed. GitHub accepts one approval from any owner on the last matching line.)
 
 So adding one Cloud Run or ECS service:
 

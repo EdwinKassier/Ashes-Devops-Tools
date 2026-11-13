@@ -651,10 +651,11 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   platform approval alone change the guardrails. `.github/CODEOWNERS` and
   `templates/CODEOWNERS.tftpl` now list the security team alone on `/policies/`,
   `/envs/gcp/guardrails/`, `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
-  `/.github/requirements/` and `/.github/CODEOWNERS`, and the comments state the real rule.
+  `/.github/requirements/`, `/.github/CODEOWNERS`, `/templates/aws/bootstrap/` (the AWS phase-0
+  CloudFormation templates) and `/templates/CODEOWNERS.tftpl`, and the comments state the real rule.
   `scripts/tests/test-init-landing-zone.sh` checks the last match for each path and that the template
   and the upstream file carry the same rules. A fork that rendered its file earlier makes the same
-  line changes in its own `.github/CODEOWNERS`.
+  line changes in its own `.github/CODEOWNERS` (`UPGRADING.md`).
 - **destroy_guard covers clusters, databases, caches and backup plans, and deletion protection
   turned off (CICD-8, breaking).** A delete or replace of `google_container_cluster`,
   `google_spanner_instance`, `google_spanner_database`, `google_bigtable_instance`,

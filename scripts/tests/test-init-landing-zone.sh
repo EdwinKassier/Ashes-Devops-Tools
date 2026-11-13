@@ -348,14 +348,16 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
   # Guardrail paths list the security team ONLY, so a security approval is
   # required: GitHub accepts one approval from any owner on the matching line.
   for path in /policies/ /envs/gcp/guardrails/ /modules/gcp/stages/guardrails/ \
-    /scripts/check-plan-time-exec.py /.github/requirements/ /.github/CODEOWNERS; do
+    /scripts/check-plan-time-exec.py /.github/requirements/ /.github/CODEOWNERS \
+    /templates/aws/bootstrap/ /templates/CODEOWNERS.tftpl; do
     assert_line "${co}" "^${path} +@acme-gh/sec\$" "${path} is security-team only"
   done
   # Each security-only line must come after every broader line that matches it,
   # or the broader line wins. The last line matching each probe path must be
   # security-only.
   for probe in policies/opa/x.rego envs/gcp/guardrails/main.tf modules/gcp/stages/guardrails/main.tf \
-    scripts/check-plan-time-exec.py .github/requirements/plan-time-exec.txt .github/CODEOWNERS; do
+    scripts/check-plan-time-exec.py .github/requirements/plan-time-exec.txt .github/CODEOWNERS \
+    templates/aws/bootstrap/phase0-management.yaml templates/CODEOWNERS.tftpl; do
     last="$(awk -v p="/${probe}" '
       /^[^#[:space:]]/ {
         pat = $1

@@ -83,11 +83,15 @@ CHANGELOG.md   ${platform_team}
 # Listed last so these lines win over every broader line above. The OPA policy
 # sets, the org IAM deny policies (including the committed
 # guardrails.auto.tfvars that holds iam_deny_policies), the plan-time execution
-# gate and its parser lock, and this file. The security team must have at least
-# one member who is not on the platform team.
+# gate and its parser lock, the AWS phase-0 CloudFormation templates (they
+# create the management-account roles), this file and the template it is
+# rendered from. The security team must have at least one member who is not on
+# the platform team.
 /policies/                        ${security_team}
 /envs/gcp/guardrails/             ${security_team}
 /modules/gcp/stages/guardrails/   ${security_team}
 /scripts/check-plan-time-exec.py  ${security_team}
 /.github/requirements/            ${security_team}
 /.github/CODEOWNERS               ${security_team}
+/templates/aws/bootstrap/         ${security_team}
+/templates/CODEOWNERS.tftpl       ${security_team}
