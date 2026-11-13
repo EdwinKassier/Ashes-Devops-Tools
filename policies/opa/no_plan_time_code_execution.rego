@@ -214,18 +214,13 @@ credential_refs(ptype, attr) := {ref |
 	ref := parts[1]
 }
 
-# A reference is allowed when it is an allowed reference or a path below it
-# (var.tfc_aws_dynamic_credentials.aliases["backup"].shared_config_file).
-ref_allowed(r, allowed) if r in allowed
+# A reference is allowed when it is exactly an allowed path; [*] in an entry
+# matches one literal map key (var.tfc_aws_dynamic_credentials.aliases["backup"]).
+ref_pattern(a) := concat("", ["^", replace(replace(a, ".", `\.`), "[*]", `\["[A-Za-z0-9_-]+"\]`), "$"])
 
 ref_allowed(r, allowed) if {
 	some a in allowed
-	startswith(r, concat("", [a, "."]))
-}
-
-ref_allowed(r, allowed) if {
-	some a in allowed
-	startswith(r, concat("", [a, "["]))
+	regex.match(ref_pattern(a), r)
 }
 
 # A root variable that an allowed expression reads must not bring a value of
@@ -240,9 +235,63 @@ variable_inert(r) if not startswith(r, "var.")
 
 variable_inert(r) if {
 	startswith(r, "var.")
-	name := regex.find_n(`^var\.[A-Za-z_][A-Za-z0-9_-]*`, r, 1)[0]
+	name := ref_variable(r)
 	vars := object.get(input.plan.configuration, ["root_module", "variables"], {})
-	inert_default(object.get(vars, [substring(name, 4, -1), "default"], null))
+	inert_default(object.get(vars, [name, "default"], null))
+	credential_variable_value_ok(name, object.get(input.plan, ["variables", name, "value"], null))
+}
+
+ref_variable(r) := substring(regex.find_n(`^var\.[A-Za-z_][A-Za-z0-9_-]*`, r, 1)[0], 4, -1)
+
+# The value the run uses (input.plan.variables), wherever it came from: a
+# workspace variable, a committed *.auto.tfvars file or HCP Terraform's
+# injection. The plan JSON shows the value as given, without attributes that
+# an optional() default would add; the exact reference paths above and the
+# scanner's type check cover those.
+#
+# tfc_aws_dynamic_credentials: null, or {default, aliases} whose
+# shared_config_file values are absolute paths. HCP Terraform writes the file
+# outside the configuration; its documentation does not give the path, so the
+# rule requires an absolute path without "." or ".." segments and outside
+# /proc, /dev and /sys (/proc/self/cwd/... would reach the checkout). A
+# guessable absolute path into the run's own checkout is not excluded
+# (docs/known-gaps.md).
+credential_variable_value_ok(_, null)
+
+credential_variable_value_ok("terraform_admin_email", v) if {
+	is_string(v)
+	regex.match(`^[a-z][a-z0-9-]*@[a-z0-9-]+\.iam\.gserviceaccount\.com$`, v)
+}
+
+credential_variable_value_ok("enable_saas_secret_bridge", v) if is_boolean(v)
+
+credential_variable_value_ok("tfc_aws_dynamic_credentials", v) if {
+	is_object(v)
+	every k, _ in v {
+		k in {"default", "aliases"}
+	}
+	dynamic_config_ok(object.get(v, "default", null))
+	every _, c in object.get(v, "aliases", {}) {
+		dynamic_config_ok(c)
+	}
+}
+
+# A variable on allowed_credential_references with no value rule here fails
+# closed unless its value is null: add a rule when you add one.
+
+dynamic_config_ok(null)
+
+dynamic_config_ok(c) if {
+	is_object(c)
+	object.keys(c) == {"shared_config_file"}
+	hcp_generated_path(c.shared_config_file)
+}
+
+hcp_generated_path(p) if {
+	is_string(p)
+	regex.match(`^(/[A-Za-z0-9._-]+)+$`, p)
+	not regex.match(`/\.\.?(/|$)`, p)
+	not regex.match(`^/(proc|dev|sys)(/|$)`, p)
 }
 
 # null: the provider reads its environment, as with no argument at all.

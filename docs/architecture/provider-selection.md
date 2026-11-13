@@ -208,13 +208,15 @@ So the credentials a deployment needs are exactly the union of the credentials o
 
 ```hcl
 provider "supabase" {
-  access_token = var.enable_supabase ? null : local.supabase_disabled_placeholder_token
+  access_token = local.enable_supabase ? null : "sbp_disabled_placeholder"
 }
 
 provider "vercel" {
-  api_token = var.enable_vercel ? null : local.vercel_disabled_placeholder_token
+  api_token = local.enable_vercel ? null : "000000000000000000000000"
 }
 ```
+
+The placeholders are inline literals because `no_plan_time_code_execution` and `scripts/check-plan-time-exec.py` allow only these exact literals (`allowed_credential_literals`) in these arguments; a check cannot see what a local evaluates to.
 
 - **Enabled:** the attribute is `null`, so the provider reads `SUPABASE_ACCESS_TOKEN` / `VERCEL_API_TOKEN` from the environment exactly as before.
 - **Disabled:** the provider gets a format-valid placeholder (`sbp_` + 40 zeros, or 24 zeros). Neither provider calls its API while configuring, and with the feature off no resource or data source uses it, so the placeholder is never sent anywhere. It is not a credential. Provider configuration takes precedence over the environment, so a stray token in the environment is ignored for the disabled provider.

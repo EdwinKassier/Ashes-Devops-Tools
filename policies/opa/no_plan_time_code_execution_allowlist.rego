@@ -41,32 +41,57 @@ allowed_remote_state_backends := {"cloud", "remote"}
 allowed_action_types := set()
 
 # Credential arguments (credential_key_pattern) that a provider of this repo
-# sets, as "<provider type>/<argument>=<reference>". The argument is allowed
-# when every reference of its expression is one of these or a path below it.
+# sets, as "<provider type>/<argument>=<reference path>". The argument is
+# allowed when every reference of its expression is EXACTLY one of these
+# paths; [*] stands for one literal map key (["backup"]). A path below an
+# entry is not allowed: an optional attribute with a default inside the
+# variable type would otherwise carry a value the plan does not show.
 #   aws shared_config_files: the TFC dynamic-credentials file of
 #     envs/aws/security and envs/aws/backup (multi-account roots).
 #   google / google-beta impersonate_service_account: every GCP root (null in
 #     HCP Terraform; set for deliberate local runs).
 #   tfe token: the SaaS bridge placeholder in envs/aws/workload and
 #     envs/gcp/workload (null when the bridge is on: TFE_TOKEN).
-#   supabase access_token / vercel api_token: the placeholders in envs/saas
-#     when a feature is off.
+#   supabase access_token / vercel api_token: the inline placeholders in
+#     envs/saas when a feature is off.
+# The variable values are checked by credential_variable_value_ok in
+# no_plan_time_code_execution.rego.
 allowed_credential_references := {
 	"aws/shared_config_files=var.tfc_aws_dynamic_credentials",
+	"aws/shared_config_files=var.tfc_aws_dynamic_credentials.default",
+	"aws/shared_config_files=var.tfc_aws_dynamic_credentials.default.shared_config_file",
+	"aws/shared_config_files=var.tfc_aws_dynamic_credentials.aliases",
+	"aws/shared_config_files=var.tfc_aws_dynamic_credentials.aliases[*]",
+	"aws/shared_config_files=var.tfc_aws_dynamic_credentials.aliases[*].shared_config_file",
 	"google/impersonate_service_account=var.terraform_admin_email",
 	"google-beta/impersonate_service_account=var.terraform_admin_email",
 	"tfe/token=var.enable_saas_secret_bridge",
 	"supabase/access_token=local.enable_supabase",
-	"supabase/access_token=local.supabase_disabled_placeholder_token",
 	"vercel/api_token=local.enable_vercel",
-	"vercel/api_token=local.vercel_disabled_placeholder_token",
+}
+
+# The type each variable on allowed_credential_references must declare, as
+# "<name>=<type>" (compared token by token, so spacing does not matter).
+# Checked by scripts/check-plan-time-exec.py only: the plan JSON does not
+# show variable types. An optional() attribute with a default would add a
+# value the plan's variable value does not show.
+allowed_credential_variable_types := {
+	"tfc_aws_dynamic_credentials=object({default=object({shared_config_file=string}),aliases=map(object({shared_config_file=string}))})",
+	"terraform_admin_email=string",
+	"enable_saas_secret_bridge=bool",
 }
 
 # String literals that scripts/check-plan-time-exec.py accepts inside an
-# allowed credential expression: inert placeholders, not credentials. (The
-# plan JSON does not show literals inside an expression, so OPA cannot check
-# this list.)
-allowed_credential_literals := {"saas-bridge-disabled-placeholder"}
+# allowed credential expression: inert placeholders, not credentials (the
+# tfe bridge placeholder, and the envs/saas Supabase and Vercel placeholders,
+# which are format-valid so that provider configuration passes). The plan
+# JSON does not show literals inside an expression, so OPA cannot check this
+# list.
+allowed_credential_literals := {
+	"saas-bridge-disabled-placeholder",
+	"sbp_disabled_placeholder",
+	"000000000000000000000000",
+}
 
 # Ephemeral resource types (Terraform 1.10+) a configuration may declare. An
 # ephemeral resource is opened during the plan and the apply and runs provider

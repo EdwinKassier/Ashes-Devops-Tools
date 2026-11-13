@@ -153,8 +153,8 @@ test_allowed_providers_pass if {
 		"tfe": prov("tfe", "registry.terraform.io/hashicorp/tfe", {"organization": {"references": ["local.org"]}}),
 		"google": prov("google", "registry.terraform.io/hashicorp/google", {"project": {"constant_value": "p"}}),
 		"google-beta": prov("google-beta", "registry.terraform.io/hashicorp/google-beta", {}),
-		"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.enable_supabase", "local.supabase_disabled_placeholder_token"]}}),
-		"vercel": prov("vercel", "registry.terraform.io/vercel/vercel", {"api_token": {"references": ["local.enable_vercel", "local.vercel_disabled_placeholder_token"]}}),
+		"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.enable_supabase"]}}),
+		"vercel": prov("vercel", "registry.terraform.io/vercel/vercel", {"api_token": {"references": ["local.enable_vercel"]}}),
 		"random": {"name": "random", "full_name": "registry.terraform.io/hashicorp/random"},
 		"null": {"name": "null", "full_name": "registry.terraform.io/hashicorp/null"},
 		"archive": {"name": "archive", "full_name": "registry.terraform.io/hashicorp/archive"},
@@ -344,7 +344,7 @@ test_google_credentials_denied if {
 
 # envs/saas sets the supabase access_token (a placeholder when Supabase is off).
 test_supabase_access_token_allowed if {
-	count(p.deny) == 0 with input as with_providers({"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.enable_supabase", "local.supabase_disabled_placeholder_token"]}})})
+	count(p.deny) == 0 with input as with_providers({"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.enable_supabase"]}})})
 }
 
 test_token_url_denied if {
@@ -504,6 +504,13 @@ test_aws_token_from_bridge_switch_denied if {
 	count(p.deny) == 1 with input as with_root(pc, {"enable_saas_secret_bridge": {"default": false}})
 }
 
+# The placeholder locals of envs/saas are inlined; a local that could hold a
+# token is not an allowed reference (I3).
+test_supabase_placeholder_local_denied if {
+	pc := {"supabase": prov("supabase", "registry.terraform.io/supabase/supabase", {"access_token": {"references": ["local.enable_supabase", "local.supabase_disabled_placeholder_token"]}})}
+	count(p.deny) == 1 with input as with_root(pc, {})
+}
+
 test_vercel_token_from_other_local_denied if {
 	pc := {"vercel": prov("vercel", "registry.terraform.io/vercel/vercel", {"api_token": {"references": ["local.attacker_token"]}})}
 	count(p.deny) == 1 with input as with_root(pc, {})
@@ -569,4 +576,95 @@ test_ephemeral_in_provider_config_denied if {
 	pc := {"aws.role": prov("aws", aws_source, {"region": {"constant_value": "eu-west-2"}, "secret_key": {"references": ["ephemeral.random_password.x.result", "ephemeral.random_password.x"]}})}
 	# one deny for the secret_key argument, one for the ephemeral type
 	count(p.deny) == 2 with input as with_root(pc, {})
+}
+
+# ── Review follow-up: variable values and exact reference paths ─────────────
+# C1 (real plan JSON): a committed evil.auto.tfvars set the variable; its
+# declared default is null, so only the plan's variable value shows it. The
+# plan ran the credential_process of ./evil.cfg.
+dyn_ref_default := {"references": [
+	"var.tfc_aws_dynamic_credentials",
+	"var.tfc_aws_dynamic_credentials.default.shared_config_file",
+	"var.tfc_aws_dynamic_credentials.default",
+	"var.tfc_aws_dynamic_credentials",
+]}
+
+with_values(pc, variables, values) := {"plan": {
+	"variables": values,
+	"configuration": {"root_module": {"variables": variables}, "provider_config": pc},
+}}
+
+dyn_provider(expr) := {"aws": prov("aws", aws_source, {"region": {"constant_value": "eu-west-2"}, "shared_config_files": expr})}
+
+dyn_value(path) := {"tfc_aws_dynamic_credentials": {"value": {"aliases": {}, "default": {"shared_config_file": path}}}}
+
+test_c1_tfvars_relative_config_file_denied if {
+	count(p.deny) == 1 with input as with_values(dyn_provider(dyn_ref_default), {"tfc_aws_dynamic_credentials": {"default": null}}, dyn_value("./evil.cfg"))
+}
+
+# HCP Terraform writes the file outside the configuration and passes an
+# absolute path (its documentation does not give the exact path).
+test_absolute_config_file_allowed if {
+	count(p.deny) == 0 with input as with_values(dyn_provider(dyn_ref_default), {"tfc_aws_dynamic_credentials": {"default": null}}, dyn_value("/home/tfc-agent/.tfc-agent/component/terraform/runs/run-abc/aws.cfg"))
+}
+
+test_null_dynamic_credentials_value_allowed if {
+	count(p.deny) == 0 with input as with_values(dyn_provider(dyn_ref_default), {"tfc_aws_dynamic_credentials": {"default": null}}, {"tfc_aws_dynamic_credentials": {"value": null}})
+}
+
+test_proc_config_file_denied if {
+	count(p.deny) == 1 with input as with_values(dyn_provider(dyn_ref_default), {"tfc_aws_dynamic_credentials": {"default": null}}, dyn_value("/proc/self/cwd/evil.cfg"))
+}
+
+test_dotdot_config_file_denied if {
+	count(p.deny) == 1 with input as with_values(dyn_provider(dyn_ref_default), {"tfc_aws_dynamic_credentials": {"default": null}}, dyn_value("/home/tfc-agent/../../tmp/evil.cfg"))
+}
+
+test_alias_config_file_relative_denied if {
+	vals := {"tfc_aws_dynamic_credentials": {"value": {"default": {"shared_config_file": "/a/b.cfg"}, "aliases": {"backup": {"shared_config_file": "evil.cfg"}}}}}
+	count(p.deny) == 1 with input as with_values({"aws.backup": dynamic_credentials_provider}, {"tfc_aws_dynamic_credentials": {"default": null}}, vals)
+}
+
+test_extra_dynamic_credentials_key_denied if {
+	vals := {"tfc_aws_dynamic_credentials": {"value": {"default": null, "aliases": {}, "pin": {"shared_config_file": "/a/b.cfg"}}}}
+	count(p.deny) == 1 with input as with_values(dyn_provider(dyn_ref_default), {"tfc_aws_dynamic_credentials": {"default": null}}, vals)
+}
+
+# C2 (real plan JSON): an optional attribute with a default inside the
+# variable type. The plan's variable value omits the filled-in attribute, so
+# only the exact reference path catches it.
+test_c2_optional_attribute_reference_denied if {
+	expr := {"references": [
+		"var.tfc_aws_dynamic_credentials",
+		"var.tfc_aws_dynamic_credentials.pin.shared_config_file",
+		"var.tfc_aws_dynamic_credentials.pin",
+		"var.tfc_aws_dynamic_credentials",
+	]}
+	vals := {"tfc_aws_dynamic_credentials": {"value": {"aliases": {}, "default": {"shared_config_file": "/home/tfc-agent/x/aws.cfg"}}}}
+	count(p.deny) == 1 with input as with_values(dyn_provider(expr), {"tfc_aws_dynamic_credentials": {"default": null}}, vals)
+}
+
+test_alias_index_must_be_a_literal_key if {
+	expr := {"references": ["var.tfc_aws_dynamic_credentials", "var.tfc_aws_dynamic_credentials.aliases[var.k].shared_config_file"]}
+	count(p.deny) == 1 with input as with_values(dyn_provider(expr), {"tfc_aws_dynamic_credentials": {"default": null}}, {})
+}
+
+gcp_imp := {"google": prov("google", "registry.terraform.io/hashicorp/google", {"impersonate_service_account": {"references": ["var.terraform_admin_email"]}})}
+
+test_admin_email_value_allowed if {
+	count(p.deny) == 0 with input as with_values(gcp_imp, {"terraform_admin_email": {"default": null}}, {"terraform_admin_email": {"value": "terraform-admin@my-admin-project.iam.gserviceaccount.com"}})
+}
+
+test_admin_email_value_not_a_service_account_denied if {
+	count(p.deny) == 1 with input as with_values(gcp_imp, {"terraform_admin_email": {"default": null}}, {"terraform_admin_email": {"value": "someone@example.com"}})
+}
+
+tfe_tok := {"tfe": prov("tfe", "registry.terraform.io/hashicorp/tfe", {"token": {"references": ["var.enable_saas_secret_bridge"]}})}
+
+test_bridge_switch_bool_allowed if {
+	count(p.deny) == 0 with input as with_values(tfe_tok, {"enable_saas_secret_bridge": {"default": false}}, {"enable_saas_secret_bridge": {"value": true}})
+}
+
+test_bridge_switch_string_denied if {
+	count(p.deny) == 1 with input as with_values(tfe_tok, {"enable_saas_secret_bridge": {"default": false}}, {"enable_saas_secret_bridge": {"value": "attacker-token"}})
 }

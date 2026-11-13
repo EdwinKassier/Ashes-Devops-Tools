@@ -355,7 +355,7 @@ for src in \
   'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git-evil//modules/aws?ref=v0.1.0' \
   '..evil/x' \
   '.evil/x'; do
-  expect_rc "module source ${src} fails" 1 "$(case_tree "mod$(printf '%s' "${src}" | cksum | cut -d' ' -f1)" envs/r/main.tf "module \"m\" {
+  expect_rc "module source ${src} fails" 1 "$(case_tree "mod$(printf '%s' "${src}" | cksum | cut -d' ' -f1)" modules/r/main.tf "module \"m\" {
   source = \"${src}\"
 }")" "neither local nor"
 done
@@ -486,17 +486,17 @@ SAAS_PROVIDERS='terraform {
   }
 }'
 t="${workdir}/saastokens"
-add_file "${t}" envs/s/providers.tf 'locals {
-  supabase_disabled_placeholder_token = "sbp_${join("", [for i in range(40) : "0"])}"
-  vercel_disabled_placeholder_token   = "000000000000000000000000"
-}
-provider "supabase" {
-  access_token = local.enable_supabase ? null : local.supabase_disabled_placeholder_token
+add_file "${t}" envs/s/providers.tf 'provider "supabase" {
+  access_token = local.enable_supabase ? null : "sbp_disabled_placeholder"
 }
 provider "vercel" {
-  api_token = local.enable_vercel ? null : local.vercel_disabled_placeholder_token
+  api_token = local.enable_vercel ? null : "000000000000000000000000"
 }'
 add_file "${t}" envs/s/versions.tf "${SAAS_PROVIDERS}"
+add_file "${t}" envs/aws/workload/variables.tf 'variable "enable_saas_secret_bridge" {
+  type    = bool
+  default = false
+}'
 add_file "${t}" envs/aws/workload/providers.tf 'provider "tfe" {
   token = var.enable_saas_secret_bridge ? null : "saas-bridge-disabled-placeholder"
 }'
@@ -512,6 +512,124 @@ add_file "${t}" envs/r/providers.tf 'provider "vercel" {
 expect_rc "a vercel token from another local fails" 1 "${t}" '"api_token"'
 expect_rc "a null credential argument passes" 0 "$(case_tree nullcred envs/r/providers.tf 'provider "google" {
   access_token = null
+}')"
+
+# --- Review follow-up of SEC-1 ----------------------------------------------------
+t="${workdir}/saaslocal"
+add_file "${t}" envs/r/versions.tf "${SAAS_PROVIDERS}"
+add_file "${t}" envs/r/providers.tf 'locals {
+  supabase_disabled_placeholder_token = "sbp_attacker"
+}
+provider "supabase" {
+  access_token = local.enable_supabase ? null : local.supabase_disabled_placeholder_token
+}'
+expect_rc "I3: a placeholder token held in a local fails" 1 "${t}" "local.supabase_disabled_placeholder_token"
+# C1: a committed tfvars file sets the variable that an allowed form reads.
+t="${workdir}/c1tfvars"
+add_file "${t}" envs/r/variables.tf "${DYN_VAR}"
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}'
+add_file "${t}" envs/r/evil.auto.tfvars 'tfc_aws_dynamic_credentials = { default = { shared_config_file = "./evil.cfg" }, aliases = {} }'
+expect_rc "C1: a tfvars file that sets a credential variable fails" 1 "${t}" "evil.auto.tfvars"
+t="${workdir}/c1tfvarsjson"
+add_file "${t}" envs/r/x.tfvars.json '{"terraform_admin_email": "evil@attacker.iam.gserviceaccount.com"}'
+expect_rc "C1: a tfvars.json file that sets a credential variable fails" 1 "${t}" "x.tfvars.json"
+t="${workdir}/tfvarsok"
+add_file "${t}" envs/gcp/guardrails/guardrails.auto.tfvars 'deny_policies = {}'
+expect_rc "a tfvars file that sets other variables passes" 0 "${t}"
+expect_rc "an unparseable tfvars file fails closed" 1 "$(case_tree tfvarsbad envs/r/x.tfvars 'a = {')" "cannot parse"
+# C2: an optional attribute with a default inside the variable type.
+t="${workdir}/c2pin"
+add_file "${t}" envs/r/variables.tf 'variable "tfc_aws_dynamic_credentials" {
+  type = object({
+    default = object({ shared_config_file = string })
+    aliases = map(object({ shared_config_file = string }))
+    pin     = optional(object({ shared_config_file = string }), { shared_config_file = "./evil.cfg" })
+  })
+  default = null
+}'
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.pin.shared_config_file]
+}'
+expect_rc "C2: a reference path outside the exact forms fails" 1 "${t}" "var.tfc_aws_dynamic_credentials.pin.shared_config_file"
+expect_rc "C2: a variable type other than the canonical one fails" 1 "${t}" "type"
+t="${workdir}/c2default"
+add_file "${t}" envs/r/variables.tf 'variable "tfc_aws_dynamic_credentials" {
+  type = object({
+    default = optional(object({ shared_config_file = string }), { shared_config_file = "./evil.cfg" })
+    aliases = map(object({ shared_config_file = string }))
+  })
+  default = null
+}'
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}'
+expect_rc "C2: an optional default inside the allowed path fails" 1 "${t}" "type"
+t="${workdir}/m3email"
+add_file "${t}" envs/r/variables.tf 'variable "terraform_admin_email" {
+  type    = any
+  default = null
+}'
+add_file "${t}" envs/r/providers.tf 'provider "google" {
+  impersonate_service_account = var.terraform_admin_email
+}'
+expect_rc "M3: terraform_admin_email must be a string variable" 1 "${t}" "type"
+t="${workdir}/m3bridge"
+add_file "${t}" envs/r/variables.tf 'variable "enable_saas_secret_bridge" {
+  type    = string
+  default = null
+}'
+add_file "${t}" envs/r/providers.tf 'provider "tfe" {
+  token = var.enable_saas_secret_bridge
+}'
+expect_rc "M3: enable_saas_secret_bridge must be a bool variable" 1 "${t}" "type"
+t="${workdir}/m3undeclared"
+add_file "${t}" envs/r/providers.tf 'provider "google" {
+  impersonate_service_account = var.terraform_admin_email
+}'
+expect_rc "an allowed variable must be declared beside the provider" 1 "${t}" "terraform_admin_email"
+# M1: a bare list of one allowed interpolation, with a trailing comment.
+t="${workdir}/m1list"
+add_file "${t}" envs/r/variables.tf "${DYN_VAR}"
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = [var.tfc_aws_dynamic_credentials.default.shared_config_file] # dynamic credentials
+}'
+expect_rc "M1: a list of the allowed reference passes" 0 "${t}"
+# I1: override files merge into the root after the scanned files.
+expect_rc "I1: a tracked override file fails" 1 "$(case_tree ovr envs/r/a_override.tf 'variable "tfc_aws_dynamic_credentials" {
+  default = { default = { shared_config_file = "./evil.cfg" } }
+}')" "override"
+expect_rc "I1: override.tf.json fails" 1 "$(case_tree ovrjson envs/r/override.tf.json '{"locals": {"x": 1}}')" "override"
+expect_rc "I1: a fork backend_override.tf with only a cloud block passes" 0 "$(case_tree ovrbackend envs/r/backend_override.tf 'terraform {
+  cloud {
+    organization = "o"
+  }
+}')"
+expect_rc "I1: backend_override.tf with anything else fails" 1 "$(case_tree ovrbackendbad envs/r/backend_override.tf 'terraform {
+  backend "local" {}
+}
+locals {
+  x = 1
+}')" "may hold only"
+# I2: HCP runs envs/**; a tag-pinned module there is not scanned.
+expect_rc "I2: a release-tag module source in envs fails" 1 "$(case_tree envsgit envs/r/main.tf 'module "m" {
+  source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0"
+}')" "envs/"
+# file() and friends read files on the runner; their output reaches state.
+expect_rc "an absolute file() path fails" 1 "$(case_tree procfile envs/r/main.tf 'locals {
+  env = file("/proc/self/environ")
+}')" "/proc/self/environ"
+expect_rc "a templatefile() path that leaves the repository fails" 1 "$(case_tree escfile modules/a/main.tf 'locals {
+  x = templatefile("${path.module}/../../../../../etc/passwd", {})
+}')" "templatefile"
+expect_rc "a file() path built by a function fails" 1 "$(case_tree joinfile modules/a/main.tf 'locals {
+  x = filebase64(join("", ["/proc", "/self/environ"]))
+}')" "filebase64"
+expect_rc "a path.module file() passes" 0 "$(case_tree okfile modules/a/main.tf 'locals {
+  x = file("${path.module}/policies/p.json")
+  y = [for n in var.names : yamldecode(file("${path.root}/../../presets/${n}.yaml"))]
+  z = fileexists(coalesce(local.f, "/nonexistent")) ? file(local.f) : ""
 }')"
 
 # --- SEC-2: ephemeral resources ---------------------------------------------------

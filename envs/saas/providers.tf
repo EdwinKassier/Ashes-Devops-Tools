@@ -26,16 +26,15 @@
 # refresh/destroy them with the placeholder, which fails with an auth error
 # (fail-closed, nothing is changed). Destroy them first with the feature still
 # enabled, then flip the flag. See provider-selection.md.
-locals {
-  # Inert placeholders — NOT secrets. Format-valid so provider configure passes.
-  supabase_disabled_placeholder_token = "sbp_${join("", [for i in range(40) : "0"])}" # built at plan time; 40 zeros
-  vercel_disabled_placeholder_token   = "000000000000000000000000"
-}
-
+#
+# The placeholders are inline literals (sbp_ + 40 zeros; 24 zeros), not locals:
+# the plan-time execution guard (policies/opa/no_plan_time_code_execution*.rego
+# and scripts/check-plan-time-exec.py) allows exactly these literals in these
+# arguments, and it cannot check what a local evaluates to.
 provider "supabase" {
-  access_token = local.enable_supabase ? null : local.supabase_disabled_placeholder_token
+  access_token = local.enable_supabase ? null : "sbp_disabled_placeholder"
 }
 
 provider "vercel" {
-  api_token = local.enable_vercel ? null : local.vercel_disabled_placeholder_token
+  api_token = local.enable_vercel ? null : "000000000000000000000000"
 }

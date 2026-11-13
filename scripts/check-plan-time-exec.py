@@ -103,8 +103,28 @@ TYPED_BLOCKS = ("resource", "data", "ephemeral", "action")
 # A rego list body this script accepts: string literals, commas, whitespace
 # and comments, nothing else.
 STRING_SET_BODY = re.compile(r'(?:\s|,|"[^"\\\n]*"|#[^\n]*)*')
-# "<provider type>/<argument>=<var.|local.><name>"
-CRED_REF_ENTRY = re.compile(r"([a-z0-9-]+)/([a-z0-9_]+)=((?:var|local)\.[A-Za-z_][A-Za-z0-9_-]*)")
+# "<provider type>/<argument>=<var.|local.><name>[.<attr>|[*]]..."
+CRED_REF_ENTRY = re.compile(
+    r"([a-z0-9-]+)/([a-z0-9_]+)=((?:var|local)\.[A-Za-z_][A-Za-z0-9_-]*)((?:\.[A-Za-z_][A-Za-z0-9_-]*|\[\*\])*)"
+)
+# "<variable name>=<type>"
+CRED_TYPE_ENTRY = re.compile(r"([A-Za-z_][A-Za-z0-9_-]*)=(.+)")
+# A type compared token by token: identifiers and parentheses. python-hcl2
+# renders object({a = string}) as ${object({"a": "string"})}; both give the
+# same tokens, and an optional() default adds tokens.
+TYPE_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|[()]")
+# Functions that read a file on the runner; their result can reach state,
+# outputs or an API call. fileexists (a bool) is not listed.
+FILE_FUNCTION = re.compile(
+    r"(?<![\w.])(file|filebase64|filesha1|filesha256|filesha512|filemd5|filebase64sha256|"
+    r"filebase64sha512|templatefile|fileset)\(\s*"
+)
+FILE_ARG_REFERENCE = re.compile(
+    r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[[^\[\]()]*\])*\s*[,)]"
+)
+OVERRIDE_FILE = re.compile(r"(?:^|_)override\.tf(?:\.json)?$")
+# A fork's own state backend (UPGRADING.md "What you own").
+BACKEND_OVERRIDE = "backend_override.tf"
 # A var. or local. reference with its attribute and literal-index path. python-hcl2
 # renders the expression as text; a nested list element as '${...}'.
 REFERENCE = re.compile(
@@ -194,25 +214,41 @@ def load_policy() -> dict:
                         "allowed_provisioner_chain", "allowed_provider_sources",
                         "endpoint_key_exceptions", "allowed_remote_state_backends",
                         "allowed_action_types", "allowed_credential_references",
-                        "allowed_credential_literals", "allowed_ephemeral_types"])
+                        "allowed_credential_literals", "allowed_ephemeral_types",
+                        "allowed_credential_variable_types"])
     patterns = {}
     for name in ("endpoint_key_pattern", "credential_key_pattern"):
         m = re.search(rf"^{name}\s*:=\s*`([^`]+)`\s*$", policy, re.M)
         if not m:
             setup_error(f"{name} in {show(POLICY)} must be one raw string")
         patterns[name] = re.compile(m.group(1))
-    cred_refs: dict[tuple[str, str], set[str]] = {}
+    cred_refs: dict[tuple[str, str], list[re.Pattern]] = {}
+    cred_vars: set[str] = set()
     for entry in rego_string_set(allow, "allowed_credential_references", ALLOWLIST):
         m = CRED_REF_ENTRY.fullmatch(entry)
         if not m:
             setup_error(f"allowed_credential_references entry {entry!r} in {show(ALLOWLIST)} must "
-                        'be "<provider type>/<argument>=<var.|local.><name>"')
-        cred_refs.setdefault((m.group(1), m.group(2)), set()).add(m.group(3))
+                        'be "<provider type>/<argument>=<var.|local.><name>[.<attr>|[*]]..."')
+        path = re.escape(m.group(3) + m.group(4)).replace(r"\[\*\]", r'\["[A-Za-z0-9_-]+"\]')
+        cred_refs.setdefault((m.group(1), m.group(2)), []).append(re.compile(path))
+        if m.group(3).startswith("var."):
+            cred_vars.add(m.group(3)[4:])
+    cred_types: dict[str, list[str]] = {}
+    for entry in rego_string_set(allow, "allowed_credential_variable_types", ALLOWLIST):
+        m = CRED_TYPE_ENTRY.fullmatch(entry)
+        if not m:
+            setup_error(f"allowed_credential_variable_types entry {entry!r} must be \"<name>=<type>\"")
+        cred_types[m.group(1)] = TYPE_TOKEN.findall(m.group(2))
+    if cred_vars - set(cred_types):
+        setup_error(f"allowed_credential_variable_types in {show(ALLOWLIST)} lacks "
+                    f"{sorted(cred_vars - set(cred_types))}")
     return {
         "exec_data_types": rego_string_set(policy, "exec_data_types", POLICY),
         "endpoint_key": patterns["endpoint_key_pattern"],
         "credential_key": patterns["credential_key_pattern"],
         "credential_refs": cred_refs,
+        "credential_vars": cred_vars,
+        "credential_types": cred_types,
         "credential_literals": rego_string_set(allow, "allowed_credential_literals", ALLOWLIST),
         "ephemeral": rego_string_set(allow, "allowed_ephemeral_types", ALLOWLIST, allow_empty=True),
         "chain": rego_chain(policy, POLICY),
@@ -298,29 +334,53 @@ def required_providers(doc: dict):
 NO_DEFAULT = object()
 
 
-def variable_defaults(doc: dict):
-    """Yield (name, default or NO_DEFAULT) for every variable block."""
+def variable_blocks(doc: dict):
+    """Yield (name, body) for every variable block."""
     for name, body in labelled(doc.get("variable")):
-        yield name, body.get("default", NO_DEFAULT)
+        yield name, body
 
 
-def credential_problem(value, allowed: set[str], pol: dict, dir_vars: dict) -> str | None:
+def credential_variable_problem(name: str, pol: dict, dir_vars: dict) -> str | None:
+    """The variable an allowed form reads: declared here, with the canonical
+    type and a null or bool default."""
+    body = dir_vars.get(name)
+    if body is None:
+        return f"var.{name}, which is not declared in this directory"
+    rendered = body.get("type")
+    if not isinstance(rendered, str) or TYPE_TOKEN.findall(rendered) != pol["credential_types"].get(name):
+        return (f"var.{name}, whose type is not the one on allowed_credential_variable_types "
+                "(an optional() default would carry a value the plan does not show)")
+    default = body.get("default", NO_DEFAULT)
+    if default is not NO_DEFAULT and default is not None and not isinstance(default, bool):
+        return f"var.{name}, whose default gives it a value of its own"
+    return None
+
+
+def credential_problem(value, allowed: list, pol: dict, dir_vars: dict) -> str | None:
     """None when a credential argument's value is null or an allowed form, else why not."""
     if value is None:
+        return None
+    if isinstance(value, list) and value and all(
+            isinstance(v, str) and v.startswith("${") and v.endswith("}") for v in value):
+        # A list of interpolations: [var.x.default.shared_config_file].
+        for v in value:
+            why = credential_problem(v, allowed, pol, dir_vars)
+            if why:
+                return why
         return None
     if not (isinstance(value, str) and value.startswith("${") and value.endswith("}")):
         return "a literal value"
     if not allowed:
         return "an expression (no form of this argument is allowed)"
     expr = value[2:-1]
-    for m in REFERENCE.finditer(expr):
-        root = m.group(1)
-        if root not in allowed:
-            return f"a reference to {root}, which is not on allowed_credential_references"
-        if root.startswith("var."):
-            default = dir_vars.get(root[4:], NO_DEFAULT)
-            if default is not NO_DEFAULT and default is not None and not isinstance(default, bool):
-                return f"{root}, whose default gives it a value of its own"
+    refs = list(REFERENCE.finditer(expr))
+    for m in refs:
+        if not any(p.fullmatch(m.group(0)) for p in allowed):
+            return f"a reference to {m.group(0)}, which is not an exact path on allowed_credential_references"
+    for root in sorted({m.group(1) for m in refs if m.group(1).startswith("var.")}):
+        why = credential_variable_problem(root[4:], pol, dir_vars)
+        if why:
+            return why
     rest = REFERENCE.sub("R", expr)
     while "'${R}'" in rest:
         rest = rest.replace("'${R}'", "R")
@@ -398,10 +458,8 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
             if key in nested or isinstance(value, dict) or (
                     isinstance(value, list) and any(isinstance(v, dict) for v in value)):
                 why = "a nested or dynamic block"
-            elif isinstance(value, list):
-                why = "a literal value"
             else:
-                why = credential_problem(value, pol["credential_refs"].get((ptype, key), set()),
+                why = credential_problem(value, pol["credential_refs"].get((ptype, key), []),
                                          pol, dir_vars)
             if why:
                 out.append(f'{rel}: provider "{pname}" sets "{key}" to {why} (a profile, credentials '
@@ -411,14 +469,112 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
     for mname, body in labelled(doc.get("module")):
         src = body.get("source")
         src = src if isinstance(src, str) else ""
-        if not (LOCAL_MODULE.fullmatch(src) or OWN_RELEASE_MODULE.fullmatch(src)):
+        if rel.startswith("envs/") and not LOCAL_MODULE.fullmatch(src):
+            out.append(f'{rel}: module "{mname}" source "{src}" is not local; HCP Terraform runs '
+                       "envs/ and this check does not scan the code behind a remote source")
+        elif not (LOCAL_MODULE.fullmatch(src) or OWN_RELEASE_MODULE.fullmatch(src)):
             out.append(f'{rel}: module "{mname}" source "{src}" is neither local nor this '
                        "repository's release tag")
         elif LOCAL_MODULE.fullmatch(src) and hidden_path(
                 posixpath.normpath(posixpath.join(posixpath.dirname(rel), src))):
             out.append(f'{rel}: module "{mname}" source "{src}" points into .terraform/ or '
                        "node_modules/, which this check does not scan")
+
+    # A variable that an allowed credential form reads, wherever it is declared.
+    for vname, _ in variable_blocks(doc):
+        if vname in pol["credential_vars"]:
+            why = credential_variable_problem(vname, pol, dict(variable_blocks(doc)))
+            if why:
+                out.append(f'{rel}: variable "{vname}": {why}')
+
+    out += file_function_problems(rel, doc)
+    out += override_problems(rel, doc)
     return out
+
+
+def all_strings(node):
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for k, v in node.items():
+            yield str(k)
+            yield from all_strings(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from all_strings(v)
+
+
+def string_literal(text: str, start: int) -> str | None:
+    """The body of the string literal that opens at text[start] ('"'), with
+    its ${...} parts kept; None when it does not close."""
+    i, depth = start + 1, 0
+    while i < len(text):
+        c = text[i]
+        if c == "\\":
+            i += 2
+            continue
+        if text.startswith("${", i):
+            depth += 1
+            i += 2
+            continue
+        if c == "}" and depth:
+            depth -= 1
+        elif c == '"' and not depth:
+            return text[start + 1:i]
+        i += 1
+    return None
+
+
+def file_function_problems(rel: str, doc: dict) -> list[str]:
+    """file(), templatefile() and the other file readers must read a literal
+    path under path.module / path.root that stays in the repository, or a
+    plain reference (its value is not checked)."""
+    out = []
+    for text in all_strings(doc):
+        for m in FILE_FUNCTION.finditer(text):
+            fn, at = m.group(1), m.end()
+            if text.startswith('"', at):
+                lit = string_literal(text, at)
+                rest = None
+                for prefix in ("${path.module}", "${path.root}"):
+                    if lit is not None and lit.startswith(prefix):
+                        rest = re.sub(r"\$\{[^}]*\}", "x", lit[len(prefix):])
+                if rest is None:
+                    out.append(f'{rel}: {fn}("{lit}") reads a path that is not under path.module '
+                               "or path.root (a file on the runner, such as /proc/self/environ, "
+                               "would reach state or outputs)")
+                elif posixpath.normpath(posixpath.join(posixpath.dirname(rel), "." + rest)).startswith(".."):
+                    out.append(f'{rel}: {fn}("{lit}") reads a path outside the repository')
+            elif not FILE_ARG_REFERENCE.match(text, at):
+                out.append(f"{rel}: {fn}(...) reads a path built by a function or expression; use a "
+                           "literal path under path.module or path.root, or a plain reference")
+    return out
+
+
+def override_problems(rel: str, doc: dict) -> list[str]:
+    """Override files merge into a module after its other files, so they can
+    replace what this check read. Only a fork's backend_override.tf with a
+    terraform { backend / cloud } block is allowed, under envs/."""
+    name = posixpath.basename(rel)
+    if not OVERRIDE_FILE.search(name):
+        return []
+    if name == BACKEND_OVERRIDE and rel.startswith("envs/") and set(doc) <= {"terraform"} and all(
+            set(b) <= {"backend", "cloud"} for b in blocks(doc.get("terraform"))):
+        return []
+    if name == BACKEND_OVERRIDE:
+        return [f"{rel}: backend_override.tf may hold only a terraform {{ backend / cloud }} "
+                "block, under envs/"]
+    return [f"{rel}: an override file replaces settings of the files this check read; it is "
+            "not allowed"]
+
+
+def check_tfvars(rel: str, doc, pol: dict) -> list[str]:
+    """A committed variable file must not set a variable that an allowed
+    credential form reads: its value would reach the provider."""
+    if not isinstance(doc, dict):
+        return [f"{rel}: top level is not an object; fail closed"]
+    return [f"{rel}: sets {name}, which an allowed provider credential form reads; set it on "
+            "the workspace instead" for name in sorted(set(doc) & pol["credential_vars"])]
 
 
 def check_chain(docs: dict[str, dict], pol: dict) -> list[str]:
@@ -456,6 +612,10 @@ def is_tf(name: str) -> bool:
     return name.endswith(".tf") or name.endswith(".tf.json")
 
 
+def is_tfvars(name: str) -> bool:
+    return name.endswith(".tfvars") or name.endswith(".tfvars.json")
+
+
 def discover() -> tuple[list[str], list[str]]:
     """(files to parse, problems). Git mode lists tracked files only: that is
     what a VCS-driven run checks out."""
@@ -475,13 +635,14 @@ def discover() -> tuple[list[str], list[str]]:
                 problems.append(f"{path}: submodule (its files are not scanned)")
             elif hidden_path(path):
                 problems.append(f"{path}: tracked file inside .terraform/ or node_modules/")
-            elif is_tf(path):
+            elif is_tf(path) or is_tfvars(path):
                 files.append(path)
         return sorted(files), problems
     files = []
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
-        files += [(Path(dirpath) / f).relative_to(ROOT).as_posix() for f in filenames if is_tf(f)]
+        files += [(Path(dirpath) / f).relative_to(ROOT).as_posix() for f in filenames
+                  if is_tf(f) or is_tfvars(f)]
     return sorted(files), []
 
 
@@ -495,9 +656,12 @@ def main() -> int:
     docs: dict[str, dict] = {}
     for rel in files:
         try:
-            doc = parse(ROOT / rel, rel.endswith(".tf.json"))
+            doc = parse(ROOT / rel, rel.endswith(".json"))
         except Exception as exc:  # noqa: BLE001 - any parse error fails closed
             problems.append(f"{rel}: cannot parse ({type(exc).__name__}: {str(exc)[:120]}); fail closed")
+            continue
+        if is_tfvars(rel):
+            problems += check_tfvars(rel, doc, pol)
             continue
         if not isinstance(doc, dict):
             problems.append(f"{rel}: top level is not an object; fail closed")
@@ -509,7 +673,7 @@ def main() -> int:
     vars_by_dir: dict[str, dict] = {}
     for rel, doc in docs.items():
         by_dir.setdefault(posixpath.dirname(rel), {}).update(required_providers(doc))
-        vars_by_dir.setdefault(posixpath.dirname(rel), {}).update(variable_defaults(doc))
+        vars_by_dir.setdefault(posixpath.dirname(rel), {}).update(variable_blocks(doc))
     for rel, doc in docs.items():
         d = posixpath.dirname(rel)
         problems += check_doc(rel, doc, by_dir[d], pol, provisioner_dir, vars_by_dir[d])
