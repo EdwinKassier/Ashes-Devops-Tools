@@ -14,3 +14,4 @@ gcp:
       cidr_block: 10.30.0.0/16
       is_production: true
       compliance_class: regulated
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c]

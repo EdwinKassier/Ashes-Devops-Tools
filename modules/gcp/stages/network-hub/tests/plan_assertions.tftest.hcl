@@ -224,3 +224,27 @@ run "internal_root_zone_follows_internal_domain" {
     error_message = "internal_domain must name the internal-root zone (with the trailing dot) and the hub_dns_domain output."
   }
 }
+
+# IAC-1: hub_zones pins the DNS anchor VPC's zones (the zone lookup above
+# returns us-central1-a only).
+run "hub_zones_pin_the_dns_anchor_zones" {
+  command = plan
+
+  variables {
+    hub_zones = ["us-central1-b", "us-central1-c"]
+  }
+
+  assert {
+    condition     = join(",", module.dns_anchor.zones) == "us-central1-b,us-central1-c"
+    error_message = "hub_zones must reach the DNS anchor VPC in the given order."
+  }
+}
+
+run "hub_zones_default_to_discovery" {
+  command = plan
+
+  assert {
+    condition     = join(",", module.dns_anchor.zones) == "us-central1-a"
+    error_message = "Without hub_zones the DNS anchor keeps the discovered zones."
+  }
+}

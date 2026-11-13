@@ -221,6 +221,7 @@ module "environment" {
       sampling             = local.flow_log_sampling
     }
     flow_logs_retention_days        = local.flow_logs_retention_days
+    explicit_zones                  = local.zones
     private_service_connect_target  = var.private_service_connect_target
     private_service_connect_name    = local.private_service_connect_name
     private_service_connect_address = local.private_service_connect_address
@@ -350,6 +351,21 @@ resource "terraform_data" "production_vpc_sc_enforced" {
     precondition {
       condition     = local.vpc_sc_prod_enforced || (local.vpc_sc_waiver_until != null && timecmp(plantimestamp(), coalesce(local.vpc_sc_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
       error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}${local.vpc_sc_waiver_until == null ? "" : ", and production_vpc_sc_dry_run_waiver expired on ${try(var.production_vpc_sc_dry_run_waiver.expires, "")}"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false. For a first rollout only, set production_vpc_sc_dry_run_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
+    }
+  }
+}
+
+# Production network guards. Pinned zones (IAC-1): the subnet CIDRs are
+# index-aligned with the zones, so with discovered zones a change in the list
+# GCP returns re-derives the CIDRs and replaces in-use subnets. The guard stops
+# the plan; it changes no resource.
+resource "terraform_data" "production_network_guard" {
+  count = local.is_production ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = length(local.zones) > 0
+      error_message = "Environment '${var.environment}' is production, so its zones must be pinned: set gcp.environments.${var.environment}.zones in config/landing-zone.yaml (or the zones variable), such as [${local.env_config.region}-a, ${local.env_config.region}-b, ${local.env_config.region}-c]. Subnet i of each tier takes the i-th CIDR, so for an existing network list the zones in the order of its subnet CIDRs (UPGRADING.md), and the plan must show no subnet change."
     }
   }
 }

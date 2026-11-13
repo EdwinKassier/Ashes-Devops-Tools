@@ -800,6 +800,17 @@ variable "private_service_connect_name" {
   default     = null
 }
 
+variable "zones" {
+  description = "Zones of the spoke VPC's zonal subnets, in subnet order: subnet i of each tier takes the i-th CIDR of the environment block, so the order fixes the CIDRs. Null = gcp.environments[<environment>].zones from config/landing-zone.yaml, else the zones GCP returns for the region (which can change and then replaces subnets). Required for a production environment (is_production)."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.zones == null || alltrue([for z in coalesce(var.zones, []) : can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))])
+    error_message = "zones must be GCP zone names, such as europe-west2-a."
+  }
+}
+
 variable "private_service_connect_address" {
   description = "Internal IPv4 address of the spoke VPC's Private Service Connect endpoint. It must be outside every spoke subnet range and every subnet range of the hub VPC. Null = gcp.environments[<environment>].private_service_connect.address from config/landing-zone.yaml, else the second-to-last address of the environment CIDR (10.10.255.254 for 10.10.0.0/16)."
   type        = string

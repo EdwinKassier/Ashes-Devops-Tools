@@ -130,6 +130,43 @@ run "hub_additional_regions_from_config" {
   }
 }
 
+# IAC-1: gcp.network.zones pins the hub and DNS anchor zones; a variable wins.
+run "hub_zones_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+  }
+
+  assert {
+    condition     = join(",", local.hub_zones) == "europe-west1-c,europe-west1-b"
+    error_message = "gcp.network.zones must reach the stage from the config file, in order."
+  }
+}
+
+run "hub_zones_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+    hub_zones                = ["europe-west1-d"]
+  }
+
+  assert {
+    condition     = join(",", local.hub_zones) == "europe-west1-d"
+    error_message = "An explicit hub_zones variable must win over gcp.network.zones."
+  }
+}
+
+run "hub_zones_empty_without_config" {
+  command = plan
+
+  assert {
+    condition     = length(local.hub_zones) == 0
+    error_message = "Without config or variable the hub zones stay empty (discovered by net-hub)."
+  }
+}
+
 # ARC-1: gcp.network.private_service_connect reaches the stage; a variable wins.
 run "hub_psc_overrides_from_config" {
   command = plan

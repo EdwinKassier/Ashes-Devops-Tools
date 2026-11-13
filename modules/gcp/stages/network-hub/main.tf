@@ -90,8 +90,10 @@ module "hub" {
   additional_regions         = var.hub_additional_regions
 
   network = {
-    name            = "hub-vpc-core"
-    cidr_block      = var.hub_vpc_cidr_block
+    name       = "hub-vpc-core"
+    cidr_block = var.hub_vpc_cidr_block
+    # Pinned zones (IAC-1). Empty = the zones GCP returns for the region.
+    explicit_zones  = var.hub_zones
     shared_vpc_host = true
     # Observability: subnet flow logs for audit.
     flow_logs = {
@@ -247,8 +249,9 @@ module "dns_anchor" {
   enable_deletion_protection = var.enable_deletion_protection
 
   network = {
-    name       = "dns-vpc-core"
-    cidr_block = var.dns_hub_vpc_cidr_block
+    name           = "dns-vpc-core"
+    cidr_block     = var.dns_hub_vpc_cidr_block
+    explicit_zones = var.hub_zones
   }
 
   dns_zones = {

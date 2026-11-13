@@ -24,6 +24,11 @@ output "subnets" {
   value       = module.network.subnets
 }
 
+output "zones" {
+  description = "The zones of the anchor VPC's zonal subnets, in subnet order: network.explicit_zones, else the zones GCP returns for the region. Subnet i of each tier takes the i-th CIDR, so this order fixes the subnet CIDRs."
+  value       = local.zones
+}
+
 output "dns_zones" {
   description = "All DNS zone module outputs, keyed by zone name."
   value       = module.dns_zones

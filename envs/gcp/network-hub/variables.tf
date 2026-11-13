@@ -198,6 +198,17 @@ variable "interconnects" {
   }
 }
 
+variable "hub_zones" {
+  description = "Zones of the hub VPC and the DNS anchor VPC (both in default_region), in subnet order: subnet i of each tier takes the i-th CIDR, so the order fixes the subnet CIDRs. Null = gcp.network.zones from config/landing-zone.yaml, else the zones GCP returns for the region (which can change and then replaces subnets). Required when any environment is_production."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.hub_zones == null || alltrue([for z in coalesce(var.hub_zones, []) : can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))])
+    error_message = "hub_zones must be GCP zone names, such as europe-west2-a."
+  }
+}
+
 variable "hub_private_service_connect_name" {
   description = "Name of the hub VPC's Private Service Connect endpoint for Google APIs: 1-20 lower-case letters and numbers, starting with a letter (Google's rule). Null = gcp.network.private_service_connect.name from config/landing-zone.yaml, else hubvpccorepsc."
   type        = string

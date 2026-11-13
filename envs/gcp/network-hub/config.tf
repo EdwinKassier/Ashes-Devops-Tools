@@ -47,6 +47,8 @@ locals {
     interconnect = try(jsonencode(local.lz.gcp.network.interconnect), null)
     # Hybrid DNS on the hub VPC (JSON text, same reason as vpn above).
     hybrid_dns = try(jsonencode(local.lz.gcp.network.hybrid_dns), null)
+    # gcp.network.zones: the hub and DNS anchor zones in subnet order (IAC-1).
+    hub_zones = try([for z in local.lz.gcp.network.zones : tostring(z)], null)
     # Hub PSC endpoint overrides (gcp.network.private_service_connect).
     hub_psc_name    = try(tostring(local.lz.gcp.network.private_service_connect.name), null)
     hub_psc_address = try(tostring(local.lz.gcp.network.private_service_connect.address), null)
@@ -138,6 +140,9 @@ locals {
     for k in sort(keys(local.environments)) : { range = local.environments[k].cidr_block, description = "environment ${k}" }
     if try(local.environments[k].cidr_block, "") != ""
   ]
+  # Hub and DNS anchor zones: variable > gcp.network.zones > [] (the zones GCP
+  # returns). Required when any environment is production (main.tf).
+  hub_zones = var.hub_zones != null ? var.hub_zones : coalesce(local.cfg.hub_zones, [])
   # Hub PSC endpoint overrides (null = the net-hub defaults).
   hub_private_service_connect = {
     name    = var.hub_private_service_connect_name != null ? var.hub_private_service_connect_name : local.cfg.hub_psc_name

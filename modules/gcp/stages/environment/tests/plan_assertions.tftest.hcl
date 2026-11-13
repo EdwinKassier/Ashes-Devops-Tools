@@ -742,3 +742,34 @@ run "enable_deletion_protection_wins_over_the_deprecated_alias" {
     error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
   }
 }
+
+# IAC-1: network.explicit_zones pins the spoke's zones, so the subnet CIDRs no
+# longer follow the zones GCP returns (the mock returns b, c, d).
+run "explicit_zones_pin_the_spoke_subnets" {
+  command = plan
+
+  variables {
+    network = {
+      explicit_zones = ["europe-west1-d", "europe-west1-c"]
+    }
+  }
+
+  assert {
+    condition     = join(",", module.host.zones) == "europe-west1-d,europe-west1-c"
+    error_message = "network.explicit_zones must reach net-spoke in the given order."
+  }
+
+  assert {
+    condition     = module.host.subnets.private["europe-west1-d"].ip_cidr_range == "10.10.16.0/24" && module.host.subnets.private["europe-west1-c"].ip_cidr_range == "10.10.17.0/24" && length(module.host.subnets.private) == 2
+    error_message = "The first pinned zone must take the first private CIDR, and no discovered zone may add a subnet."
+  }
+}
+
+run "zones_are_discovered_when_not_pinned" {
+  command = plan
+
+  assert {
+    condition     = join(",", module.host.zones) == "europe-west1-b,europe-west1-c,europe-west1-d"
+    error_message = "Without network.explicit_zones the spoke keeps the discovered zones."
+  }
+}

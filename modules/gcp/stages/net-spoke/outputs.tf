@@ -29,6 +29,11 @@ output "subnets" {
   value       = module.network.subnets
 }
 
+output "zones" {
+  description = "The zones of the zonal subnets, in subnet order: network.explicit_zones, else the zones GCP returns for the region. Subnet i of each tier takes the i-th CIDR, so this order fixes the subnet CIDRs."
+  value       = local.zones
+}
+
 output "additional_region_subnets" {
   description = "Subnet module outputs of the additional regions, keyed by region, each with public, private and database; empty when additional_regions is empty."
   value       = module.network.additional_region_subnets

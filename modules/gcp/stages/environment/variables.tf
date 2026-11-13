@@ -108,9 +108,10 @@ variable "deletion_protection" {
 # --- Network --------------------------------------------------------------------
 
 variable "network" {
-  description = "Spoke VPC settings: name: the spoke VPC name (default <project_prefix>-<environment>-vpc; gcp-workload passes the gcp-projects contract value), flow_logs (aggregation_interval, sampling 0.0-1.0), flow_logs_retention_days for the BigQuery export, private_service_connect_target (all-apis | vpc-sc; null derives vpc-sc once the perimeter is enforced, else all-apis), private_service_connect_name and private_service_connect_address (the PSC endpoint's name and internal IPv4 address; null = the net-spoke defaults: the VPC name without non-alphanumerics plus psc, and the second-to-last address of the host CIDR), and additional_regions: opt-in extra regions of the spoke VPC keyed by region name (subnet_cidrs public/private/database, optional secondary_ranges, nat default true for a Cloud Router and NAT in the region; empty = single-region)."
+  description = "Spoke VPC settings: name: the spoke VPC name (default <project_prefix>-<environment>-vpc; gcp-workload passes the gcp-projects contract value), flow_logs (aggregation_interval, sampling 0.0-1.0), flow_logs_retention_days for the BigQuery export, private_service_connect_target (all-apis | vpc-sc; null derives vpc-sc once the perimeter is enforced, else all-apis), private_service_connect_name and private_service_connect_address (the PSC endpoint's name and internal IPv4 address; null = the net-spoke defaults: the VPC name without non-alphanumerics plus psc, and the second-to-last address of the host CIDR), explicit_zones (the spoke's zones in subnet order; subnet i of each tier takes the i-th CIDR, so the order fixes the CIDRs; empty = the zones GCP returns for the region, which can change and then replaces subnets; gcp-workload requires it for a production environment), and additional_regions: opt-in extra regions of the spoke VPC keyed by region name (subnet_cidrs public/private/database, optional secondary_ranges, nat default true for a Cloud Router and NAT in the region; empty = single-region)."
   type = object({
-    name = optional(string)
+    name           = optional(string)
+    explicit_zones = optional(list(string), [])
     flow_logs = optional(object({
       aggregation_interval = optional(string, "INTERVAL_5_SEC")
       sampling             = optional(number, 0.1)
@@ -138,6 +139,11 @@ variable "network" {
   validation {
     condition     = var.network.flow_logs.sampling >= 0 && var.network.flow_logs.sampling <= 1
     error_message = "network.flow_logs.sampling must be between 0.0 and 1.0."
+  }
+
+  validation {
+    condition     = alltrue([for z in var.network.explicit_zones : startswith(z, "${var.host_project.region}-") && can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))]) && length(distinct(var.network.explicit_zones)) == length(var.network.explicit_zones)
+    error_message = "network.explicit_zones must list distinct zones of the host project's region (${var.host_project.region}), such as ${var.host_project.region}-a."
   }
 
   validation {

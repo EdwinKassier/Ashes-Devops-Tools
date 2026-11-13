@@ -1577,6 +1577,57 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### Production networks pin their zones (gcp-workload, gcp-network-hub, breaking, IAC-1)
+
+**Breaking: a production plan that passed before now fails.** Each spoke, hub and DNS anchor VPC
+has one subnet per zone and tier. Subnet `i` of a tier takes the `i`-th CIDR of the block, so the
+zone list fixes the CIDRs. That list came from the zones GCP returns for the region. When GCP
+returns a different list (a new zone, or another order), the plan re-derives the CIDRs and
+replaces subnets in use. Now:
+
+- `gcp-workload-<env>` fails the plan for a production environment
+  (`environment_config.<env>.is_production = true`) until `gcp.environments.<env>.zones` (or the
+  `zones` variable) is set. The guard is `terraform_data.production_network_guard`.
+- `gcp-network-hub` fails the plan when any `gcp.environments` entry is production until
+  `gcp.network.zones` (or the `hub_zones` variable) is set. One list sets the hub VPC and the DNS
+  anchor VPC; both are in `org.regions.gcp`. The guard is
+  `terraform_data.production_hub_zones_guard`.
+
+A non-production environment may still leave its zones unset.
+
+**Existing network: keep the zones it has, in the same order.** Do not take the order of
+`gcloud compute zones list`; take it from the subnets, so the CIDRs do not change:
+
+```sh
+gcloud compute networks subnets list --project=<host-project> \
+  --filter="network~/<vpc-name>$ AND name~-public-" \
+  --format="value(name,ipCidrRange)" --sort-by=ipCidrRange
+```
+
+The zone is the end of each subnet name (`<vpc>-public-<zone>`). Skip additional-region subnets:
+their name ends in a region, not a zone. List the zones in the order of their CIDRs, lowest
+first (for a `/16` block: `x.y.0.0/24`, then `x.y.1.0/24`, and so on). Do the same for the
+hub (`hub-vpc-core` in the hub project) and the DNS anchor (`dns-vpc-core` in the DNS project). The
+hub and DNS anchor take one list, so they must have the same zones in the same order. If they
+differ, keep the hub's order and plan: the DNS anchor holds no workloads, but its subnets are then
+replaced, so review that plan first. Then set, for example:
+
+```yaml
+gcp:
+  network:
+    zones: [europe-west2-a, europe-west2-b, europe-west2-c]
+  environments:
+    prod:
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c]
+```
+
+Plan each workspace. The plan must show no subnet change. If it does, the order is wrong.
+
+**New estate:** the scaffolder writes `<region>-a`, `-b` and `-c` (for `us-east1` and
+`europe-west1`, which have no `-a` zone: `-b`, `-c` and `-d`) and reports them as derived, not
+verified. Check them with `gcloud compute zones list --filter=region:<region>` before the first
+apply.
+
 #### CMEK for regulated Cloud SQL (gcp-workload, CMP-12)
 
 **Who:** forks with a `compliance_class: regulated` environment whose app

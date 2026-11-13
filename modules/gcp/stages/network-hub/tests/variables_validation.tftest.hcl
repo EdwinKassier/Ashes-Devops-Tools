@@ -659,3 +659,60 @@ run "rejects_internal_domain_underscore" {
 
   expect_failures = [var.internal_domain]
 }
+
+# IAC-1: pinned hub zones must belong to default_region, once each.
+run "rejects_hub_zones_outside_the_region" {
+  command = plan
+
+  variables {
+    hub_zones = ["us-central1-a", "us-east1-b"]
+  }
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  expect_failures = [var.hub_zones]
+}
+
+run "rejects_duplicate_hub_zones" {
+  command = plan
+
+  variables {
+    hub_zones = ["us-central1-a", "us-central1-a"]
+  }
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  expect_failures = [var.hub_zones]
+}

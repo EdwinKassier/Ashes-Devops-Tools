@@ -68,8 +68,10 @@ module "host" {
   additional_regions         = var.network.additional_regions
 
   network = {
-    name            = coalesce(var.network.name, "${var.project_prefix}-${var.environment}-vpc")
-    cidr_block      = var.host_project.cidr_block
+    name       = coalesce(var.network.name, "${var.project_prefix}-${var.environment}-vpc")
+    cidr_block = var.host_project.cidr_block
+    # Pinned zones (IAC-1). Empty = the zones GCP returns for the region.
+    explicit_zones  = var.network.explicit_zones
     shared_vpc_host = true
     flow_logs = {
       aggregation_interval = var.network.flow_logs.aggregation_interval

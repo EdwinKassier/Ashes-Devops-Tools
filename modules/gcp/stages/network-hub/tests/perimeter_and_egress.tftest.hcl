@@ -147,3 +147,18 @@ run "published_proxy_explicit_consumers_win" {
     error_message = "An explicit consumer_accept_projects list must win over the environment default."
   }
 }
+
+# IAC-1: hub_zones pins the hub VPC's zones (the zone lookup returns
+# us-central1-a only).
+run "hub_zones_pin_the_hub_zones" {
+  command = plan
+
+  variables {
+    hub_zones = ["us-central1-c", "us-central1-b"]
+  }
+
+  assert {
+    condition     = join(",", module.hub.zones) == "us-central1-c,us-central1-b"
+    error_message = "hub_zones must reach the hub VPC in the given order."
+  }
+}

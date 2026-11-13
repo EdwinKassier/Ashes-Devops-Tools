@@ -62,6 +62,7 @@ module "network_hub" {
   hybrid_dns                   = local.hybrid_dns
   hub_additional_regions       = local.hub_additional_regions
   hub_private_service_connect  = local.hub_private_service_connect
+  hub_zones                    = local.hub_zones
 
   vpc_sc_access_policy_name = local.vpc_sc_access_policy_name
   vpc_sc_enable_dry_run     = var.vpc_sc_enable_dry_run
@@ -88,6 +89,22 @@ check "hub_vpc_sc_enforced_when_prod_present" {
       local.vpc_sc_access_policy_name != null && !var.vpc_sc_enable_dry_run
     )
     error_message = "A production environment (is_production = true) is present but the hub VPC-SC perimeter (hub and DNS projects; environment projects have their own perimeters) is ${local.vpc_sc_access_policy_name == null ? "NOT CREATED (set gcp.network.vpc_sc_access_policy or vpc_sc_access_policy_name)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_additional_restricted_services to keep staging further changes)."
+  }
+}
+
+# Pinned hub zones (IAC-1). The hub and DNS anchor subnet CIDRs are
+# index-aligned with the zones, so with discovered zones a change in the list
+# GCP returns re-derives the CIDRs and replaces hub subnets that every
+# environment routes through. Production environments make that an outage, so
+# the plan fails until the zones are pinned. The guard changes no resource.
+resource "terraform_data" "production_hub_zones_guard" {
+  count = anytrue([for e in values(local.environments) : e.is_production]) ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = length(local.hub_zones) > 0
+      error_message = "A production environment (is_production = true) is present, so the hub zones must be pinned: set gcp.network.zones in config/landing-zone.yaml (or the hub_zones variable), such as [${local.default_region}-a, ${local.default_region}-b, ${local.default_region}-c]. The same list sets the hub VPC and the DNS anchor VPC. Subnet i of each tier takes the i-th CIDR, so for an existing hub list the zones in the order of its subnet CIDRs (UPGRADING.md), and the plan must show no subnet change."
+    }
   }
 }
 

@@ -26,6 +26,18 @@ variable "default_region" {
   type        = string
 }
 
+variable "hub_zones" {
+  description = "Zones of the hub VPC and the DNS anchor VPC (both in default_region), in subnet order: subnet i of each tier takes the i-th CIDR, so the order fixes the subnet CIDRs. Empty (default) = the zones GCP returns for the region, which can change and then replaces subnets. gcp-network-hub requires it when any environment is_production."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for z in var.hub_zones : startswith(z, "${var.default_region}-") && can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))]) && length(distinct(var.hub_zones)) == length(var.hub_zones)
+    error_message = "hub_zones must list distinct zones of default_region (${var.default_region}), such as ${var.default_region}-a."
+  }
+}
+
 variable "hub_project_id" {
   description = "Project ID for the network hub"
   type        = string

@@ -331,3 +331,24 @@ run "rejects_host_project_service_when_disabled" {
 
   expect_failures = [var.enable_host_project_workloads]
 }
+
+# IAC-1: pinned zones must belong to the host project's region, once each.
+run "rejects_explicit_zones_outside_the_region" {
+  command = plan
+
+  variables {
+    network = { explicit_zones = ["europe-west1-b", "europe-west2-a"] }
+  }
+
+  expect_failures = [var.network]
+}
+
+run "rejects_duplicate_explicit_zones" {
+  command = plan
+
+  variables {
+    network = { explicit_zones = ["europe-west1-b", "europe-west1-b"] }
+  }
+
+  expect_failures = [var.network]
+}

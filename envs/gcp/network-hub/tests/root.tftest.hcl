@@ -14,6 +14,9 @@ variables {
   project_prefix           = "acme"
   hub_vpc_cidr_block       = "10.0.0.0/16"
   dns_hub_vpc_cidr_block   = "10.1.0.0/16"
+  # A production environment needs pinned hub zones (IAC-1); the run that
+  # tests the requirement unsets them.
+  hub_zones = ["europe-west2-a", "europe-west2-b", "europe-west2-c"]
   environments = {
     dev = {
       display_name            = "Development"
@@ -115,6 +118,56 @@ run "prod_env_with_dry_run_hub_perimeter_warns" {
   }
 
   expect_failures = [check.hub_vpc_sc_enforced_when_prod_present]
+}
+
+# IAC-1: with a production environment the hub zones must be pinned, or a
+# change in the zones GCP returns replaces in-use hub subnets.
+run "prod_env_without_hub_zones_fails" {
+  command = plan
+
+  variables {
+    hub_zones = null
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 100
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.gcp_projects
+    values = {
+      outputs = {
+        contract = {
+          project_ids     = { "shared-hub" = "acme-hub-abcd", "shared-dns" = "acme-dns-abcd", "prod-host" = "acme-prod-host-abcd" }
+          project_numbers = { "shared-hub" = "111111111111", "shared-dns" = "222222222222", "prod-host" = "333333333333" }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_hub_zones_guard]
+}
+
+# Without a production environment the hub zones stay optional.
+run "non_prod_estate_needs_no_hub_zones" {
+  command = plan
+
+  variables {
+    hub_zones = null
+  }
+
+  assert {
+    condition     = length(terraform_data.production_hub_zones_guard) == 0
+    error_message = "The hub zone guard must not exist without a production environment."
+  }
 }
 
 # Production is the explicit is_production attribute, not a name match: an

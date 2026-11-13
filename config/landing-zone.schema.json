@@ -201,6 +201,16 @@
             "dns_hub_cidr_block": {
               "type": "string"
             },
+            "zones": {
+              "type": "array",
+              "description": "Zones of the hub VPC and the DNS anchor VPC (gcp-network-hub), in subnet order: subnet i of each tier takes the i-th CIDR, so the order fixes the CIDRs. Required when any gcp.environments entry is_production. Unset = the zones GCP returns for the region, which can change and then replaces subnets.",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+              }
+            },
             "internal_domain": {
               "type": "string",
               "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
@@ -531,6 +541,16 @@
               },
               "is_production": {
                 "type": "boolean"
+              },
+              "zones": {
+                "type": "array",
+                "description": "Zones of this environment's spoke VPC (gcp-workload-<env>), in subnet order: subnet i of each tier takes the i-th CIDR, so the order fixes the CIDRs. Required when is_production. Unset = the zones GCP returns for the region, which can change and then replaces subnets.",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+                }
               },
               "network_connectivity": {
                 "type": "string",

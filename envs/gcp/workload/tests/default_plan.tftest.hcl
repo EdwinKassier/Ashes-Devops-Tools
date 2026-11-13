@@ -29,6 +29,9 @@ variables {
   environment              = "dev"
   tfc_organization         = "acme-tfc"
   monthly_budget_limit     = 0 # disable the budget module for this contract test
+  # Production needs pinned zones (IAC-1); the runs below that test the
+  # requirement unset it.
+  zones = ["europe-west1-b", "europe-west1-c", "europe-west1-d"]
 }
 
 override_data {
@@ -299,6 +302,115 @@ run "non_production_has_no_perimeter_guard" {
     condition     = length(terraform_data.production_vpc_sc_enforced) == 0
     error_message = "the production perimeter guard must not exist for a non-production environment."
   }
+}
+
+# IAC-1: a production environment must pin its zones, or a change in the zones
+# GCP returns would re-derive the subnet CIDRs and replace in-use subnets.
+run "prod_without_pinned_zones_fails" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    zones                     = null
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_network_guard]
+}
+
+# gcp.environments.<env>.zones pins the spoke's zones in the given order.
+run "prod_zones_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-zones.yaml"
+    environment               = "prod"
+    zones                     = null
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "folders/333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = join(",", local.zones) == "europe-west1-d,europe-west1-b" && length(terraform_data.production_network_guard) == 1
+    error_message = "gcp.environments.prod.zones must set the spoke's zones, in order, and satisfy the production guard."
+  }
+
+  assert {
+    condition     = module.environment.subnets.private["europe-west1-d"].ip_cidr_range == "10.30.16.0/24" && module.environment.subnets.private["europe-west1-b"].ip_cidr_range == "10.30.17.0/24" && length(module.environment.subnets.private) == 2
+    error_message = "The first pinned zone must take the first private CIDR, and no discovered zone may add a subnet."
+  }
+}
+
+# An explicit zones variable wins over the config file.
+run "zones_variable_beats_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-zones.yaml"
+    zones                    = ["europe-west1-c"]
+  }
+
+  assert {
+    condition     = join(",", local.zones) == "europe-west1-c"
+    error_message = "The zones variable must win over gcp.environments.<env>.zones."
+  }
+}
+
+run "rejects_malformed_zone" {
+  command = plan
+
+  variables {
+    zones = ["europe-west1"]
+  }
+
+  expect_failures = [var.zones]
 }
 
 run "rejects_waiver_without_reason" {

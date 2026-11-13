@@ -153,6 +153,12 @@ gcp:
   network:
     hub_cidr_block: 10.0.0.0/16
     dns_hub_cidr_block: 10.1.0.0/16
+    # Zones of the hub VPC and the DNS anchor VPC (both in org.regions.gcp), in
+    # subnet order: subnet i of each tier takes the i-th CIDR, so the order
+    # fixes the CIDRs. Required when any environment is_production. Unset, the
+    # zones GCP returns are used, and a change in that list replaces subnets.
+    # Check the names: gcloud compute zones list --filter=region:europe-west2
+    zones: [europe-west2-a, europe-west2-b, europe-west2-c]
     # Name of the private root DNS zone (gcp-network-hub internal-root); every
     # environment peers to it. Default internal.local. Set it before the first
     # apply of gcp-network-hub: the zone name cannot change in place, so a later
@@ -241,6 +247,9 @@ gcp:
       # restricted. gcp-projects binds the matching data-classification tag
       # value to this environment's host project.
       # data_classification: internal
+      # Zones of this environment's spoke VPC (gcp-workload-<env>), in subnet
+      # order, as gcp.network.zones. Required when is_production.
+      # zones: [europe-west2-a, europe-west2-b, europe-west2-c]
       # Extra regions of this environment's spoke VPC (gcp-workload-<env>),
       # same shape as gcp.network.additional_regions; off by default. Under
       # network_connectivity: ncc the NCC spoke exports every subnet range.
@@ -295,6 +304,9 @@ gcp:
       cidr_block: 10.12.0.0/16
       budget_monthly_limit: 2000
       is_production: true
+      # Zones of the spoke VPC in subnet order (required when is_production;
+      # see gcp.network.zones).
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c]
       # Opt-in regulated class (docs/architecture/regulated-environments.md):
       # enforced VPC-SC with no waiver, Cloud Armor and OWASP rules, every flow
       # logged and kept 365 days, and a Backup and DR vault. gcp-organization

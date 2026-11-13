@@ -375,6 +375,19 @@ sed_args=(
   -e "s|^  enable_org_config_recorders: false\$|  enable_org_config_recorders: ${AWS_CONFIG_RECORDERS}|"
   -e "s|^  enable_config_recorder_scp: false\$|  enable_config_recorder_scp: ${AWS_CONFIG_RECORDERS}|"
 )
+# Zones (gcp.network.zones, gcp.environments.prod.zones): the example lists
+# <region>-a, -b and -c, which the region substitution above derives. Two
+# regions have no -a zone; they get -b, -c and -d, and the platform team's
+# subnet the -b one. Reported as derived, not verified: the operator checks
+# them with gcloud compute zones list.
+case "${GCP_REGION}" in
+  us-east1 | europe-west1)
+    sed_args+=(
+      -e "s|\[${GCP_REGION}-a, ${GCP_REGION}-b, ${GCP_REGION}-c\]|[${GCP_REGION}-b, ${GCP_REGION}-c, ${GCP_REGION}-d]|"
+      -e "s|-private-${GCP_REGION}-a}|-private-${GCP_REGION}-b}|"
+    )
+    ;;
+esac
 if [[ -n "${DOMAIN}" ]]; then
   sed_args+=(
     -e "s|^  domain: my-org\\.example\\.com\$|  domain: $(esc "${DOMAIN}")|"
@@ -545,6 +558,7 @@ derived="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_cloud
     print NR ":" $0
   }
   section == "gcp" && gcp && /subnet_name:/ { print NR ":" $0 }
+  section == "gcp" && gcp && /^ +zones:/ { print NR ":" $0 }
   section == "aws" && aws && /^  (terraform_run_role_arn|break_glass_role_arn):/ && !/REPLACE_WITH_/ { print NR ":" $0 }
 ' "${OUTPUT}")"
 cat <<EOF
@@ -559,8 +573,9 @@ if [[ -n "${remaining}" ]]; then
 fi
 if [[ -n "${derived}" ]]; then
   printf '     Derived, not verified (before the first apply each group must exist in\n'
-  printf '     Cloud Identity, each subnet in the environment, and each AWS role ARN\n'
-  printf '     must equal the phase-0 stack outputs TerraformRunRoleArn / BreakGlassRoleArn,\n'
+  printf '     Cloud Identity, each subnet in the environment, each zone in the region\n'
+  printf '     (gcloud compute zones list), and each AWS role ARN must equal the\n'
+  printf '     phase-0 stack outputs TerraformRunRoleArn / BreakGlassRoleArn,\n'
   printf '     or your hand-created role):\n'
   printf '%s\n' "${derived}" | sed 's/^/       line /'
 fi

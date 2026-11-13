@@ -159,6 +159,11 @@ locals {
       for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.private_service_connect.address)
       if try(e.private_service_connect.address, null) != null
     }
+    # gcp.environments.<env>.zones: the spoke's zones in subnet order (IAC-1).
+    environment_zones = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => [for z in e.zones : tostring(z)]
+      if try(e.zones, null) != null
+    }
     # gcp.environments.<env>.additional_regions as JSON text (no type
     # unification across environments); the stage's variable type validates it.
     environment_additional_regions = {
@@ -181,6 +186,9 @@ locals {
   # PSC endpoint overrides (null = the net-spoke defaults).
   private_service_connect_name    = var.private_service_connect_name != null ? var.private_service_connect_name : lookup(local.cfg.environment_psc_name, var.environment, null)
   private_service_connect_address = var.private_service_connect_address != null ? var.private_service_connect_address : lookup(local.cfg.environment_psc_address, var.environment, null)
+  # The spoke's zones in subnet order: variable > gcp.environments.<env>.zones
+  # > [] (the zones GCP returns). Production requires them (main.tf).
+  zones = var.zones != null ? var.zones : try(local.cfg.environment_zones[var.environment], [])
   # Opt-in extra spoke regions (default none: single-region spoke).
   additional_regions = jsondecode(var.additional_regions != null ? jsonencode(var.additional_regions) : lookup(local.cfg.environment_additional_regions, var.environment, "{}"))
 

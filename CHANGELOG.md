@@ -624,6 +624,16 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   the restriction. The example egress allowlist drops
   `.amazonaws.com` for regional ECR and Secrets Manager names, and aws-network warns when the list
   still contains it. See `UPGRADING.md`.
+- **Production GCP networks pin their zones (IAC-1, breaking).** The spoke, hub and DNS anchor
+  subnet CIDRs are index-aligned with the zone list, and that list came from the zones GCP returns
+  for the region, so a change in that list replaced subnets in use. The new config keys
+  `gcp.environments.<env>.zones` (gcp-workload, variable `zones`) and `gcp.network.zones`
+  (gcp-network-hub, variable `hub_zones`, used for the hub and the DNS anchor VPC) pin them, in
+  subnet order. A production `gcp-workload-<env>` plan fails without spoke zones, and the
+  gcp-network-hub plan fails without hub zones when any environment is production. The environment
+  and network-hub stages take `network.explicit_zones` and `hub_zones`; net-hub, net-spoke and
+  dns-anchor output `zones`. The scaffolder writes `<region>-a`, `-b` and `-c` (`-b`, `-c`, `-d`
+  for `us-east1` and `europe-west1`) and lists them as derived, not verified. See `UPGRADING.md`.
 
 ### Changed
 

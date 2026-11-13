@@ -164,4 +164,5 @@ The following resources are created:
 | <a name="output_vpc_service_controls"></a> [vpc\_service\_controls](#output\_vpc\_service\_controls) | All VPC Service Controls perimeter outputs, keyed by perimeter name. |
 | <a name="output_vpn_gateway_ips"></a> [vpn\_gateway\_ips](#output\_vpn\_gateway\_ips) | The HA VPN gateway external IP addresses, or null when VPN is disabled. |
 | <a name="output_vpn_tunnel_statuses"></a> [vpn\_tunnel\_statuses](#output\_vpn\_tunnel\_statuses) | The status of each VPN tunnel, or null when VPN is disabled. |
+| <a name="output_zones"></a> [zones](#output\_zones) | The zones of the zonal subnets, in subnet order: network.explicit\_zones, else the zones GCP returns for the region. Subnet i of each tier takes the i-th CIDR, so this order fixes the subnet CIDRs. |
 <!-- END_TF_DOCS -->

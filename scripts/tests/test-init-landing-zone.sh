@@ -95,6 +95,8 @@ if [[ -s "${out}" ]]; then
   assert_line "${out}" '^        platform:$' "gcp scaffold declares a platform service team"
   assert_line "${out}" '^          service_team: platform$' "gcp scaffold points the example service at the platform team"
   assert_line "${out}" 'subnet_name: acme-dev-vpc-private-us-central1-a' "platform team subnet uses the prefix and region"
+  assert_line "${out}" '^    zones: \[us-central1-a, us-central1-b, us-central1-c\]$' "hub zones derived from the region (IAC-1)"
+  assert_line "${out}" '^      zones: \[us-central1-a, us-central1-b, us-central1-c\]$' "production environment zones derived from the region (IAC-1)"
   assert_no_line "${out}" '^          github: ' "gcp scaffold example service has no placeholder deploy identity"
   assert_eq "$(section_value "${out}" aws enable_org_config_recorders)" "false" "first pass: org Config recorders off"
   assert_eq "$(section_value "${out}" aws enable_config_recorder_scp)" "false" "first pass: recorder SCP off"
@@ -361,8 +363,20 @@ if bash "${SCRIPT}" --non-interactive --output "${out3}" --org-name acme --tfc-o
   assert_line "${log}" 'gcp-organization-admins@acme\.com' "derived admin group is listed"
   assert_line "${log}" 'gcp-break-glass@acme\.com' "derived break-glass group is listed"
   assert_line "${log}" 'subnet_name: acme-dev-vpc-private-' "derived subnet name is listed"
+  assert_line "${log}" 'line [0-9]+: +zones: \[europe-west2-a, europe-west2-b, europe-west2-c\]' "derived zones are listed"
 else
   fail "gcp-only run exits 0"; cat "${log}" >&2
+fi
+
+echo "==> a region without an -a zone gets -b, -c and -d"
+out5="${workdir}/us-east1.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out5}" --org-name acme --tfc-org acme-tfc --clouds gcp --domain acme.com \
+  --gcp-region us-east1 </dev/null >"${log}" 2>&1; then
+  assert_line "${out5}" '^      zones: \[us-east1-b, us-east1-c, us-east1-d\]$' "us-east1 production zones skip -a"
+  assert_line "${out5}" 'subnet_name: acme-dev-vpc-private-us-east1-b' "us-east1 platform subnet uses the -b zone"
+  assert_no_line "${out5}" '^[^#]*us-east1-a' "no us-east1-a value"
+else
+  fail "us-east1 run exits 0"; cat "${log}" >&2
 fi
 
 echo "==> AWS phase-0 role ARNs are reported until checked against the stack outputs"
