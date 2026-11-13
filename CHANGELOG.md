@@ -79,6 +79,13 @@ IDs prefixed `re-audit-3` are this report's; the same IDs in older entries belon
   attributes that the run's configuration version names. A run of another commit holds the
   release as before; a run with no source commit (a CLI or API run) now fails the workflow and
   publishes no release, where it used to publish one. The job checks out only that script.
+- **Zone and region validations accept two-digit GCP regions (re-audit-3 IAC-1).** The
+  `network.explicit_zones` validations of the `net-hub`, `net-spoke` and `dns-anchor` stages and
+  the `region` validation of `gcp/network/app-ingress` accepted one region digit only, so
+  `europe-west10-a` and `europe-west12` failed the plan. They now use `[0-9]+`, like every other
+  GCP region and zone check, and each suite plans a two-digit region. New gate:
+  `scripts/check-gcp-region-regex.sh` (run by `make consistency`) fails on a `[a-z]+[0-9]-` or
+  `[a-z]+[0-9]$` pattern. Inputs that passed before still pass.
 
 ### Examples audit (2026-11-13)
 

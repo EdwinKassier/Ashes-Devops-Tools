@@ -51,6 +51,15 @@ run "rejects_bad_region" {
   expect_failures = [var.region]
 }
 
+# Two-digit GCP regions (europe-west10, europe-west12) are valid.
+run "accepts_two_digit_region" {
+  command = plan
+
+  variables {
+    region = "europe-west12"
+  }
+}
+
 run "rejects_empty_service_name" {
   command = plan
 

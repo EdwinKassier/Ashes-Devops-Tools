@@ -13,7 +13,7 @@ variable "region" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z]+-[a-z]+[0-9]$", var.region))
+    condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.region))
     error_message = "region must be a valid GCP region name, e.g. europe-west1."
   }
 }

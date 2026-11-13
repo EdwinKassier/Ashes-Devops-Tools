@@ -107,7 +107,7 @@ variable "network" {
     error_message = "network.cidr_block must be valid CIDR notation without host bits set (e.g. \"10.0.0.0/16\")."
   }
   validation {
-    condition     = alltrue([for z in var.network.explicit_zones : can(regex("^[a-z]+-[a-z]+[0-9]-[a-z]$", z))])
+    condition     = alltrue([for z in var.network.explicit_zones : can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))])
     error_message = "Each entry in network.explicit_zones must be a valid GCP zone name (e.g. 'us-central1-a')."
   }
 }

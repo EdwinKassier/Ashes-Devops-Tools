@@ -429,6 +429,9 @@ echo "==> Every workflow job that holds a secret or an OIDC token blocks egress"
 echo "==> Every workflow run: step that pipes runs under pipefail (shell: bash)"
 python3 -I scripts/check-workflow-pipefail.py || note "a workflow run: step pipes without pipefail (see above)"
 
+echo "==> GCP region and zone regexes accept multi-digit regions (europe-west10)"
+./scripts/check-gcp-region-regex.sh || note "a GCP region/zone regex accepts a single region digit (see above)"
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else
