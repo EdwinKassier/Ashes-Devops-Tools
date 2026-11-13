@@ -181,3 +181,77 @@ test_repo_app_deploy_repo_ref_env_passes if {
 
 # workload-identity GitLab bindings (project_path) are out of scope and pass.
 test_repo_gitlab_project_path_passes if count(p.deny) == 0 with input as sa_member(member_of("attribute.project_path/acme/app"))
+
+# ── Second review of SEC-1 (follow-up bypasses) ─────────────────────────────
+# M3: a raw TFC claim name with a digit.
+test_tfc_claim_with_digit_denied if count(p.deny) == 1 with input as sa_member(member_of("attribute.terraform_v2_claim/x"))
+
+# M4: only pinned attributes may federate; anything else under the pool is denied.
+test_unlisted_attribute_denied if count(p.deny) == 1 with input as sa_member(member_of("attribute.role/deployer"))
+
+test_aws_account_denied if count(p.deny) == 1 with input as sa_member(member_of("attribute.account/111111111111"))
+
+test_aws_account_on_project_role_denied if {
+	count(p.deny) == 1 with input as one("google_project_iam_member", {"role": "roles/storage.admin", "member": member_of("attribute.account/111111111111")})
+}
+
+test_group_under_pool_denied if count(p.deny) == 1 with input as sa_member(member_of("group/deployers"))
+
+test_repo_env_without_environment_denied if count(p.deny) == 1 with input as sa_member(member_of("attribute.repo_env/123/-"))
+
+test_workspace_phase_bad_phase_denied if count(p.deny) == 1 with input as sa_member(member_of("attribute.workspace_phase/gcp-organization:any"))
+
+test_unlisted_attribute_in_policy_data_denied if {
+	doc := json.marshal({"bindings": [{"role": "roles/iam.workloadIdentityUser", "members": [member_of("attribute.role/deployer")]}]})
+	count(p.deny) == 1 with input as one("google_service_account_iam_policy", {"policy_data": doc})
+}
+
+subject_member(s) := sprintf("principal://iam.googleapis.com/projects/2/locations/global/workloadIdentityPools/apps-prod/subject/%s", [s])
+
+test_principal_pull_request_subject_denied if count(p.deny) == 1 with input as sa_member(subject_member("repo:acme/app:pull_request"))
+
+test_principal_owner_subject_denied if count(p.deny) == 1 with input as sa_member(subject_member("repository_owner_id:1:environment:prod"))
+
+test_principal_short_tfc_subject_denied if count(p.deny) == 1 with input as sa_member(subject_member("organization:acme:project:p"))
+
+test_principal_pinned_github_subject_passes if count(p.deny) == 0 with input as sa_member(subject_member("repo:acme/app:environment:prod"))
+
+test_principal_pinned_tfc_subject_passes if count(p.deny) == 0 with input as sa_member(subject_member("organization:acme:project:p:workspace:w:run_phase:apply"))
+
+# GKE Workload Identity principal on a resource role (examples/system-design).
+test_gke_principal_resource_role_passes if {
+	count(p.deny) == 0 with input as one("google_pubsub_subscription_iam_member", {"role": "roles/pubsub.subscriber", "member": "principal://iam.googleapis.com/projects/2/locations/global/workloadIdentityPools/acme-prj.svc.id.goog/subject/ns/search/sa/indexer"})
+}
+
+# M5: GitLab project_path federates every ref of the project: advisory.
+test_project_path_is_advisory if {
+	inp := sa_member(member_of("attribute.project_path/acme/app"))
+	count(p.deny) == 0 with input as inp
+	count(p.repo_wide) == 1 with input as inp
+}
+
+# M6: more roles act as a service account.
+test_openid_token_creator_unlisted_attribute_denied if {
+	count(p.deny) == 1 with input as one("google_service_account_iam_member", {"role": "roles/iam.serviceAccountOpenIdTokenCreator", "member": member_of("attribute.role/x")})
+}
+
+test_key_admin_workforce_denied if {
+	count(p.deny) == 1 with input as one("google_service_account_iam_member", {"role": "roles/iam.serviceAccountKeyAdmin", "member": sprintf("%s/*", [workforce])})
+}
+
+test_project_custom_role_workforce_denied if {
+	count(p.deny) == 1 with input as one("google_service_account_iam_member", {"role": "projects/acme/roles/impersonator", "member": sprintf("%s/group/eng", [workforce])})
+}
+
+test_org_custom_role_workforce_denied if {
+	count(p.deny) == 1 with input as one("google_service_account_iam_member", {"role": "organizations/123/roles/impersonator", "member": sprintf("%s/group/eng", [workforce])})
+}
+
+# Repo builders: vpc-sc example and app-services repo_ref / repo_env.
+test_repo_vpc_sc_example_passes if {
+	count(p.deny) == 0 with input as one("google_project_iam_member", {"role": "roles/storage.objectViewer", "member": "principalSet://iam.googleapis.com/projects/555666777888/locations/global/workloadIdentityPools/github-pool/attribute.repo_ref/123456789/refs/heads/main"})
+}
+
+test_repo_app_deploy_repo_ref_passes if count(p.deny) == 0 with input as sa_member(member_of("attribute.repo_ref/222/refs/tags/v1.2.3"))
+
+test_repo_app_deploy_repo_env_passes if count(p.deny) == 0 with input as sa_member(member_of("attribute.repo_env/222/production"))

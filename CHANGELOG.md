@@ -698,6 +698,14 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   exempts an unknown trust only when the provider or organization is created in the role's module
   or below it. The app-services stage now fails the plan for a `github.subject` without a literal
   repository and a `ref:` or `environment:` value. See `UPGRADING.md`.
+- **GCP workload identity gate allows only pinned forms on impersonation roles (SEC-1, breaking).**
+  `gcp_wif_principalset_pinned` now allows, on a role that acts as a service account (now also
+  `serviceAccountOpenIdTokenCreator` and `serviceAccountKeyAdmin`) or an unknown role, only the
+  `repo_ref`, `repo_env`, `repo_ref_env`, `workspace_id_phase` and `workspace_phase` principalSets,
+  with `repository_id` and GitLab `project_path` as advisory. It denies `attribute.account/`,
+  `repo_env` without an environment and any `terraform_*` claim on any role, a `principal://`
+  subject that the AWS policy would deny, and a workforce member on a custom role. See
+  `UPGRADING.md`.
 
 ### Changed
 

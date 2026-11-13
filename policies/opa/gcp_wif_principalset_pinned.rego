@@ -10,9 +10,21 @@
 # google_*_iam_policy, for any role: service account impersonation and direct
 # resource access alike.
 #
+# On a role through which a principal acts as a service account (or a role
+# unknown at plan time), a principalSet under a workload pool must be one of
+# the pinned forms the repo builds (allowlist): attribute.repo_ref,
+# repo_env (with an environment), repo_ref_env, workspace_id_phase or
+# workspace_phase. attribute.repository_id and attribute.project_path pass
+# with an advisory (repo_wide). Every other attribute, group or form is denied.
+#
+# A principal://.../subject/<sub> member is denied, on any role, when <sub> is
+# a TFC or GitHub subject that aws_iam_federated_trust_pinned would deny
+# (shared rules in lib_helpers.rego).
+#
 # Workforce identities (people from an external IdP) must not hold a role
 # through which a principal acts as a service account: a workforce pool member
-# (principal:// or principalSet://) on a federating role is denied.
+# (principal:// or principalSet://) on a federating, unknown or custom role is
+# denied.
 #
 # Unknown values: a member that embeds a pool created in the same run (the
 # pool name holds the project number) is unknown at plan time and cannot be
@@ -30,7 +42,8 @@ pool_prefix := `^principalSet://iam\.googleapis\.com/projects/[^/]+/locations/gl
 # environment: the whole pool, the owner (ID or name), a repository name
 # (mutable, and every branch of it), an actor (every repository the person can
 # run in), a bare ref (that ref in every repository), the audience and any raw
-# Terraform Cloud claim (every workspace or run phase that shares it).
+# Terraform Cloud claim (every workspace or run phase that shares it), an AWS
+# account (every role in it) and repo_env without an environment.
 too_wide_patterns := [
 	`\*$`,
 	`attribute\.repository_owner_id/`,
@@ -39,13 +52,65 @@ too_wide_patterns := [
 	`attribute\.actor/`,
 	`attribute\.ref/`,
 	`attribute\.aud/`,
-	`attribute\.terraform_[a-z_]+/`,
+	`attribute\.terraform_[a-z0-9_]+/`,
+	`attribute\.account/`,
+	`attribute\.repo_env/[^/]+/-$`,
 ]
+
+# Pinned forms a federating principalSet may take (suffix after the pool).
+pinned_patterns := [
+	`attribute\.repo_ref/[^/]+/.+$`,
+	`attribute\.repo_env/[^/]+/[^/]+$`,
+	`attribute\.repo_ref_env/[^/]+/.+/[^/]+$`,
+	`attribute\.workspace_id_phase/[^/:]+:(plan|apply)$`,
+	`attribute\.workspace_phase/[^/:]+:(plan|apply)$`,
+]
+
+# Forms that pass with an advisory: every branch of one repository, or every
+# ref of one GitLab project.
+advisory_patterns := [
+	`attribute\.repository_id/[^/]+$`,
+	`attribute\.project_path/.+$`,
+]
+
+pool_member(m) if regex.match(pool_prefix, m)
+
+matches_any(m, patterns) if {
+	some pat in patterns
+	regex.match(concat("", [pool_prefix, pat]), m)
+}
+
+pinned(m) if {
+	matches_any(m, pinned_patterns)
+	not too_wide(m)
+}
+
+subject_prefix := `^principal://iam\.googleapis\.com/projects/[^/]+/locations/global/workloadIdentityPools/[^/]+/subject/`
+
+# A workload pool subject that the AWS federated-trust policy would deny.
+unpinned_subject(m) if {
+	regex.match(subject_prefix, m)
+	sub := regex.replace(m, subject_prefix, "")
+	startswith(sub, "organization:")
+	not lib.tfc_subject_pinned(sub)
+}
+
+unpinned_subject(m) if {
+	regex.match(subject_prefix, m)
+	sub := regex.replace(m, subject_prefix, "")
+	lib.github_subject_shape(sub)
+	not lib.github_subject_pinned(sub)
+}
 
 workforce_member(m) if regex.match(`^principal(Set)?://iam\.googleapis\.com/locations/global/workforcePools/`, m)
 
 # Roles through which a federated principal acts as a service account.
-federating_roles := {"roles/iam.workloadIdentityUser", "roles/iam.serviceAccountTokenCreator"}
+federating_roles := {
+	"roles/iam.workloadIdentityUser",
+	"roles/iam.serviceAccountTokenCreator",
+	"roles/iam.serviceAccountOpenIdTokenCreator",
+	"roles/iam.serviceAccountKeyAdmin",
+}
 
 iam_member_or_binding(t) if regex.match(`^google_[a-z0-9_]+_iam_(member|binding)$`, t)
 
@@ -84,12 +149,37 @@ federating_or_unknown_role(_, role) if role in federating_roles
 
 federating_or_unknown_role(rc, _) if lib.unknown(rc, "role")
 
+# Workforce rule: a custom role may hold impersonation permissions too.
+workforce_risky_role(rc, role) if federating_or_unknown_role(rc, role)
+
+workforce_risky_role(_, role) if regex.match(`^(projects|organizations)/[^/]+/roles/`, role)
+
 too_wide(m) if {
 	some pat in too_wide_patterns
 	regex.match(concat("", [pool_prefix, pat]), m)
 }
 
-repo_id_only(m) if regex.match(concat("", [pool_prefix, `attribute\.repository_id/[^/]+$`]), m)
+repo_id_only(m) if matches_any(m, advisory_patterns)
+
+deny contains msg if {
+	some rc in lib.managed
+	lib.writes(rc)
+	some [role, m] in role_members(rc)
+	federating_or_unknown_role(rc, role)
+	pool_member(m)
+	not too_wide(m)
+	not pinned(m)
+	not repo_id_only(m)
+	msg := sprintf("%s: member %s holds %v but is not a pinned workload identity form; bind attribute.repo_ref, attribute.repo_env, attribute.repo_ref_env (GitHub) or attribute.workspace_id_phase / attribute.workspace_phase (Terraform Cloud)", [rc.address, m, role])
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	lib.writes(rc)
+	some m in members(rc)
+	unpinned_subject(m)
+	msg := sprintf("%s: member %s names a subject that trusts more than one workspace and run phase, or more than one repository and ref or environment", [rc.address, m])
+}
 
 deny contains msg if {
 	some rc in lib.managed
@@ -104,7 +194,7 @@ deny contains msg if {
 	lib.writes(rc)
 	some [role, m] in role_members(rc)
 	workforce_member(m)
-	federating_or_unknown_role(rc, role)
+	workforce_risky_role(rc, role)
 	msg := sprintf("%s: workforce pool member %s holds %v, through which it can act as a service account; grant workforce identities direct roles, not service account impersonation", [rc.address, m, role])
 }
 
@@ -113,7 +203,7 @@ repo_wide contains msg if {
 	lib.writes(rc)
 	some m in members(rc)
 	repo_id_only(m)
-	msg := sprintf("%s: member %s trusts every branch, tag and environment of the repository; pin a ref or an environment", [rc.address, m])
+	msg := sprintf("%s: member %s trusts every branch, tag and environment of the repository (or every ref of the GitLab project); pin a ref or an environment", [rc.address, m])
 }
 
 # Some member of an iam_member or iam_binding is unknown at plan time.

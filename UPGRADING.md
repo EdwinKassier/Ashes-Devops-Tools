@@ -550,8 +550,18 @@ identity, so those statements are now checked.
 `attribute.terraform_*/...` (raw TFC claims), `attribute.repository_owner/...`,
 `attribute.actor/...` and `attribute.aud/...`, and any workforce pool member
 (`principal://` or `principalSet://iam.googleapis.com/locations/global/workforcePools/...`)
-on `roles/iam.workloadIdentityUser`, `roles/iam.serviceAccountTokenCreator` or
-a role unknown at plan time.
+on `roles/iam.workloadIdentityUser`, `roles/iam.serviceAccountTokenCreator`,
+`roles/iam.serviceAccountOpenIdTokenCreator`, `roles/iam.serviceAccountKeyAdmin`,
+a custom role or a role unknown at plan time. It denies
+`attribute.account/...` and `attribute.repo_env/<id>/-` on any role. On those
+service-account roles (custom roles excepted), a workload pool member must be
+`attribute.repo_ref/`, `attribute.repo_env/`, `attribute.repo_ref_env/`,
+`attribute.workspace_id_phase/` or `attribute.workspace_phase/`;
+`attribute.repository_id/` and `attribute.project_path/` pass with an
+advisory, and any other form (for example `attribute.role/...`, a GKE
+`namespace/...` set or a `group/...`) is denied. A
+`principal://.../workloadIdentityPools/<pool>/subject/<sub>` member is denied
+when `<sub>` is a TFC or GitHub subject that the AWS rules above deny.
 
 Before the upgrade:
 
@@ -566,6 +576,9 @@ Before the upgrade:
    is created in that run), apply the referenced resource in an earlier run.
 5. Grant workforce identities direct roles, not service account
    impersonation.
+6. On GCP, grant a pinned principalSet, or a single `principal://` subject
+   that names one workspace and run phase or one repository and ref or
+   environment, to each role that acts as a service account.
 
 #### Wildcard workload identity bindings are denied (policies, breaking)
 

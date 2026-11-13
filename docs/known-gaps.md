@@ -1594,16 +1594,19 @@ side (all mock-tested, secure defaults):
   needs it to create the app-deploy pool. `custom.wifProviderTenantPinned` pins
   each GitHub provider condition to the owner. The mandatory OPA policy
   `gcp_wif_principalset_pinned` denies a principalSet on the whole pool, the
-  owner, a repository name, an actor, a bare ref, the audience or a raw
-  `attribute.terraform_*` claim when the run is planned, and a workforce pool
-  member on a role that impersonates a service account. Two cases
+  owner, a repository name, an actor, a bare ref, the audience, an AWS
+  account, `repo_env` without an environment or a raw `attribute.terraform_*`
+  claim when the run is planned. On a role that acts as a service account it
+  allows only the pinned forms the repo builds, and it denies a workforce pool
+  member on such a role or on a custom role. Three cases
   are advisory only (`gcp_wif_principalset_repo_wide`): a binding whose member
   is unknown at plan time (the pool is created in the same run), and a binding
   on `attribute.repository_id` alone, which trusts every branch and
-  environment of one repository. The policy also acts only on runs that HCP
-  Terraform judges with the policy sets attached; a direct API call with the
-  workload apply SA's credentials is not checked. GitLab bindings on
-  `attribute.project_path` are not checked.
+  environment of one repository, and a GitLab binding on
+  `attribute.project_path`, which trusts every ref of the project. The policy
+  also acts only on runs that HCP Terraform judges with the policy sets
+  attached; a direct API call with the workload apply SA's credentials is not
+  checked.
 - **Unknown AWS trusts in first-apply runs (SEC-1 residual).**
   `aws_iam_federated_trust_pinned` denies an `aws_iam_role` trust that is
   unknown at plan time, unless the same run creates an
