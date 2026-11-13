@@ -40,12 +40,6 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 #### Security
 
-- **aws-organization refuses account root emails on reserved test domains (breaking).** The
-  `accounts` and `workload_accounts` validations now reject `.invalid`, `.localhost` and `.test`
-  addresses as well as `example.com/org/net`, matching the aws-security and aws-network
-  notification checks. A config that uses one of those domains now fails the plan
-  (UPGRADING.md). `examples/aws-landing-zone/aws-organization.tfvars.example` uses
-  `REPLACE-...@your-domain.invalid` placeholders that fail until replaced.
 - **The app-delivery example workflows start with harden-runner.** Each job in
   `examples/app-delivery/*.example.yml` holds a cloud OIDC token, so its first step is now
   `step-security/harden-runner` (v2.22.3, SHA-pinned) in `egress-policy: audit`, with a comment to

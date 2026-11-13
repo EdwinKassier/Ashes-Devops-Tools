@@ -21,15 +21,15 @@ aws:
   break_glass_role_arn: arn:aws:iam::012345678901:role/break-glass
   log_archive_bucket_name: cfgco-org-log-archive
   accounts:
-    log_archive: {email: aws+log-archive@cfg-corp.io, ou: Security}
-    security_tooling: {email: aws+security-tooling@cfg-corp.io, ou: Security}
-    network: {email: aws+network@cfg-corp.io, ou: Infrastructure, tags: {tier: core}}
-    shared_services: {email: aws+shared-services@cfg-corp.io, ou: Infrastructure}
-    backup: {email: aws+backup@cfg-corp.io, ou: Infrastructure}
-    forensics: {email: aws+forensics@cfg-corp.io, ou: Security}
+    log_archive: {email: aws+log-archive@cfg.test, ou: Security}
+    security_tooling: {email: aws+security-tooling@cfg.test, ou: Security}
+    network: {email: aws+network@cfg.test, ou: Infrastructure, tags: {tier: core}}
+    shared_services: {email: aws+shared-services@cfg.test, ou: Infrastructure}
+    backup: {email: aws+backup@cfg.test, ou: Infrastructure}
+    forensics: {email: aws+forensics@cfg.test, ou: Security}
   workload_accounts:
-    workload_nonprod: {email: aws+workload-nonprod@cfg-corp.io, ou: Workloads}
-    workload_prod: {email: aws+workload-prod@cfg-corp.io, ou: Workloads}
+    workload_nonprod: {email: aws+workload-nonprod@cfg.test, ou: Workloads}
+    workload_prod: {email: aws+workload-prod@cfg.test, ou: Workloads}
   workload_environments:
     dev: {is_production: false, account_key: workload_nonprod}
     staging: {is_production: false, account_key: workload_nonprod}

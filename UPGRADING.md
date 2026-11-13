@@ -706,16 +706,6 @@ New scaffolds: `scripts/init-landing-zone.sh --tfc-plan` writes `org.tfc.plan`
 
 ### AWS
 
-#### Account root emails on .invalid, .localhost or .test are refused (aws-organization, breaking)
-
-**Breaking: the `aws-organization` plan now fails for configs that passed before.** The `accounts` and `workload_accounts` validations rejected only `example.com`, `example.org` and `example.net` (and their subdomains). They now also reject an email on the reserved `.invalid`, `.localhost` and `.test` domains (RFC 2606 / RFC 6761), the same domains `aws-security` and `aws-network` reject for notification subscribers. Those domains never deliver mail, so an account root email on one cannot receive the password-reset or security mail AWS sends to the root user. Before you plan `aws-organization`:
-
-1. Search `aws.accounts` and `aws.workload_accounts` in `config/landing-zone.yaml` (and any `accounts` / `workload_accounts` variable) for an address ending in `.invalid`, `.localhost` or `.test`.
-2. For an account that does not exist yet, set a real, deliverable address.
-3. For an existing account, change its root email in AWS first (as the root user, or from the Organizations console), then set the same address in the config. Read the plan before any apply: it must show no change to the `aws_organizations_account`. Do not change only the config: a different `email` on an existing account can plan a replacement, which closes the account.
-
-The `.example` domain is still accepted here: the scaffolder's test fixtures use it as their stand-in domain.
-
 #### Production hub network alarms need a subscriber (aws-network)
 
 **Breaking: a production aws-network plan now fails without an alarm contact.** The hub creates CloudWatch alarms for transit gateway blackhole drops, NAT gateway port allocation errors and, with the VPN, VPN tunnel state. They publish to an SNS topic in the network account. A topic with no subscriber notifies nobody, so the root fails a production plan (`org.profile: production`, or any `aws.workload_environments` entry with `is_production: true`) unless there is a real contact. Before you plan `aws-network`, do one of these:

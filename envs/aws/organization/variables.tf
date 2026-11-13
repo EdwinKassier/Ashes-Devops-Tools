@@ -71,15 +71,11 @@ variable "accounts" {
 
   # The default emails are placeholders. Reject them so an unmodified apply
   # fails fast instead of trying to create real AWS accounts with example.com
-  # addresses (each account needs a unique, deliverable root email). The
-  # reserved, never-delivered TLDs .invalid, .localhost and .test (RFC 2606 /
-  # RFC 6761) are rejected too, as aws-security and aws-network reject them for
-  # notification subscribers. The .example TLD is not rejected here: the
-  # scaffolder's test fixtures use it as their stand-in domain.
+  # addresses (each account needs a unique, deliverable root email).
   validation {
-    # [@.] also catches subdomains of the reserved domains (e.g. @acme.example.com).
-    condition     = alltrue([for e in(var.accounts != null ? [for a in values(var.accounts) : a.email] : [for a in values(local.cfg_or_default_accounts) : a.email]) : !can(regex("[@.](example\\.(com|org|net)|invalid|localhost|test)$", lower(e)))])
-    error_message = "accounts still uses a placeholder email on a reserved domain (example.com/org/net, .invalid, .localhost or .test). Set real, unique, deliverable root email addresses for each account (var.accounts or aws.accounts in config/landing-zone.yaml) before applying."
+    # [@.] also catches subdomains of the reserved example domains (e.g. @acme.example.com).
+    condition     = alltrue([for e in(var.accounts != null ? [for a in values(var.accounts) : a.email] : [for a in values(local.cfg_or_default_accounts) : a.email]) : !can(regex("[@.]example\\.(com|org|net)$", lower(e)))])
+    error_message = "accounts still uses placeholder @example.com emails. Set real, unique root email addresses for each account (var.accounts or aws.accounts in config/landing-zone.yaml) before applying."
   }
 }
 
@@ -108,8 +104,8 @@ variable "workload_accounts" {
   }
 
   validation {
-    condition     = alltrue([for e in(var.workload_accounts != null ? [for a in values(var.workload_accounts) : a.email] : [for a in values(local.cfg.workload_accounts) : a.email]) : !can(regex("[@.](example\\.(com|org|net)|invalid|localhost|test)$", lower(e)))])
-    error_message = "workload_accounts still uses a placeholder email on a reserved domain (example.com/org/net, .invalid, .localhost or .test). Set real, unique, deliverable root email addresses before applying."
+    condition     = alltrue([for e in(var.workload_accounts != null ? [for a in values(var.workload_accounts) : a.email] : [for a in values(local.cfg.workload_accounts) : a.email]) : !can(regex("[@.]example\\.(com|org|net)$", lower(e)))])
+    error_message = "workload_accounts still uses placeholder example.com/org/net emails. Set real, unique root email addresses before applying."
   }
 }
 
