@@ -103,24 +103,25 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L426)
-- resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L416)
+- resource.google_access_context_manager_access_policy_iam_member.workload (modules/gcp/stages/bootstrap/service_accounts.tf#L431)
+- resource.google_billing_account_iam_member.stage_billing_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L421)
+- resource.google_organization_iam_custom_role.logging_config_viewer (modules/gcp/stages/bootstrap/plan_viewer.tf#L59)
 - resource.google_organization_iam_custom_role.plan_viewer (modules/gcp/stages/bootstrap/plan_viewer.tf#L14)
-- resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L517)
-- resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L543)
-- resource.google_organization_iam_member.org_admins (modules/gcp/stages/bootstrap/service_accounts.tf#L363)
-- resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L384)
-- resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L306)
-- resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L332)
-- resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L405)
-- resource.google_service_account.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L507)
-- resource.google_service_account.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L534)
-- resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L295)
-- resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L525)
+- resource.google_organization_iam_member.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L522)
+- resource.google_organization_iam_member.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L548)
+- resource.google_organization_iam_member.org_admins (modules/gcp/stages/bootstrap/service_accounts.tf#L368)
+- resource.google_organization_iam_member.projects_delegated_folder_iam (modules/gcp/stages/bootstrap/service_accounts.tf#L389)
+- resource.google_organization_iam_member.stage_org_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L308)
+- resource.google_organization_iam_member.stage_org_security_admin (modules/gcp/stages/bootstrap/service_accounts.tf#L337)
+- resource.google_project_iam_member.stage_admin_project_roles (modules/gcp/stages/bootstrap/service_accounts.tf#L410)
+- resource.google_service_account.guardrails (modules/gcp/stages/bootstrap/service_accounts.tf#L512)
+- resource.google_service_account.guardrails_plan (modules/gcp/stages/bootstrap/service_accounts.tf#L539)
+- resource.google_service_account.stage (modules/gcp/stages/bootstrap/service_accounts.tf#L297)
+- resource.google_service_account_iam_member.guardrails_impersonation (modules/gcp/stages/bootstrap/service_accounts.tf#L530)
 - resource.random_id.suffix (modules/gcp/stages/bootstrap/main.tf#L6)
-- resource.terraform_data.guardrails_workspace_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L556)
+- resource.terraform_data.guardrails_workspace_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L561)
 - resource.terraform_data.phase0_impersonation_is_time_boxed (modules/gcp/stages/bootstrap/main.tf#L77)
-- resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L449)
+- resource.terraform_data.production_workspaces_bound_by_id (modules/gcp/stages/bootstrap/service_accounts.tf#L454)
 
 
 ## Inputs
@@ -150,6 +151,7 @@ The following resources are created:
 | <a name="input_guardrail_owner_members"></a> [guardrail\_owner\_members](#input\_guardrail\_owner\_members) | Break-glass principals allowed to impersonate the guardrails SA (roles/iam.serviceAccountTokenCreator) when guardrail\_owner\_mode = "separate"; routine changes go through the guardrails\_workspace. Use a group whose membership is granted just in time (PAM) and is disjoint from the people who can change the gcp-organization workspace. Empty = nobody can use the SA until set. | `list(string)` | `[]` | no |
 | <a name="input_guardrail_owner_mode"></a> [guardrail\_owner\_mode](#input\_guardrail\_owner\_mode) | Who owns IAM deny policies. "separate" (default): a dedicated <prefix>-guardrails-apply SA is the only automation identity with roles/iam.denyAdmin; the organization apply SA no longer holds it, so it cannot delete the containment deny policy that constrains it. "organization": legacy, the organization apply SA holds denyAdmin and gcp-organization manages the deny policies itself. Keep it in step with the gcp-organization guardrail\_owner\_mode input (it defaults to this stage's output). | `string` | `"separate"` | no |
 | <a name="input_guardrails_workspace"></a> [guardrails\_workspace](#input\_guardrails\_workspace) | TFC workspace (envs/gcp/guardrails) that applies the org deny policies as the guardrails SA when guardrail\_owner\_mode = "separate". Its plan phase is bound to <prefix>-guardrails-plan and its apply phase to <prefix>-guardrails-apply, by the immutable ID in tfc\_workspace\_ids only (never by name); a production estate fails the plan without that ID. Null = no workspace identity, only the guardrail\_owner\_members break-glass path. | `string` | `"gcp-guardrails"` | no |
+| <a name="input_logging_config_viewer_role_id"></a> [logging\_config\_viewer\_role\_id](#input\_logging\_config\_viewer\_role\_id) | role\_id of the org-level custom role that gives the organization plan identity read-only Cloud Logging configuration access (sinks, settings, buckets, links, metrics, views, exclusions) without log entries. It replaces roles/logging.viewer, which reads the log entries of every project. A deleted custom role ID is unusable for 37 days, so change it if you recreate the role within that window. | `string` | `"landingZoneLoggingConfigViewer"` | no |
 | <a name="input_network_folder_roles"></a> [network\_folder\_roles](#input\_network\_folder\_roles) | Roles the gcp-projects stage grants the network-hub plan/apply SAs on the `shared` folder (hub + DNS projects, hierarchical firewall policy, Shared VPC host). | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [<br/>    "roles/compute.networkAdmin",<br/>    "roles/compute.securityAdmin",<br/>    "roles/compute.xpnAdmin",<br/>    "roles/compute.orgFirewallPolicyAdmin",<br/>    "roles/compute.orgSecurityResourceAdmin",<br/>    "roles/dns.admin",<br/>    "roles/servicenetworking.networksAdmin",<br/>    "roles/serviceusage.serviceUsageAdmin"<br/>  ],<br/>  "plan": [<br/>    "roles/compute.viewer",<br/>    "roles/dns.reader",<br/>    "roles/serviceusage.serviceUsageViewer"<br/>  ]<br/>}</pre> | no |
 | <a name="input_organization_admin_members"></a> [organization\_admin\_members](#input\_organization\_admin\_members) | Members (group:... or user:...) that hold the standing roles/resourcemanager.organizationAdmin. Granted here by bootstrap-apply, not by gcp-organization: organization-apply may not grant organizationAdmin. gcp-organization fails its plan when a member it expects (gcp.organization\_admin\_groups, plus the admin users with allow\_user\_principals\_for\_break\_glass) is missing here. Default [] = none. | `list(string)` | `[]` | no |
 | <a name="input_organization_apply_grantable_roles"></a> [organization\_apply\_grantable\_roles](#input\_organization\_apply\_grantable\_roles) | Roles the gcp-organization apply SA may add or remove through its org-level iam.securityAdmin, anywhere in the organization: the grant carries the condition modifiedGrantsByRole.hasOnly(<this list>). The default is every role the organization stage grants that way: billing.admin (billing admin groups on the org), logging.bucketWriter and logging.logWriter (log-sink writer identities on the audit project), and storage.objectCreator and cloudkms.cryptoKeyEncrypterDecrypter (sink writers and service agents on the audit buckets and keys of a separate logging project). Folder IAM goes through folderIamAdmin and needs no entry. At most 10 roles. Roles that control IAM, identities, projects or PAM are rejected: organization-apply could grant one to itself and reach roles/iam.denyAdmin. | `list(string)` | <pre>[<br/>  "roles/billing.admin",<br/>  "roles/logging.bucketWriter",<br/>  "roles/logging.logWriter",<br/>  "roles/storage.objectCreator",<br/>  "roles/cloudkms.cryptoKeyEncrypterDecrypter"<br/>]</pre> | no |

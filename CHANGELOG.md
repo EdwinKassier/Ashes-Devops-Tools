@@ -713,6 +713,13 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   matches member prefixes without case. `aws_iam_federated_trust_pinned` exempts an unknown trust
   only on a role created in the run, and denies web identity with `NotPrincipal` or
   `{"Federated": "*"}`. See `UPGRADING.md`.
+- **The organization plan identity reads no log entries (SEC-2).** gcp-bootstrap no longer grants
+  `<prefix>-organization-plan` `roles/logging.viewer` at the org node. That role holds
+  `logging.logEntries.list`, so every speculative gcp-organization plan (and the GitHub drift
+  identity, when `enable_github_wif` is on) could read the logs of every project. The new org
+  custom role `landingZoneLoggingConfigViewer` (input `logging_config_viewer_role_id`) holds only
+  the logging configuration get/list permissions the gcp-organization refresh needs. Apply
+  gcp-bootstrap to take it. See `UPGRADING.md`.
 
 ### Changed
 

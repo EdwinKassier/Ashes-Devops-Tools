@@ -248,3 +248,23 @@ run "org_admin_members_must_be_principals" {
 
   expect_failures = [var.organization_admin_members]
 }
+
+run "logging_config_viewer_role_id_rejects_invalid_characters" {
+  command = plan
+
+  variables {
+    logging_config_viewer_role_id = "logging-config-viewer"
+  }
+
+  expect_failures = [var.logging_config_viewer_role_id]
+}
+
+run "logging_config_viewer_role_id_must_differ_from_plan_viewer" {
+  command = plan
+
+  variables {
+    logging_config_viewer_role_id = "landingZonePlanViewer"
+  }
+
+  expect_failures = [var.logging_config_viewer_role_id]
+}

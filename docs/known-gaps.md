@@ -544,7 +544,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   (notably `logging.configWriter` vs `logging.admin`,
   `securitycenter.notificationConfigEditor`, `monitoring.metricsScopesAdmin`,
   that the metadata-only plan role set (predefined viewers + the
-  `landingZonePlanViewer` custom role) is enough for every stage's plan, and that
+  `landingZonePlanViewer` custom role) is enough for every stage's plan,
+  that the `landingZoneLoggingConfigViewer` custom role (organization-plan's
+  logging configuration reads in place of `roles/logging.viewer`, SEC-2) is
+  enough for a gcp-organization refresh of the org sinks, org logging settings,
+  log buckets and their tag bindings, linked datasets and log-based metrics, and that
   bootstrap-apply's org `iam.securityAdmin` covers billing-account IAM);
   (3) the projects-apply `modifiedGrantsByRole` delegated grant works on a
   real folder. IAM accepts at most 10 roles in one `hasOnly()` list, so

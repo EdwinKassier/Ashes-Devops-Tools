@@ -231,7 +231,12 @@ Three refinements close the remaining paths:
   which holds only get/list/getIamPolicy on configuration. Variable validation
   rejects data-plane permissions (`storage.objects.get`,
   `bigquery.tables.getData`, `secretmanager.versions.access`, ...) and
-  `roles/viewer` in the plan folder role lists.
+  `roles/viewer` in the plan folder role lists. No plan SA holds
+  `roles/logging.viewer` either: it holds `logging.logEntries.list`, so at the
+  org node it reads the logs of every project. organization-plan gets the org
+  custom role `landingZoneLoggingConfigViewer` instead, with only the logging
+  configuration reads its refresh needs (sinks, settings, buckets, links,
+  metrics, views, exclusions).
 - **Folder-IAM delegation is per folder.** projects-apply's conditional
   `folderIamAdmin` is bound by gcp-organization on each environment folder (the
   workload role list only) and on the shared folder (the network role list

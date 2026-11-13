@@ -16,9 +16,9 @@
 # are granted by gcp-organization on their OWN folder-scoped access policy.
 #
 # Plan identities never get roles/viewer (it reads GCS objects through legacy
-# bucket roles and BigQuery table data). They get metadata-only predefined
-# viewers plus the org custom role below (plan_viewer.tf), which holds only
-# get/list/getIamPolicy permissions.
+# bucket roles and BigQuery table data) or roles/logging.viewer (it reads log
+# entries). They get metadata-only predefined viewers plus the org custom
+# roles in plan_viewer.tf, which hold only get/list/getIamPolicy permissions.
 
 locals {
   control_plane_stages = ["bootstrap", "organization", "projects", "network-hub"]
@@ -52,7 +52,9 @@ locals {
     "organization-plan" = {
       org = concat(local.plan_org_baseline, [
         "roles/orgpolicy.policyViewer",
-        "roles/logging.viewer",
+        # Not roles/logging.viewer: it reads the log entries of every
+        # project. Logging configuration reads only (plan_viewer.tf, SEC-2).
+        local.logging_config_viewer_role,
         "roles/securitycenter.notificationConfigViewer",
         "roles/resourcemanager.tagViewer",
         "roles/iam.denyReviewer",
@@ -305,6 +307,9 @@ resource "google_service_account" "stage" {
 # so they never receive an org-level binding.
 resource "google_organization_iam_member" "stage_org_roles" {
   for_each = { for k, v in local.org_grants : k => v if v.role != "roles/iam.securityAdmin" }
+
+  # The logging configuration viewer custom role must exist before it is granted.
+  depends_on = [google_organization_iam_custom_role.logging_config_viewer]
 
   org_id = var.org_id
   role   = each.value.role

@@ -919,3 +919,64 @@ run "org_admin_groups_granted_by_bootstrap" {
     error_message = "gcp-bootstrap must own the standing organizationAdmin grant of the org-admin groups and publish the members."
   }
 }
+
+# SEC-2: a plan identity must not read log entries. roles/logging.viewer holds
+# logging.logEntries.list, so at the org node it reads the logs of every
+# project. organization-plan gets an org custom role with the logging
+# configuration reads its refresh needs (sinks, settings, buckets, views,
+# links, metrics, exclusions) and no log data.
+run "plan_identities_read_no_log_entries" {
+  command = plan
+
+  variables {
+    guardrails_workspace = "gcp-guardrails"
+  }
+
+  assert {
+    condition = length([
+      for k, v in merge(
+        { for k, v in google_organization_iam_member.stage_org_roles : k => v if endswith(split("|", k)[0], "-plan") },
+        { for k, v in google_organization_iam_member.guardrails_plan : "guardrails-plan|${k}" => v },
+      ) :
+      k if contains([
+        "roles/logging.viewer", "roles/logging.privateLogViewer", "roles/logging.viewAccessor",
+        "roles/logging.admin", "roles/logging.configWriter", "roles/viewer",
+      ], v.role)
+    ]) == 0
+    error_message = "no plan identity may hold a role that reads log entries (logging.viewer, privateLogViewer, viewAccessor, admin, viewer) at the org node."
+  }
+
+  assert {
+    condition = length(setintersection(
+      toset(concat(output.workload_folder_roles.plan, output.network_folder_roles.plan)),
+      toset(["roles/logging.viewer", "roles/logging.privateLogViewer", "roles/logging.viewAccessor", "roles/logging.admin"]),
+    )) == 0
+    error_message = "the workload and network plan folder roles must not read log entries."
+  }
+
+  assert {
+    condition     = contains(keys(google_organization_iam_member.stage_org_roles), "organization-plan|organizations/123456789/roles/landingZoneLoggingConfigViewer")
+    error_message = "organization-plan must get the logging configuration viewer custom role at the org node in place of roles/logging.viewer."
+  }
+
+  assert {
+    condition = (
+      google_organization_iam_custom_role.logging_config_viewer.org_id == "123456789" &&
+      google_organization_iam_custom_role.logging_config_viewer.role_id == "landingZoneLoggingConfigViewer" &&
+      length(setintersection(toset(google_organization_iam_custom_role.logging_config_viewer.permissions), toset([
+        "logging.logEntries.list", "logging.privateLogEntries.list", "logging.views.access", "logging.views.listLogs",
+        "logging.logs.list", "logging.queries.usePrivate", "logging.sqlAlerts.create",
+      ]))) == 0 &&
+      alltrue([for p in google_organization_iam_custom_role.logging_config_viewer.permissions : can(regex("^logging\\.[A-Za-z]+\\.(get|list|listEffectiveTags|listTagBindings)$", p))])
+    )
+    error_message = "the logging configuration viewer role must hold only logging get/list permissions and no log-entry, view-access or private-log permission."
+  }
+
+  assert {
+    condition = length(setsubtract(toset([
+      "logging.sinks.get", "logging.settings.get", "logging.buckets.get", "logging.links.get",
+      "logging.logMetrics.get", "logging.views.get", "logging.exclusions.get", "logging.buckets.listTagBindings",
+    ]), toset(google_organization_iam_custom_role.logging_config_viewer.permissions))) == 0
+    error_message = "the logging configuration viewer role must keep the reads the gcp-organization refresh makes (org sinks, org settings, log buckets and their tag bindings, links, metrics, views, exclusions)."
+  }
+}

@@ -2163,6 +2163,13 @@ Set `vpc_sc_ingress_policies` and `vpc_sc_egress_policies` with named identities
 
 `custom.wifProviderTenantPinned` now also denies any provider for a pinned issuer (TFC or GitHub Actions) that sets `oidc.jwks_json`. With an uploaded JWKS, the key holder could sign any token while still passing the issuer and condition pins. Remove any uploaded JWKS from such providers before you apply gcp-organization.
 
+#### The organization plan identity loses roles/logging.viewer (gcp-bootstrap, SEC-2)
+
+**Who:** every estate that applies gcp-bootstrap.
+**What changes:** `<prefix>-organization-plan` no longer holds `roles/logging.viewer` at the org node. That role holds `logging.logEntries.list`, so a speculative gcp-organization plan could read the log entries of every project. The plan SA gets the new org custom role `landingZoneLoggingConfigViewer` in its place. The role holds only these Cloud Logging configuration reads: `get` and `list` on sinks, buckets, links, log-based metrics, views and exclusions, `logging.settings.get`, and `logging.buckets.listEffectiveTags` / `listTagBindings`. The gcp-bootstrap plan creates the custom role and one org binding, and removes the `roles/logging.viewer` binding. No input changes. No other stage changes.
+
+Apply gcp-bootstrap, then run a gcp-organization plan. It must show no permission error on the org sinks, the org logging settings, the log buckets, the linked dataset or the log-based metrics. If a deleted custom role with the same ID exists from the last 37 days, set `logging_config_viewer_role_id` to a new ID.
+
 #### IAM-controlling workload roles are no longer delegable (gcp-bootstrap, gcp-organization, gcp-projects)
 
 projects-apply could grant itself any delegated role on an environment folder, because a folder IAM condition limits roles but not members. It can no longer grant these roles:

@@ -359,6 +359,23 @@ variable "plan_viewer_role_id" {
   }
 }
 
+variable "logging_config_viewer_role_id" {
+  description = "role_id of the org-level custom role that gives the organization plan identity read-only Cloud Logging configuration access (sinks, settings, buckets, links, metrics, views, exclusions) without log entries. It replaces roles/logging.viewer, which reads the log entries of every project. A deleted custom role ID is unusable for 37 days, so change it if you recreate the role within that window."
+  type        = string
+  default     = "landingZoneLoggingConfigViewer"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_.]{3,64}$", var.logging_config_viewer_role_id))
+    error_message = "logging_config_viewer_role_id must be 3-64 characters of letters, digits, '_' and '.'."
+  }
+
+  validation {
+    condition     = var.logging_config_viewer_role_id != var.plan_viewer_role_id
+    error_message = "logging_config_viewer_role_id must differ from plan_viewer_role_id: both are custom roles in the same organization."
+  }
+}
+
 variable "plan_viewer_permissions" {
   description = "Permissions of the plan viewer custom role. Metadata-only by design: it fills the gaps left by the predefined metadata viewers in the plan role lists (bucket and repository metadata, logging and monitoring configuration). Data-plane permissions (object reads, table data, secret payloads, decrypt, log entries, token minting) are rejected."
   type        = list(string)
