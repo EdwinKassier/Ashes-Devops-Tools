@@ -88,9 +88,16 @@ variable "dashboard_name" {
 }
 
 variable "dashboard_widgets" {
-  description = "List of CloudWatch dashboard widget objects (rendered into the dashboard body via jsonencode). Empty = a minimal single-text-widget placeholder."
-  type        = list(any)
-  default     = []
+  description = "List of CloudWatch dashboard widget objects (rendered into the dashboard body via jsonencode). Widgets may differ in shape (text, metric, alarm). Empty = a minimal single-text-widget placeholder."
+  # any, not list(any): list(any) forces every widget to one object type, so a
+  # text widget next to a metric widget would be rejected.
+  type    = any
+  default = []
+
+  validation {
+    condition     = can(concat(var.dashboard_widgets, []))
+    error_message = "dashboard_widgets must be a list of widget objects."
+  }
 }
 
 variable "tags" {

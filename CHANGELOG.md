@@ -51,6 +51,12 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   `scripts/check-example-module-attrs.py` (python-hcl2, run by `make consistency`) fails when a
   Terraform root under `examples/` passes a module argument or a nested object attribute that the
   module variable does not declare. The limits are in `docs/known-gaps.md`.
+- **`aws/ops/cloudwatch` plans with dashboard widgets.** The dashboard body chose between
+  `var.dashboard_widgets` and a placeholder in one conditional, so any non-empty
+  `dashboard_widgets` failed the plan with "Inconsistent conditional result types". Each branch is
+  now encoded on its own. `dashboard_widgets` is now `any` (still a list, checked by a validation)
+  so text and metric widgets can sit in the same dashboard. Callers that pass no widgets see no
+  plan change.
 
 #### Security
 

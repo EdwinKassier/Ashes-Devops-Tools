@@ -199,6 +199,11 @@
       "owner": "envs/gcp/workload",
       "variable": "app_services",
       "reason": "Forwarded unchanged (variable or config file) to modules/gcp/stages/environment app_services, whose validation rejects keys outside allowed_keys.app_services (the rows above)."
+    },
+    {
+      "owner": "modules/aws/ops/cloudwatch",
+      "variable": "dashboard_widgets",
+      "reason": "CloudWatch dashboard widgets differ in shape by widget type (text, metric, alarm, log), so no single object type fits; the list is passed to jsonencode() as the dashboard body and CloudWatch validates each widget."
     }
   ]
 }
