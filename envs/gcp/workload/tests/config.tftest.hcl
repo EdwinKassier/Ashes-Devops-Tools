@@ -85,6 +85,27 @@ run "services_from_config" {
   }
 }
 
+# gcp.environments.<env>.services.<name>.database.backup_location and
+# .transaction_log_retention_days reach the service's Cloud SQL instance; a
+# database without them keeps the cloud-sql defaults (instance region, 7 days).
+run "database_backup_settings_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.database-backup.yaml"
+  }
+
+  assert {
+    condition     = output.app_services["api"].database_backup_location == "europe-west2" && output.app_services["api"].database_transaction_log_retention_days == 14
+    error_message = "the config file's database.backup_location and database.transaction_log_retention_days must reach the Cloud SQL instance."
+  }
+
+  assert {
+    condition     = output.app_services["worker"].database_backup_location == "europe-west1" && output.app_services["worker"].database_transaction_log_retention_days == 7
+    error_message = "a config database without the keys must keep the instance region and 7 days."
+  }
+}
+
 run "empty_services_section_is_noop" {
   command = plan
 

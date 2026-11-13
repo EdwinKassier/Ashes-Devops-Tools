@@ -28,6 +28,19 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
 
 ### Examples audit (2026-11-13)
 
+#### Added
+
+- **App-service Cloud SQL backup location and PITR log retention from config.** An app service's
+  `database` block (`gcp.environments.<env>.services.<name>.database` in
+  `config/landing-zone.yaml`, or the `app_services` variable) now accepts `backup_location` (a
+  region, or `us`, `eu`, `asia`) and `transaction_log_retention_days` (1 to 35; Cloud SQL allows
+  more than 7 only on Enterprise Plus). The schema rejected both keys before, and app-services
+  did not forward `transaction_log_retention_days`. Unset, both keep today's values
+  (the instance region, 7 days), so no existing plan changes. `cloud-sql` gains a
+  `transaction_log_retention_days` output and treats a null value as 7; the app-services
+  `services` output (and the `app_services` outputs of the environment stage and `gcp-workload`)
+  adds `database_backup_location` and `database_transaction_log_retention_days`.
+
 #### Fixed
 
 - **`examples/kms` grants the app service account the key.** The example passed `iam_bindings`
@@ -95,8 +108,7 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   (`compliance.backup`), per-database selection (`enable_org_backup`) and the GCP Backup and DR
   vault (`gcp.environments.<env>.backup_vault`) replace the raw vault, key and policy snippets,
   which would have collided with them. The remaining gaps are named: no hourly rule, no locked
-  DR-region vault, the workload CMK grant, `transaction_log_retention_days` and
-  `backup_location` not in config, and a 6-hour multi-region Cloud SQL plan, still raw.
+  DR-region vault, the workload CMK grant, and a 6-hour multi-region Cloud SQL plan, still raw.
 - **Production config and hardening in walkthroughs 09, 12, 16 and 17.** The GCP perimeter
   holds the service-team projects, so `09` now says signed-URL uploads need an ingress rule or
   buckets outside the environment. Production environments in `12`, `16` and `17` set zones

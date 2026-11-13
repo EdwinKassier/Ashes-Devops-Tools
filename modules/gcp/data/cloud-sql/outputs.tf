@@ -45,6 +45,11 @@ output "backup_location" {
   value       = coalesce(var.backup_location, var.region)
 }
 
+output "transaction_log_retention_days" {
+  description = "Days of transaction (WAL) logs kept for point-in-time recovery."
+  value       = google_sql_database_instance.this.settings[0].backup_configuration[0].transaction_log_retention_days
+}
+
 output "encryption_key_name" {
   description = "The customer-managed key that encrypts the instance, or null for Google-managed encryption."
   value       = var.encryption_key_name

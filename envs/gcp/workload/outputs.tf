@@ -79,7 +79,7 @@ output "saas_secret_id" {
 }
 
 output "app_services" {
-  description = "Per app service: Cloud Run url and name, image_repository, runtime/deploy SA emails, Cloud SQL connection name and IAM DB user (empty when app_services = {})."
+  description = "Per app service: Cloud Run url and name, image_repository, runtime/deploy SA emails, Cloud SQL connection name, IAM DB user, backup location and PITR log retention (empty when app_services = {})."
   value       = module.environment.app_services
 }
 

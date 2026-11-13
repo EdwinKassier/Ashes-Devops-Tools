@@ -102,7 +102,7 @@ root's `app_bootstrap_image` / `gcp.workload.bootstrap_image`, else
 probe path, default `/`, empty string for the TCP probe), `max_instances`, `subnetwork_id`, `invoker_members`,
 `enable_unauthenticated`, `enable_binary_authorization` / `binary_authorization_policy`,
 `runtime_project_roles` (an escape hatch, empty by default), `artifact_registry`
-(cleanup tuning) and `database.{tier,edition,enable_high_availability,encryption_key_name}`.
+(cleanup tuning) and `database.{tier,edition,enable_high_availability,encryption_key_name,backup_location,transaction_log_retention_days}`.
 
 After merge, Terraform Cloud plans the change and a person approves the apply.
 The first apply creates the service with the bootstrap image.

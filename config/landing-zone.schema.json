@@ -867,6 +867,17 @@
                         "enable_point_in_time_recovery": {
                           "type": "boolean"
                         },
+                        "backup_location": {
+                          "type": "string",
+                          "pattern": "^([a-z]+-[a-z]+[0-9]+|us|eu|asia)$",
+                          "description": "Location of the Cloud SQL automated backups: a region (e.g. europe-west2) or a multi-region (us, eu, asia). Unset = the instance region."
+                        },
+                        "transaction_log_retention_days": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 35,
+                          "description": "Days of transaction (WAL) logs kept for point-in-time recovery: 1 to 7 on ENTERPRISE, 1 to 35 on ENTERPRISE_PLUS. Unset = 7."
+                        },
                         "encryption_key_name": {
                           "type": "string"
                         },

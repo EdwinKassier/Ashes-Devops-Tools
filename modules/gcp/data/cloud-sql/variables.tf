@@ -124,9 +124,10 @@ variable "backup_location" {
 }
 
 variable "transaction_log_retention_days" {
-  description = "Number of days of transaction (WAL) logs to retain for point-in-time recovery"
+  description = "Number of days of transaction (WAL) logs to retain for point-in-time recovery: 1 to 7 on the Enterprise edition, 1 to 35 on Enterprise Plus. Null = 7."
   type        = number
   default     = 7
+  nullable    = false
 
   validation {
     condition     = var.transaction_log_retention_days >= 1 && var.transaction_log_retention_days <= 35

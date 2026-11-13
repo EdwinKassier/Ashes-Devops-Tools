@@ -5,7 +5,7 @@
  */
 
 output "services" {
-  description = "Per-service golden-path facts: runtime, effective Direct VPC egress (vpc_egress), Cloud Run service name, URL, effective minimum instance count and probe path (null for a job; the probe path is also null when probing is off) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user, availability type (REGIONAL or ZONAL) and whether a customer-managed key is required (database_cmek_required); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
+  description = "Per-service golden-path facts: runtime, effective Direct VPC egress (vpc_egress), Cloud Run service name, URL, effective minimum instance count and probe path (null for a job; the probe path is also null when probing is off) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user, availability type (REGIONAL or ZONAL), backup location (database_backup_location), point-in-time-recovery log retention in days (database_transaction_log_retention_days) and whether a customer-managed key is required (database_cmek_required); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
   value = {
     for k, s in var.services : k => {
       runtime                  = s.runtime
@@ -23,11 +23,14 @@ output "services" {
       database_iam_user        = s.database == null ? null : trimsuffix(local.runtime_sa_email[k], ".gserviceaccount.com")
       database_availability    = s.database == null ? null : module.database[k].availability_type
       database_cmek_required   = s.database == null ? null : module.database[k].cmek_required
-      pubsub_topic             = try(local.pubsub_topic[k], null)
-      pubsub_subscription      = try(local.pubsub_subscription[k], null)
-      pubsub_dead_letter_topic = try(local.pubsub_dlq_topic[k], null)
-      alert_policy_ids         = contains(keys(local.services_with_alerts), k) ? [google_monitoring_alert_policy.error_ratio[k].id, google_monitoring_alert_policy.latency_p99[k].id] : []
-      slo_name                 = contains(keys(local.services_with_slo), k) ? module.slo[k].slo_name : null
+      # Effective DR settings of the automated backups.
+      database_backup_location                = s.database == null ? null : module.database[k].backup_location
+      database_transaction_log_retention_days = s.database == null ? null : module.database[k].transaction_log_retention_days
+      pubsub_topic                            = try(local.pubsub_topic[k], null)
+      pubsub_subscription                     = try(local.pubsub_subscription[k], null)
+      pubsub_dead_letter_topic                = try(local.pubsub_dlq_topic[k], null)
+      alert_policy_ids                        = contains(keys(local.services_with_alerts), k) ? [google_monitoring_alert_policy.error_ratio[k].id, google_monitoring_alert_policy.latency_p99[k].id] : []
+      slo_name                                = contains(keys(local.services_with_slo), k) ? module.slo[k].slo_name : null
     }
   }
 }

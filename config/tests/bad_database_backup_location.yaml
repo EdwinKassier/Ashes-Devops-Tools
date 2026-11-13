@@ -1,0 +1,11 @@
+# Expected to FAIL schema validation: database.backup_location must be a region
+# (e.g. europe-west2) or a multi-region (us, eu, asia).
+version: 1
+gcp:
+  environments:
+    dev:
+      is_production: false
+      services:
+        api:
+          database:
+            backup_location: Europe West 2

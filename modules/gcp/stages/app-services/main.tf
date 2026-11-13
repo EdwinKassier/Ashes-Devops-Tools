@@ -479,13 +479,15 @@ module "database" {
   # module after it (depends_on = [module.host] in stages/environment).
   private_network = var.network_id
 
-  enable_iam_authentication     = true
-  enable_high_availability      = coalesce(each.value.database.enable_high_availability, var.is_production)
-  backup_location               = each.value.database.backup_location
-  enable_point_in_time_recovery = each.value.database.enable_point_in_time_recovery
-  encryption_key_name           = each.value.database.encryption_key_name
-  require_cmek                  = var.require_database_cmek
-  enable_deletion_protection    = coalesce(each.value.database.enable_deletion_protection, var.enable_deletion_protection)
+  enable_iam_authentication = true
+  enable_high_availability  = coalesce(each.value.database.enable_high_availability, var.is_production)
+  backup_location           = each.value.database.backup_location
+  # Null = the cloud-sql default (7 days; the variable is non-nullable).
+  transaction_log_retention_days = each.value.database.transaction_log_retention_days
+  enable_point_in_time_recovery  = each.value.database.enable_point_in_time_recovery
+  encryption_key_name            = each.value.database.encryption_key_name
+  require_cmek                   = var.require_database_cmek
+  enable_deletion_protection     = coalesce(each.value.database.enable_deletion_protection, var.enable_deletion_protection)
 
   databases = each.value.database.databases
 

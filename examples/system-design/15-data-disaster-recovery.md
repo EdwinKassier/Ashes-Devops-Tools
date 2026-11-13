@@ -217,7 +217,7 @@ So every tier gets a second, data-loss target:
 
 | Tier | Site-loss RPO / RTO | Data-loss recovery window | Mechanism for data loss |
 |---|---|---|---|
-| 0 Orders | Seconds / 15 min | Any second in 35 days (Aurora); 7 days on Cloud SQL through this repo | Aurora continuous backup (1–35 days); Cloud SQL PITR, plus vault backups every 6 h at best |
+| 0 Orders | Seconds / 15 min | Any second in 35 days (Aurora; Cloud SQL Enterprise Plus) | Aurora continuous backup (1–35 days); Cloud SQL PITR, plus vault backups every 6 h at best |
 | 1 Carts | ~1 s / 1 h | Any second in 35 days (AWS); any minute in 7 days (Firestore) | DynamoDB PITR, up to 35 days at per-second granularity; Firestore PITR, 7 days at 1-minute granularity |
 | 2 Objects | 15 min / 4 h | Soft delete or versions; vault copies | S3 versioning + Object Lock; Cloud Storage soft delete, 7–90 days |
 | 2 Streams | Minutes (raw zone lag) / 1 h | Topic retention, then raw zone | Kinesis up to 365 days; Pub/Sub topics up to 31 days |
@@ -375,11 +375,11 @@ Gaps this design must close, each checked against the code:
    S3, DynamoDB and EFS.
 4. **No cross-region database replicas.** `rds-aurora` has no global-cluster
    input, and `cloud-sql` has no replica, retained-backup count or
-   `retain_backups_on_delete` input. `cloud-sql` takes `backup_location` and
-   `transaction_log_retention_days` (up to 35 days). app-services forwards
-   `backup_location` but not `transaction_log_retention_days`, and the config
-   schema has neither key, so through config Cloud SQL PITR stays at 7 days,
-   even on Enterprise Plus. The GCP Backup and DR vault
+   `retain_backups_on_delete` input. Cloud SQL's own backups are config: an
+   app service's `database.backup_location` (a region, or `us`, `eu`, `asia`;
+   default the instance region) and `database.transaction_log_retention_days`
+   (PITR logs, default 7; Cloud SQL allows 1 to 7 on Enterprise and 1 to 35 on
+   Enterprise Plus). The GCP Backup and DR vault
    ([`modules/gcp/backup/backup-vault`](../../modules/gcp/backup/backup-vault/),
    `backup_vault`) is regional with a daily plan.
 5. **DynamoDB backups cannot leave the account.** Cross-Region and
@@ -505,9 +505,11 @@ gcp:
       services:
         orders:
           database:
-            edition: ENTERPRISE_PLUS # needed for advanced DR; 35-day PITR is not configurable here (gap 4)
+            edition: ENTERPRISE_PLUS # needed for advanced DR and PITR logs beyond 7 days
             tier: db-perf-optimized-N-2 # the module requires this family for Enterprise Plus
             enable_high_availability: true
+            transaction_log_retention_days: 35 # PITR window, the Enterprise Plus maximum
+            backup_location: us-east4 # automated backups outside the primary region
 compliance:
   backup:
     copy_to_central_vault: true # IRREVERSIBLE lock on the copy vault (UPGRADING.md)
@@ -602,10 +604,10 @@ module does not grant it. Limits that shape the rest, all checked 2026-11:
   [Cloud SQL](https://docs.cloud.google.com/backup-disaster-recovery/docs/cloud-console/sql/csql-backup)).
 
 The module covers neither a 6-hour plan nor a multi-region vault. Cloud SQL's
-own automated backups can go to another location: app-services takes
-`database.backup_location` (a region or `us`, `eu`, `asia`), but the config
-schema does not accept that key yet, so it needs the full `app_services`
-variable on the workspace (gap). For the 6-hour, multi-region vault, raw
+own automated backups can go to another location: set the service's
+`database.backup_location` (a region or `us`, `eu`, `asia`;
+[Cloud SQL locations](https://docs.cloud.google.com/sql/docs/postgres/locations),
+checked 2026-11), as in [Config](#config). For the 6-hour, multi-region vault, raw
 resources remain. An instance takes one backup plan (**verify before relying
 on**), and `backup_vault` associates every app-service database, so this
 replaces `backup_vault` in the environment rather than adding to it. A

@@ -110,7 +110,7 @@ By default this root reads organization outputs from the Terraform Cloud workspa
 |------|-------------|
 | <a name="output_app_deploy_workload_identity_provider"></a> [app\_deploy\_workload\_identity\_provider](#output\_app\_deploy\_workload\_identity\_provider) | Full resource name of the app-deploy GitHub WIF provider (google-github-actions/auth `workload_identity_provider`), or null when no service declares `github`. |
 | <a name="output_app_github_actions"></a> [app\_github\_actions](#output\_app\_github\_actions) | Per service, the GitHub variables the delivery workflow needs: GCP\_WIF\_PROVIDER, GCP\_DEPLOY\_SA, GCP\_PROJECT\_ID, GCP\_REGION, CLOUD\_RUN\_SERVICE, IMAGE\_REPOSITORY. |
-| <a name="output_app_services"></a> [app\_services](#output\_app\_services) | Per app service: Cloud Run url and name, image\_repository, runtime/deploy SA emails, Cloud SQL connection name and IAM DB user (empty when app\_services = {}). |
+| <a name="output_app_services"></a> [app\_services](#output\_app\_services) | Per app service: Cloud Run url and name, image\_repository, runtime/deploy SA emails, Cloud SQL connection name, IAM DB user, backup location and PITR log retention (empty when app\_services = {}). |
 | <a name="output_dns_zones"></a> [dns\_zones](#output\_dns\_zones) | DNS zone outputs |
 | <a name="output_environment"></a> [environment](#output\_environment) | Application environment name |
 | <a name="output_folder_id"></a> [folder\_id](#output\_folder\_id) | Folder ID for this environment |

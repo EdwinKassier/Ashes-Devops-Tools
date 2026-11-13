@@ -282,9 +282,12 @@ variable "services" {
       enable_point_in_time_recovery = optional(bool, true)
       # Region or multi-region of the automated backups (cross-region copy).
       # Null = the instance region (cloud-sql module default, CMP-8).
-      backup_location            = optional(string)
-      encryption_key_name        = optional(string)
-      enable_deletion_protection = optional(bool)
+      backup_location = optional(string)
+      # Days of transaction (WAL) logs kept for point-in-time recovery: 1 to 7
+      # on ENTERPRISE, 1 to 35 on ENTERPRISE_PLUS. Null = 7 (cloud-sql default).
+      transaction_log_retention_days = optional(number)
+      encryption_key_name            = optional(string)
+      enable_deletion_protection     = optional(bool)
     }))
 
     # Deploy identity. Bound on repository_id + ref and/or GitHub environment;

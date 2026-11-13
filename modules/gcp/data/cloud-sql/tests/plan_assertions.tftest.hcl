@@ -203,3 +203,31 @@ run "backup_location_cross_region" {
     error_message = "backup_location must set the automated backups' location."
   }
 }
+
+# PITR log retention: 7 days by default, and a caller that forwards null (an
+# app service without database.transaction_log_retention_days) keeps it.
+run "transaction_log_retention_default_and_null" {
+  command = plan
+
+  variables {
+    transaction_log_retention_days = null
+  }
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].transaction_log_retention_days == 7 && output.transaction_log_retention_days == 7
+    error_message = "null transaction_log_retention_days must keep the 7-day default."
+  }
+}
+
+run "transaction_log_retention_explicit" {
+  command = plan
+
+  variables {
+    transaction_log_retention_days = 14
+  }
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].transaction_log_retention_days == 14 && output.transaction_log_retention_days == 14
+    error_message = "an explicit transaction_log_retention_days must reach the instance."
+  }
+}

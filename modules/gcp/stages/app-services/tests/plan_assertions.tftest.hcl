@@ -954,6 +954,39 @@ run "production_database_defaults_to_high_availability" {
   }
 }
 
+# DR knobs of the automated backups: backup_location and the PITR log
+# retention reach the cloud-sql module; unset, they keep its defaults (the
+# instance region, 7 days).
+run "database_backup_location_and_log_retention_forwarded" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        database = { backup_location = "eu", transaction_log_retention_days = 21 }
+      }
+      batch = {
+        database = {}
+      }
+    }
+  }
+
+  assert {
+    condition     = module.database["api"].backup_location == "eu" && module.database["api"].transaction_log_retention_days == 21
+    error_message = "database.backup_location and database.transaction_log_retention_days must reach the cloud-sql module."
+  }
+
+  assert {
+    condition     = module.database["batch"].backup_location == "europe-west1" && module.database["batch"].transaction_log_retention_days == 7
+    error_message = "without the keys the database keeps the cloud-sql defaults (instance region, 7 days)."
+  }
+
+  assert {
+    condition     = output.services["api"].database_backup_location == "eu" && output.services["api"].database_transaction_log_retention_days == 21 && output.services["batch"].database_transaction_log_retention_days == 7
+    error_message = "output.services must expose the effective backup location and log retention."
+  }
+}
+
 run "non_production_database_stays_zonal" {
   command = plan
 
