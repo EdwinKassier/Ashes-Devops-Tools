@@ -429,7 +429,8 @@ aws:
   # Central log-archive bucket (aws-organization, aws-security, aws-network).
   log_archive_bucket_name: my-org-org-log-archive
   # Foundational SRA accounts: key => {email, ou}. Root emails must be real,
-  # unique and deliverable (example.com addresses are rejected).
+  # unique and deliverable (example.com/org/net, .invalid, .localhost and .test
+  # addresses are rejected).
   accounts:
     log_archive: {email: aws+log-archive@example.com, ou: Security}
     security_tooling: {email: aws+security-tooling@example.com, ou: Security}

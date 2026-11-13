@@ -52,7 +52,7 @@ The other AWS keys, by the root that needs them:
 | `aws.management_account_id` | `aws-organization`, `aws-security`, `aws-backup` | 12-digit ID, **quoted** |
 | `aws.terraform_run_role_arn`, `aws.break_glass_role_arn` | `aws-organization` | Phase-0 management-account roles (runbook Step 2), carved out of every guardrail |
 | `aws.log_archive_bucket_name` | `aws-organization`, `aws-security`, `aws-network` | One name for the whole estate (see the naming contract below) |
-| `aws.accounts`, `aws.workload_accounts` | `aws-organization` | Real, unique, deliverable root emails (`example.com` is rejected) |
+| `aws.accounts`, `aws.workload_accounts` | `aws-organization` | Real, unique, deliverable root emails (`example.com`/`.org`/`.net`, `.invalid`, `.localhost` and `.test` are rejected) |
 | `aws.workload_environments.<env>` | `tfc-admin`, `aws-organization`, `aws-workload` | `account_key` (required), optional `vpc_cidr` and `services`; one `aws-workload-<env>` workspace each |
 | `aws.allowed_regions`, `aws.enabled_regions` | most AWS roots | Region-restriction SCP and the baselined regions |
 | `aws.network.*`, `aws.identity.groups`, `aws.workload.*` | `aws-network`, `aws-identity`, `aws-workload` | Egress allowlist and spokes, name-based SSO assignments, app ingress |

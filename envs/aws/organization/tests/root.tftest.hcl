@@ -22,12 +22,12 @@ variables {
   guard_alert_emails       = ["secops@acme.test"]
   management_account_id    = "111111111111" # C4 account guard
   accounts = {                              # L2: non-placeholder emails
-    log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
-    security_tooling = { email = "aws+security-tooling@acme.test", ou = "Security" }
-    network          = { email = "aws+network@acme.test", ou = "Infrastructure" }
-    shared_services  = { email = "aws+shared-services@acme.test", ou = "Infrastructure" }
-    backup           = { email = "aws+backup@acme.test", ou = "Infrastructure" }
-    forensics        = { email = "aws+forensics@acme.test", ou = "Security" }
+    log_archive      = { email = "aws+log-archive@acme-corp.io", ou = "Security" }
+    security_tooling = { email = "aws+security-tooling@acme-corp.io", ou = "Security" }
+    network          = { email = "aws+network@acme-corp.io", ou = "Infrastructure" }
+    shared_services  = { email = "aws+shared-services@acme-corp.io", ou = "Infrastructure" }
+    backup           = { email = "aws+backup@acme-corp.io", ou = "Infrastructure" }
+    forensics        = { email = "aws+forensics@acme-corp.io", ou = "Security" }
   }
   terraform_run_role_arn  = "arn:aws:iam::111111111111:role/tfc-run-role"
   break_glass_role_arn    = "arn:aws:iam::111111111111:role/break-glass"
@@ -193,11 +193,11 @@ run "rejects_example_subdomain_emails" {
   variables {
     accounts = {
       log_archive      = { email = "aws+log-archive@ashes.example.com", ou = "Security" }
-      security_tooling = { email = "aws+security-tooling@acme.test", ou = "Security" }
-      network          = { email = "aws+network@acme.test", ou = "Infrastructure" }
-      shared_services  = { email = "aws+shared-services@acme.test", ou = "Infrastructure" }
-      backup           = { email = "aws+backup@acme.test", ou = "Infrastructure" }
-      forensics        = { email = "aws+forensics@acme.test", ou = "Security" }
+      security_tooling = { email = "aws+security-tooling@acme-corp.io", ou = "Security" }
+      network          = { email = "aws+network@acme-corp.io", ou = "Infrastructure" }
+      shared_services  = { email = "aws+shared-services@acme-corp.io", ou = "Infrastructure" }
+      backup           = { email = "aws+backup@acme-corp.io", ou = "Infrastructure" }
+      forensics        = { email = "aws+forensics@acme-corp.io", ou = "Security" }
     }
   }
 
@@ -210,6 +210,56 @@ run "rejects_example_workload_account_emails" {
   variables {
     workload_accounts = {
       sandbox = { email = "aws+sandbox@acme.example.org", ou = "Workloads" }
+    }
+  }
+
+  expect_failures = [var.workload_accounts]
+}
+
+# The reserved TLDs .test, .invalid and .localhost (RFC 2606 / RFC 6761) never
+# deliver mail either; aws-security and aws-network reject them for
+# notification subscribers too.
+run "rejects_reserved_test_domain_account_emails" {
+  command = plan
+
+  variables {
+    accounts = {
+      log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
+      security_tooling = { email = "aws+security-tooling@acme-corp.io", ou = "Security" }
+      network          = { email = "aws+network@acme-corp.io", ou = "Infrastructure" }
+      shared_services  = { email = "aws+shared-services@acme-corp.io", ou = "Infrastructure" }
+      backup           = { email = "aws+backup@acme-corp.io", ou = "Infrastructure" }
+      forensics        = { email = "aws+forensics@acme-corp.io", ou = "Security" }
+    }
+  }
+
+  expect_failures = [var.accounts]
+}
+
+run "rejects_reserved_invalid_domain_account_emails" {
+  command = plan
+
+  variables {
+    accounts = {
+      log_archive      = { email = "REPLACE-log-archive@your-domain.invalid", ou = "Security" }
+      security_tooling = { email = "aws+security-tooling@acme-corp.io", ou = "Security" }
+      network          = { email = "aws+network@acme-corp.io", ou = "Infrastructure" }
+      shared_services  = { email = "aws+shared-services@acme-corp.io", ou = "Infrastructure" }
+      backup           = { email = "aws+backup@acme-corp.io", ou = "Infrastructure" }
+      forensics        = { email = "aws+forensics@acme-corp.io", ou = "Security" }
+    }
+  }
+
+  expect_failures = [var.accounts]
+}
+
+run "rejects_reserved_domain_workload_account_emails" {
+  command = plan
+
+  variables {
+    workload_accounts = {
+      sandbox = { email = "aws+sandbox@corp.localhost", ou = "Workloads" }
+      dev     = { email = "aws+dev@acme.test", ou = "Workloads" }
     }
   }
 

@@ -23,14 +23,16 @@
 # creates it, and aws-network reads the same aws.log_archive_bucket_name.
 # log_archive_bucket_name = "acme-org-log-archive" # aws.log_archive_bucket_name
 
-# Foundational SRA accounts (aws.accounts). The example.com placeholder emails
-# are rejected: every root email must be real, unique and deliverable. See the
-# env template for the full map shape (name, alternate_contacts, ...).
+# Foundational SRA accounts (aws.accounts). Every root email must be real,
+# unique and deliverable: the plan rejects example.com/org/net and the .invalid,
+# .localhost and .test domains, so the REPLACE-...@your-domain.invalid
+# placeholders below fail until you replace them. See the env template for the
+# full map shape (name, alternate_contacts, ...).
 # accounts = {
-#   log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
-#   security_tooling = { email = "aws+security-tooling@acme.test", ou = "Security" }
-#   network          = { email = "aws+network@acme.test", ou = "Infrastructure" }
-#   shared_services  = { email = "aws+shared-services@acme.test", ou = "Infrastructure" }
-#   backup           = { email = "aws+backup@acme.test", ou = "Infrastructure" }
-#   forensics        = { email = "aws+forensics@acme.test", ou = "Security" }
+#   log_archive      = { email = "REPLACE-aws-log-archive@your-domain.invalid", ou = "Security" }
+#   security_tooling = { email = "REPLACE-aws-security-tooling@your-domain.invalid", ou = "Security" }
+#   network          = { email = "REPLACE-aws-network@your-domain.invalid", ou = "Infrastructure" }
+#   shared_services  = { email = "REPLACE-aws-shared-services@your-domain.invalid", ou = "Infrastructure" }
+#   backup           = { email = "REPLACE-aws-backup@your-domain.invalid", ou = "Infrastructure" }
+#   forensics        = { email = "REPLACE-aws-forensics@your-domain.invalid", ou = "Security" }
 # }

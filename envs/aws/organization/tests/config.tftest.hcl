@@ -56,7 +56,7 @@ run "values_come_from_config_file" {
   }
 
   assert {
-    condition     = length(local.accounts) == 6 && local.accounts["network"].email == "aws+network@cfg.test" && local.accounts["network"].tags.tier == "core" && length(local.workload_accounts) == 2
+    condition     = length(local.accounts) == 6 && local.accounts["network"].email == "aws+network@cfg-corp.io" && local.accounts["network"].tags.tier == "core" && length(local.workload_accounts) == 2
     error_message = "accounts / workload_accounts must come from aws.accounts / aws.workload_accounts (normalised, tags kept)."
   }
 
@@ -149,7 +149,7 @@ run "tfc_project_default_without_config_prefix" {
     break_glass_role_arn   = "arn:aws:iam::111111111111:role/break-glass"
     tfc_organization       = "acme"
     accounts = {
-      log_archive = { email = "aws+log-archive@acme.test", ou = "Security" }
+      log_archive = { email = "aws+log-archive@acme-corp.io", ou = "Security" }
     }
     log_archive_bucket_name  = "acme-org-log-archive"
     landing_zone_config_path = ""
