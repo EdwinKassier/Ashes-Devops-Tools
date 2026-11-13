@@ -111,6 +111,31 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   if it carries `layer:control-plane`; and a run on an older VCS
   configuration version (`configuration-version-id` on the API) carries that
   commit's SHA and passes.
+- **PREVIEW: an enforced environment perimeter with service-team projects
+  needs the sandbox proof (ARC-C1).** The `<env>_perimeter` perimeter
+  (`modules/gcp/stages/environment`) protects the Shared VPC host project and
+  every `service_teams` project. Google requires this: "Ensure that the Shared
+  VPC network host is in the same service perimeter as the projects connected
+  to the network" (VPC Service Controls troubleshooting). Mock plans prove the
+  membership only. No real apply has run app services behind an enforced
+  perimeter that holds team projects. Calls between the host and the team
+  projects are inside the perimeter. Cloud Run image pulls from the team
+  project's own Artifact Registry repository stay inside it. The
+  environment's plan and apply service accounts keep the default ingress rule.
+  Organization-level log sinks are not blocked: Google says VPC Service
+  Controls "doesn't protect against Cloud Logging log exports on a folder or
+  organization level". The flow-log export writes to a dataset in the host
+  project, inside the perimeter. Traffic to the hub egress proxy and the PSC
+  endpoints is network traffic, not a Google API call, so the perimeter does
+  not check it. These flows can still be blocked and need a rule or a proof:
+  a CMEK key in a project outside the perimeter (`database.encryption_key_name`,
+  `app_platform.artifact_registry_kms_key_name`; Google says a Cloud SQL key
+  must be "in the same perimeter as the resource, or in a perimeter connected
+  through a perimeter bridge"); an image in a registry outside the perimeter;
+  an app-deploy WIF identity (`docs/guides/deploying-a-service.md`); and any
+  caller outside Google Cloud. Before you enforce, run the perimeter in
+  dry-run with the team projects in it and read the violation logs
+  (`docs/runbooks/production-hardening.md`).
 - **GCP Private Service Connect endpoint for Google APIs is mock-tested only
   (ARC-1).** `net-hub` and `net-spoke` name the endpoint by Google's rule
   (1-20 lower-case letters and numbers, starting with a letter) and reserve an

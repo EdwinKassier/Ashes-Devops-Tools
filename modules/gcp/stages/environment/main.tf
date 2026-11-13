@@ -54,6 +54,15 @@ data "google_project" "host_project" {
   project_id = var.host_project.project_id
 }
 
+locals {
+  # Projects in the environment perimeter, by number: the host first, then the
+  # service-team projects in key order (a stable plan).
+  vpc_sc_protected_projects = concat(
+    [data.google_project.host_project.number],
+    [for k in sort(keys(var.service_teams)) : module.service_team[k].project_number],
+  )
+}
+
 # Environment spoke network: the net-spoke composition. The label stays "host"
 # so the caller's moved blocks (and the network-core moves recorded in
 # envs/gcp/workload/moved.tf) keep their addresses.
@@ -128,10 +137,12 @@ module "host" {
       perimeter_title    = coalesce(local.vpc_sc.perimeter_title, "${upper(var.environment)} Perimeter")
       perimeter_type     = "PERIMETER_TYPE_REGULAR"
       enable_dry_run     = local.vpc_sc.enable_dry_run
-      # VPC-SC requires numeric project numbers, not project IDs.
-      protected_projects = [
-        data.google_project.host_project.number
-      ]
+      # VPC-SC requires numeric project numbers, not project IDs. The perimeter
+      # protects every project the environment owns (ARC-C1): the Shared VPC
+      # host and every service-team project, where the app services and their
+      # data live. Google requires a Shared VPC host and its service projects
+      # in the same perimeter.
+      protected_projects  = local.vpc_sc_protected_projects
       restricted_services = local.vpc_sc.restricted_services
       ingress_policies    = local.effective_vpc_sc_ingress_policies
       egress_policies     = local.effective_vpc_sc_egress_policies
@@ -192,17 +203,18 @@ module "service_team" {
   activate_apis = distinct(concat(each.value.activate_apis, local.team_service_apis[each.key]))
 
   enable_shared_vpc_attachment = each.value.enable_shared_vpc_attachment
-  shared_vpc_host_project_id   = var.host_project.project_id
-  shared_vpc_subnets           = each.value.shared_vpc_subnets
-  enable_gke_network_user      = each.value.enable_gke_network_user
+  # Attach service projects only after the host project is a Shared VPC host
+  # with its subnets. This output depends on the spoke network only, not on
+  # all of module.host: the perimeter in module.host lists these team
+  # projects, so a module-wide depends_on would be a dependency cycle.
+  shared_vpc_host_project_id = module.host.shared_vpc_host_project_id
+  shared_vpc_subnets         = each.value.shared_vpc_subnets
+  enable_gke_network_user    = each.value.enable_gke_network_user
 
   project_admin_group_email = each.value.project_admin_group_email
   project_admin_roles       = each.value.project_admin_roles
 
   labels = merge(var.labels, { team = each.key }, each.value.labels)
-
-  # Attach service projects only after the host project is a Shared VPC host.
-  depends_on = [module.host]
 }
 
 # =============================================================================

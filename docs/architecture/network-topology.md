@@ -79,12 +79,13 @@ graph TB
 
 ## VPC Service Controls Boundary
 
-When `vpc_service_controls.enabled = true`, a VPC-SC perimeter wraps the spoke project. Services listed in `restricted_services` (e.g., BigQuery, Cloud Storage, Secret Manager) cannot be called from outside the perimeter without an explicit ingress policy.
+When the environment has an access policy, a VPC-SC perimeter wraps the spoke (Shared VPC host) project and every service-team project of the environment. Google requires a Shared VPC host and its service projects in the same perimeter. Services listed in `restricted_services` (e.g., BigQuery, Cloud Storage, Secret Manager) cannot be called from outside the perimeter without an explicit ingress policy.
 
 ```mermaid
 graph LR
     subgraph perimeter["VPC-SC Perimeter — prod_perimeter"]
         spoke["Spoke Project\n(protected)"]
+        teams["Service-team projects\n(protected)"]
         bq["BigQuery"]
         gcs["Cloud Storage"]
         sm["Secret Manager"]
@@ -101,7 +102,7 @@ graph LR
 
 The perimeter starts in **dry-run mode** (`enable_dry_run = true`) — violations are logged to Cloud Audit Logs but not blocked. Flip to enforcement after validating that all legitimate callers have ingress policies.
 
-Each environment host project sits in its **own** perimeter. The hub perimeter (`hub_data_perimeter`, `stages/network-hub`) protects only the hub and DNS projects: a project can belong to only one regular perimeter of an access policy, and one shared perimeter around every environment would let prod and non-prod exchange data freely once enforced. This holds in both modes: with one org-wide access policy the hub and environment perimeters hold disjoint projects, and with per-environment scoped policies the environment perimeters live in their own policies. VPC peering between a spoke and the hub carries IP traffic only; it does not merge perimeters.
+Each environment's host and service-team projects sit in their **own** perimeter. The hub perimeter (`hub_data_perimeter`, `stages/network-hub`) protects only the hub and DNS projects: a project can belong to only one regular perimeter of an access policy, and one shared perimeter around every environment would let prod and non-prod exchange data freely once enforced. This holds in both modes: with one org-wide access policy the hub and environment perimeters hold disjoint projects, and with per-environment scoped policies the environment perimeters live in their own policies. VPC peering between a spoke and the hub carries IP traffic only; it does not merge perimeters.
 
 ---
 

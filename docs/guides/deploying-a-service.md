@@ -298,6 +298,10 @@ These items are verified by mocked plan tests only:
   lives outside the perimeter. Mirror a placeholder into a repo inside it and set
   `gcp.workload.bootstrap_image` in `config/landing-zone.yaml` (or
   `app_bootstrap_image`) once for every service, or `image` per service.
+  The perimeter holds the host project and every service-team project. A CMEK
+  key (`database.encryption_key_name`, `artifact_registry_kms_key_name`) or an
+  image registry in a project outside the perimeter needs an egress rule
+  (`vpc_sc_egress_policies`) once the perimeter is enforced.
 - **Binary Authorization.** The first-revision image must satisfy the policy, or
   the first apply fails. Use an attested image as `bootstrap_image`.
 - **Shared repos.** Two services may share one GitHub repository with *different*

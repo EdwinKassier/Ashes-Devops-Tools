@@ -51,7 +51,7 @@ output "security_policy_id" {
 }
 
 output "vpc_sc_perimeter_names" {
-  description = "Map of VPC-SC perimeter key to perimeter name, or null when VPC-SC is disabled."
+  description = "Map of VPC-SC perimeter key to perimeter name; an empty map when VPC-SC is disabled."
   value       = module.host.vpc_service_controls != null ? { for k, v in module.host.vpc_service_controls : k => v.name } : null
 }
 

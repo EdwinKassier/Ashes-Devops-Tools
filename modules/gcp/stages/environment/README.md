@@ -124,7 +124,7 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_project_service.osconfig (modules/gcp/stages/environment/main.tf#L253)
+- resource.google_project_service.osconfig (modules/gcp/stages/environment/main.tf#L265)
 - data source.google_project.host_project (modules/gcp/stages/environment/main.tf#L53)
 
 
@@ -181,5 +181,5 @@ The following resources are created:
 | <a name="output_subnets"></a> [subnets](#output\_subnets) | All subnet outputs organized by tier |
 | <a name="output_vm_backup_policy_self_links"></a> [vm\_backup\_policy\_self\_links](#output\_vm\_backup\_policy\_self\_links) | Map of target project key (host, team-<name>) to its snapshot-schedule resource policy self\_links. Attach these to persistent disks. Empty when vm\_operations.enable\_backup\_policy = false. |
 | <a name="output_vpc_peerings"></a> [vpc\_peerings](#output\_vpc\_peerings) | VPC peering connection outputs |
-| <a name="output_vpc_sc_perimeter_names"></a> [vpc\_sc\_perimeter\_names](#output\_vpc\_sc\_perimeter\_names) | Map of VPC-SC perimeter key to perimeter name, or null when VPC-SC is disabled. |
+| <a name="output_vpc_sc_perimeter_names"></a> [vpc\_sc\_perimeter\_names](#output\_vpc\_sc\_perimeter\_names) | Map of VPC-SC perimeter key to perimeter name; an empty map when VPC-SC is disabled. |
 <!-- END_TF_DOCS -->

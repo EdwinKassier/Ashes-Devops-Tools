@@ -64,7 +64,7 @@ output "security_policy_id" {
 }
 
 output "vpc_sc_perimeter_names" {
-  description = "Map of VPC-SC perimeter key to perimeter name, or null when VPC-SC is disabled. Callers should use try(output.vpc_sc_perimeter_names, null) to handle the null case safely."
+  description = "Map of VPC-SC perimeter key to perimeter name; an empty map when VPC-SC is disabled."
   value       = module.environment.vpc_sc_perimeter_names
 }
 

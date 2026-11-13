@@ -124,6 +124,12 @@ output "vpc_flow_logs_kms_key_name" {
   value       = var.flow_logs_export.enabled ? module.flow_logs_kms[0].key_names["vpc-flow-logs"] : null
 }
 
+output "shared_vpc_host_project_id" {
+  description = "The host project ID once the Shared VPC host and its subnets exist, or null when network.shared_vpc_host = false. Pass it to service projects that attach to this host: it orders the attachment after the network without depending on the rest of the spoke (such as the VPC-SC perimeter, which may list those service projects)."
+  value       = var.network.shared_vpc_host ? var.project_id : null
+  depends_on  = [module.network]
+}
+
 output "shared_vpc_service_project_ids" {
   description = "The IDs of the Shared VPC service project attachments, keyed by service project."
   value       = { for k, v in module.shared_vpc_service_projects : k => v.id }

@@ -1637,6 +1637,42 @@ leave the setting out of the policy.
 
 ### GCP
 
+#### The environment perimeter now holds the service-team projects (gcp-workload, ARC-C1)
+
+**Who:** every `gcp-workload-<env>` with a VPC-SC perimeter and at least one
+`service_teams` entry.
+**What changes:** the `<env>_perimeter` perimeter lists the host project and
+every service-team project. Before, it listed the host project only. The plan
+shows an in-place update of the perimeter. No input changes, and no resource is
+replaced. Service-team projects now wait for the spoke network only, not for
+all of the spoke, so the first apply of a new team may create its project
+earlier in the run.
+
+- **Dry-run perimeter** (the default outside production): only the dry-run
+  spec changes. Nothing is blocked. Read the violation logs for the team
+  projects before you enforce.
+- **Enforced perimeter**: calls between a team project and anything outside the
+  perimeter are now checked, and can be blocked. Check these before you apply:
+  a CMEK key in a project outside the perimeter
+  (`database.encryption_key_name`, `app_platform.artifact_registry_kms_key_name`),
+  an image registry outside the perimeter, an app-deploy WIF identity, and any
+  other caller outside Google Cloud. Add a `vpc_sc_egress_policies` or
+  `vpc_sc_ingress_policies` rule for each one that is legitimate.
+
+Steps for an enforced production environment:
+
+1. Apply with `vpc_sc_enable_dry_run = true` and a short
+   `production_vpc_sc_dry_run_waiver` `{reason, expires}` in
+   `config/tfc-workspaces.yaml`.
+2. Let real traffic run. Read the dry-run violation logs
+   (`protoPayload.metadata.dryRun = true`) for the team projects. Add a rule for
+   each legitimate call.
+3. Remove the waiver, set `vpc_sc_enable_dry_run = false` and apply.
+
+A regulated environment (`compliance_class: regulated`) refuses the waiver.
+Run steps 1 and 2 on a non-regulated environment with the same services first,
+add the same rules to the regulated environment, then apply it.
+
 #### Production networks pin their zones (gcp-workload, gcp-network-hub, breaking, IAC-1)
 
 **Breaking: a production plan that passed before now fails.** Each spoke, hub and DNS anchor VPC

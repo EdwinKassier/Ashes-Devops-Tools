@@ -280,6 +280,115 @@ run "no_identities_means_no_default_rule" {
   }
 }
 
+# ARC-C1: the environment perimeter protects every project the environment
+# owns, not only the Shared VPC host. Google requires the host and its service
+# projects in one perimeter, and the team projects hold the services and data.
+run "perimeter_protects_host_and_every_team_project" {
+  command = plan
+
+  variables {
+    vpc_service_controls = { access_policy_name = "1234567890", enable_dry_run = false }
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+      ledger = {
+        project_admin_group_email = "ledger-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  override_module {
+    target = module.service_team["payments"]
+    outputs = {
+      project_id            = "payments-1a2b"
+      project_number        = "333333333333"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "acme-dev-host-abcd"
+    }
+  }
+
+  override_module {
+    target = module.service_team["ledger"]
+    outputs = {
+      project_id            = "ledger-3c4d"
+      project_number        = "444444444444"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "acme-dev-host-abcd"
+    }
+  }
+
+  assert {
+    condition     = module.host.vpc_service_controls["dev_perimeter"].protected_project_numbers == tolist(["222222222222", "444444444444", "333333333333"])
+    error_message = "The perimeter must protect the host project and every service-team project (host first, then teams in key order), by project number."
+  }
+
+  assert {
+    condition = toset(module.host.vpc_service_controls["dev_perimeter"].perimeter.status[0].resources) == toset([
+      "projects/222222222222", "projects/333333333333", "projects/444444444444",
+    ])
+    error_message = "The enforced status of the perimeter must list the host project and both team projects."
+  }
+}
+
+# Adding a team adds its project; a dry-run perimeter carries it in the spec.
+run "dry_run_perimeter_adds_a_new_team_project" {
+  command = plan
+
+  variables {
+    vpc_service_controls = { access_policy_name = "1234567890" }
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  override_module {
+    target = module.service_team["payments"]
+    outputs = {
+      project_id            = "payments-1a2b"
+      project_number        = "333333333333"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "acme-dev-host-abcd"
+    }
+  }
+
+  assert {
+    condition = (
+      !module.host.vpc_service_controls["dev_perimeter"].enforced &&
+      length(module.host.vpc_service_controls["dev_perimeter"].perimeter.status) == 0 &&
+      toset(module.host.vpc_service_controls["dev_perimeter"].perimeter.spec[0].resources) == toset(["projects/222222222222", "projects/333333333333"])
+    )
+    error_message = "A dry-run perimeter must list the host project and the new team project in its spec, and enforce nothing."
+  }
+}
+
+run "perimeter_without_teams_protects_the_host_only" {
+  command = plan
+
+  variables {
+    vpc_service_controls = { access_policy_name = "1234567890", enable_dry_run = false }
+  }
+
+  assert {
+    condition     = module.host.vpc_service_controls["dev_perimeter"].protected_project_numbers == tolist(["222222222222"])
+    error_message = "With no service teams the perimeter protects the host project only."
+  }
+}
+
 run "explicit_psc_target_wins" {
   command = plan
 

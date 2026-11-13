@@ -669,6 +669,15 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   whose `variable_set_id` is unknown at plan time used to pass whenever the plan created any
   `tfe_variable_set`. It now passes only when its configuration references a `tfe_variable_set`,
   followed through `each.value`, module arguments and module `for_each`. See `UPGRADING.md`.
+- **The GCP environment perimeter protects the service-team projects (ARC-C1).** The
+  `<env>_perimeter` perimeter (`modules/gcp/stages/environment`) held only the Shared VPC host
+  project, so the team projects that hold Cloud Run, Cloud SQL, Artifact Registry and Secret
+  Manager were outside it. It now lists the host project and every `service_teams` project, by
+  project number. Google requires a Shared VPC host and its service projects in the same perimeter.
+  Service-team projects now attach to the host after the spoke network only (the new net-spoke
+  output `shared_vpc_host_project_id`), not after all of the spoke, because the perimeter lists
+  them. An existing perimeter shows an in-place update. Enforced with team projects is PREVIEW
+  (`docs/known-gaps.md`); see `UPGRADING.md` before you apply an enforced perimeter.
 
 ### Changed
 
