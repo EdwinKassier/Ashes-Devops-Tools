@@ -426,6 +426,9 @@ done < <(find modules -type d -path '*/examples/basic' ! -path '*/.terraform/*' 
 echo "==> Every workflow job that holds a secret or an OIDC token blocks egress"
 ./scripts/check-github-governance.sh || note "a credential-holding job is not harden-runner egress-policy: block (see above)"
 
+echo "==> Every workflow run: step that pipes runs under pipefail (shell: bash)"
+python3 -I scripts/check-workflow-pipefail.py || note "a workflow run: step pipes without pipefail (see above)"
+
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."
 else

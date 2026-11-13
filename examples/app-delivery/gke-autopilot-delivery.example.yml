@@ -80,6 +80,13 @@ concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   deploy:
     runs-on: ubuntu-latest  # private control plane: use a runner that can reach it
@@ -133,7 +140,7 @@ jobs:
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
           docker push "${REPO}:${GITHUB_SHA}"
           digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${REPO}:${GITHUB_SHA}" \
-            | grep -F "${REPO}@" | head -n 1 | cut -d@ -f2)"
+            | awk -F@ -v repo="${REPO}" '$1 == repo && !found { found = 1; print $2 }')"
           case "${digest}" in
             sha256:*) echo "digest=${digest}" >> "${GITHUB_OUTPUT}" ;;
             *) echo "::error::could not resolve the pushed digest of ${REPO}:${GITHUB_SHA}"; exit 1 ;;

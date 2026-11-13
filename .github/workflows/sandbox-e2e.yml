@@ -67,6 +67,13 @@ env:
   CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK: "true"
   CLOUDSDK_CORE_DISABLE_USAGE_REPORTING: "true"
 
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   preflight:
     name: E2E Preflight

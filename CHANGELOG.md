@@ -58,6 +58,19 @@ IDs prefixed `re-audit-3` are this report's; the same IDs in older entries belon
   only in CI; [known gaps](docs/known-gaps.md) records it and recommends running the scanner as an
   HCP Terraform pre-plan run task.
 
+#### Fixed
+
+- **Workflow `run:` steps run under pipefail (re-audit-3 CICD-1).** No workflow set a `shell:`,
+  so GitHub ran every step as `bash -e` without pipefail, and the `Examples Plan` step
+  `if ! ./scripts/plan-module-examples.sh ... | tee plan-examples.log` passed when an example
+  failed to plan. Every workflow in `.github/workflows` and `examples/app-delivery` with a `run:`
+  step now sets `defaults: run: shell: bash` (`bash -eo pipefail`). The breaking-change check no
+  longer pipes into an early-exiting `grep -q`, and the app-delivery examples resolve the pushed
+  digest with one `awk` instead of `grep | head | cut`, so a SIGPIPE cannot turn either into a
+  false result. New gate: `scripts/check-workflow-pipefail.py` (run by `make consistency`) fails
+  when a `run:` step pipes and neither the step, its job nor the workflow sets `shell: bash` or
+  another shell with pipefail, unless the script sets `-o pipefail` itself.
+
 ### Examples audit (2026-11-13)
 
 #### Added

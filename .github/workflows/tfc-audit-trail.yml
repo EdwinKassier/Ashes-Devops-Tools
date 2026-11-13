@@ -56,6 +56,13 @@ concurrency:
   group: tfc-audit-trail
   cancel-in-progress: false
 
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   export:
     name: Export HCP Terraform audit trail

@@ -45,6 +45,13 @@ env:
   # (Absolute path: the runner/HOME contexts are not available at workflow level.)
   TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
 
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   discover:
     name: Discover Terraform Roots
@@ -493,9 +500,11 @@ jobs:
           git rev-parse --verify --quiet "origin/${BASE_REF}" >/dev/null \
             || git fetch --no-tags origin "${BASE_REF}"
           base_sha="$(git merge-base "origin/${BASE_REF}" HEAD)"
+          # grep reads all of its input (no -q): an early-exiting grep -q can
+          # SIGPIPE git, which pipefail would turn into a false result.
           if git log --format=%B "${base_sha}..HEAD" \
-              | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE'; then
-            if ! git diff --name-only "${base_sha}..HEAD" | grep -qx 'UPGRADING.md'; then
+              | grep -E '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE' >/dev/null; then
+            if ! git diff --name-only "${base_sha}..HEAD" | grep -x 'UPGRADING.md' >/dev/null; then
               msg="A commit in this PR is marked breaking (!: or BREAKING CHANGE)"
               msg+=" but UPGRADING.md is not in the diff. Add an entry under 'Unreleased'."
               echo "::error::${msg}"
