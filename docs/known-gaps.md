@@ -1745,11 +1745,14 @@ side (all mock-tested, secure defaults):
   owner on it satisfies the line. `.github/CODEOWNERS` lists the security team
   alone on `/policies/`, `/envs/gcp/guardrails/`,
   `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
-  `/.github/requirements/`, `/.github/CODEOWNERS`, `/templates/aws/bootstrap/`
-  and `/templates/CODEOWNERS.tftpl`, so those need a security approval. Every
-  other security-sensitive line (`/envs/tfc-admin/`, which also
+  `/.github/requirements/`, `/.github/CODEOWNERS`, `/templates/aws/bootstrap/`,
+  `/templates/CODEOWNERS.tftpl`, `/modules/gcp/iam/deny-policy/`,
+  `/modules/tfc/`, `/renovate.json`, `/release-please-config.json`,
+  `/.tool-versions` and `/.pre-commit-config.yaml`, so those need a security
+  approval. Every other security-sensitive line (`/envs/tfc-admin/`, which also
   wires the policy sets in `main.tf`, `/.github/` workflows, the control-plane
-  roots, the IAM and governance modules, `config/landing-zone.yaml` and
+  roots, the other IAM modules and the governance modules, `.checkov.yaml`,
+  `config/landing-zone.yaml` and
   `config/tfc-workspaces.yaml`) lists the platform and the security team, so a
   platform approval alone satisfies it. A platform engineer can therefore
   change, for example, the workflow that runs the plan-time gate, or

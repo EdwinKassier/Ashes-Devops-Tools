@@ -30,7 +30,6 @@
 /.terraform-docs.yml      ${platform_team}
 /.tflint.hcl              ${platform_team}
 /.checkov.yaml            ${platform_team} ${security_team}
-/.pre-commit-config.yaml  ${platform_team} ${security_team}
 
 # ── Deployable roots ─────────────────────────────────────────────────────────
 /envs/           ${platform_team}
@@ -39,7 +38,6 @@
 # ── Modules ──────────────────────────────────────────────────────────────────
 /modules/gcp/        ${platform_team}
 /modules/aws/        ${platform_team}
-/modules/tfc/        ${platform_team}
 /modules/supabase/   ${app_platform_team}
 /modules/vercel/     ${app_platform_team}
 /modules/saas/       ${app_platform_team}
@@ -85,8 +83,11 @@ CHANGELOG.md   ${platform_team}
 # guardrails.auto.tfvars that holds iam_deny_policies), the plan-time execution
 # gate and its parser lock, the AWS phase-0 CloudFormation templates (they
 # create the management-account roles), this file and the template it is
-# rendered from. The security team must have at least one member who is not on
-# the platform team.
+# rendered from. Also the deny-policy module the guardrails root uses, the TFC
+# workspace module tfc-admin builds every workspace with, and the supply-chain
+# pins: Renovate, release-please, the tool versions and the pre-commit hooks.
+# The security team must have at least one member who is not on the platform
+# team.
 /policies/                        ${security_team}
 /envs/gcp/guardrails/             ${security_team}
 /modules/gcp/stages/guardrails/   ${security_team}
@@ -95,3 +96,9 @@ CHANGELOG.md   ${platform_team}
 /.github/CODEOWNERS               ${security_team}
 /templates/aws/bootstrap/         ${security_team}
 /templates/CODEOWNERS.tftpl       ${security_team}
+/modules/gcp/iam/deny-policy/     ${security_team}
+/modules/tfc/                     ${security_team}
+/renovate.json                    ${security_team}
+/release-please-config.json       ${security_team}
+/.tool-versions                   ${security_team}
+/.pre-commit-config.yaml          ${security_team}

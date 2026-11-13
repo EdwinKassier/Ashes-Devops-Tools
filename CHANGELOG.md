@@ -746,6 +746,12 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   waives it through the `expires` day (UTC). The scaffolder's new `--tfc-plan` flag writes
   `org.tfc.plan`, `standard` by default with `--profile production`, and the scaffolder lists the
   policy sets as still required when they would be off. See `UPGRADING.md`.
+- **More paths need a security approval (CICD-3).** The security-only section of
+  `.github/CODEOWNERS` and `templates/CODEOWNERS.tftpl` now also lists
+  `/modules/gcp/iam/deny-policy/`, `/modules/tfc/`, `/renovate.json`,
+  `/release-please-config.json`, `/.tool-versions` and `/.pre-commit-config.yaml`. Before, a
+  platform approval alone was enough for all of them. Forks copy the lines into their own
+  CODEOWNERS (`UPGRADING.md`).
 
 ### Changed
 

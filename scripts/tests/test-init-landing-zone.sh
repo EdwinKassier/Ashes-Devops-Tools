@@ -349,7 +349,9 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
   # required: GitHub accepts one approval from any owner on the matching line.
   for path in /policies/ /envs/gcp/guardrails/ /modules/gcp/stages/guardrails/ \
     /scripts/check-plan-time-exec.py /.github/requirements/ /.github/CODEOWNERS \
-    /templates/aws/bootstrap/ /templates/CODEOWNERS.tftpl; do
+    /templates/aws/bootstrap/ /templates/CODEOWNERS.tftpl \
+    /modules/gcp/iam/deny-policy/ /modules/tfc/ \
+    /renovate.json /release-please-config.json /.tool-versions /.pre-commit-config.yaml; do
     assert_line "${co}" "^${path} +@acme-gh/sec\$" "${path} is security-team only"
   done
   # Each security-only line must come after every broader line that matches it,
@@ -357,7 +359,9 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
   # security-only.
   for probe in policies/opa/x.rego envs/gcp/guardrails/main.tf modules/gcp/stages/guardrails/main.tf \
     scripts/check-plan-time-exec.py .github/requirements/plan-time-exec.txt .github/CODEOWNERS \
-    templates/aws/bootstrap/phase0-management.yaml templates/CODEOWNERS.tftpl; do
+    templates/aws/bootstrap/phase0-management.yaml templates/CODEOWNERS.tftpl \
+    modules/gcp/iam/deny-policy/main.tf modules/tfc/workspace/main.tf \
+    renovate.json release-please-config.json .tool-versions .pre-commit-config.yaml; do
     last="$(awk -v p="/${probe}" '
       /^[^#[:space:]]/ {
         pat = $1

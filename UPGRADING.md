@@ -114,7 +114,12 @@ platform approval alone. `templates/CODEOWNERS.tftpl` now ends with a section th
 security team alone on `/policies/`, `/envs/gcp/guardrails/`, `/modules/gcp/stages/guardrails/`,
 `/scripts/check-plan-time-exec.py`, `/.github/requirements/`, `/.github/CODEOWNERS`,
 `/templates/aws/bootstrap/` and `/templates/CODEOWNERS.tftpl`, so a change there needs a security
-approval. Copy that section ("Guardrails (security team ONLY ...)") to the end of your
+approval. The section now also lists `/modules/gcp/iam/deny-policy/` (the module behind the org
+IAM deny policies), `/modules/tfc/` (the workspace module tfc-admin uses), `/renovate.json`,
+`/release-please-config.json`, `/.tool-versions` and `/.pre-commit-config.yaml` (CICD-3). Before,
+`/modules/gcp/iam/` and `/.pre-commit-config.yaml` accepted a platform approval alone, and the
+other four fell to the platform-only default. Delete the old `/modules/tfc/` and
+`/.pre-commit-config.yaml` lines from the upper sections when you copy the new ones. Copy that section ("Guardrails (security team ONLY ...)") to the end of your
 `.github/CODEOWNERS` and replace `${security_team}` with your security team. Do not re-run the
 scaffolder over an existing `config/landing-zone.yaml`: its `--force` overwrites that file too. Keep
 the section last, or a broader line after it wins. It takes effect only when code-owner review is required on the default
