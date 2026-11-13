@@ -175,3 +175,43 @@ Plan Step 4 requires these before the next phase. Grouped by size. The lens each
 **Delivery.** CICD-6 the sandbox E2E label gate is bypassable by any writer. CICD-9 wildcard cloud domains in egress allowlists (KNOWN). CICD-10 release fails open with no ingress commit (KNOWN). CICD-11 no SBOM, signing or tag protection (KNOWN). CICD-12 Renovate not installed; Dependabot has no cooldown (KNOWN). CICD-13 to CICD-17: unhashed `pip install`; terraform-docs checksum from the same origin; example delivery workflows without harden-runner; zizmor misses `*.example.yml`; docs bot pull requests get no required checks. OpenSSF Scorecard estimate after merge: about 5.5; only live settings move it above 7.
 
 **Adoption.** ADO-09 no minimal AWS footprint in the scaffolder (9 accounts against a default quota of 10). ADO-11 nine TFC team inputs and scattered operator steps with no single checklist. ADO-14 terminology: TFC, Terraform Cloud and HCP Terraform used interchangeably; phase names differ by cloud. Capability gaps for the enterprise persona: no EKS, Azure, AI/ML services, data platform, IdP integration, service mesh, developer portal, AWS cost export or active-active primitives.
+
+## Status after Phase 2b (2026-11-13)
+
+This section records what the Phase 2b commits (`87a134cc..17419a04`) did with the findings above. It does not change the findings. Scores are not re-estimated here: the next independent re-audit sets them. "Closed in code" means the code and its mock or OPA tests do what the gap task asked; nothing below is proven on a real cloud or a real HCP Terraform run.
+
+| Finding | Status | Evidence commits | Still needs the sandbox (or a decision) |
+|---|---|---|---|
+| ARC-1 | Closed in code (mock tests only) | `30e35ce1`, `e3d0254e`, `51f5121b` | A first real hub and environment network apply that creates the PSC endpoint with the derived name and address |
+| SEC-1 | Closed with residual: `tfc_vcs_run_only` reads `input.run`, is PREVIEW and sits in the overridable set. On `gcp-guardrails` one security engineer can upload, override and apply alone | `413b836b`, `248dbb85`, `d7f1aee2` | Read `run.commit_sha` on a VCS, a UI-queued and an API-upload run; then move the rule to the hard-gate set |
+| SEC-3 / CICD-7 | Closed in code | `11c540ec`, `188b1333`, `1cc09a71`, `efbb885e` | The variable set walk needs `input.plan.configuration`: one tfc-admin plan that creates and attaches a variable set |
+| SEC-6 | Closed with residual: a denylist; `HOME` and `XDG_CONFIG_HOME` are not blocked | `0ac83941`, `188b1333` | None (a design limit, in known-gaps) |
+| SEC-2 | Closed in code. Deny-tamper SCP 5,068 characters with defaults (quota 10,240); `tfc-apply` boundary 5,423 of 6,144. That Control Tower writes its stacks as `AWSControlTowerExecution` is inferred from the Control Tower guide | `5443e62f`, `954137ea`, `c01ba9d8` | Apply the SCP and boundary in a sandbox organization; on a Control Tower estate, confirm the writer role |
+| SEC-4 | Closed with residual: `tfc-mgmt-apply` keeps `AdministratorAccess` in the management account | `a1c3d006`, `71567bcd` | Deploy the phase-0 stack and confirm the self-tampering and member-pivot denies |
+| ARC-2 | Closed with residual: PREVIEW; DynamoDB with `aws:ResourceOrgID` is unproven; the regional ECR and Secrets Manager names in the egress allowlist admit any account | `7bd63597`, `3ac8fc38` | The production gateway endpoint checks in known-gaps (ECR pulls, `dnf`, SSM patching, DynamoDB in and outside the organization) |
+| IAC-1 | Closed in code | `6be6c490`, `e4e36996`, `d7f1aee2` | A plan with pinned zones on an existing network that shows no subnet change |
+| ARC-4 | Closed with residual: production runs on an expiring waiver until the hub Secure Web Proxy is proven | `24093f1e`, `e4e36996`, `d7f1aee2` | Prove the Secure Web Proxy (PREVIEW), then drop the waivers |
+| CMP-01 | Closed by relabel: DET-05 is a scaffold; the isolation handler is not built | `3484f15c` | None until the handler is built |
+| CMP-02 | Closed with residual: the network log sink is on only for regulated or framework estates; LOG-06 is PREVIEW | `2a0d462a`, `22a050f0`, `6badb3a7` | One org sink apply that delivers to the audit bucket; check the legacy sink identity case |
+| CMP-05 | Closed | `ba7a4c05`, `e4e36996` | None |
+| CMP-09 | Closed | `3484f15c` | None |
+| CMP-12 | Closed | `3484f15c` | None |
+| CICD-2 | Closed with residual: `envs/tfc-admin`, the `.github` workflows and the config files (and the waivers in them) are still satisfied by a platform approval alone | `35d83965`, `a39285d5`, `17419a04` | Real teams and required code-owner review on the default branch (Phase 3) |
+| CICD-8 | Closed (OPA unit tests only) | `e152ef02` | One update that turns `deletion_protection` off in the sandbox |
+| ADO-01, ADO-02, ADO-03, ADO-07, ADO-08, ADO-10, ADO-12, ADO-13 | Closed. ADO-08: the order (enable Identity Center after the delegated administrator registration) is unproven | `be02aa4d`, `851ec83b`, `51f5121b` | ADO-08: the AWS bootstrap order on a real organization |
+
+**Still open: owner, funding or design work**
+
+- CICD-1, CICD-3 to CICD-5: codified rulesets, protected environments, a policy release branch and a second maintainer (owner decisions O1 and O3, Phase 3).
+- ADO-04: CI on `main` is still red until this branch merges or `main` is fixed.
+- ADO-06: bus factor 1.
+- ADO-09 (minimal AWS footprint) and ADO-11 (one operator checklist).
+- SEC-5: `organization-apply` org-level `folderIamAdmin` and the fail-open `securityAdmin` condition.
+- ARC-3 (IP plan size), ARC-5 (second region) and CMP-11 (the CloudTrail `aws:SourceOrgID` condition, sandbox).
+- ARC-6 / ADO-05 got worse: `git log v0.1.0..HEAD --oneline | grep -c '!:'` now counts 57 breaking commits (45 at the re-audit), and `UPGRADING.md` has 3,218 lines, 3,134 of them under Unreleased (about 2,800 at the re-audit). The sandbox upgrade log is still empty.
+
+**Tool results now**
+
+- `opa test policies/` (OPA 1.22.2): 403 / 403 pass (288 at the re-audit).
+- `terraform test`: 3,220 runs in 145 directories, 0 failed, at `a39285d5`. The later commits change only docs, config example comments, scaffold fixtures, CODEOWNERS, the scaffolder test and one variable description.
+- `make count`: 126 modules, 15 roots, 350 test suites.

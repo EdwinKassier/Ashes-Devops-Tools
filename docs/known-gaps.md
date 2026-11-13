@@ -743,6 +743,8 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 **Phases 1 and 2 complete (2026-11-12).** Phases 1 and 2 of [the remediation plan](moai/plans/2026-11-11-dd-score-max/README.md) are done in code. Phase 3 (codified GitHub governance) is next; it needs owner decisions O1 and O3. The mock-tested items below still need the sandbox.
 
+**Phase 2b complete (2026-11-13).** The Phase 2b gap tasks are done in code; the [re-audit status section](audit/2026-11-12-due-diligence-reaudit.md#status-after-phase-2b-2026-11-13) lists each finding, its evidence commits and what still needs the sandbox. Phase 3 needs owner decisions O1 and O3.
+
 - **Validate in the sandbox (mock-tested only):**
   - GCP rejects a peering to a network that does not exist yet. The hub-side
     `hub-to-<env>` peering design relies on it, and on the `google_compute_networks`
