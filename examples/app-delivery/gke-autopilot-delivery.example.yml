@@ -63,8 +63,10 @@
 #   GKE_CLUSTER        the gke_cluster_name output, e.g. dev-apps
 #   IMAGE_REPOSITORY   <region>-docker.pkg.dev/<project>/<repo>/<image>
 #
-# Action pinning: every action is pinned to a full commit SHA; keep them
-# current with Dependabot or Renovate.
+# Action pinning: every action is pinned to a full commit SHA.
+# These SHAs are not tracked by this repository's Dependabot (it scans
+# .github/workflows only, not examples/): keep them current with Dependabot or
+# Renovate in the application repository once copied.
 
 name: Deploy service (GKE Autopilot)
 
@@ -93,6 +95,16 @@ jobs:
       NAMESPACE: my-api   # the namespace the deploy SA's RoleBinding covers
       CONTAINER: my-api   # the container within the Deployment
     steps:
+      # First step of every job: monitor (audit) or restrict (block) the
+      # runner's network egress. audit only records the endpoints this job
+      # calls (registries, Trivy DB, Sigstore, the cloud APIs); once a few runs
+      # show the list, switch to egress-policy: block with allowed-endpoints,
+      # so a compromised build step or action cannot exfiltrate the OIDC token.
+      - name: Harden the runner (egress audit)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false

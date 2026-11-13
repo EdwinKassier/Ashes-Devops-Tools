@@ -38,6 +38,15 @@ GitHub App and sets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`
   Terraform root under `examples/` passes a module argument or a nested object attribute that the
   module variable does not declare. The limits are in `docs/known-gaps.md`.
 
+#### Security
+
+- **The app-delivery example workflows start with harden-runner.** Each job in
+  `examples/app-delivery/*.example.yml` holds a cloud OIDC token, so its first step is now
+  `step-security/harden-runner` (v2.22.3, SHA-pinned) in `egress-policy: audit`, with a comment to
+  switch to `block` with the endpoints the audit shows. The pinning comment now says that this
+  repository's Dependabot does not track these files. The Cloud Run example also documents
+  `service_team` and the Cloud Run job variant (`CLOUD_RUN_JOB`, `gcloud run jobs deploy`).
+
 #### Documentation
 
 - **Presets list the production prerequisites they do not set.** `examples/presets/README.md`

@@ -19,8 +19,11 @@
 #
 # Everything this pipeline needs is created by ONE app_services entry in the
 # gcp-workload-<env> workspace (modules/gcp/stages/app-services):
-# (<project> below is the service's project: the env host project by default,
-# or the team project when the entry sets project_id.)
+# (<project> below is the service's project: the team's service project when
+# the entry sets service_team, an explicit project_id when it sets one, else
+# the env host project. A production environment refuses the host project
+# unless enable_host_project_workloads = true, so give production services a
+# service_team.)
 #   - Artifact Registry repo  <region>-docker.pkg.dev/<project>/<service>
 #   - Cloud Run service       <service> (runtime SA <service>-run@...)
 #   - deploy SA               <service>-deploy@... with run.developer on the
@@ -36,8 +39,15 @@
 #   GCP_DEPLOY_SA      <service>-deploy@<project>.iam.gserviceaccount.com
 #   GCP_PROJECT_ID     <project> (the service's project; host by default)
 #   GCP_REGION         e.g. europe-west1
-#   CLOUD_RUN_SERVICE  <service>
+#   CLOUD_RUN_SERVICE  <service> (null for a runtime = "cloud-run-job" entry)
+#   CLOUD_RUN_JOB      <service> for a runtime = "cloud-run-job" entry, else null
 #   IMAGE_REPOSITORY   <region>-docker.pkg.dev/<project>/<service>/<service>
+#
+# A Cloud Run JOB entry: set CLOUD_RUN_JOB instead of CLOUD_RUN_SERVICE and
+# replace the last step's command with
+#   gcloud run jobs deploy "${JOB}" --project "${PROJECT}" --region "${REGION}" \
+#     --image "${REPO}@${DIGEST}" --quiet
+# (JOB: ${{ vars.CLOUD_RUN_JOB }}).
 #
 # The job declares `environment: <name>` (below). GitHub puts the environment
 # claim in the OIDC token only for a job that declares one, and the deploy SA is
@@ -47,8 +57,10 @@
 # that ref (as below).
 #
 # Action pinning: every action is pinned to a full commit SHA (the same SHAs as
-# this repo's own workflows where they overlap); keep them current with
-# Dependabot or Renovate.
+# this repo's own workflows where they overlap when this file was last edited).
+# These SHAs are not tracked by this repository's Dependabot (it scans
+# .github/workflows only, not examples/): keep them current with Dependabot or
+# Renovate in the application repository once copied.
 # The gcloud steps use the CLI preinstalled on GitHub-hosted ubuntu runners; on
 # a self-hosted runner, add a SHA-pinned google-github-actions/setup-gcloud
 # step first.
@@ -79,6 +91,16 @@ jobs:
     env:
       REPO: ${{ vars.IMAGE_REPOSITORY }}
     steps:
+      # First step of every job: monitor (audit) or restrict (block) the
+      # runner's network egress. audit only records the endpoints this job
+      # calls (registries, Trivy DB, Sigstore, the cloud APIs); once a few runs
+      # show the list, switch to egress-policy: block with allowed-endpoints,
+      # so a compromised build step or action cannot exfiltrate the OIDC token.
+      - name: Harden the runner (egress audit)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
