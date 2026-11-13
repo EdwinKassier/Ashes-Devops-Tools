@@ -624,16 +624,6 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   the restriction. The example egress allowlist drops
   `.amazonaws.com` for regional ECR and Secrets Manager names, and aws-network warns when the list
   still contains it. See `UPGRADING.md`.
-- **Production GCP networks pin their zones (IAC-1, breaking).** The spoke, hub and DNS anchor
-  subnet CIDRs are index-aligned with the zone list, and that list came from the zones GCP returns
-  for the region, so a change in that list replaced subnets in use. The new config keys
-  `gcp.environments.<env>.zones` (gcp-workload, variable `zones`) and `gcp.network.zones`
-  (gcp-network-hub, variable `hub_zones`, used for the hub and the DNS anchor VPC) pin them, in
-  subnet order. A production `gcp-workload-<env>` plan fails without spoke zones, and the
-  gcp-network-hub plan fails without hub zones when any environment is production. The environment
-  and network-hub stages take `network.explicit_zones` and `hub_zones`; net-hub, net-spoke and
-  dns-anchor output `zones`. The scaffolder writes `<region>-a`, `-b` and `-c` (`-b`, `-c`, `-d`
-  for `us-east1` and `europe-west1`) and lists them as derived, not verified. See `UPGRADING.md`.
 - **GCP production egress fails closed (ARC-4, breaking).** A production `gcp-workload-<env>`
   plan fails unless the private tier egresses through the hub Secure Web Proxy
   (`gcp.environments.<env>.egress_proxy`, PREVIEW) or the workspace sets the new
@@ -645,10 +635,6 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
   hardened-audit-store requirement (LOG-03, LOG-04) only until `expires` (UTC), the
   `production_vpc_sc_dry_run_waiver` rule. The old key fails the gcp-organization plan and the
   schema (`make config-check`), and both name the new key. See `UPGRADING.md`.
-- **Waiver dates accept the YAML midnight form.** `gcp.audit_store_waiver`,
-  `production_egress_proxy_waiver` and `production_vpc_sc_dry_run_waiver` read `expires` from its
-  first 10 characters, so `YYYY-MM-DDT00:00:00Z` (what `yamldecode` makes of an unquoted YAML date)
-  waives through that day instead of failing. The schema still asks for a quoted date.
 - **GCP network and edge logs reach the audit store (CMP-02).** Firewall rule logs, Cloud NAT
   logs, load balancer request logs (with the Cloud Armor verdict), Secure Web Proxy request logs and
   Cloud NGFW threat logs stayed in each project's 30-day `_Default` bucket. A new aggregated org
@@ -685,6 +671,16 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Changed
 
+- **Production GCP networks pin their zones (IAC-1, breaking).** The spoke, hub and DNS anchor
+  subnet CIDRs are index-aligned with the zone list, and that list came from the zones GCP returns
+  for the region, so a change in that list replaced subnets in use. The new config keys
+  `gcp.environments.<env>.zones` (gcp-workload, variable `zones`) and `gcp.network.zones`
+  (gcp-network-hub, variable `hub_zones`, used for the hub and the DNS anchor VPC) pin them, in
+  subnet order. A production `gcp-workload-<env>` plan fails without spoke zones, and the
+  gcp-network-hub plan fails without hub zones when any environment is production. The environment
+  and network-hub stages take `network.explicit_zones` and `hub_zones`; net-hub, net-spoke and
+  dns-anchor output `zones`. The scaffolder writes `<region>-a`, `-b` and `-c` (`-b`, `-c`, `-d`
+  for `us-east1` and `europe-west1`) and lists them as derived, not verified. See `UPGRADING.md`.
 - **Cloud Run probes and a warm instance in production (breaking, ARC-16).** `modules/gcp/compute/cloud-run`
   takes `health_check_path` and adds an HTTP startup and liveness probe. The app-services stage
   defaults it to `/` (empty string = keep the TCP probe) and keeps one instance warm for every
@@ -832,6 +828,10 @@ Remediation of the [2026-11-05 enterprise boilerplate audit](docs/audit/archive/
 
 ### Fixed
 
+- **Waiver dates accept the YAML midnight form.** `gcp.audit_store_waiver`,
+  `production_egress_proxy_waiver` and `production_vpc_sc_dry_run_waiver` read `expires` from its
+  first 10 characters, so `YYYY-MM-DDT00:00:00Z` (what `yamldecode` makes of an unquoted YAML date)
+  waives through that day instead of failing. The schema still asks for a quoted date.
 - **tfc-admin fails the plan when an upstream contract lacks the credential keys (IAC-9).** The
   reads of the gcp-bootstrap and aws-organization outputs have a postcondition that names each
   missing `TFC_*` dynamic-credential key. Before, a renamed or missing output dropped those

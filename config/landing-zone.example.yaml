@@ -321,6 +321,12 @@ gcp:
       # Zones of the spoke VPC in subnet order (required when is_production;
       # see gcp.network.zones).
       zones: [europe-west2-a, europe-west2-b, europe-west2-c]
+      # Production egress: the gcp-workload-prod plan fails until you choose.
+      # Either send the private tier through the hub Secure Web Proxy (PREVIEW;
+      # needs secure_web_proxy on gcp-network-hub), or set
+      # production_egress_proxy_waiver { reason, expires } on gcp-workload-prod
+      # in config/tfc-workspaces.yaml (docs/runbooks/production-hardening.md).
+      # egress_proxy: true
       # Opt-in regulated class (docs/architecture/regulated-environments.md):
       # enforced VPC-SC with no waiver, Cloud Armor and OWASP rules, every flow
       # logged and kept 365 days, and a Backup and DR vault. gcp-organization

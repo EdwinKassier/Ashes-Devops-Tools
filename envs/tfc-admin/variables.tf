@@ -571,7 +571,7 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create the two OPA policy sets, both sourced from the VCS repo and attached to every managed workspace: <prefix>opa-guardrails from policies/opa (mixed mandatory/advisory, not overridable unless policy_set_overridable = true) and <prefix>destructive-change-guard from policies/opa-destructive (the mandatory destroy_guard, overridable by a user with Manage Policy Overrides). Null = on when vcs_repo is set and tfc_plan (org.tfc.plan) is standard or premium, else off (a check then warns that destructive changes are unguarded)."
+  description = "Create the two OPA policy sets, both sourced from the VCS repo and attached to every managed workspace: <prefix>opa-guardrails from policies/opa (mixed mandatory/advisory, not overridable unless policy_set_overridable = true) and <prefix>destructive-change-guard from policies/opa-destructive (the mandatory destroy_guard, tfc_admin_guard and tfc_vcs_run_only, overridable by a user with Manage Policy Overrides). Null = on when vcs_repo is set and tfc_plan (org.tfc.plan) is standard or premium, else off (a check then warns that destructive changes are unguarded)."
   type        = bool
   default     = null
 }

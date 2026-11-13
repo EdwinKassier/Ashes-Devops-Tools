@@ -74,6 +74,26 @@ plan fails if it does not.
 > variable), that value wins over the config file. Remove it so that the root reads the file, or add the
 > entry there too.
 
+**Production environments (`is_production: true`).** The plans fail until you make these choices, so
+put them in the same PR:
+
+- **Zones.** Set `gcp.environments.<env>.zones` to zones of the environment's region, in subnet
+  order (check the names with `gcloud compute zones list --filter=region:<region>`). Without them
+  the `gcp-workload-<env>` plan fails. For the first production environment, also set
+  `gcp.network.zones` for the hub region: the `gcp-network-hub` plan fails without it as soon as
+  any environment is production.
+- **Egress.** Set `gcp.environments.<env>.egress_proxy: true` (it needs `secure_web_proxy` on
+  `gcp-network-hub`, which is PREVIEW), or set `production_egress_proxy_waiver = { reason, expires }`
+  on the `gcp-workload-<env>` workspace in `config/tfc-workspaces.yaml`. A standalone environment
+  (no hub) needs the waiver.
+- **VPC-SC.** The perimeter starts in dry-run, and a production plan fails on a dry-run perimeter.
+  Enforce it (`vpc_sc_enable_dry_run = false`) or set `production_vpc_sc_dry_run_waiver` on the same
+  workspace for a first rollout.
+
+[production-hardening.md](production-hardening.md#1-vpc-service-controls-promote-from-dry-run-to-enforced-audit-m2)
+explains each choice and the waiver format. A waiver stops working after its `expires` date, and the
+plan fails again.
+
 Merge the PR. The config edit queues a run on tfc-admin and on every workspace that triggers on
 `config/landing-zone.yaml`.
 

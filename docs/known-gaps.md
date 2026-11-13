@@ -95,7 +95,11 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `run.commit_sha` in the policy evaluation input. Once the VCS and UI-queued
   runs show a non-empty `run.commit_sha`, promote the rule to the hard-gate
   `policies/opa` set. Until then it is overridable, so an approver and a
-  security-team member together can still apply uploaded code. If a VCS run
+  security-team member together can still apply uploaded code. On
+  `gcp-guardrails` the security team itself holds `runs = apply`
+  (`envs/tfc-admin`, `security_custom_access`) and also overrides policies,
+  so one security engineer can upload code, override the rule and apply it
+  alone. If a VCS run
   carries no SHA, the rule stops every control-plane and production apply.
   Recover with a security-team override on each run; as break-glass, an
   organization owner can change the policy set in the HCP Terraform UI; and

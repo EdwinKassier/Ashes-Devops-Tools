@@ -88,7 +88,7 @@ Trigger patterns now list each root's own module trees, not all of `modules/<clo
   - attaching a variable set that tfc-admin does not manage to a workspace or project, and making a variable set global.
 
   Expect an override when tfc-admin pass 2 wires dynamic credentials, when a role or service account behind a `TFC_*` variable changes, and when you set `TF_CLI_ARGS_plan` through `workspace_variables`. Moving `gcp-bootstrap` from `local` to `remote` needs none.
-- `tfc_vcs_run_only` (mandatory, overridable by the security team, PREVIEW) blocks a run that can apply on a VCS-connected workspace tagged `layer:control-plane`, `layer:bootstrap` or `tier:production` when the run has no commit SHA. Anyone who applies an API-uploaded configuration version on such a workspace now needs a security-team override. Speculative plans, CLI-driven workspaces and non-production workloads are not affected. Before you rely on it, confirm on a sandbox run that a VCS run carries a non-empty `run.commit_sha` (`docs/known-gaps.md`).
+- `tfc_vcs_run_only` (mandatory, overridable by the security team, PREVIEW; breaking: an API-upload apply on a protected workspace now needs a security-team override) blocks a run that can apply on a VCS-connected workspace tagged `layer:control-plane`, `layer:bootstrap` or `tier:production` when the run has no commit SHA. Anyone who applies an API-uploaded configuration version on such a workspace now needs a security-team override. Speculative plans, CLI-driven workspaces and non-production workloads are not affected. Before you rely on it, confirm on a sandbox run that a VCS run carries a non-empty `run.commit_sha` (`docs/known-gaps.md`).
 - `no_plan_time_code_execution` (mandatory, not overridable) blocks provisioners outside the reviewed `supabase/vault-secrets` call chain, and the `external` and `http` data sources everywhere. Its later changes are described below.
 
 Both sets now also attach to the tfc-admin workspace itself.
@@ -1681,9 +1681,11 @@ Plan each workspace. The plan must show no subnet change. If it does, the order 
 verified. Check them with `gcloud compute zones list --filter=region:<region>` before the first
 apply.
 
-#### Network and edge logs go to the audit bucket in regulated and framework estates (gcp-organization, CMP-02)
+#### Network and edge logs go to the audit bucket in regulated and framework estates; a legacy audit sink identity needs a grant first (gcp-organization, CMP-02)
 
-**Behaviour change, not breaking.** Nothing existing changes or is replaced. When any
+**Behaviour change.** Nothing existing changes or is replaced. It is not breaking unless
+`org-audit-sink` still writes as a legacy identity: then the apply fails until you grant it (see
+**Legacy audit sink identity** below). When any
 `gcp.environments` entry is `compliance_class: regulated`, or `compliance.frameworks` lists any
 framework, the next `gcp-organization` plan adds one resource: the aggregated org sink
 `org-network-logs`. It copies firewall rule logs, Cloud NAT logs, load balancer request logs (with
@@ -1776,7 +1778,7 @@ Secure Web Proxy the private tier leaves through Cloud NAT with no destination a
    workloads and list every destination in the proxy allowlist first. The proxy is PREVIEW: prove
    it in the sandbox (`docs/known-gaps.md`).
 2. **A time-boxed waiver.** Add it for that workspace in `config/tfc-workspaces.yaml`
-   (CODEOWNERS-reviewed) and re-apply tfc-admin:
+   (its CODEOWNERS line lists the platform and the security team, so either team's approval satisfies it) and re-apply tfc-admin:
 
    ```yaml
    workspaces:
@@ -1955,7 +1957,7 @@ The same estates also get an inbound DNS server policy on the hub VPC (`<prefix>
 Before you plan a production workload, do one of these:
 
 1. **Enforce the perimeter (recommended).** Read the dry-run violation logs (`protoPayload.metadata.dryRun = true`) and add an ingress or egress rule for each legitimate caller. The environment's own plan and apply SAs are already admitted once gcp-projects publishes `environment_config.<env>.automation_identities`. Then set `vpc_sc_enable_dry_run = false` (or name the `prod-gcp-workload` preset) and apply.
-2. **Set a time-boxed waiver during a first rollout.** Add it for that workspace in `config/tfc-workspaces.yaml` (CODEOWNERS-reviewed) and re-apply tfc-admin:
+2. **Set a time-boxed waiver during a first rollout.** Add it for that workspace in `config/tfc-workspaces.yaml` (its CODEOWNERS line lists the platform and the security team, so either team's approval satisfies it) and re-apply tfc-admin:
 
    ```yaml
    workspaces:

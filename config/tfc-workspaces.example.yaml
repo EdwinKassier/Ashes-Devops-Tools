@@ -50,3 +50,14 @@ workspaces:
   gcp-organization:
     domain: acme.example
     project_prefix: acme
+
+  # Production workload waivers (envs/gcp/workload). Each one lets a production
+  # plan pass for a limited time; after `expires` (YYYY-MM-DD, UTC, quoted) the
+  # plan fails again. See docs/runbooks/production-hardening.md.
+  # gcp-workload-prod:
+  #   production_vpc_sc_dry_run_waiver:
+  #     reason: First rollout, reading the dry-run violation logs
+  #     expires: "2026-12-31"
+  #   production_egress_proxy_waiver:
+  #     reason: Hub egress proxy not yet proven in the sandbox
+  #     expires: "2026-12-31"

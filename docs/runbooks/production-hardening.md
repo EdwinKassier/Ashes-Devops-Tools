@@ -89,6 +89,10 @@ workspaces:
 A standalone environment (no hub) cannot use the proxy, so it needs the
 waiver. The scaffolder writes neither choice.
 
+**An expired waiver blocks every run.** After `expires`, every plan on that
+workspace fails, including the plan for an emergency fix. Renew the waiver, or
+make the change it waives, before the date.
+
 **One access policy per environment.** By default (`enable_scoped_access_policies
 = true` in gcp-bootstrap and gcp-organization) gcp-organization creates a
 **folder-scoped** Access Context Manager policy for each environment folder and

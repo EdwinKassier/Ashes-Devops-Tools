@@ -110,6 +110,8 @@ git add config/landing-zone.yaml && git commit -m "chore(config): landing zone"
 
 The script validates the inputs the same way the Terraform variables do. It writes `config/landing-zone.yaml` and lists the placeholders still left for the clouds you enabled, such as admin groups. `--rebrand` also renames the README title. Review the environments, CIDRs and groups before you commit.
 
+**Production environments** (`is_production: true`, such as the scaffolded GCP `prod`) fail the plan until you choose their egress (hub proxy or a waiver) and their VPC-SC mode: see [production hardening](../runbooks/production-hardening.md) for these prerequisites.
+
 **CI on a fresh fork.** Scheduled drift detection and sandbox E2E **fail** until they are configured ([CI secrets](CI_SECRETS.md)), because a check that never ran must not read as green. If you are not ready to configure them, set the repository variable `REAL_CLOUD_CHECKS_OPT_OUT=true` to acknowledge running without them: `gh variable set REAL_CLOUD_CHECKS_OPT_OUT --body true`.
 
 How the roots read it:

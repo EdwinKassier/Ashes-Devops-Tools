@@ -52,8 +52,11 @@ looked up by name. So `tfc_admin_guard` judges the plan that would detach it.
 
 HCP Terraform passes OPA one document. `input.plan` is the JSON plan (the
 `terraform show -json` shape) and `input.run` holds run metadata (organization,
-workspace and similar). Every policy except `no_plan_time_code_execution`
-and `tfc_vcs_run_only` reads only `input.plan.resource_changes[]`.
+workspace and similar). Every policy except `no_plan_time_code_execution`,
+`tfc_admin_guard` and `tfc_vcs_run_only` reads only
+`input.plan.resource_changes[]`. `tfc_admin_guard` also walks
+`input.plan.configuration` (every module's resources and module calls) to
+trace an unknown variable set ID to a `tfe_variable_set` it manages.
 `tfc_vcs_run_only` reads only `input.run` (`speculative`, `commit_sha`,
 `workspace.tags`, `workspace.vcs_repo`, the fields HCP Terraform documents in
 [Terraform run data](https://developer.hashicorp.com/terraform/cloud-docs/policy-enforcement/define-policies/opa)).
@@ -123,10 +126,34 @@ public access block switches, `enable_key_rotation`, `storage_encrypted`,
 them on should not block an existing workspace. Run `enable_policy_sets` in a non-production project first
 and read the advisory results before relying on them.
 
-## The TFC-layer guard in practice
+## Which runs need an override
 
-`tfc_admin_guard` stops some changes that are routine, so the security team
-overrides them on the run after reading the plan:
+The three rules of the overridable `policies/opa-destructive` set stop some
+routine runs. The security team reads the plan and overrides that one run
+(**Override & Continue**); a re-plan needs a new override. This section lists
+the cases. The `policies/opa` set is not overridable (unless
+`policy_set_overridable = true`): fix the code.
+
+**`destroy_guard`** (stateful resources):
+
+- **A teardown** deletes stateful resources: one override per destroy run, per
+  workspace ([teardown.md](../runbooks/teardown.md)).
+- **Turning deletion protection off** (`deletion_protection`,
+  `deletion_policy` away from `"PREVENT"` and the other switches in the table
+  above) in an in-place update, which a teardown does first.
+- **A replace** of a stateful resource, for example any change to an
+  `aws_backup_selection` (it has no in-place update).
+
+**`tfc_vcs_run_only`** (PREVIEW; control-plane, bootstrap and production
+workspaces connected to VCS):
+
+- **An API-uploaded configuration version** that can apply needs an override.
+- **A rollback to an older VCS configuration version** (a run on that
+  version's `configuration-version-id`) carries that commit's SHA and passes.
+- Speculative plans, workspaces with no VCS connection (such as `gcp-bootstrap`
+  in local mode) and non-production workloads are not judged.
+
+**`tfc_admin_guard`** (the HCP Terraform layer that tfc-admin manages):
 
 - **A new environment** creates workspace-level team grants (a non-production
   workload in a shared project gets `tfe_team_access` write) and, on its first
@@ -135,6 +162,10 @@ overrides them on the run after reading the plan:
 - **Wiring dynamic credentials** (tfc-admin pass 2) creates or changes the
   `TFC_*` env vars of every workspace it wires, and any later change to a
   plan or apply role or service account does the same.
+- **A switch to `local` or `agent` execution** once the policy sets exist:
+  for example `aws-organization` in local mode for its first run
+  ([aws-bootstrap.md](../runbooks/aws-bootstrap.md)), or a tfc-admin apply
+  that creates `gcp-bootstrap` in local mode ([bootstrap.md](../runbooks/bootstrap.md)).
 - **A `TF_CLI_ARGS_plan` env var** set through `workspace_variables`
   ([add-environment.md](../runbooks/add-environment.md), step 7).
 - **A move between projects** of a control-plane or production workspace, for
@@ -144,7 +175,7 @@ overrides them on the run after reading the plan:
 - **The sandbox estate** (`auto_apply_on_merge = true`) creates control-plane
   workspaces with `auto_apply` on.
 
-Limits: when the same plan creates a workspace, the new ID is unknown and
+Limits of `tfc_admin_guard`: when the same plan creates a workspace, the new ID is unknown and
 `workspace_ids` cannot be compared, so a removal hidden behind an addition in
 one plan is not caught by that rule (the deletion and repointing rules still
 apply). The rule judges `tfe_*` resources in any workspace, but only tfc-admin
