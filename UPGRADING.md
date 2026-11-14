@@ -82,6 +82,23 @@ added these entries. Read them before the first run on this release:
 
 **What to do:** remove the argument or the block. If you need another form, add `"<provider type>/<argument>=<var.|local.><name>"` to `allowed_credential_references`, or the type to `allowed_ephemeral_types`, in a reviewed change to the allowlist file (CODEOWNERS: security team), and record why. Both checks read that file.
 
+#### Release metadata fails closed when the applied run has no source commit (CI, re-audit-3 CICD-2)
+
+`terraform-apply.yml` now reads the applied run's commit from its ingress
+attributes (`include=configuration_version.ingress_attributes`, checked by
+`scripts/verify-run-commit.sh`). Before, it never found the commit and always
+reported a match.
+
+- A deployment tag whose latest applied run came from the CLI or the API (for
+  example the phase-0 `gcp-bootstrap` apply, which a human runs locally) now
+  fails the release-metadata job with "has no source commit". No GitHub
+  Release is published for it. Apply the tagged commit through a VCS-driven
+  run, then re-run the job.
+- A run whose commit differs from the tag holds the release with a warning.
+- The verifier is checked out from the tagged commit, so tags on commits older
+  than this change fail the job. Re-tag on a newer commit if you need the
+  release.
+
 #### tfc-admin fails when an upstream contract lacks the credential keys
 
 **Who:** forks that set `gcp_bootstrap_outputs_from_tfc` or `aws_organization_outputs_from_tfc` to true.

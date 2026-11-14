@@ -133,3 +133,19 @@ The pattern from re-audit 2 holds: code-only rounds close their findings and the
 **Delivery.** CICD-7 `destroy_guard` does not cover detective controls (log sinks, SCC notifications, GuardDuty, Security Hub, Config recorder, Security Lake, log groups). CICD-8 mutable unsigned `v*` tags, no SBOM or provenance. CICD-9 wildcard egress allowlists; app-delivery harden-runner in audit mode with `id-token: write`. CICD-10 app-delivery examples are SLSA Build L2 with no promotion. Low: unhashed pip install; `setup.sh` unpinned trivy and checkov fallback; `tfc_vcs_run_only` replay of an older configuration version; workflow-level `security-events: write`. OpenSSF Scorecard estimate after merge: about 5.5; about 7.5 with live governance codified.
 
 **Adoption.** ADO-5 `--clouds saas` needs both Supabase and Vercel. ADO-6 starter still writes the full AWS estate. ADO-7 a new non-production environment needs a `tfc_admin_guard` override (SUSPECTED). ADO-8 removing a cloud breaks the gates. ADO-9 the quick start never says to run `terraform login`. ADO-10 `make install` does not pin versions, and README sends adopters to the heavy `make ci`. Low: seven false doc claims (a nonexistent identifier in QUICK_START, `make ci` lists missing `examples-plan`, a policy-set name, the `0.1.0` CHANGELOG date, a nonexistent module cited in a comment, a `dev.tfvars.example` claim, a GCP impersonation expiry written when GCP is off). Capability gaps unchanged: no EKS, AI/ML services, Azure, IdP or SCIM, service mesh, developer portal, AWS cost export or active-active primitives.
+
+## Status after the fixes (2026-11-14)
+
+The original findings above are unchanged. Commits `7a4e6740` to the commit that adds this section close the "Fix now" list.
+
+| Finding | Status | Evidence | Still needs a real run |
+|---|---|---|---|
+| SEC-1 provider credential arguments | Closed in code. An adversarial review found two more bypasses (a committed `*.auto.tfvars` setting the allowed variable; an `optional()` default under a prefix-matched path). Both are closed: OPA checks the values allowed variables receive, both layers match exact reference paths, and the scanner checks variable types, tfvars, override files, `envs/` module sources, placeholder literals and `file()` paths. | `7a4e6740`, `6883cbc8`, `792fe7e2` | The path HCP Terraform writes the dynamic-credentials config file to (not documented; OPA requires an absolute path outside `/proc`, `/dev`, `/sys`) |
+| SEC-2 ephemeral blocks | Closed with residual. The scanner allows only `tfe_outputs` and applies the code-execution list to ephemerals; OPA denies any referenced ephemeral type other than `tfe_outputs`. An unreferenced ephemeral is invisible to OPA, so the scanner (CI only) is the only layer for it; a pre-plan run task is recorded in known-gaps. | `7a4e6740`, `6883cbc8` | That HCP's policy input omits ephemerals as `terraform show -json` does |
+| CICD-1 fail-open examples-plan | Closed in code. Every workflow runs `shell: bash` (pipefail); `scripts/check-workflow-pipefail.py` fails a piping step without it. | `3d347e36` | The job on GitHub |
+| CICD-2 release provenance | Closed in code, fails closed. | `6376fa5b`, this commit (UPGRADING) | That the dotted include is honoured on the runs list endpoint |
+| IAC-1 two-digit GCP regions | Closed in code, with a consistency check. | `03b8d536` | None |
+
+Gates at `792fe7e2`: `make test` 3,281 runs in 145 directories, 0 failed; `make examples-plan` 126 of 126; OPA 543 of 543; ci-quick, yamllint, markdownlint, commit-check, zizmor, validate-all, lint and security all pass.
+
+Breaking changes added: one (`7a4e6740`), so 66 since `v0.1.0`. Scores are not re-estimated here. The report's other recommendations are still open: the breaking-change freeze and v0.2.0, a sandbox apply per cloud, and the Phase 3 owner steps.
