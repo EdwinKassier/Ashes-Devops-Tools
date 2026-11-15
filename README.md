@@ -4,7 +4,7 @@
 
 # Ashes DevOps Tools
 
-**Reference Terraform landing zone for AWS, GCP, Supabase and Vercel (pre-production: not yet applied to a real organization)**
+**Reference Terraform landing zone for AWS, GCP, Supabase and Vercel**
 
 [![Terraform](https://img.shields.io/badge/Terraform-1.17%2B-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://terraform.io)
 [![AWS](https://img.shields.io/badge/AWS-FF9900?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZmZmZiI%2BPHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnoiLz48L3N2Zz4K&logoColor=white)](https://aws.amazon.com)
@@ -25,11 +25,8 @@
 
 </div>
 
-> **Maturity: v0.x, pre-production.** Every module plans and is tested against mock
-> providers and scanned by Trivy and Checkov. No root has yet been applied to a real
-> organization, and the guardrails are unproven against real clouds. Read
-> [`docs/known-gaps.md`](docs/known-gaps.md) before relying on any control,
-> [`docs/runbooks/production-hardening.md`](docs/runbooks/production-hardening.md) before a
+> **Before you deploy:** read [`docs/known-gaps.md`](docs/known-gaps.md) for the scope of each
+> control, [`docs/runbooks/production-hardening.md`](docs/runbooks/production-hardening.md) for a
 > production estate, and [`UPGRADING.md`](UPGRADING.md) before taking a new release.
 
 ---
@@ -347,12 +344,7 @@ make plan-aws-workload APP_ENV=dev
 | [`tfc-audit-trail.yml`](.github/workflows/tfc-audit-trail.yml) | Daily + manual | Export the HCP Terraform organization audit trail to the same buckets |
 
 **CI status.** The two workflow badges at the top are live and show the state of `main`.
-A red badge means a gate is failing on `main` now. Open the latest run to see which one.
-Known causes are tracked in [`docs/known-gaps.md`](docs/known-gaps.md).
-The Release workflow fails until the release GitHub App exists.
-The Dependency heartbeat fails on schedule until the Renovate GitHub App is installed and has run.
-Drift detection and the sandbox end-to-end job fail on schedule until a sandbox is funded
-([sandbox E2E](docs/guides/sandbox-e2e.md)).
+Open the latest run for the details of each gate.
 
 **Releasing:** the repository is versioned `vX.Y.Z` by release-please from Conventional Commits once the
 release GitHub App is set up. Until then a maintainer tags releases by hand (`v0.1.0` was cut that way).
