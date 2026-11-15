@@ -27,20 +27,20 @@
 
 ## Overview
 
-**Ashes DevOps Tools** is a reference landing zone built on Terraform and HCP Terraform. One committed config file drives every cloud. Each cloud has its own roots and workspaces, so you apply only the clouds you use.
+**Ashes DevOps Tools** is a reference landing zone built on Terraform and HCP Terraform. Each cloud has its own roots and workspaces, so you apply only the clouds you use.
 
-- **Any combination of clouds.** AWS, GCP, Supabase and Vercel each live in separate roots. A cloud you do not apply needs no credentials.
-- **One config file.** `config/landing-zone.yaml` feeds all 15 roots, so VCS-driven runs need no tfvars.
-- **Guardrails as code.** Org policies, SCPs and RCPs, IAM deny policies, VPC Service Controls, CMEK and org-wide audit logging.
-- **Tested without credentials.** Every module has `mock_provider` tests and an example that plans in CI, plus Trivy, Checkov and OPA gates.
-- **Remote execution only.** HCP Terraform owns state and applies. GitHub Actions validates every pull request.
+- **Any combination of clouds.** A cloud you do not apply needs no credentials.
+- **One config file.** `config/landing-zone.yaml` feeds all 15 roots. VCS-driven runs need no tfvars.
+- **Guardrails as code.** Org policies, SCPs and RCPs, IAM deny policies, VPC-SC, CMEK and org-wide audit logs.
+- **Tested without credentials.** Mock-provider tests and a planned example for every module, plus Trivy, Checkov and OPA.
+- **Remote execution only.** HCP Terraform owns state and applies. GitHub Actions gates every pull request.
 
-| Cloud | Roots | What it manages |
-|:------|:------|:----------------|
-| **GCP** | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>`, plus `gcp-guardrails` | Admin project and WIF, org hierarchy, IAM, org policies, KMS, audit logs, network hub, VPC-SC, per-environment Shared VPC workloads |
-| **AWS** | `aws-organization` → `aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload-<env>` | Multi-account SRA organization, SCP/RCP guardrails, GuardDuty, Security Hub, Config, CloudTrail, Security Lake, Transit Gateway, IAM Identity Center, org backup |
-| **Supabase** | `saas-<name>` (`enable_supabase`) | Projects, settings and vault secrets across three environments |
-| **Vercel** | `saas-<name>` (`enable_vercel`) | Projects across three environments |
+| Cloud | What you get |
+|:------|:-------------|
+| **GCP** | Org hierarchy, org policies, IAM deny guardrails, CMEK, audit logs, hub-and-spoke Shared VPC, VPC-SC, per-environment workloads |
+| **AWS** | Multi-account SRA organization, SCP/RCP guardrails, GuardDuty, Security Hub, CloudTrail, Transit Gateway, IAM Identity Center, org backup |
+| **Supabase** | Projects, settings and vault secrets across three environments |
+| **Vercel** | Projects across three environments |
 
 ---
 
@@ -264,7 +264,7 @@ Composite stages wrap the primitives above into deployable landing-zone layers, 
 <details>
 <summary><strong>Library-only modules</strong> — not wired into a root</summary>
 
-These modules are tested and documented but **no `envs/**` root composes them** (`make count` lists them via `scripts/check-module-usage.py`; a module with no caller must carry `> Status: experimental` in its README, and `make count-check` fails otherwise). Marked *(library-only)* in the tables above. Call them from your own root or stage; they are not deployed by applying the landing-zone workspaces.
+These modules are tested and documented, but no root composes them. They are marked *(library-only)* in the tables above. Call them from your own root or stage.
 
 | Module | Why it is library-only |
 |:-------|:-----------------------|
@@ -309,7 +309,7 @@ make plan-gcp-workload APP_ENV=dev
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Infrastructure drift detection |
 | [`sandbox-e2e.yml`](.github/workflows/sandbox-e2e.yml) | Nightly, manual or `e2e` label | Real apply and destroy in a sandbox ([guide](docs/guides/sandbox-e2e.md)) |
 | [`state-backup.yml`](.github/workflows/state-backup.yml), [`tfc-audit-trail.yml`](.github/workflows/tfc-audit-trail.yml) | Daily | State and audit-trail export to write-once buckets ([runbook](docs/runbooks/state-backup.md)) |
-| [`documentation.yml`](.github/workflows/documentation.yml), [`dependency-heartbeat.yml`](.github/workflows/dependency-heartbeat.yml), [`reusable-security.yml`](.github/workflows/reusable-security.yml) | Various | Docs regeneration, Renovate heartbeat, shared scan job |
+| [`documentation.yml`](.github/workflows/documentation.yml) | Module changes | Regenerates module docs and opens a PR |
 
 Releases follow Conventional Commits and [semantic versioning](docs/policies/versioning-and-compatibility.md). See the [CHANGELOG](CHANGELOG.md).
 
