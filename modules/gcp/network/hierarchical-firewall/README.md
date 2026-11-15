@@ -135,3 +135,7 @@ The following resources are created:
 | <a name="output_rules"></a> [rules](#output\_rules) | Map of created firewall policy rules |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The self\_link of the hierarchical firewall policy |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

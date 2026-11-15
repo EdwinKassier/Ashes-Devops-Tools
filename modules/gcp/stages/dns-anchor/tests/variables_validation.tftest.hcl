@@ -11,6 +11,7 @@ mock_provider "google-beta" {}
 
 variables {
   project_id = "mock-dns-project"
+  region     = "us-central1"
   network = {
     name       = "dns-vpc-core"
     cidr_block = "10.1.0.0/16"
@@ -19,6 +20,19 @@ variables {
 
 run "accepts_valid_inputs" {
   command = plan
+}
+
+# Two-digit GCP regions (europe-west10, europe-west12) and their zones are valid.
+run "accepts_two_digit_region_zones" {
+  command = plan
+  variables {
+    region = "europe-west10"
+    network = {
+      name           = "dns-vpc-core"
+      cidr_block     = "10.1.0.0/16"
+      explicit_zones = ["europe-west10-a", "europe-west10-b"]
+    }
+  }
 }
 
 run "rejects_invalid_region" {

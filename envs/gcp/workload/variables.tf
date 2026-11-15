@@ -1,7 +1,25 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values. Its `presets` list (and gcp.workload.presets_by_environment) loads examples/presets/<name>.yaml overlays."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values. Its `presets` list (and gcp.workload.presets_by_environment) loads examples/presets/<name>.yaml overlays."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "project_prefix" {
@@ -26,6 +44,11 @@ variable "environment" {
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{0,29}$", var.environment))
     error_message = "environment must be lowercase alphanumeric with optional hyphens (e.g., 'dev', 'staging', 'prod')."
+  }
+
+  validation {
+    condition     = !contains(local.cfg.environments_missing_is_production, var.environment)
+    error_message = "gcp.environments.${var.environment} in config/landing-zone.yaml must set is_production: true or false; the environment name is not read."
   }
 }
 
@@ -88,7 +111,7 @@ variable "network_hub_workspace_name" {
 # -----------------------------------------------------------------------------
 
 variable "organization_contract" {
-  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, billing_account, admin_project_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (the bare ID XXXXXX-XXXXXX-XXXXXX that gcp-organization emits, or billingAccounts/XXXXXX-XXXXXX-XXXXXX; the root strips the prefix), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, billing_account, admin_project_number. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
     org_id               = optional(string)
     billing_account      = optional(string)
@@ -115,7 +138,7 @@ variable "organization_contract" {
 }
 
 variable "projects_contract" {
-  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id). This root needs: environment_config, which must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
+  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id, automation_identities, spoke_network_name). This root needs: environment_config, which must contain var.environment. Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
   type = object({
     project_ids     = optional(map(string), {})
     project_numbers = optional(map(string), {})
@@ -128,19 +151,23 @@ variable "projects_contract" {
       labels                  = optional(map(string), {})
       is_production           = optional(bool)
       vpc_sc_access_policy_id = optional(string)
+      automation_identities   = optional(list(string), [])
+      spoke_network_name      = optional(string)
+      compliance_class        = optional(string)
     })), {})
   })
   default = null
 }
 
 variable "network_hub_contract" {
-  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc_hub_id, ncc_spoke_group} it joins when network_connectivity = ncc. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
+  description = "gcp-network-hub stage contract: hub_network {vpc_self_link, dns_domain} the env VPC peers with and forwards DNS to, plus the optional NCC hub {ncc_hub_id, ncc_spoke_group} it joins when network_connectivity = ncc, and the optional hub egress proxy {egress_proxy_service_attachment, egress_proxy_port (null = 443)}. Null = gcp.contracts.network_hub from config/landing-zone.yaml, else read from the gcp-network-hub workspace's remote state. Ignored when enable_network_hub = false."
   type = object({
     vpc_self_link                   = string
     dns_domain                      = string
     ncc_hub_id                      = optional(string)
     ncc_spoke_group                 = optional(string)
     egress_proxy_service_attachment = optional(string)
+    egress_proxy_port               = optional(number)
   })
   default = null
 
@@ -163,16 +190,16 @@ variable "additional_regions" {
   validation {
     condition = length([for k in flatten([
       for region, r in coalesce(var.additional_regions, {}) : concat(
-        [for k in keys(r) : "${region}.${k}" if !contains(["subnet_cidrs", "secondary_ranges", "nat"], k)],
-        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(["public", "private", "database"], k)],
-        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(["range_name", "ip_cidr_range"], k)]]),
+        [for k in keys(r) : "${region}.${k}" if !contains(local.allowed_keys.additional_regions.self, k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(local.allowed_keys.additional_regions.subnet_cidrs, k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(local.allowed_keys.additional_regions.secondary_ranges, k)]]),
       )
     ]) : k]) == 0
     error_message = "additional_regions has keys the stage does not accept: ${join(", ", [for k in flatten([
       for region, r in coalesce(var.additional_regions, {}) : concat(
-        [for k in keys(r) : "${region}.${k}" if !contains(["subnet_cidrs", "secondary_ranges", "nat"], k)],
-        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(["public", "private", "database"], k)],
-        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(["range_name", "ip_cidr_range"], k)]]),
+        [for k in keys(r) : "${region}.${k}" if !contains(local.allowed_keys.additional_regions.self, k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(local.allowed_keys.additional_regions.subnet_cidrs, k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(local.allowed_keys.additional_regions.secondary_ranges, k)]]),
       )
     ]) : k])}."
   }
@@ -234,13 +261,13 @@ variable "enable_deletion_protection" {
 }
 
 variable "enable_cloud_armor" {
-  description = "Enable the environment Cloud Armor security policy (also implied by public ingress). Null = a configured preset (e.g. prod-gcp-workload), else false."
+  description = "Enable the environment Cloud Armor security policy (also implied by public ingress). Null = a configured preset (e.g. prod-gcp-workload), else false. A regulated environment (compliance_class: regulated) fails the plan with false."
   type        = bool
   default     = null
 }
 
 variable "enable_owasp_rules" {
-  description = "Enable Cloud Armor OWASP managed rules. Null = a configured preset (e.g. prod-gcp-workload), else false."
+  description = "Enable Cloud Armor OWASP managed rules. Null = a configured preset (e.g. prod-gcp-workload), else false. A regulated environment (compliance_class: regulated) fails the plan with false."
   type        = bool
   default     = null
 }
@@ -263,12 +290,12 @@ variable "owasp_sensitivity" {
 }
 
 variable "log_config_flow_sampling" {
-  description = "VPC Flow Logs packet-sampling rate (0.0–1.0). 0.1 = 10% of packets sampled. Recommended: 0.5 for dev/staging, 0.1 for prod (reduce Logging cost). Set to 0.0 to disable flow log collection while keeping the log bucket."
+  description = "VPC Flow Logs packet-sampling rate (0.0–1.0). 0.1 = 10% of packets sampled. Recommended: 0.5 for dev/staging, 0.1 for prod (reduce Logging cost). Set to 0.0 to disable flow log collection while keeping the log bucket. Null = a configured preset (regulated-gcp-workload sets 1), else 0.1. A regulated environment (gcp.environments.<env>.compliance_class: regulated) fails the plan below 1."
   type        = number
-  default     = 0.1
+  default     = null
 
   validation {
-    condition     = var.log_config_flow_sampling >= 0.0 && var.log_config_flow_sampling <= 1.0
+    condition     = var.log_config_flow_sampling == null || try(var.log_config_flow_sampling >= 0.0 && var.log_config_flow_sampling <= 1.0, false)
     error_message = "log_config_flow_sampling must be between 0.0 and 1.0."
   }
 }
@@ -280,9 +307,14 @@ variable "log_config_aggregation_interval" {
 }
 
 variable "vpc_flow_logs_retention_days" {
-  description = "Retention period for exported VPC flow logs"
+  description = "Retention period, in days, for exported VPC flow logs. Null = a configured preset (regulated-gcp-workload sets 365), else 30. A regulated environment (gcp.environments.<env>.compliance_class: regulated) fails the plan below 365."
   type        = number
-  default     = 30
+  default     = null
+
+  validation {
+    condition     = var.vpc_flow_logs_retention_days == null || try(var.vpc_flow_logs_retention_days >= 1, false)
+    error_message = "vpc_flow_logs_retention_days must be at least 1."
+  }
 }
 
 variable "extra_labels" {
@@ -327,7 +359,52 @@ variable "vpc_sc_enable_dry_run" {
     # Guards the preset loader (config.tf). Hosted here because a validation on
     # landing_zone_config_path would cycle; the var reference is a no-op.
     condition     = (var.vpc_sc_enable_dry_run == null || var.vpc_sc_enable_dry_run != null) && length(setsubtract(keys(local.preset), local.preset_supported_keys)) == 0
-    error_message = "A preset for envs/gcp/workload sets a key this root cannot take from a preset (supported: vpc_sc_enable_dry_run, enable_cloud_armor, enable_owasp_rules). Set it as a variable instead."
+    error_message = "A preset for envs/gcp/workload sets a key this root cannot take from a preset (supported: vpc_sc_enable_dry_run, enable_cloud_armor, enable_owasp_rules, log_config_flow_sampling, vpc_flow_logs_retention_days). Set it as a variable instead."
+  }
+
+  validation {
+    # SEC-1: the loader skips a preset name that is not one path segment; this
+    # fails the plan so the name is fixed, not ignored.
+    condition     = (var.vpc_sc_enable_dry_run == null || var.vpc_sc_enable_dry_run != null) && alltrue([for n in local.preset_names : can(regex("^[a-z0-9-]+$", n))])
+    error_message = "A preset name (presets / gcp.workload.presets_by_environment in config/landing-zone.yaml) must match ^[a-z0-9-]+$ (a file name under examples/presets without .yaml). Invalid: ${join(", ", [for n in local.preset_names : n if !can(regex("^[a-z0-9-]+$", n))])}."
+  }
+}
+
+variable "production_vpc_sc_dry_run_waiver" {
+  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its VPC-SC perimeter is in dry-run or absent. reason says why; expires (YYYY-MM-DD, UTC; the midnight form YYYY-MM-DDT00:00:00Z is read as that day) is the last day it waives. Null (default) fails such a plan, because dry-run gives no exfiltration protection. Set it only for a first rollout while you read the violation logs, through config/tfc-workspaces.yaml (reviewed), then remove it."
+  type = object({
+    reason  = string
+    expires = string
+  })
+  default = null
+
+  validation {
+    condition     = var.production_vpc_sc_dry_run_waiver == null || try(length(trimspace(var.production_vpc_sc_dry_run_waiver.reason)) > 0, false)
+    error_message = "production_vpc_sc_dry_run_waiver.reason must say why the production perimeter is not enforced."
+  }
+
+  validation {
+    condition     = var.production_vpc_sc_dry_run_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", var.production_vpc_sc_dry_run_waiver.expires)) && can(formatdate("YYYY", "${substr(var.production_vpc_sc_dry_run_waiver.expires, 0, 10)}T00:00:00Z")), false)
+    error_message = "production_vpc_sc_dry_run_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC). The midnight form YYYY-MM-DDT00:00:00Z, which yamldecode makes of an unquoted YAML date, is accepted."
+  }
+}
+
+variable "production_egress_proxy_waiver" {
+  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its private-tier egress does not go through the hub Secure Web Proxy (enable_egress_proxy / gcp.environments.<env>.egress_proxy off, or no hub). reason says why; expires (YYYY-MM-DD, UTC; the midnight form YYYY-MM-DDT00:00:00Z is read as that day) is the last day it waives. Null (default) fails such a plan, because Cloud NAT egress has no destination allowlist. Set it through config/tfc-workspaces.yaml (reviewed). A regulated environment refuses a waiver that expires more than 90 days after the plan."
+  type = object({
+    reason  = string
+    expires = string
+  })
+  default = null
+
+  validation {
+    condition     = var.production_egress_proxy_waiver == null || try(length(trimspace(var.production_egress_proxy_waiver.reason)) > 0, false)
+    error_message = "production_egress_proxy_waiver.reason must say why production egress does not go through the hub egress proxy."
+  }
+
+  validation {
+    condition     = var.production_egress_proxy_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", var.production_egress_proxy_waiver.expires)) && can(formatdate("YYYY", "${substr(var.production_egress_proxy_waiver.expires, 0, 10)}T00:00:00Z")), false)
+    error_message = "production_egress_proxy_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC). The midnight form YYYY-MM-DDT00:00:00Z, which yamldecode makes of an unquoted YAML date, is accepted."
   }
 }
 
@@ -668,29 +745,19 @@ variable "vm_backup_schedules" {
   validation {
     condition = length([for k in flatten([
       for name, sch in coalesce(var.vm_backup_schedules, {}) : concat(
-        [for k in keys(sch) : "${name}.${k}" if !contains(["daily_schedule", "weekly_schedule", "hourly_schedule", "retention_policy", "snapshot_properties"], k)],
+        [for k in keys(sch) : "${name}.${k}" if !contains(local.allowed_keys.vm_backup_schedules.self, k)],
         flatten([
-          for sub, allowed in {
-            daily_schedule      = ["days_in_cycle", "start_time"]
-            weekly_schedule     = ["day_of_weeks"]
-            hourly_schedule     = ["hours_in_cycle", "start_time"]
-            retention_policy    = ["max_retention_days", "on_source_disk_delete"]
-            snapshot_properties = ["labels", "storage_locations", "guest_flush"]
-          } : [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+          for sub, allowed in local.allowed_keys.vm_backup_schedules :
+          [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)] if sub != "self"
         ]),
       )
     ]) : k]) == 0
     error_message = "vm_backup_schedules has keys modules/gcp/backup/backup-plan does not accept: ${join(", ", [for k in flatten([
       for name, sch in coalesce(var.vm_backup_schedules, {}) : concat(
-        [for k in keys(sch) : "${name}.${k}" if !contains(["daily_schedule", "weekly_schedule", "hourly_schedule", "retention_policy", "snapshot_properties"], k)],
+        [for k in keys(sch) : "${name}.${k}" if !contains(local.allowed_keys.vm_backup_schedules.self, k)],
         flatten([
-          for sub, allowed in {
-            daily_schedule      = ["days_in_cycle", "start_time"]
-            weekly_schedule     = ["day_of_weeks"]
-            hourly_schedule     = ["hours_in_cycle", "start_time"]
-            retention_policy    = ["max_retention_days", "on_source_disk_delete"]
-            snapshot_properties = ["labels", "storage_locations", "guest_flush"]
-          } : [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+          for sub, allowed in local.allowed_keys.vm_backup_schedules :
+          [for k in try(keys(sch[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)] if sub != "self"
         ]),
       )
     ]) : k])}."
@@ -711,9 +778,21 @@ variable "os_patch_deployments" {
   default = null
 
   validation {
-    condition     = length(flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(["all_instances", "instance_labels", "reboot_config", "day_of_week", "start_time", "time_zone", "description"], k)]])) == 0
-    error_message = "os_patch_deployments has keys modules/gcp/ops/os-config does not accept: ${join(", ", flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(["all_instances", "instance_labels", "reboot_config", "day_of_week", "start_time", "time_zone", "description"], k)]]))}."
+    condition     = length(flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(local.allowed_keys.os_patch_deployments.self, k)]])) == 0
+    error_message = "os_patch_deployments has keys modules/gcp/ops/os-config does not accept: ${join(", ", flatten([for name, d in coalesce(var.os_patch_deployments, {}) : [for k in keys(d) : "${name}.${k}" if !contains(local.allowed_keys.os_patch_deployments.self, k)]]))}."
   }
+}
+
+variable "enable_backup_vault" {
+  description = "Create a Backup and DR vault in the host project with a daily plan for every app-service database (modules/gcp/backup/backup-vault). Null = gcp.environments.<env>.backup_vault.enabled, else true for compliance_class: regulated and false otherwise. A regulated environment fails the plan with false. Apply gcp-bootstrap and gcp-organization first: the workload apply SA needs roles/backupdr.admin on the environment folder."
+  type        = bool
+  default     = null
+}
+
+variable "backup_vault_enforced_retention_days" {
+  description = "Minimum enforced retention of the Backup and DR vault, in days (1-3653). Every backup is immutable this long. Null = gcp.environments.<env>.backup_vault.enforced_retention_days, else 35. The retention lock (IRREVERSIBLE) is set only by gcp.environments.<env>.backup_vault.lock_effective_time in the config file."
+  type        = number
+  default     = null
 }
 
 # -----------------------------------------------------------------------------
@@ -759,6 +838,29 @@ variable "private_service_connect_target" {
     condition     = var.private_service_connect_target == null || contains(["all-apis", "vpc-sc"], coalesce(var.private_service_connect_target, "all-apis"))
     error_message = "private_service_connect_target must be all-apis or vpc-sc."
   }
+}
+
+variable "private_service_connect_name" {
+  description = "Name of the spoke VPC's Private Service Connect endpoint for Google APIs: 1-20 lower-case letters and numbers, starting with a letter (Google's rule). Null = gcp.environments[<environment>].private_service_connect.name from config/landing-zone.yaml, else the spoke VPC name without non-alphanumerics (first 17 characters) plus psc."
+  type        = string
+  default     = null
+}
+
+variable "zones" {
+  description = "Zones of the spoke VPC's zonal subnets, in subnet order: subnet i of each tier takes the i-th CIDR of the environment block, so the order fixes the CIDRs. Null = gcp.environments[<environment>].zones from config/landing-zone.yaml, else the zones GCP returns for the region (which can change and then replaces subnets). Required for a production environment (is_production)."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.zones == null || alltrue([for z in coalesce(var.zones, []) : can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))])
+    error_message = "zones must be GCP zone names, such as europe-west2-a."
+  }
+}
+
+variable "private_service_connect_address" {
+  description = "Internal IPv4 address of the spoke VPC's Private Service Connect endpoint. It must be outside every spoke subnet range and every subnet range of the hub VPC. Null = gcp.environments[<environment>].private_service_connect.address from config/landing-zone.yaml, else the second-to-last address of the environment CIDR (10.10.255.254 for 10.10.0.0/16)."
+  type        = string
+  default     = null
 }
 
 variable "enable_app_alerts" {

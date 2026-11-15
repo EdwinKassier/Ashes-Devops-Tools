@@ -57,6 +57,19 @@ run "invalid_region_rejected" {
   variables { serverless_function_region = "mars-1" }
 }
 
+# The list follows https://vercel.com/docs/regions: yul1 (Montreal) is listed,
+# sea1 is not.
+run "valid_region_yul1_accepted" {
+  command = plan
+  variables { serverless_function_region = "yul1" }
+}
+
+run "unlisted_region_sea1_rejected" {
+  command         = plan
+  expect_failures = [var.serverless_function_region]
+  variables { serverless_function_region = "sea1" }
+}
+
 # ── domains ────────────────────────────────────────────────────────────────────
 
 run "valid_domains_accepted" {

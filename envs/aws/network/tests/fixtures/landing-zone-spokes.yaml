@@ -1,6 +1,7 @@
 # Test fixture: aws.network.spoke_attachments from the config file
 # (spoke_routing.tftest.hcl). aws.contracts.organization replaces the
-# aws-organization remote-state read.
+# aws-organization remote-state read. aws.workload_environments.<env>.vpc_cidr
+# becomes the spoke cidr that the other segment's table blackholes.
 version: 1
 org:
   name: cfgco
@@ -14,6 +15,9 @@ org:
 aws:
   log_archive_bucket_name: cfgco-org-log-archive
   enabled_regions: [eu-west-1, eu-west-2]
+  workload_environments:
+    dev: {account_key: workload_dev, vpc_cidr: 10.72.0.0/16, is_production: false}
+    prod: {account_key: workload_prod, vpc_cidr: 10.73.0.0/16, is_production: true}
   contracts:
     organization:
       organization_id: o-cfgcfgcfg0

@@ -14,7 +14,7 @@ variable "region" {
 
   validation {
     # Matches AWS region ids like eu-west-2, us-east-1, ap-southeast-3.
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.region))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", var.region))
     error_message = "region must be a valid AWS region id (e.g. eu-west-2)."
   }
 }
@@ -26,9 +26,29 @@ variable "subnet_ids" {
 }
 
 variable "security_group_ids" {
-  description = "Security group IDs to associate with the interface endpoint ENIs."
+  description = "Security group IDs to associate with the interface endpoint ENIs. Empty (default) = a module-owned group that admits HTTPS from allowed_cidrs (when allowed_cidrs is set)."
   type        = list(string)
   default     = []
+  nullable    = false
+}
+
+variable "allowed_cidrs" {
+  description = "CIDRs that may reach the interface endpoints on 443 when security_group_ids is empty (the module then owns the group). Use the org supernet for centralized endpoints. Empty with no security_group_ids = the VPC default security group."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for c in var.allowed_cidrs : can(cidrnetmask(c))])
+    error_message = "allowed_cidrs entries must be IPv4 CIDR blocks."
+  }
+}
+
+variable "enable_shared_private_dns" {
+  description = "Serve each endpoint's regional name (<service>.<region>.amazonaws.com) from a private hosted zone with an alias record, instead of the endpoint's own private DNS, so other VPCs (through a Route 53 Profile) resolve the central endpoint. Only for services whose private DNS name is <service>.<region>.amazonaws.com. Default false."
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 variable "interface_services" {
@@ -62,6 +82,25 @@ variable "endpoint_policy_json" {
   description = "Optional override for the interface-endpoint policy (a JSON document). When null (default), the module applies an org-scoped allow-all policy gated by aws:PrincipalOrgID and relies on IAM for authorization. Supply a scoped policy to enforce per-service least privilege on the shared endpoints."
   type        = string
   default     = null
+}
+
+variable "endpoint_policy_mode" {
+  description = "Default endpoint policy when endpoint_policy_json is null. org_principals (default): the caller must be in the organization (aws:PrincipalOrgID). org_principals_and_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on the services in resource_org_exempt_services. PREVIEW: not yet proven in a sandbox. AWS-owned resources (public AMIs, AWS-managed repositories) are not in your organization, so calls to them through a non-exempt endpoint are denied."
+  type        = string
+  default     = "org_principals"
+  nullable    = false
+
+  validation {
+    condition     = contains(["org_principals", "org_principals_and_resources"], var.endpoint_policy_mode)
+    error_message = "endpoint_policy_mode must be org_principals or org_principals_and_resources."
+  }
+}
+
+variable "resource_org_exempt_services" {
+  description = "Interface services that keep the principal-only policy when endpoint_policy_mode is org_principals_and_resources, because their calls reach AWS-owned resources or no resource at all (for example ec2 RunInstances with a public AMI, sts GetCallerIdentity)."
+  type        = list(string)
+  default     = ["ec2", "ec2messages", "ecr.api", "ecr.dkr", "logs", "monitoring", "ssm", "ssmmessages", "sts"]
+  nullable    = false
 }
 
 variable "tags" {

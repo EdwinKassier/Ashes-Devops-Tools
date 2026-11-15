@@ -155,16 +155,25 @@ run "stage_apply_sas_are_least_privilege" {
     error_message = "the per-folder delegation allow-lists must be split: workload roles for env folders, network roles for the shared folder."
   }
 
-  # The workload SAs keep the IAM-controlling roles (gcp-organization grants
-  # them), but projects-apply may never grant them: it could grant them to itself.
+  # The workload SAs keep the IAM-controlling and data-plane IAM roles
+  # (gcp-organization grants them), but projects-apply may never grant them: it
+  # could grant them to itself.
   assert {
     condition = (
       contains(output.workload_folder_roles.apply, "roles/resourcemanager.projectIamAdmin") &&
-      contains(output.workload_folder_roles.apply, "roles/iam.workloadIdentityPoolAdmin") &&
-      length(setintersection(toset(output.delegated_workload_folder_roles), toset(["roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.serviceAccountKeyAdmin", "roles/iam.serviceAccountTokenCreator", "roles/iam.workloadIdentityPoolAdmin"]))) == 0 &&
+      contains(output.workload_folder_roles.apply, "roles/secretmanager.admin") &&
+      contains(output.workload_folder_roles.apply, "roles/backupdr.admin") &&
+      contains(output.delegated_workload_folder_roles, "roles/backupdr.viewer") &&
+      length(setintersection(toset(output.delegated_workload_folder_roles), toset([
+        "roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.serviceAccountKeyAdmin",
+        "roles/iam.serviceAccountTokenCreator", "roles/iam.workloadIdentityPoolAdmin", "roles/iam.serviceAccountUser",
+        "roles/secretmanager.admin", "roles/cloudkms.admin", "roles/storage.admin", "roles/run.admin",
+        "roles/bigquery.admin", "roles/pubsub.admin", "roles/artifactregistry.admin", "roles/backupdr.admin", "roles/resourcemanager.projectCreator",
+      ]))) == 0 &&
+      contains(output.delegated_workload_folder_roles, "roles/compute.admin") &&
       length(setintersection(toset(output.delegated_network_folder_roles), toset(["roles/resourcemanager.projectIamAdmin", "roles/iam.serviceAccountAdmin", "roles/iam.workloadIdentityPoolAdmin"]))) == 0
     )
-    error_message = "the IAM-controlling workload roles must stay out of every delegation allow-list."
+    error_message = "every role that controls IAM, identities, data-plane IAM or project ownership must stay out of the delegation allow-lists: projects-apply could grant it to itself."
   }
 }
 
@@ -176,8 +185,72 @@ run "legacy_org_level_folder_delegation_is_opt_in" {
   }
 
   assert {
-    condition     = strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "modifiedGrantsByRole") && !strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "roles/owner") && strcontains(google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression, "'roles/compute.admin'")
+    condition = (
+      alltrue([for m in google_organization_iam_member.projects_delegated_folder_iam : strcontains(m.condition[0].expression, "modifiedGrantsByRole") && !strcontains(m.condition[0].expression, "roles/owner")]) &&
+      anytrue([for m in google_organization_iam_member.projects_delegated_folder_iam : strcontains(m.condition[0].expression, "'roles/compute.admin'")])
+    )
     error_message = "the legacy org-level delegation must still be a conditional grant limited to the folder role lists (never roles/owner)."
+  }
+
+  # IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list.
+  # The default lists are 28 workload roles and 13 network roles (33 distinct),
+  # so the legacy binding must split into ceil(33 / 10) = 4 conditions.
+  assert {
+    condition     = length(output.delegated_workload_folder_roles) == 28 && length(output.delegated_network_folder_roles) == 13
+    error_message = "the default delegated role lists changed size; update this suite and the organization stage suite delegated_grants_split_into_ten_role_conditions."
+  }
+
+  assert {
+    condition     = length(google_organization_iam_member.projects_delegated_folder_iam) == ceil(length(distinct(concat(output.delegated_workload_folder_roles, output.delegated_network_folder_roles))) / 10)
+    error_message = "the legacy org-level delegation needs one binding per 10 roles."
+  }
+
+  assert {
+    condition = alltrue([
+      for m in google_organization_iam_member.projects_delegated_folder_iam :
+      length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0])) >= 1 && length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0])) <= 10 &&
+      !strcontains(m.condition[0].expression, "&&") && !strcontains(m.condition[0].expression, "||") && length(regexall("hasOnly\\(", m.condition[0].expression)) == 1
+    ])
+    error_message = "every legacy delegated condition must be one hasOnly() call with 1 to 10 roles, never joined with && or ||."
+  }
+
+  assert {
+    condition     = tolist(flatten([for m in google_organization_iam_member.projects_delegated_folder_iam : [for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0]) : r[0]]])) == sort(distinct(concat(output.delegated_workload_folder_roles, output.delegated_network_folder_roles)))
+    error_message = "the legacy chunks must together list every delegated role exactly once."
+  }
+
+  assert {
+    condition     = google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].title == "delegated_folder_role_grants" && google_organization_iam_member.projects_delegated_folder_iam[3].condition[0].title == "delegated_folder_role_grants_3" && strcontains(google_organization_iam_member.projects_delegated_folder_iam[3].condition[0].description, "part 4 of 4")
+    error_message = "each legacy chunk needs its own condition title and a description that names the chunk."
+  }
+}
+
+# A legacy list of 10 roles or fewer keeps the binding exactly as it was before
+# the split: same address [0], title, description and expression.
+run "legacy_short_delegated_list_keeps_one_unchanged_condition" {
+  command = plan
+
+  variables {
+    enable_org_level_folder_iam_delegation = true
+    enable_plan_viewer_role                = false
+    workload_folder_roles = {
+      plan  = ["roles/compute.viewer"]
+      apply = ["roles/container.admin", "roles/compute.admin"]
+    }
+    network_folder_roles = {
+      plan  = ["roles/dns.reader"]
+      apply = ["roles/compute.networkAdmin"]
+    }
+  }
+
+  assert {
+    condition = (
+      length(google_organization_iam_member.projects_delegated_folder_iam) == 1 &&
+      google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.admin', 'roles/compute.networkAdmin', 'roles/compute.viewer', 'roles/container.admin', 'roles/dns.peer', 'roles/dns.reader'])" &&
+      google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].title == "delegated_folder_role_grants" &&
+      google_organization_iam_member.projects_delegated_folder_iam[0].condition[0].description == "projects-apply may only grant the workload/network folder roles"
+    )
+    error_message = "a legacy list of 10 roles or fewer must keep the old single condition exactly (any change replaces the binding)."
   }
 }
 
@@ -753,5 +826,167 @@ run "ncc_roles_are_folder_scoped_when_enabled" {
   assert {
     condition     = !anytrue([for r in output.network_folder_roles.plan : endswith(r, "Admin")]) && !anytrue([for r in output.workload_folder_roles.plan : endswith(r, "Admin")])
     error_message = "Plan SAs must get only the NCC viewer role."
+  }
+}
+
+# gcp-projects grants roles/dns.peer to each workload apply SA on the shared
+# folder (the spoke DNS peering zone targets the hub VPC there), so the
+# shared-folder allow-list must admit it. Environment folders do not need it.
+run "projects_apply_may_delegate_dns_peer_on_the_shared_folder" {
+  command = plan
+
+  assert {
+    condition     = contains(output.delegated_network_folder_roles, "roles/dns.peer") && !contains(output.delegated_workload_folder_roles, "roles/dns.peer")
+    error_message = "gcp-projects grants roles/dns.peer to workload apply SAs on the shared folder, so the shared-folder delegated allow-list (and only it) must admit it."
+  }
+}
+
+# organization-apply cannot reach a guardrail-owner role in any number of
+# steps: no org-level folderAdmin (it holds resourcemanager.projects.setIamPolicy,
+# which reaches the admin project and the guardrails SA), and its org
+# iam.securityAdmin may add or remove only a short allow-list of roles that
+# control no IAM, identity or project.
+run "organization_apply_reaches_no_guardrail_owner_role" {
+  command = plan
+
+  assert {
+    condition = (
+      !contains(output.org_role_grants["organization-apply"], "roles/resourcemanager.folderAdmin") &&
+      contains(output.org_role_grants["organization-apply"], "roles/resourcemanager.folderCreator") &&
+      contains(output.org_role_grants["organization-apply"], "roles/resourcemanager.folderEditor") &&
+      contains(output.org_role_grants["organization-apply"], "roles/resourcemanager.folderIamAdmin")
+    )
+    error_message = "organization-apply must hold folderCreator + folderEditor + folderIamAdmin at the org node, never folderAdmin (it includes resourcemanager.projects.setIamPolicy on every project, the admin project included)."
+  }
+
+  assert {
+    condition = (
+      length(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition) == 1 &&
+      startswith(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression, "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([") &&
+      endswith(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression, "])") &&
+      !strcontains(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression, "&&") &&
+      !strcontains(google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression, "||")
+    )
+    error_message = "organization-apply's org iam.securityAdmin must carry exactly one modifiedGrantsByRole hasOnly() condition."
+  }
+
+  # Every listed role: 1 to 10 of them (the IAM hasOnly limit), each a predefined
+  # role that controls no IAM, identity or project.
+  assert {
+    condition = (
+      length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression)[0])) >= 1 &&
+      length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression)[0])) <= 10 &&
+      alltrue([
+        for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression)[0]) :
+        startswith(r[0], "roles/") && !startswith(r[0], "roles/iam.") && !startswith(r[0], "roles/resourcemanager.") && !startswith(r[0], "roles/privilegedaccessmanager.") &&
+        !contains(["roles/owner", "roles/editor"], r[0]) && !endswith(r[0], "IamAdmin") && !endswith(lower(r[0]), "securityadmin")
+      ]) &&
+      tolist([for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_organization_iam_member.stage_org_security_admin["organization-apply|roles/iam.securityAdmin"].condition[0].expression)[0]) : r[0]]) == output.organization_apply_grantable_roles
+    )
+    error_message = "the organization-apply allow-list must list 1 to 10 roles, none of which controls IAM, identities, projects or PAM, and must equal the published allow-list."
+  }
+
+  assert {
+    condition     = output.organization_apply_grantable_roles == sort(["roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter", "roles/logging.logWriter", "roles/storage.objectCreator"])
+    error_message = "the default allow-list is the roles the organization stage grants through its org securityAdmin: billing admins, the two log-sink writer roles, and the logging-project service-agent roles."
+  }
+
+  assert {
+    condition     = length(google_organization_iam_member.stage_org_security_admin["bootstrap-apply|roles/iam.securityAdmin"].condition) == 0
+    error_message = "bootstrap-apply keeps unconditional securityAdmin: it owns the org-admin grants and can always repair the allow-list."
+  }
+
+  assert {
+    condition     = length(google_organization_iam_member.org_admins) == 0
+    error_message = "no organizationAdmin grant without organization_admin_members."
+  }
+}
+
+run "org_admin_groups_granted_by_bootstrap" {
+  command = plan
+
+  variables {
+    organization_admin_members = ["group:gcp-org-admins@example.com"]
+  }
+
+  assert {
+    condition = (
+      google_organization_iam_member.org_admins["group:gcp-org-admins@example.com"].role == "roles/resourcemanager.organizationAdmin" &&
+      google_organization_iam_member.org_admins["group:gcp-org-admins@example.com"].org_id == "123456789" &&
+      length(google_organization_iam_member.org_admins["group:gcp-org-admins@example.com"].condition) == 0 &&
+      output.organization_admin_members == tolist(["group:gcp-org-admins@example.com"])
+    )
+    error_message = "gcp-bootstrap must own the standing organizationAdmin grant of the org-admin groups and publish the members."
+  }
+}
+
+# SEC-2: a plan identity must not read log entries. roles/logging.viewer holds
+# logging.logEntries.list, so at the org node it reads the logs of every
+# project. organization-plan gets an org custom role with the logging
+# configuration reads its refresh needs (sinks, settings, buckets, views,
+# links, metrics, exclusions) and no log data.
+run "plan_identities_read_no_log_entries" {
+  command = plan
+
+  variables {
+    guardrails_workspace = "gcp-guardrails"
+  }
+
+  assert {
+    condition = length([
+      for k, v in merge(
+        { for k, v in google_organization_iam_member.stage_org_roles : k => v if endswith(split("|", k)[0], "-plan") },
+        { for k, v in google_organization_iam_member.guardrails_plan : "guardrails-plan|${k}" => v },
+      ) :
+      k if contains([
+        "roles/logging.viewer", "roles/logging.privateLogViewer", "roles/logging.viewAccessor",
+        "roles/logging.admin", "roles/logging.configWriter", "roles/viewer",
+      ], v.role)
+    ]) == 0
+    error_message = "no plan identity may hold a role that reads log entries (logging.viewer, privateLogViewer, viewAccessor, logging.admin, viewer) or writes logging configuration (logging.configWriter) at the org node."
+  }
+
+  assert {
+    condition = length([
+      for k, v in google_project_iam_member.stage_admin_project_roles :
+      k if endswith(split("|", k)[0], "-plan") && contains([
+        "roles/logging.viewer", "roles/logging.privateLogViewer", "roles/logging.viewAccessor", "roles/logging.admin",
+      ], v.role)
+    ]) == 0
+    error_message = "no plan identity may hold a role that reads log entries (logging.viewer, privateLogViewer, viewAccessor, logging.admin) on the admin project."
+  }
+
+  assert {
+    condition = length(setintersection(
+      toset(concat(output.workload_folder_roles.plan, output.network_folder_roles.plan)),
+      toset(["roles/logging.viewer", "roles/logging.privateLogViewer", "roles/logging.viewAccessor", "roles/logging.admin"]),
+    )) == 0
+    error_message = "the workload and network plan folder roles must not read log entries."
+  }
+
+  assert {
+    condition     = contains(keys(google_organization_iam_member.stage_org_roles), "organization-plan|organizations/123456789/roles/landingZoneLoggingConfigViewer")
+    error_message = "organization-plan must get the logging configuration viewer custom role at the org node in place of roles/logging.viewer."
+  }
+
+  assert {
+    condition = (
+      google_organization_iam_custom_role.logging_config_viewer.org_id == "123456789" &&
+      google_organization_iam_custom_role.logging_config_viewer.role_id == "landingZoneLoggingConfigViewer" &&
+      length(setintersection(toset(google_organization_iam_custom_role.logging_config_viewer.permissions), toset([
+        "logging.logEntries.list", "logging.privateLogEntries.list", "logging.views.access", "logging.views.listLogs",
+        "logging.logs.list", "logging.queries.usePrivate", "logging.sqlAlerts.create",
+      ]))) == 0 &&
+      alltrue([for p in google_organization_iam_custom_role.logging_config_viewer.permissions : can(regex("^logging\\.[A-Za-z]+\\.(get|list|listEffectiveTags|listTagBindings)$", p))])
+    )
+    error_message = "the logging configuration viewer role must hold only logging get/list permissions and no log-entry, view-access or private-log permission."
+  }
+
+  assert {
+    condition = length(setsubtract(toset([
+      "logging.sinks.get", "logging.settings.get", "logging.buckets.get", "logging.links.get",
+      "logging.logMetrics.get", "logging.views.get", "logging.exclusions.get", "logging.buckets.listTagBindings",
+    ]), toset(google_organization_iam_custom_role.logging_config_viewer.permissions))) == 0
+    error_message = "the logging configuration viewer role must keep the reads the gcp-organization refresh makes (org sinks, org settings, log buckets and their tag bindings, links, metrics, views, exclusions)."
   }
 }

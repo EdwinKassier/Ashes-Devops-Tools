@@ -23,6 +23,7 @@ module "aws_shared_services" {
   # Secrets Manager baseline — org-scoped secrets.
   enable_secrets_baseline = true
   org_id                  = "o-abc1234567"
+  secrets_kms_key_id      = "arn:aws:kms:eu-west-2:111111111111:key/00000000-0000-0000-0000-000000000000"
   secrets = {
     "app/db-password" = {}
   }

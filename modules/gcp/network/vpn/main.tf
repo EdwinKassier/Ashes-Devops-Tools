@@ -46,6 +46,9 @@ resource "google_compute_router" "router" {
   bgp {
     asn            = var.router_asn
     advertise_mode = length(var.advertised_ip_ranges) > 0 ? "CUSTOM" : "DEFAULT"
+    # CUSTOM mode announces only what is listed: ALL_SUBNETS adds every subnet
+    # of the VPC, which is what DEFAULT mode announced.
+    advertised_groups = length(var.advertised_ip_ranges) > 0 ? var.advertised_groups : null
 
     dynamic "advertised_ip_ranges" {
       for_each = var.advertised_ip_ranges

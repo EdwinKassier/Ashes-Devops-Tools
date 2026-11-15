@@ -102,7 +102,13 @@ module "policies" {
   break_glass_role_names             = var.break_glass_role_names
   data_perimeter_trusted_account_ids = var.data_perimeter_trusted_account_ids
   allow_vpc_bpa_exclusions           = var.allow_vpc_bpa_exclusions
-  ec2_allowed_images                 = var.ec2_allowed_images
+  # Roles that write StackSet-* stacks for StackSets this repo does not own
+  # (AWS Control Tower: AWSControlTowerExecution).
+  stackset_stack_writer_role_names = var.stackset_stack_writer_role_names
+  ec2_allowed_images               = var.ec2_allowed_images
+
+  # Required-tag reporting on the root tag policy (CMP-10, ARC-17).
+  tag_policy_required_resource_types = var.tag_policy_required_resource_types
 
   # Recorder SCP: after the recorder migration only the StackSet execution
   # role, break-glass and security tooling's tfc-apply (its aggregator
@@ -169,6 +175,7 @@ module "tfc_oidc_baseline" {
   enable_apply_permissions_boundary = var.tfc_enable_apply_permissions_boundary
   apply_permissions_boundary_arn    = var.tfc_apply_permissions_boundary_arn
   enable_apply_boundary_propagation = var.tfc_enable_apply_boundary_propagation
+  enable_apply_trust_update_lock    = var.tfc_enable_apply_trust_update_lock
   call_as                           = var.tfc_oidc_call_as
 
   # Plan-role data-plane read deny (ReadOnlyAccess minus GetObject/GetSecretValue/...).

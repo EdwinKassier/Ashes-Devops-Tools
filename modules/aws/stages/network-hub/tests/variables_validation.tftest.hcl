@@ -11,6 +11,7 @@ variables {
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 run "valid_var_set_accepted" {
@@ -58,4 +59,108 @@ run "rejects_static_routing_without_onprem_cidrs" {
   }
 
   expect_failures = [var.vpn]
+}
+
+# This file does not override module.vpc_endpoints, so the mode reaches the
+# real endpoint policies.
+run "resource_org_endpoint_policy_reaches_the_endpoints" {
+  command = plan
+
+  variables {
+    vpc_endpoint_policy_mode = "org_principals_and_resources"
+  }
+
+  assert {
+    condition     = join(",", module.vpc_endpoints.resource_org_scoped_services) == "kms"
+    error_message = "vpc_endpoint_policy_mode must reach the hub endpoints (kms is the only default service outside the exempt list)."
+  }
+}
+
+run "endpoint_policy_stays_principal_only_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(module.vpc_endpoints.resource_org_scoped_services) == 0
+    error_message = "The hub endpoint policy must stay aws:PrincipalOrgID only by default."
+  }
+}
+
+run "rejects_unknown_vpc_endpoint_policy_mode" {
+  command = plan
+
+  variables {
+    vpc_endpoint_policy_mode = "resources_only"
+  }
+
+  expect_failures = [var.vpc_endpoint_policy_mode]
+}
+
+run "alarm_subscriber_emails_must_be_addresses" {
+  command = plan
+
+  variables {
+    alarm_subscriber_emails = ["not-an-address"]
+  }
+
+  expect_failures = [var.alarm_subscriber_emails]
+}
+
+# Re-audit 5 ARC-2: an extra internal range must be private and outside
+# top_cidr, or it passes egress or traffic between segments.
+run "internal_pass_cidr_inside_top_cidr_rejected" {
+  command = plan
+
+  variables {
+    network_firewall_internal_pass_cidrs = ["10.64.0.0/10"]
+  }
+
+  expect_failures = [var.network_firewall_internal_pass_cidrs]
+}
+
+run "public_internal_pass_cidr_rejected" {
+  command = plan
+
+  variables {
+    network_firewall_internal_pass_cidrs = ["0.0.0.0/0"]
+  }
+
+  expect_failures = [var.network_firewall_internal_pass_cidrs]
+}
+
+# Re-audit 5 review: overlapping spoke CIDRs would cross the segment rules.
+run "overlapping_spoke_cidrs_rejected" {
+  command = plan
+
+  variables {
+    spoke_attachments = {
+      prod = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "prod", cidr = "10.64.0.0/12" }
+      dev  = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.70.0.0/16" }
+    }
+  }
+
+  expect_failures = [var.spoke_attachments]
+}
+
+run "spoke_cidr_reusing_a_hub_vpc_rejected" {
+  command = plan
+
+  variables {
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.1.0.0/16" }
+    }
+  }
+
+  expect_failures = [var.spoke_attachments]
+}
+
+run "spoke_cidr_outside_top_cidr_rejected" {
+  command = plan
+
+  variables {
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "172.20.0.0/16" }
+    }
+  }
+
+  expect_failures = [var.spoke_attachments]
 }

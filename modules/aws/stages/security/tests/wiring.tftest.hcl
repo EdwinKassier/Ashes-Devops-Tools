@@ -74,6 +74,13 @@ run "log_archive_and_config_wiring" {
     error_message = "aws.log_archive_bucket_name must reach module.log_archive_bucket."
   }
 
+  # CloudTrail receives the policy-attached name, so it is ordered after the
+  # bucket policy by data flow (no module-level depends_on).
+  assert {
+    condition     = module.log_archive_bucket.policy_attached_bucket_name == "acme-wiring-log-archive"
+    error_message = "the bucket policy output CloudTrail consumes must carry the configured bucket name."
+  }
+
   # With no config_role_arn the Config child builds the service-linked role ARN
   # from the account_id the stage passes (security_tooling_account_id).
   assert {
@@ -183,5 +190,82 @@ run "cloudwatch_logs_off_reaches_cloudtrail" {
   assert {
     condition     = length(module.cloudtrail[0].cis_metric_filter_patterns) == 0 && output.cloudtrail_log_group_name == null
     error_message = "aws.enable_cloudwatch_logs = false must reach module.cloudtrail (no log group, no CIS filters)."
+  }
+}
+
+# CMP-2: the log-archive retention and lock mode reach the bucket child. The
+# outputs read the child's planned Object Lock default retention.
+run "log_archive_retention_wired" {
+  command = plan
+
+  variables {
+    aws = {
+      log_archive_bucket_name      = "acme-wiring-log-archive"
+      key_admin_arn                = "arn:aws:iam::333333333333:role/kms-admin"
+      meta_store_manager_role_arn  = "arn:aws:iam::222222222222:role/AmazonSecurityLakeMetaStoreManager"
+      break_glass_role_arn         = "arn:aws:iam::111111111111:role/break-glass"
+      log_archive_retention_days   = 2190
+      log_archive_object_lock_mode = "GOVERNANCE"
+      notification_subscribers = {
+        secops = { protocol = "email", endpoint = "secops@example.com" }
+      }
+    }
+  }
+
+  assert {
+    condition     = output.log_archive_retention_days == 2190 && module.log_archive_bucket.object_lock_mode == "GOVERNANCE"
+    error_message = "aws.log_archive_retention_days and aws.log_archive_object_lock_mode must reach the log-archive bucket."
+  }
+}
+
+# Unset keys keep today's bucket: 365 days in COMPLIANCE mode.
+run "log_archive_retention_default_unchanged" {
+  command = plan
+
+  assert {
+    condition     = output.log_archive_retention_days == 365 && module.log_archive_bucket.object_lock_mode == "COMPLIANCE"
+    error_message = "without the new keys the log archive must stay 365 days in COMPLIANCE mode."
+  }
+}
+
+# CMP-3: the security-tooling account gets the weekly patch install by default,
+# and aws.enable_patch_install / aws.patch_operating_systems reach the module.
+run "patch_install_wiring" {
+  command = plan
+
+  assert {
+    condition     = module.systems_manager.patch_install_schedule == "cron(0 3 ? * SUN *)" && module.systems_manager.patch_operating_systems == tolist(["AMAZON_LINUX_2023"])
+    error_message = "by default the security-tooling account must get the weekly install association and an Amazon Linux 2023 baseline."
+  }
+}
+
+run "patch_install_target_tag_wiring" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      patch_install_target_tag = { key = "PatchInstall", value = "true" }
+    })
+  }
+
+  assert {
+    condition     = module.systems_manager.patch_install_targets.key == "tag:PatchInstall" && module.systems_manager.patch_install_targets.values[0] == "true"
+    error_message = "aws.patch_install_target_tag must narrow the install association to tagged instances."
+  }
+}
+
+run "patch_install_opt_out_wiring" {
+  command = plan
+
+  variables {
+    aws = merge(var.aws, {
+      enable_patch_install    = false
+      patch_operating_systems = ["AMAZON_LINUX_2", "AMAZON_LINUX_2023"]
+    })
+  }
+
+  assert {
+    condition     = module.systems_manager.patch_install_schedule == null && module.systems_manager.patch_operating_systems == tolist(["AMAZON_LINUX_2", "AMAZON_LINUX_2023"])
+    error_message = "aws.enable_patch_install = false must drop the install association and aws.patch_operating_systems must reach the module."
   }
 }

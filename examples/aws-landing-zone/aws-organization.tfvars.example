@@ -17,20 +17,22 @@
 # Phase-0 management-account roles (aws-bootstrap runbook Step 2). Both are
 # carved out of every guardrail deny statement.
 # terraform_run_role_arn = "arn:aws:iam::111111111111:role/tfc-mgmt-apply" # aws.terraform_run_role_arn
-# break_glass_role_arn   = "arn:aws:iam::111111111111:role/break-glass"    # aws.break_glass_role_arn
+# break_glass_role_arn   = "arn:aws:iam::111111111111:role/OrganizationBreakGlass" # aws.break_glass_role_arn
 
 # Central log-archive bucket protected by the deny-tamper SCP. aws-security
 # creates it, and aws-network reads the same aws.log_archive_bucket_name.
 # log_archive_bucket_name = "acme-org-log-archive" # aws.log_archive_bucket_name
 
-# Foundational SRA accounts (aws.accounts). The example.com placeholder emails
-# are rejected: every root email must be real, unique and deliverable. See the
-# env template for the full map shape (name, alternate_contacts, ...).
+# Foundational SRA accounts (aws.accounts). Every root email must be real,
+# unique and deliverable. The REPLACE-...@example.com placeholders below are
+# rejected by the root's validation, so the plan fails until you replace each
+# one with a real address. See the env template for the full map shape (name,
+# alternate_contacts, ...).
 # accounts = {
-#   log_archive      = { email = "aws+log-archive@acme.test", ou = "Security" }
-#   security_tooling = { email = "aws+security-tooling@acme.test", ou = "Security" }
-#   network          = { email = "aws+network@acme.test", ou = "Infrastructure" }
-#   shared_services  = { email = "aws+shared-services@acme.test", ou = "Infrastructure" }
-#   backup           = { email = "aws+backup@acme.test", ou = "Infrastructure" }
-#   forensics        = { email = "aws+forensics@acme.test", ou = "Security" }
+#   log_archive      = { email = "REPLACE-aws-log-archive@example.com", ou = "Security" }
+#   security_tooling = { email = "REPLACE-aws-security-tooling@example.com", ou = "Security" }
+#   network          = { email = "REPLACE-aws-network@example.com", ou = "Infrastructure" }
+#   shared_services  = { email = "REPLACE-aws-shared-services@example.com", ou = "Infrastructure" }
+#   backup           = { email = "REPLACE-aws-backup@example.com", ou = "Infrastructure" }
+#   forensics        = { email = "REPLACE-aws-forensics@example.com", ou = "Security" }
 # }

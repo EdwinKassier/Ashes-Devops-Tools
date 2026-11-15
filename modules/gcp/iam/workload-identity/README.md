@@ -241,3 +241,7 @@ The following resources are created:
 | <a name="output_tfc_binding_members"></a> [tfc\_binding\_members](#output\_tfc\_binding\_members) | Map of "<workspace\_name>:<run\_phase>" to the principalSet member bound to roles/iam.workloadIdentityUser on the target SA. |
 | <a name="output_tfc_provider_name"></a> [tfc\_provider\_name](#output\_tfc\_provider\_name) | The fully-qualified name of the Terraform Cloud OIDC provider |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

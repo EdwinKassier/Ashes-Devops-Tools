@@ -23,6 +23,11 @@ output "audit_logs_bucket_name" {
   value       = module.audit_logs.storage_bucket_name
 }
 
+output "audit_log_retention_days" {
+  description = "Days the org audit bucket keeps audit logs, as planned on the bucket's lifecycle Delete rule."
+  value       = module.audit_logs.log_retention_days
+}
+
 output "billing_export_dataset_id" {
   description = "BigQuery dataset ID for Cloud Billing export data"
   value       = google_bigquery_dataset.billing_export.dataset_id
@@ -119,7 +124,7 @@ output "scoped_access_policy_grants" {
 }
 
 output "delegated_folder_iam_targets" {
-  description = "Folders on which projects-apply holds the conditional folderIamAdmin, keyed by folder key, with the role allow-list of each."
+  description = "Folders on which projects-apply holds the conditional folderIamAdmin, keyed by folder key, with the role allow-list of each. Each folder gets one conditional binding per 10 roles of its list (IAM allows at most 10 roles in one modifiedGrantsByRole hasOnly() list)."
   value       = local.delegated_folder_iam_targets
 }
 
@@ -176,4 +181,9 @@ output "logging_organization_service_account" {
 output "principal_access_boundary_policy" {
   description = "Name of the automation principal access boundary policy (null when disabled)."
   value       = var.gcp.enable_principal_access_boundary ? module.automation_boundary[0].policy_name : null
+}
+
+output "network_log_sink" {
+  description = "The org sink (org-network-logs) that copies firewall, Cloud NAT and load balancer request logs into the audit bucket: name, destination and filter. Null when gcp.enable_network_log_export is false."
+  value       = module.audit_logs.network_log_sink
 }

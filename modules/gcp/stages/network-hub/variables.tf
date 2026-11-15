@@ -26,6 +26,18 @@ variable "default_region" {
   type        = string
 }
 
+variable "hub_zones" {
+  description = "Zones of the hub VPC and the DNS anchor VPC (both in default_region), in subnet order: subnet i of each tier takes the i-th CIDR, so the order fixes the subnet CIDRs. Empty (default) = the zones GCP returns for the region, which can change and then replaces subnets. gcp-network-hub requires it when any environment is_production."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for z in var.hub_zones : startswith(z, "${var.default_region}-") && can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))]) && length(distinct(var.hub_zones)) == length(var.hub_zones)
+    error_message = "hub_zones must list distinct zones of default_region (${var.default_region}), such as ${var.default_region}-a."
+  }
+}
+
 variable "hub_project_id" {
   description = "Project ID for the network hub"
   type        = string
@@ -106,9 +118,14 @@ variable "folders" {
 }
 
 variable "internal_domain" {
-  description = "Internal domain for private DNS zone (e.g., 'mycompany.com')"
+  description = "Name of the private root DNS zone (internal-root), for example 'corp.example.com': lowercase letters, digits and hyphens, at least two labels, no trailing dot. The zone's dns_name is immutable, so changing it on an existing hub replaces the zone and drops every record in it (it needs a destroy_guard override and the records created again)."
   type        = string
   default     = "internal.local"
+
+  validation {
+    condition     = can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.internal_domain)) && length(var.internal_domain) <= 253
+    error_message = "internal_domain must be a lowercase DNS name of at least two labels without a trailing dot, for example corp.example.com."
+  }
 }
 
 variable "vpc_sc_access_policy_name" {
@@ -212,6 +229,10 @@ variable "vpn" {
     lists the peer interface IPv4 addresses (one per tunnel). local_ips and
     peer_ips are the BGP link-local addresses. The pre-shared key is the separate
     write-only vpn_shared_secret_wo input. site_to_site_data_transfer lets on-premises sites exchange traffic through the NCC hybrid spoke. With enable_ncc_hub, the tunnels also join the NCC hub as a hybrid spoke.
+    Routes announced: empty advertised_ip_ranges (default) = CUSTOM mode with the ALL_SUBNETS
+    group (every hub subnet) plus hybrid_advertised_ranges (the environment CIDRs) and, with
+    hybrid DNS forward zones, 35.199.192.0/19 (DEFAULT mode when that list is empty).
+    Non-empty advertised_ip_ranges = exactly those ranges plus advertised_groups (default none).
   EOT
   type = object({
     enabled                    = optional(bool, false)
@@ -222,6 +243,7 @@ variable "vpn" {
     local_ips                  = optional(list(string), ["169.254.0.1", "169.254.0.3"])
     peer_ips                   = optional(list(string), ["169.254.0.2", "169.254.0.4"])
     site_to_site_data_transfer = optional(bool, false)
+    advertised_groups          = optional(list(string), [])
     advertised_ip_ranges = optional(list(object({
       range       = string
       description = string
@@ -312,6 +334,16 @@ variable "hub_additional_regions" {
   nullable = false
 }
 
+variable "hub_private_service_connect" {
+  description = "Overrides for the hub VPC's Private Service Connect endpoint for Google APIs (gcp.network.private_service_connect in config). name: 1-20 lower-case letters and numbers, starting with a letter (null = hubvpccorepsc). address: the endpoint's internal IPv4 address, outside every hub subnet range, including the Secure Web Proxy proxy-only and PSC NAT subnets (null = the second-to-last address of the hub CIDR, for example 10.0.255.254)."
+  type = object({
+    name    = optional(string)
+    address = optional(string)
+  })
+  default  = {}
+  nullable = false
+}
+
 variable "spoke_peerings" {
   description = "Hub side of the environment VPC peerings (connectivity = peering), keyed by environment key: the spoke network self link and the route exchange from the hub's view. Each entry becomes the peering hub-to-<env> on the hub VPC. Pass only spokes whose network already exists (envs/gcp/network-hub discovers them); the gcp-workload-<env> root creates the spoke side. Empty (default) = no hub-side peerings."
   type = map(object({
@@ -325,6 +357,63 @@ variable "spoke_peerings" {
   validation {
     condition     = alltrue([for k in keys(var.spoke_peerings) : can(regex("^[a-z]([-a-z0-9]{0,53}[a-z0-9])?$", k))])
     error_message = "spoke_peerings keys must be environment keys usable in the peering name hub-to-<env>: lowercase letters, digits and hyphens, starting with a letter, at most 55 characters."
+  }
+}
+
+variable "hybrid_advertised_ranges" {
+  description = "Prefixes the hub Cloud Routers announce over VPN/Interconnect when vpn.advertised_ip_ranges (or an interconnect's) is empty, next to the ALL_SUBNETS group (every hub subnet): normally every environment CIDR (envs/gcp/network-hub derives them). DEFAULT BGP mode never announces peered environment subnets. With no ranges at all (no environment CIDR, no forward zone) the routers stay in DEFAULT mode (the hub subnets only)."
+  type = list(object({
+    range       = string
+    description = string
+  }))
+  default  = []
+  nullable = false
+
+  validation {
+    condition     = alltrue([for r in var.hybrid_advertised_ranges : can(cidrhost(r.range, 0))])
+    error_message = "hybrid_advertised_ranges entries need a valid CIDR range."
+  }
+}
+
+variable "hybrid_dns" {
+  description = "Hybrid DNS, used only when the VPN or an Interconnect is on. enable_inbound_forwarding (default true) adds an inbound DNS server policy on the hub VPC, so on-premises resolvers can forward the internal domain to its entry-point addresses. forward_zones forwards on-premises domains (dns_name ending with a dot) from the hub VPC to target_ips over the private path. A forward zone may not be internal_domain or a subdomain of it: the internal zone is bound to the hub VPC too."
+  type = object({
+    enable_inbound_forwarding = optional(bool, true)
+    forward_zones = optional(map(object({
+      dns_name   = string
+      target_ips = list(string)
+    })), {})
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for z in values(var.hybrid_dns.forward_zones) : endswith(z.dns_name, ".") && length(z.target_ips) > 0 && alltrue([for ip in z.target_ips : can(regex("^(\\d{1,3}\\.){3}\\d{1,3}$", ip))])])
+    error_message = "hybrid_dns.forward_zones entries need a dns_name ending with a dot and at least one IPv4 target_ips address."
+  }
+
+  validation {
+    condition     = alltrue([for k in keys(var.hybrid_dns.forward_zones) : can(regex("^[a-z]([-a-z0-9]{0,57}[a-z0-9])?$", k))])
+    error_message = "hybrid_dns.forward_zones keys name the zone fwd-<key>: lowercase letters, digits and hyphens, starting with a letter, at most 59 characters."
+  }
+
+  validation {
+    condition = alltrue([for z in values(var.hybrid_dns.forward_zones) :
+      lower(z.dns_name) != lower("${var.internal_domain}.") && !endswith(lower(z.dns_name), lower(".${var.internal_domain}."))
+    ])
+    error_message = "hybrid_dns.forward_zones may not forward internal_domain or a subdomain of it: the internal zone is bound to the hub VPC, two private zones on one network cannot share a DNS name, and a forwarded subdomain would hide part of the internal zone."
+  }
+}
+
+variable "hub_peering_limit" {
+  description = "Most environment peerings the hub VPC may carry. The PEERINGS_PER_NETWORK quota is 25 peerings per network by default; one is kept for the hub's own Private Service Access peering. Raise it only after the quota is raised."
+  type        = number
+  default     = 24
+  nullable    = false
+
+  validation {
+    condition     = var.hub_peering_limit >= 1
+    error_message = "hub_peering_limit must be at least 1."
   }
 }
 

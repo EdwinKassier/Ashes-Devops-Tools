@@ -19,7 +19,7 @@ variables {
   org_id                 = "organizations/123456789"
   internal_domain        = "internal.example.com"
   folders = {
-    shared = { id = "folders/111111111", name = "folders/111111111", display_name = "Shared" }
+    shared = { id = "111111111", name = "folders/111111111", display_name = "Shared" }
   }
 }
 
@@ -33,6 +33,7 @@ override_data {
 override_module {
   target = module.hub.module.network
   outputs = {
+    subnet_ip_ranges  = ["10.0.0.0/24", "10.0.16.0/24", "10.0.32.0/24"]
     network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
     network_id        = "projects/mock-hub-project/global/networks/hub-vpc-core"
     network_name      = "hub-vpc-core"
@@ -120,7 +121,7 @@ run "published_proxy_accepts_environment_host_projects_by_default" {
     secure_web_proxy = {
       enabled             = true
       allowed_fqdns       = ["*.github.com"]
-      psc_nat_subnet_cidr = "10.0.253.0/24"
+      psc_nat_subnet_cidr = "10.0.252.0/24"
     }
   }
 
@@ -136,7 +137,7 @@ run "published_proxy_explicit_consumers_win" {
   variables {
     secure_web_proxy = {
       enabled                  = true
-      psc_nat_subnet_cidr      = "10.0.253.0/24"
+      psc_nat_subnet_cidr      = "10.0.252.0/24"
       consumer_accept_projects = ["555555555555"]
     }
   }
@@ -144,5 +145,20 @@ run "published_proxy_explicit_consumers_win" {
   assert {
     condition     = local.secure_web_proxy.consumer_accept_projects == tolist(["555555555555"])
     error_message = "An explicit consumer_accept_projects list must win over the environment default."
+  }
+}
+
+# IAC-1: hub_zones pins the hub VPC's zones (the zone lookup returns
+# us-central1-a only).
+run "hub_zones_pin_the_hub_zones" {
+  command = plan
+
+  variables {
+    hub_zones = ["us-central1-c", "us-central1-b"]
+  }
+
+  assert {
+    condition     = join(",", module.hub.zones) == "us-central1-c,us-central1-b"
+    error_message = "hub_zones must reach the hub VPC in the given order."
   }
 }

@@ -4,7 +4,7 @@
 locals {
   project_labels = {
     managed-by = "terraform"
-    owner      = "platform-team"
+    owner      = var.owner
     # GCP label values allow only lowercase letters, digits, '_' and '-' (max
     # 63): "My Organization" becomes "my-organization". Already-valid names are
     # unchanged, so existing labels do not churn.
@@ -40,7 +40,9 @@ module "project" {
   # Use the shared suffix to ensure ID stability
   project_id      = "${var.project_prefix}-${each.value.ou}-${each.value.proj.name}-${var.suffix}"
   billing_account = coalesce(each.value.proj.billing_account, var.default_billing_account)
-  parent          = var.folders[each.value.ou].id
+  # The folder's resource name (folders/<number>): the contract's .id is the
+  # bare number (google_folder.folder_id), which the project parent rejects.
+  parent = var.folders[each.value.ou].name
 
   labels = merge(
     local.project_labels,
@@ -54,6 +56,8 @@ module "project" {
   # example networkconnectivity.googleapis.com on the hub and host projects
   # when Network Connectivity Center is in use).
   services = distinct(concat(var.project_services, lookup(var.additional_project_services, each.key, [])))
+
+  tag_bindings = each.value.proj.tag_bindings
 
   # Foundation projects must not be deletable by a routine plan.
   deletion_policy = "PREVENT"
@@ -75,9 +79,11 @@ resource "google_monitoring_monitored_project" "projects" {
 # The per-environment workload SAs created by gcp-bootstrap hold NO org-level
 # role. Their rights live here, scoped to their OWN environment folder (FAST
 # stage-3 pattern): the apply SA gets the write roles, the plan SA read-only
-# roles. The network-hub SAs likewise get their network roles on the `shared`
-# folder only. These grants are made by the projects-apply SA through a
-# conditional (delegated) folderIamAdmin grant that only admits these role lists.
+# roles. The one exception is roles/dns.peer on the shared folder for each
+# workload apply SA (its DNS peering zone targets the hub VPC). The network-hub
+# SAs likewise get their network roles on the `shared` folder only. These
+# grants are made by the projects-apply SA through a conditional (delegated)
+# folderIamAdmin grant that only admits these role lists.
 
 locals {
   # Roles in non_delegable_workload_folder_roles are granted by gcp-organization
@@ -86,7 +92,7 @@ locals {
     for env, sas in var.workload_service_accounts : merge([
       for phase in ["plan", "apply"] : {
         for role in setsubtract(toset(var.workload_folder_roles[phase]), toset(var.non_delegable_workload_folder_roles)) : "${env}|${phase}|${role}" => {
-          folder = var.folders[env].id
+          folder = var.folders[env].name
           role   = role
           member = "serviceAccount:${sas[phase]}"
         }
@@ -97,7 +103,7 @@ locals {
   network_folder_grants = var.network_service_accounts == null ? {} : merge([
     for phase in ["plan", "apply"] : {
       for role in var.network_folder_roles[phase] : "${phase}|${role}" => {
-        folder = var.folders[var.network_folder_key].id
+        folder = var.folders[var.network_folder_key].name
         role   = role
         member = "serviceAccount:${var.network_service_accounts[phase]}"
       }
@@ -111,11 +117,22 @@ locals {
   network_env_viewer_grants = var.network_service_accounts == null ? {} : merge([
     for env in sort(keys(var.environments)) : {
       for phase in ["plan", "apply"] : "${env}|${phase}" => {
-        folder = var.folders[env].id
+        folder = var.folders[env].name
         member = "serviceAccount:${var.network_service_accounts[phase]}"
       }
     } if env != var.network_folder_key
   ]...)
+
+  # Each gcp-workload-<env> DNS peering zone targets the hub VPC in the shared
+  # folder. Creating a peering zone needs dns.networks.targetWithPeeringZone on
+  # the TARGET network's project, which roles/dns.peer holds (and nothing else).
+  # Only the apply SA creates the zone, so the plan SAs get nothing here.
+  workload_dns_peer_grants = contains(keys(var.folders), var.network_folder_key) ? {
+    for env, sas in var.workload_service_accounts : env => {
+      folder = var.folders[var.network_folder_key].name
+      member = "serviceAccount:${sas.apply}"
+    } if env != var.network_folder_key
+  } : {}
 }
 
 resource "google_folder_iam_member" "workload_sa_folder_roles" {
@@ -140,5 +157,13 @@ resource "google_folder_iam_member" "network_sa_env_viewer" {
 
   folder = each.value.folder
   role   = "roles/compute.viewer"
+  member = each.value.member
+}
+
+resource "google_folder_iam_member" "workload_dns_peer" {
+  for_each = local.workload_dns_peer_grants
+
+  folder = each.value.folder
+  role   = "roles/dns.peer"
   member = each.value.member
 }

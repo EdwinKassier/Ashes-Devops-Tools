@@ -29,7 +29,8 @@ locals {
   #   * break_glass_arns — break-glass only. Destructive actions (leave org,
   #     stop/delete CloudTrail, delete GuardDuty detector/members, disable
   #     Security Hub / Macie / Inspector, delete Access Analyzer, destroy or
-  #     untag protected KMS keys, change a protected key's policy). A pipeline
+  #     untag protected KMS keys, change a protected key's policy, retarget or
+  #     delete a protected key's alias). A pipeline
   #     compromise cannot perform these — in particular it cannot rewrite a
   #     protected key policy to grant itself kms:Decrypt. Consequence: Terraform
   #     key-policy changes to protected keys require a break-glass apply (the
@@ -101,6 +102,29 @@ locals {
   # Same exemptions as DenyStackSetRoleTampering: break-glass and the StackSet
   # execution role that creates and updates the policy.
   stackset_policy_arns = [for n in var.stackset_managed_policy_names : "arn:${var.partition}:iam::*:policy/${n}"]
+  # DenyStackSetStackTampering (same exemptions): the stack that a StackSet
+  # creates in each target account is named StackSet-<stack set name>-<id>
+  # (AWS CloudFormation User Guide, "Performing drift detection on
+  # CloudFormation StackSets", example StackId
+  # "arn:aws:cloudformation:eu-west-1:123456789012:stack/StackSet-stack-set-drift-example-...";
+  # the AWS managed policy AWSQuickSetupSSMDeploymentRolePolicy scopes its stack
+  # writes to "arn:aws:cloudformation:*:*:stack/StackSet-AWS-QuickSetup-SSM-*";
+  # both checked 2026-11-12). The same guide says "Changes made through
+  # CloudFormation to a stack directly, rather than at the StackSet level,
+  # aren't considered drift", so a direct UpdateStack or change set on one of
+  # these stacks could rewrite the StackSet-owned roles and boundary unseen.
+  # Only break-glass and stackset_execution_role_names may write to them. A
+  # SELF_MANAGED StackSet, AWS Quick Setup or AWS Control Tower
+  # (AWSControlTowerExecution writes StackSet-AWSControlTowerBP-*) runs as its
+  # own role in the target account: list that name in
+  # stackset_stack_writer_role_names, which exempts it from this statement
+  # only. CreateStackRefactor and ExecuteStackRefactor take the stack resource
+  # type (Service Authorization Reference, AWS CloudFormation, checked
+  # 2026-11-12), so a refactor that touches a StackSet-* stack is denied too.
+  stackset_stack_exempt_arns = distinct(concat(
+    local.stackset_exempt_arns,
+    [for n in var.stackset_stack_writer_role_names : "arn:${var.partition}:iam::*:role/${n}"],
+  ))
   policy_tamper_actions = [
     "iam:CreatePolicy",
     "iam:CreatePolicyVersion",
@@ -129,17 +153,18 @@ locals {
     scp-deny-tamper = {
       type = "SERVICE_CONTROL_POLICY"
       content = jsonencode(jsondecode(templatefile("${path.module}/policies/scp-deny-tamper.json.tftpl", {
-        partition               = var.partition
-        break_glass_arns        = jsonencode(local.break_glass_principal_arns)
-        privileged_arns         = jsonencode(local.privileged_principal_arns)
-        admin_role_arns         = local.admin_role_arns
-        stackset_role_arns      = local.stackset_role_arns
-        stackset_exempt_arns    = local.stackset_exempt_arns
-        role_tamper_actions     = jsonencode(local.role_tamper_actions)
-        stackset_policy_arns    = local.stackset_policy_arns
-        policy_tamper_actions   = jsonencode(local.policy_tamper_actions)
-        log_archive_bucket_name = var.log_archive_bucket_name
-        kms_protection_tag_key  = var.kms_protection_tag_key
+        partition                  = var.partition
+        break_glass_arns           = jsonencode(local.break_glass_principal_arns)
+        privileged_arns            = jsonencode(local.privileged_principal_arns)
+        admin_role_arns            = local.admin_role_arns
+        stackset_role_arns         = local.stackset_role_arns
+        stackset_exempt_arns       = local.stackset_exempt_arns
+        stackset_stack_exempt_arns = local.stackset_stack_exempt_arns
+        role_tamper_actions        = jsonencode(local.role_tamper_actions)
+        stackset_policy_arns       = local.stackset_policy_arns
+        policy_tamper_actions      = jsonencode(local.policy_tamper_actions)
+        log_archive_bucket_name    = var.log_archive_bucket_name
+        kms_protection_tag_key     = var.kms_protection_tag_key
         # Recorder actions: DenyWeakenSecurityServices (pipeline-wide exemption)
         # until the migration, then DenyConfigRecorderChanges.
         enable_config_recorder_scp  = var.enable_config_recorder_scp
@@ -268,7 +293,7 @@ locals {
     }
     tag-policy = {
       type    = "TAG_POLICY"
-      content = templatefile("${path.module}/policies/tag-policy.json", {})
+      content = local.tag_policy_content
     }
     backup-policy = {
       type = "BACKUP_POLICY"
@@ -288,12 +313,59 @@ locals {
   )
 }
 
+# Tag policy (org root). Defines the tag key case for the four ownership and
+# cost keys every AWS root writes through provider default_tags, and the
+# allowed DataClassification values. A tag policy alone never blocks an
+# untagged resource: AWS evaluates only tags that are present. With
+# tag_policy_required_resource_types set, report_required_tag_for marks the keys
+# as required for those types, which the AWS provider checks at plan when the
+# workspace sets TF_AWS_TAG_POLICY_COMPLIANCE (error or warning). No
+# enforced_for: tagging operations are never blocked by this policy.
+locals {
+  tag_policy_keys = {
+    CostCenter         = null
+    Environment        = null
+    Owner              = null
+    DataClassification = ["public", "internal", "confidential", "restricted"]
+  }
+  tag_policy_content = jsonencode({
+    tags = {
+      for k, allowed in local.tag_policy_keys : k => merge(
+        { tag_key = { "@@assign" = k } },
+        allowed == null ? {} : { tag_value = { "@@assign" = allowed } },
+        length(var.tag_policy_required_resource_types) == 0 ? {} : { report_required_tag_for = { "@@assign" = var.tag_policy_required_resource_types } },
+      )
+    }
+  })
+}
+
+# AWS Organizations "Maximum size of a policy document" per type (checked
+# 2026-11-12). The API stores the content exactly as sent, whitespace included,
+# so the rendered string is what counts. Types not listed here are capped at
+# 10,000 characters.
+locals {
+  policy_size_quotas = {
+    SERVICE_CONTROL_POLICY    = 10240
+    RESOURCE_CONTROL_POLICY   = 5120
+    AISERVICES_OPT_OUT_POLICY = 2500
+  }
+}
+
 resource "aws_organizations_policy" "policy" {
   for_each = local.effective_policies
   name     = each.key
   type     = each.value.type
   content  = each.value.content
   tags     = var.tags
+
+  lifecycle {
+    # Fail at plan, not at CreatePolicy/UpdatePolicy: long role names, extra
+    # trusted accounts or federation pins, or an override can grow a policy.
+    precondition {
+      condition     = length(each.value.content) <= lookup(local.policy_size_quotas, each.value.type, 10000)
+      error_message = "Policy ${each.key} (${each.value.type}) renders to ${length(each.value.content)} characters, over the AWS Organizations quota of ${lookup(local.policy_size_quotas, each.value.type, 10000)}. Shorten the inputs that feed it (role names, account lists, federation pins) or split the policy."
+    }
+  }
 }
 
 resource "aws_organizations_policy_attachment" "attach" {

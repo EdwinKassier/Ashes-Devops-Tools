@@ -21,6 +21,8 @@ module "cloud_run_deployer" {
     "run.services.list",
     "run.revisions.get",
     "run.revisions.list",
-    "artifactregistry.repositories.downloadArtifacts",
+    # Deploying a revision that runs as a service account needs actAs on it.
+    # The Cloud Run service agent, not the deployer, pulls the image.
+    "iam.serviceAccounts.actAs",
   ]
 }

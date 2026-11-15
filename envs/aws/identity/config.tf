@@ -30,6 +30,13 @@ locals {
         for e in entries : { permission_set = tostring(e.permission_set), accounts = [for a in e.accounts : tostring(a)] }
       ]
     }
+    # Account keys of the production workload accounts: the account_key of
+    # every aws.workload_environments entry with is_production: true (the same
+    # rule as tfc-admin and aws-network). Feeds the assignment guard (main.tf).
+    production_account_keys = sort(distinct([
+      for k, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : tostring(e.account_key)
+      if try(tobool(e.is_production), false) && try(e.account_key, null) != null
+    ]))
     # aws.contracts.organization: stage contract override (same type as
     # var.organization_contract, identical in every aws root). Present => the
     # aws-organization read is skipped.

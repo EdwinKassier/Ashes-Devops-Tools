@@ -1,0 +1,23 @@
+# Test fixture: an app service database's backup location and PITR log
+# retention set in the config file (config.tftest.hcl).
+version: 1
+org:
+  prefix: cfgco
+  regions:
+    gcp: europe-west1
+  tfc:
+    organization: cfg-tfc
+gcp:
+  environments:
+    dev:
+      is_production: false
+      cidr_block: 10.10.0.0/16
+      services:
+        api:
+          database:
+            edition: ENTERPRISE_PLUS # more than 7 days of PITR logs needs Enterprise Plus
+            tier: db-perf-optimized-N-2
+            backup_location: europe-west2
+            transaction_log_retention_days: 14
+        worker:
+          database: {}

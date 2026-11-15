@@ -14,14 +14,14 @@
 
 ## Automated quarantine flow
 
-`modules/aws/security/incident-response` wires this automatically in the security stage:
+`modules/aws/security/incident-response` wires the trigger in the security stage. The last step is yours to write: the shipped handler stops at logging (see the note below).
 
 ```text
 GuardDuty finding (severity >= 7)
   -> EventBridge rule (ir-guardduty-high-severity)
     -> EventBridge target
       -> isolation Lambda (ir-isolate)
-        -> attach quarantine security group to the flagged instance
+        -> (your handler) attach quarantine security group to the flagged instance
 ```
 
 The quarantine security group is a **deny-all** SG (no ingress, no egress) — attaching it severs the instance's network reachability while leaving it running and its EBS volumes intact for imaging.
@@ -98,12 +98,13 @@ Only after forensic copies are confirmed:
 
 ## Step 6 — Post-incident review
 
-Within 24 hours, document timeline, root cause, blast radius, and remediation. Confirm the quarantine SG, snapshots, and forensic copies are all accounted for and that no evidence was destroyed. If break-glass access was used, cross-check it per [`aws-break-glass.md`](aws-break-glass.md).
+Within 24 hours, document timeline, root cause, blast radius, and remediation. Confirm the quarantine SG, snapshots, and forensic copies are all accounted for and that no evidence was destroyed. If break-glass access was used, cross-check it per [`aws-break-glass.md`](aws-break-glass.md). If personal data, health data, card data or a regulated service was affected, a legal notification clock may already be running: follow [`regulatory-notification.md`](regulatory-notification.md).
 
 ---
 
 ## See also
 
 - [AWS Landing Zone](../architecture/aws-landing-zone.md#incident-response--forensics) — where incident-response sits in the SRA.
+- [Regulatory incident and breach notification](regulatory-notification.md) — GDPR, DORA, NIS2, HIPAA, PCI and SEC deadlines and who decides.
 - [AWS Break-Glass](aws-break-glass.md) — emergency access if normal paths are down.
 - [AWS Teardown](aws-teardown.md) — backup/log immutability that affects recovery.

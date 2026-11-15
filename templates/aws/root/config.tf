@@ -27,6 +27,8 @@ locals {
     aws_region          = try(tostring(local.lz.org.regions.aws), null)
     tfc_organization    = try(tostring(local.lz.org.tfc.organization), null)
     aws_enabled_regions = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
+    cost_center         = try(tostring(local.lz.org.cost_center), null)
+    owner               = try(tostring(local.lz.org.owner), null)
 
     # aws.contracts.organization: stage contract override (same type as
     # var.organization_contract, identical in every aws root). Present => the remote-state read is skipped.
@@ -41,7 +43,11 @@ locals {
   }
 
   # Effective values.
-  aws_region          = coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
-  tfc_organization    = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  aws_region       = coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
+  tfc_organization = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  cost_center      = coalesce(local.cfg.cost_center, "platform")
+  owner            = coalesce(local.cfg.owner, "platform-team")
+  # Used by the stage module call that a cloned root wires in main.tf.
+  # tflint-ignore: terraform_unused_declarations
   aws_enabled_regions = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, [local.aws_region])
 }

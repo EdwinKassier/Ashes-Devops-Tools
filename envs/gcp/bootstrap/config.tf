@@ -20,7 +20,11 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    project_prefix                        = try(tostring(local.lz.org.prefix), null)
+    project_prefix = try(tostring(local.lz.org.prefix), null)
+    # org.cost_center / org.owner: the cost-center and owner provider default
+    # labels (providers.tf), the same keys as the AWS roots' default_tags.
+    cost_center                           = try(tostring(local.lz.org.cost_center), null)
+    owner                                 = try(tostring(local.lz.org.owner), null)
     organization_name                     = try(tostring(local.lz.org.display_name), null)
     domain                                = try(tostring(local.lz.org.domain), null)
     default_region                        = try(tostring(local.lz.org.regions.gcp), null)
@@ -55,6 +59,12 @@ locals {
         is_production           = tobool(try(e.is_production, false))
       }
     }
+    # Environment keys whose is_production is missing or not a boolean. The
+    # schema requires it; the environments validation names them.
+    environments_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
   }
 
   # Effective values. Required ones fall back to an inert sentinel only so
@@ -71,4 +81,6 @@ locals {
   tfc_organization                      = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   phase0_admin_impersonation_expires_at = try(coalesce(var.phase0_admin_impersonation_expires_at, local.cfg.phase0_admin_impersonation_expires_at), null)
   enable_network_connectivity_center    = coalesce(var.enable_network_connectivity_center, local.cfg.enable_network_connectivity_center)
+  # The standing organizationAdmin members (granted here, not by gcp-organization).
+  organization_admin_members = var.organization_admin_members != null ? var.organization_admin_members : [for g in coalesce(local.cfg.organization_admin_groups, []) : "group:${g}"]
 }

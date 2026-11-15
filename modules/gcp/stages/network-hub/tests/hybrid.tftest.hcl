@@ -17,7 +17,7 @@ variables {
   org_id                 = "organizations/123456789"
   internal_domain        = "internal.example.com"
   folders = {
-    shared = { id = "folders/111111111", name = "folders/111111111", display_name = "Shared" }
+    shared = { id = "111111111", name = "folders/111111111", display_name = "Shared" }
   }
 }
 
@@ -31,6 +31,7 @@ override_data {
 override_module {
   target = module.hub.module.network
   outputs = {
+    subnet_ip_ranges  = ["10.0.0.0/24", "10.0.16.0/24", "10.0.32.0/24"]
     network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
     network_id        = "projects/mock-hub-project/global/networks/hub-vpc-core"
     network_name      = "hub-vpc-core"
@@ -134,6 +135,7 @@ run "hub_additional_region_router_nat" {
   override_module {
     target = module.hub.module.network
     outputs = {
+      subnet_ip_ranges  = ["10.0.0.0/24", "10.0.16.0/24", "10.0.32.0/24"]
       network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
       network_id        = "projects/mock-hub-project/global/networks/hub-vpc-core"
       network_name      = "hub-vpc-core"
@@ -151,5 +153,222 @@ run "hub_additional_region_router_nat" {
   assert {
     condition     = module.hub.additional_region_routers == { "us-east4" = "hub-vpc-core-router-us-east4" }
     error_message = "hub_additional_regions must reach net-hub and plan a router and NAT in the extra region."
+  }
+}
+
+# ── Routes announced on-premises and hybrid DNS (ARC-12) ─────────────────────
+# DEFAULT BGP mode announces the hub VPC's own subnets only, never the peered
+# environment ranges. With no explicit advertised_ip_ranges the router moves to
+# CUSTOM mode with the ALL_SUBNETS group (every hub subnet, what DEFAULT
+# announced) plus each environment CIDR, so the announcement is a superset.
+
+run "vpn_advertises_hub_and_environment_ranges_by_default" {
+  command = plan
+
+  variables {
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo     = "mock-psk-not-a-secret"
+    hybrid_advertised_ranges = [{ range = "10.10.0.0/16", description = "environment dev" }]
+  }
+
+  assert {
+    condition     = jsonencode(local.vpn_effective.advertised_groups) == jsonencode(["ALL_SUBNETS"])
+    error_message = "The derived announcement must keep every hub subnet (ALL_SUBNETS), so on-premises loses no route DEFAULT mode announced."
+  }
+
+  assert {
+    condition     = jsonencode(local.vpn_effective.advertised_ip_ranges) == jsonencode([{ description = "environment dev", range = "10.10.0.0/16" }])
+    error_message = "DEFAULT BGP mode never announces peered spokes: every environment CIDR must be advertised (ARC-12)."
+  }
+
+  assert {
+    condition     = length(google_dns_policy.hub_inbound) == 1 && google_dns_policy.hub_inbound[0].enable_inbound_forwarding && one(google_dns_policy.hub_inbound[0].networks).network_url == "projects/mock-hub-project/global/networks/hub-vpc-core"
+    error_message = "On-premises resolvers need an inbound forwarding address in the hub VPC (the VPC the VPN lands in)."
+  }
+
+  assert {
+    condition     = length(module.hybrid_forward_zones) == 0
+    error_message = "No forward zone is created unless hybrid_dns.forward_zones lists one."
+  }
+}
+
+run "explicit_advertised_ranges_win" {
+  command = plan
+
+  variables {
+    vpn = {
+      enabled              = true
+      peer_gateway_ips     = ["203.0.113.1", "203.0.113.2"]
+      advertised_ip_ranges = [{ range = "10.0.0.0/12", description = "GCP block" }]
+    }
+    vpn_shared_secret_wo     = "mock-psk-not-a-secret"
+    hybrid_advertised_ranges = [{ range = "10.10.0.0/16", description = "environment dev" }]
+  }
+
+  assert {
+    condition     = jsonencode(local.vpn_effective.advertised_ip_ranges) == jsonencode([{ description = "GCP block", range = "10.0.0.0/12" }]) && length(local.vpn_effective.advertised_groups) == 0
+    error_message = "Explicit vpn.advertised_ip_ranges must win over the derived list, with the groups the caller set (none)."
+  }
+}
+
+run "interconnect_advertises_environment_ranges_by_default" {
+  command = plan
+
+  variables {
+    interconnects = {
+      "ic-partner-1" = { region = "us-central1", router_name = "hub-ic-router" }
+      "ic-partner-2" = {
+        region               = "us-central1"
+        router_name          = "hub-ic-router-2"
+        advertised_ip_ranges = [{ range = "10.0.0.0/12", description = "GCP block" }]
+      }
+    }
+    hybrid_advertised_ranges = [{ range = "10.10.0.0/16", description = "environment dev" }]
+  }
+
+  assert {
+    condition     = jsonencode(local.interconnects_effective["ic-partner-1"].advertised_ip_ranges) == jsonencode([{ description = "environment dev", range = "10.10.0.0/16" }])
+    error_message = "An Interconnect without advertised_ip_ranges must announce the environment CIDRs (its router keeps ALL_SUBNETS in CUSTOM mode)."
+  }
+
+  assert {
+    condition     = jsonencode(local.interconnects_effective["ic-partner-2"].advertised_ip_ranges) == jsonencode([{ description = "GCP block", range = "10.0.0.0/12" }])
+    error_message = "An Interconnect's explicit advertised_ip_ranges must win."
+  }
+
+  assert {
+    condition     = length(google_dns_policy.hub_inbound) == 1
+    error_message = "An Interconnect alone also turns on the inbound DNS policy."
+  }
+}
+
+run "on_prem_zones_are_forwarded" {
+  command = plan
+
+  variables {
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+    hybrid_dns = {
+      forward_zones = { corp = { dns_name = "corp.example.com.", target_ips = ["192.168.0.10", "192.168.0.11"] } }
+    }
+  }
+
+  assert {
+    condition = (
+      module.hybrid_forward_zones["corp"].zone.dns_name == "corp.example.com." &&
+      length(module.hybrid_forward_zones["corp"].zone.forwarding_config[0].target_name_servers) == 2 &&
+      alltrue([for t in module.hybrid_forward_zones["corp"].zone.forwarding_config[0].target_name_servers : t.forwarding_path == "private"]) &&
+      one(module.hybrid_forward_zones["corp"].zone.private_visibility_config[0].networks).network_url == "projects/mock-hub-project/global/networks/hub-vpc-core"
+    )
+    error_message = "On-premises domains must be forwarded from the hub VPC to the on-premises resolvers over the private path."
+  }
+
+  # Cloud DNS sends forwarded queries from 35.199.192.0/19; with dynamic
+  # routing the on-premises side learns the return route from the router.
+  assert {
+    condition     = contains([for r in local.vpn_effective.advertised_ip_ranges : r.range], "35.199.192.0/19")
+    error_message = "Forward zones need 35.199.192.0/19 announced so on-premises resolvers can answer."
+  }
+}
+
+run "no_hybrid_no_dns_policy" {
+  command = plan
+
+  variables {
+    hybrid_dns = {
+      forward_zones = { corp = { dns_name = "corp.example.com.", target_ips = ["192.168.0.10"] } }
+    }
+  }
+
+  assert {
+    condition     = length(google_dns_policy.hub_inbound) == 0 && length(module.hybrid_forward_zones) == 0
+    error_message = "Without VPN or Interconnect nothing hybrid is created."
+  }
+}
+
+run "inbound_forwarding_can_be_turned_off" {
+  command = plan
+
+  variables {
+    vpn = {
+      enabled          = true
+      peer_gateway_ips = ["203.0.113.1", "203.0.113.2"]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+    hybrid_dns           = { enable_inbound_forwarding = false }
+  }
+
+  assert {
+    condition     = length(google_dns_policy.hub_inbound) == 0
+    error_message = "enable_inbound_forwarding = false must skip the inbound DNS policy."
+  }
+}
+
+# The internal zone (internal_domain) is bound to the hub VPC. Two private
+# zones bound to one network cannot share an origin, and a forwarded subdomain
+# would hide part of the internal zone from the hub.
+run "rejects_forwarding_the_internal_domain" {
+  command = plan
+
+  variables {
+    hybrid_dns = {
+      forward_zones = { internal = { dns_name = "internal.example.com.", target_ips = ["192.168.0.10"] } }
+    }
+  }
+
+  expect_failures = [var.hybrid_dns]
+}
+
+run "rejects_forwarding_a_subdomain_of_the_internal_domain" {
+  command = plan
+
+  variables {
+    hybrid_dns = {
+      forward_zones = { sub = { dns_name = "corp.internal.example.com.", target_ips = ["192.168.0.10"] } }
+    }
+  }
+
+  expect_failures = [var.hybrid_dns]
+}
+
+run "rejects_forward_zone_without_trailing_dot" {
+  command = plan
+
+  variables {
+    hybrid_dns = {
+      forward_zones = { corp = { dns_name = "corp.example.com", target_ips = ["192.168.0.10"] } }
+    }
+  }
+
+  expect_failures = [var.hybrid_dns]
+}
+
+# ARC-1: the hub PSC endpoint defaults to a Google-compliant name and an
+# explicit IP; hub_private_service_connect overrides both.
+run "hub_psc_endpoint_defaults" {
+  command = plan
+
+  assert {
+    condition     = module.hub.private_service_connect.name == "hubvpccorepsc" && module.hub.private_service_connect.address == "10.0.255.254"
+    error_message = "The hub PSC endpoint must default to hubvpccorepsc at 10.0.255.254."
+  }
+}
+
+run "hub_psc_endpoint_overrides_reach_net_hub" {
+  command = plan
+
+  variables {
+    hub_private_service_connect = { name = "hubapis", address = "10.0.200.10" }
+  }
+
+  assert {
+    condition     = module.hub.private_service_connect.name == "hubapis" && module.hub.private_service_connect.address == "10.0.200.10"
+    error_message = "hub_private_service_connect must reach net-hub."
   }
 }

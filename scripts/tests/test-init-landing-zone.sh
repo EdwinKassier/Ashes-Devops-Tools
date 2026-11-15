@@ -95,6 +95,8 @@ if [[ -s "${out}" ]]; then
   assert_line "${out}" '^        platform:$' "gcp scaffold declares a platform service team"
   assert_line "${out}" '^          service_team: platform$' "gcp scaffold points the example service at the platform team"
   assert_line "${out}" 'subnet_name: acme-dev-vpc-private-us-central1-a' "platform team subnet uses the prefix and region"
+  assert_line "${out}" '^    zones: \[us-central1-a, us-central1-b, us-central1-c\]$' "hub zones derived from the region (IAC-1)"
+  assert_line "${out}" '^      zones: \[us-central1-a, us-central1-b, us-central1-c\]$' "production environment zones derived from the region (IAC-1)"
   assert_no_line "${out}" '^          github: ' "gcp scaffold example service has no placeholder deploy identity"
   assert_eq "$(section_value "${out}" aws enable_org_config_recorders)" "false" "first pass: org Config recorders off"
   assert_eq "$(section_value "${out}" aws enable_config_recorder_scp)" "false" "first pass: recorder SCP off"
@@ -240,8 +242,29 @@ if bash "${SCRIPT}" --non-interactive --output "${out7}" --org-name acme --cloud
   assert_eq "$(section_value "${out7}" org monthly_budget_usd)" "750" "org.monthly_budget_usd"
   schema_check "${out7}" "starter scaffold"
   if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out7}"; then pass "starter scaffold is yamllint-clean"; else fail "starter scaffold is yamllint-clean"; fi
+  assert_no_line "${out7}" '^compliance:' "starter scaffold leaves compliance commented"
+  assert_no_line "${out7}" '^ +copy_to_central_vault:' "starter scaffold does not set compliance.backup.copy_to_central_vault"
 else
   fail "starter run exits 0"; cat "${log}" >&2
+fi
+
+echo "==> decision D3: production scaffolds the locked central backup copy"
+out7p="${workdir}/production.yaml"
+if bash "${SCRIPT}" --non-interactive --yes --output "${out7p}" --org-name acme --clouds aws --profile production \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_line "${out7p}" '^compliance:$' "production scaffold uncomments compliance"
+  assert_eq "$(awk '/^[a-z_]+:/ { s = $1 } s == "compliance:" && /^  backup:$/ { b = 1; next } b && /^    copy_to_central_vault: / { print $2; exit } b && /^  [a-z]/ { b = 0 }' "${out7p}")" \
+    "true" "production scaffold sets compliance.backup.copy_to_central_vault: true"
+  # The uncommented compliance: block alone (it ends at the next top-level line).
+  awk '/^compliance:$/ { c = 1; print; next } c && /^[^ ]/ { c = 0 } c' "${out7p}" >"${workdir}/compliance-block"
+  assert_line "${workdir}/compliance-block" '^    # .*irreversible' "the compliance block says the copy vault lock becomes irreversible"
+  assert_line "${workdir}/compliance-block" '^    # .*changeable_for_days' "the compliance block names changeable_for_days"
+  assert_line "${workdir}/compliance-block" '^    # .*UPGRADING\.md' "the compliance block names UPGRADING.md"
+  assert_no_line "${workdir}/compliance-block" '^  (frameworks|audit_log_retention_days|breach_notification_contacts):' "production scaffold sets no other compliance key"
+  schema_check "${out7p}" "production scaffold"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out7p}"; then pass "production scaffold is yamllint-clean"; else fail "production scaffold is yamllint-clean"; fi
+else
+  fail "production run exits 0"; cat "${log}" >&2
 fi
 
 echo "==> task 2.7: interactive production shows the idle cost and asks for confirmation"
@@ -312,18 +335,64 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
   assert_line "${co}" '^\* @acme-gh/platform-team$' "default owner is the platform team"
   assert_line "${co}" '^/envs/tfc-admin/ +@acme-gh/platform-team @acme-gh/sec$' "tfc-admin needs platform + security"
   assert_line "${co}" '^/config/landing-zone.yaml +@acme-gh/platform-team @acme-gh/sec$' "landing-zone.yaml is security-owned"
-  # Every security-sensitive path routes to platform + security (last match wins).
+  # Security-sensitive paths list platform and security (last match wins; one
+  # approval from either team satisfies the line).
   for path in /modules/aws/iam/ /modules/aws/governance/ /modules/gcp/iam/ \
-    /modules/gcp/stages/organization/ /modules/gcp/stages/bootstrap/ /modules/gcp/stages/guardrails/ \
+    /modules/gcp/stages/organization/ /modules/gcp/stages/bootstrap/ \
     /modules/aws/stages/organization/ /modules/aws/stages/security/ /modules/aws/stages/backup/ \
     /config/tfc-workspaces.yaml \
-    /envs/tfc-admin/ /envs/gcp/guardrails/ /policies/ /.github/; do
-    assert_line "${co}" "^${path} +@acme-gh/platform-team @acme-gh/sec\$" "${path} needs platform + security"
+    /envs/tfc-admin/ /.github/; do
+    assert_line "${co}" "^${path} +@acme-gh/platform-team @acme-gh/sec\$" "${path} lists platform + security"
+  done
+  # Guardrail paths list the security team ONLY, so a security approval is
+  # required: GitHub accepts one approval from any owner on the matching line.
+  for path in /policies/ /envs/gcp/guardrails/ /modules/gcp/stages/guardrails/ \
+    /scripts/check-plan-time-exec.py /.github/requirements/ /.github/CODEOWNERS \
+    /templates/aws/bootstrap/ /templates/CODEOWNERS.tftpl \
+    /modules/gcp/iam/deny-policy/ /modules/tfc/ \
+    /renovate.json /release-please-config.json /.tool-versions /.pre-commit-config.yaml \
+    /scripts/check-consistency.sh /.github/workflows/terraform-plan.yml \
+    /modules/aws/network/network-firewall/ /scripts/verify-run-commit.sh; do
+    assert_line "${co}" "^${path} +@acme-gh/sec\$" "${path} is security-team only"
+  done
+  # Each security-only line must come after every broader line that matches it,
+  # or the broader line wins. The last line matching each probe path must be
+  # security-only.
+  for probe in policies/opa/x.rego envs/gcp/guardrails/main.tf modules/gcp/stages/guardrails/main.tf \
+    scripts/check-plan-time-exec.py .github/requirements/plan-time-exec.txt .github/CODEOWNERS \
+    templates/aws/bootstrap/phase0-management.yaml templates/CODEOWNERS.tftpl \
+    modules/gcp/iam/deny-policy/main.tf modules/tfc/workspace/main.tf \
+    renovate.json release-please-config.json .tool-versions .pre-commit-config.yaml; do
+    last="$(awk -v p="/${probe}" '
+      /^[^#[:space:]]/ {
+        pat = $1
+        if (pat == "*" || index(p, pat) == 1) line = $0
+      }
+      END { print line }' "${co}")"
+    if [[ "${last}" =~ ^[^[:space:]]+[[:space:]]+@acme-gh/sec$ ]]; then
+      pass "last match for /${probe} is security-only"
+    else
+      fail "last match for /${probe} is security-only (got '${last}')"
+    fi
   done
   assert_no_line "${co}" '\$\{|your-org' "no unrendered variables or placeholders"
   assert_no_line "${co}" '^[^#]*@acme-gh/(sec|platform-team|app-platform-team|docs-team)@' "no malformed owners"
 else
   fail "codeowners run exits 0"; cat "${log}" >&2
+fi
+echo "==> templates/CODEOWNERS.tftpl and .github/CODEOWNERS carry the same rules"
+co_up="${workdir}/CODEOWNERS.upstream"
+if bash "${SCRIPT}" --non-interactive --output "${workdir}/co-up.yaml" --org-name acme --clouds aws \
+  --aws-management-account 123456789012 --github-owner your-org --codeowners --codeowners-output "${co_up}" \
+  </dev/null >"${log}" 2>&1; then
+  rules() { grep -vE '^[[:space:]]*(#|$)' "$1" | awk '{$1=$1; print}'; }
+  if diff <(rules "${co_up}") <(rules "${REPO_ROOT}/.github/CODEOWNERS") >"${workdir}/co.diff"; then
+    pass "template rules match .github/CODEOWNERS"
+  else
+    fail "template rules match .github/CODEOWNERS"; cat "${workdir}/co.diff" >&2
+  fi
+else
+  fail "upstream codeowners render exits 0"; cat "${log}" >&2
 fi
 expect_reject "--codeowners needs a GitHub owner" --output "${workdir}/co2.yaml" --org-name acme --clouds aws \
   --codeowners --codeowners-output "${workdir}/CODEOWNERS2"
@@ -335,9 +404,138 @@ out3="${workdir}/gcp-only.yaml"
 if bash "${SCRIPT}" --non-interactive --output "${out3}" --org-name acme --tfc-org acme-tfc --clouds gcp --domain acme.com \
   </dev/null >"${log}" 2>&1; then
   assert_no_line "${log}" 'example\.com, ou:' "AWS account emails not reported on a gcp-only run"
+  assert_line "${log}" 'Derived, not verified' "derived values are reported"
+  assert_line "${log}" 'gcp-organization-admins@acme\.com' "derived admin group is listed"
+  assert_line "${log}" 'gcp-break-glass@acme\.com' "derived break-glass group is listed"
+  assert_line "${log}" 'subnet_name: acme-dev-vpc-private-' "derived subnet name is listed"
+  assert_line "${log}" 'line [0-9]+: +zones: \[europe-west2-a, europe-west2-b, europe-west2-c\]' "derived zones are listed"
 else
   fail "gcp-only run exits 0"; cat "${log}" >&2
 fi
+
+echo "==> a region without an -a zone gets -b, -c and -d"
+out5="${workdir}/us-east1.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out5}" --org-name acme --tfc-org acme-tfc --clouds gcp --domain acme.com \
+  --gcp-region us-east1 </dev/null >"${log}" 2>&1; then
+  assert_line "${out5}" '^      zones: \[us-east1-b, us-east1-c, us-east1-d\]$' "us-east1 production zones skip -a"
+  assert_line "${out5}" 'subnet_name: acme-dev-vpc-private-us-east1-b' "us-east1 platform subnet uses the -b zone"
+  assert_no_line "${out5}" '^[^#]*us-east1-a' "no us-east1-a value"
+else
+  fail "us-east1 run exits 0"; cat "${log}" >&2
+fi
+
+echo "==> AWS phase-0 role ARNs are reported until checked against the stack outputs"
+out4="${workdir}/aws-roles.yaml"
+if bash "${SCRIPT}" --non-interactive --output "${out4}" --org-name acme --tfc-org acme-tfc --clouds aws \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_line "${out4}" '^  break_glass_role_arn: arn:aws:iam::123456789012:role/OrganizationBreakGlass$' \
+    "break-glass ARN names the phase-0 stack role"
+  assert_line "${log}" 'line [0-9]+:  break_glass_role_arn: arn:aws:iam::123456789012:role/OrganizationBreakGlass' \
+    "derived break-glass ARN is listed"
+  assert_line "${log}" 'line [0-9]+:  terraform_run_role_arn: arn:aws:iam::123456789012:role/tfc-mgmt-apply' \
+    "derived run role ARN is listed"
+  assert_line "${log}" 'phase-0 stack outputs' "the report says to compare with the phase-0 stack outputs"
+  assert_line "${log}" 'git commit -m "chore\(config\): landing zone"' "next steps use a Conventional Commits message"
+  assert_no_line "${log}" 'saas-bootstrap\.md' "saas runbook not listed when saas is off"
+else
+  fail "aws run with a management account exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --force --output "${out4}" --org-name acme --tfc-org acme-tfc --clouds aws \
+  </dev/null >"${log}" 2>&1; then
+  assert_line "${log}" 'line [0-9]+:  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/OrganizationBreakGlass' \
+    "break-glass ARN without an account ID is a placeholder"
+else
+  fail "aws run without a management account exits 0"; cat "${log}" >&2
+fi
+
+echo "==> next steps name the SaaS runbook when saas is enabled"
+if bash "${SCRIPT}" --non-interactive --output "${workdir}/saas-next.yaml" --org-name acme --tfc-org acme-tfc --clouds saas \
+  --supabase-org abcdefgh1234 --vercel-team team_x --github-repo acme/web </dev/null >"${log}" 2>&1; then
+  assert_line "${log}" 'docs/runbooks/saas-bootstrap\.md' "saas run lists the SaaS bootstrap runbook"
+else
+  fail "saas run with IDs exits 0"; cat "${log}" >&2
+fi
+
+echo "==> ADO-20: --tfc-plan writes org.tfc.plan (production default standard)"
+out8="${workdir}/tfc-plan.yaml"
+if bash "${SCRIPT}" --non-interactive --yes --output "${out8}" --org-name acme --clouds aws --profile production \
+  --aws-management-account 123456789012 --vcs-repo acme/landing-zone \
+  </dev/null >"${log}" 2>&1; then
+  assert_line "${out8}" '^    plan: standard$' "production profile writes org.tfc.plan: standard"
+  assert_no_line "${log}" 'policy sets' "policy sets on (standard + vcs_repo): no policy-set warning"
+  schema_check "${out8}" "production tfc-plan scaffold"
+else
+  fail "production tfc-plan run exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --yes --force --output "${out8}" --org-name acme --clouds aws --profile production \
+  --aws-management-account 123456789012 --tfc-plan essentials --vcs-repo acme/landing-zone </dev/null >"${log}" 2>&1; then
+  assert_line "${out8}" '^    plan: essentials$' "--tfc-plan essentials is written"
+  assert_line "${log}" 'org\.tfc\.plan is essentials' "a production estate on essentials is told the policy sets are off"
+  assert_line "${log}" 'org\.tfc\.policy_sets_waiver' "the report names the waiver key"
+else
+  fail "essentials run exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --yes --force --output "${out8}" --org-name acme --clouds aws --profile production \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_line "${log}" 'no org\.tfc\.vcs_repo' "a production scaffold without --vcs-repo is told the policy sets are off"
+else
+  fail "no-vcs run exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --force --output "${out8}" --org-name acme --clouds aws --profile starter \
+  --monthly-budget 750 </dev/null >"${log}" 2>&1; then
+  assert_line "${out8}" '^    # plan: standard$' "starter leaves org.tfc.plan commented when --tfc-plan is not given"
+else
+  fail "starter tfc-plan run exits 0"; cat "${log}" >&2
+fi
+expect_reject "rejects an unknown --tfc-plan" --output "${workdir}/p.yaml" --org-name acme --clouds aws --tfc-plan business
+
+echo "==> ADO-21: --notification-emails writes notifications.emails"
+out9="${workdir}/notify.yaml"
+if bash "${SCRIPT}" --non-interactive --yes --output "${out9}" --org-name acme --clouds aws \
+  --aws-management-account 123456789012 --notification-emails 'secops@acme.io, %netops@acme.io' \
+  </dev/null >"${log}" 2>&1; then
+  assert_line "${out9}" '^notifications:$' "notifications uncommented"
+  assert_line "${out9}" '^  emails:$' "notifications.emails uncommented"
+  assert_line "${out9}" '^    - "secops@acme\.io"$' "first notification email, quoted"
+  assert_line "${out9}" '^    - "%netops@acme\.io"$' "second notification email (local part starts with %), quoted"
+  assert_line "${out9}" '^  # hcp_email_user_ids:$' "hcp_email_user_ids stays commented"
+  awk '/^notifications:$/ { c = 1; print; next } c && /^[^ ]/ { c = 0 } c' "${out9}" >"${workdir}/notifications-block"
+  assert_no_line "${workdir}/notifications-block" '@my-org|@example' "the example address is gone from notifications"
+  assert_no_line "${workdir}/notifications-block" '^  # # ' "notifications comments are not double-commented"
+  assert_no_line "${log}" 'notifications\.emails' "no missing-contact warning when the flag is given"
+  schema_check "${out9}" "notifications scaffold"
+  if yamllint_cmd -s -d "${YAMLLINT_RULES}" "${out9}"; then pass "notifications scaffold is yamllint-clean"; else fail "notifications scaffold is yamllint-clean"; fi
+  if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' 2>/dev/null; then
+    if python3 -c 'import sys, yaml; d = yaml.safe_load(open(sys.argv[1])); assert d["notifications"] == {"emails": ["secops@acme.io", "%netops@acme.io"]}, d["notifications"]' "${out9}"; then
+      pass "notifications parses to exactly the given emails"
+    else
+      fail "notifications parses to exactly the given emails"
+    fi
+  fi
+else
+  fail "notification-emails run exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --yes --force --output "${out9}" --org-name acme --clouds aws \
+  --aws-management-account 123456789012 </dev/null >"${log}" 2>&1; then
+  assert_no_line "${out9}" '^notifications:' "without the flag notifications stays commented"
+  assert_line "${log}" 'notifications\.emails' "a production AWS scaffold without the flag lists notifications.emails"
+  assert_line "${log}" 'aws-security' "the report names aws-security"
+  assert_line "${log}" 'aws-network' "the report names aws-network"
+else
+  fail "aws run without notification emails exits 0"; cat "${log}" >&2
+fi
+if bash "${SCRIPT}" --non-interactive --force --output "${out9}" --org-name acme --tfc-org acme-tfc --clouds gcp --domain acme.com \
+  </dev/null >"${log}" 2>&1; then
+  assert_no_line "${log}" 'notifications\.emails' "a gcp-only scaffold does not require notifications.emails"
+else
+  fail "gcp-only run without notification emails exits 0"; cat "${log}" >&2
+fi
+expect_reject "rejects a malformed --notification-emails" --output "${workdir}/n1.yaml" --org-name acme --clouds aws \
+  --notification-emails 'not-an-email'
+expect_reject "rejects a placeholder-domain --notification-emails" --output "${workdir}/n2.yaml" --org-name acme --clouds aws \
+  --notification-emails 'secops@acme.example.com'
+expect_reject "rejects a .test --notification-emails" --output "${workdir}/n3.yaml" --org-name acme --clouds aws \
+  --notification-emails 'secops@acme.io,ops@corp.test'
 
 echo
 echo "test-init-landing-zone: ${passes} passed, ${failures} failed"

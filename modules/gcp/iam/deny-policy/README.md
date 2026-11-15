@@ -100,4 +100,9 @@ The following resources are created:
 |------|-------------|
 | <a name="output_deny_policy_ids"></a> [deny\_policy\_ids](#output\_deny\_policy\_ids) | Map of deny-policy name to the created google\_iam\_deny\_policy resource ID. |
 | <a name="output_deny_policy_names"></a> [deny\_policy\_names](#output\_deny\_policy\_names) | List of deny-policy names created. |
+| <a name="output_deny_policy_rules"></a> [deny\_policy\_rules](#output\_deny\_policy\_rules) | Map of deny-policy name to its planned rules, read from the google\_iam\_deny\_policy resource (not the input): denied and exception principals and permissions, and the denial condition expression (null when unconditional). Lets callers' tests assert what the policy will actually deny. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

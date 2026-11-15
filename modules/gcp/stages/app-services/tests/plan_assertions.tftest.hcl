@@ -80,9 +80,11 @@ run "one_service_full_golden_path" {
   }
 
   # WIF binding keys on the IMMUTABLE numeric repository_id, never the name.
+  # With neither ref nor environment it is pinned to the GitHub environment
+  # named after var.environment, never the whole repository.
   assert {
-    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repository_id/123456789"
-    error_message = "the deploy SA WIF binding must use principalSet .../attribute.repository_id/<id>."
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_env/123456789/dev"
+    error_message = "with neither ref nor environment, the deploy SA must be pinned to the GitHub environment named after var.environment (as AWS app-services does), never to the whole repository."
   }
 
   assert {
@@ -213,8 +215,9 @@ run "env_only_service_binds_repo_env" {
   }
 }
 
-# Declares neither -> bound on attribute.repository_id (any ref, any env).
-run "bare_service_binds_repository_id" {
+# Declares neither -> bound on attribute.repo_env with var.environment as the
+# GitHub environment. No binding trusts every ref and environment of a repo.
+run "bare_service_pins_var_environment" {
   command = plan
 
   variables {
@@ -225,8 +228,49 @@ run "bare_service_binds_repository_id" {
   }
 
   assert {
-    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repository_id/123"
-    error_message = "a service declaring neither ref nor environment must bind attribute.repository_id/<repo>."
+    condition     = google_service_account_iam_member.deploy_wif["api"].member == "principalSet://iam.googleapis.com/projects/222222222222/locations/global/workloadIdentityPools/apps-dev/attribute.repo_env/123/dev"
+    error_message = "a service declaring neither ref nor environment must bind attribute.repo_env/<repo>/<var.environment>."
+  }
+}
+
+run "no_service_binding_is_repository_wide" {
+  command = plan
+
+  variables {
+    enable_app_deploy_wif = true
+    services = {
+      api = { github = { repository_id = "123" } }
+      web = { github = { repository_id = "456", ref = "refs/heads/main" } }
+      ops = { github = { repository_id = "789", environment = "dev-approval" } }
+      job = { github = { repository_id = "321", ref = "refs/heads/main", environment = "prod" } }
+    }
+  }
+
+  assert {
+    condition     = alltrue([for k, m in google_service_account_iam_member.deploy_wif : !strcontains(m.member, "/attribute.repository_id/")])
+    error_message = "no deploy SA may trust every branch and environment of a repository."
+  }
+
+  assert {
+    condition     = endswith(google_service_account_iam_member.deploy_wif["web"].member, "/attribute.repo_ref/456/refs/heads/main")
+    error_message = "a service that sets only ref stays pinned to that ref."
+  }
+
+  # End to end: the attribute each principalSet tests is one the provider
+  # maps from the token, and every binding is checked (4 services, 4 members).
+  assert {
+    condition = length(google_service_account_iam_member.deploy_wif) == 4 && alltrue([
+      for k, m in google_service_account_iam_member.deploy_wif :
+      contains(keys(google_iam_workload_identity_pool_provider.github[0].attribute_mapping), "attribute.${regex("/attribute\\.([a-z_]+)/", m.member)[0]}")
+    ])
+    error_message = "every deploy SA principalSet must test an attribute that the GitHub provider's attribute_mapping produces."
+  }
+
+  # repo_env maps a token without an environment claim to "-", so a job that
+  # does not declare `environment:` never matches a repo_env binding.
+  assert {
+    condition     = google_iam_workload_identity_pool_provider.github[0].attribute_mapping["attribute.repo_env"] == "assertion.repository_id + '/' + (has(assertion.environment) ? assertion.environment : '-')"
+    error_message = "attribute.repo_env must be <repository_id>/<environment claim>, with '-' when the token has no environment claim."
   }
 }
 
@@ -905,8 +949,41 @@ run "production_database_defaults_to_high_availability" {
   }
 
   assert {
-    condition     = module.database["batch"].availability_type == "ZONAL" && module.database["batch"].backup_location == "europe-west2" && module.database["api"].backup_location == null
-    error_message = "enable_high_availability = false must opt a production database out, and backup_location must reach the instance."
+    condition     = module.database["batch"].availability_type == "ZONAL" && module.database["batch"].backup_location == "europe-west2" && module.database["api"].backup_location == "europe-west1"
+    error_message = "enable_high_availability = false must opt a production database out, and backup_location must reach the instance (null = the instance region)."
+  }
+}
+
+# DR knobs of the automated backups: backup_location and the PITR log
+# retention reach the cloud-sql module; unset, they keep its defaults (the
+# instance region, 7 days).
+run "database_backup_location_and_log_retention_forwarded" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        database = { edition = "ENTERPRISE_PLUS", tier = "db-perf-optimized-N-2", backup_location = "eu", transaction_log_retention_days = 21 }
+      }
+      batch = {
+        database = {}
+      }
+    }
+  }
+
+  assert {
+    condition     = module.database["api"].backup_location == "eu" && module.database["api"].transaction_log_retention_days == 21
+    error_message = "database.backup_location and database.transaction_log_retention_days must reach the cloud-sql module."
+  }
+
+  assert {
+    condition     = module.database["batch"].backup_location == "europe-west1" && module.database["batch"].transaction_log_retention_days == 7
+    error_message = "without the keys the database keeps the cloud-sql defaults (instance region, 7 days)."
+  }
+
+  assert {
+    condition     = output.services["api"].database_backup_location == "eu" && output.services["api"].database_transaction_log_retention_days == 21 && output.services["batch"].database_transaction_log_retention_days == 7
+    error_message = "output.services must expose the effective backup location and log retention."
   }
 }
 
@@ -924,5 +1001,237 @@ run "non_production_database_stays_zonal" {
   assert {
     condition     = module.database["api"].availability_type == "ZONAL"
     error_message = "outside production a database defaults to ZONAL."
+  }
+}
+
+# ARC-16: production keeps one Cloud Run instance warm; every service is probed.
+run "production_services_stay_warm_and_probed" {
+  command = plan
+
+  variables {
+    is_production = true
+    services      = { api = {} }
+  }
+
+  assert {
+    condition     = module.service["api"].min_instance_count_effective == 1
+    error_message = "A production Cloud Run service without min_instances must keep one warm instance (ARC-16)."
+  }
+
+  assert {
+    condition     = module.service["api"].health_check_path_effective == "/"
+    error_message = "Services default to probing / (the bootstrap image serves it)."
+  }
+}
+
+run "explicit_min_instances_wins_in_production" {
+  command = plan
+
+  variables {
+    is_production = true
+    services      = { api = { min_instances = 0 } }
+  }
+
+  assert {
+    condition     = module.service["api"].min_instance_count_effective == 0
+    error_message = "An explicit min_instances = 0 must opt a production service out of the warm instance."
+  }
+}
+
+run "non_production_still_scales_to_zero" {
+  command = plan
+
+  variables {
+    services = { api = {} }
+  }
+
+  assert {
+    condition     = module.service["api"].min_instance_count_effective == 0
+    error_message = "Non-production services keep scale-to-zero by default."
+  }
+}
+
+run "empty_health_check_path_keeps_the_tcp_probe" {
+  command = plan
+
+  variables {
+    services = { api = { health_check_path = "" } }
+  }
+
+  assert {
+    condition     = module.service["api"].health_check_path_effective == null
+    error_message = "health_check_path = \"\" must leave the service without an HTTP probe."
+  }
+}
+
+# CMP-12: require_database_cmek makes every app-service database require a
+# customer-managed key (set by gcp-workload for compliance_class: regulated).
+run "require_database_cmek_passes_with_a_key" {
+  command = plan
+
+  variables {
+    require_database_cmek = true
+    services = {
+      api = {
+        database = { encryption_key_name = "projects/acme-kms/locations/europe-west1/keyRings/sql/cryptoKeys/api" }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.database["api"].cmek_required && output.services["api"].database_cmek_required && module.database["api"].encryption_key_name == "projects/acme-kms/locations/europe-west1/keyRings/sql/cryptoKeys/api"
+    error_message = "require_database_cmek must reach each database (require_cmek) with its key."
+  }
+}
+
+run "database_cmek_not_required_by_default" {
+  command = plan
+
+  variables {
+    services = {
+      api = {
+        database = {}
+      }
+    }
+  }
+
+  assert {
+    condition     = !module.database["api"].cmek_required && module.database["api"].encryption_key_name == null
+    error_message = "without require_database_cmek a database must not require a key."
+  }
+}
+
+# The guard itself (require_cmek with no key) is tested in
+# modules/gcp/data/cloud-sql/tests/variables_validation.tftest.hcl.
+
+# ARC-H1: with the environment egress proxy on, every Cloud Run service and job
+# sends ALL traffic into the VPC (the private tier has no Cloud NAT then) and
+# gets the proxy environment variables. Without it, Cloud Run's own internet
+# path would skip the proxy.
+run "egress_proxy_forces_all_traffic_and_proxy_env" {
+  command = plan
+
+  variables {
+    is_production = true
+    egress_proxy = {
+      enabled  = true
+      address  = "10.10.16.50"
+      port     = 443
+      no_proxy = ["10.10.255.254", ".hub.internal"]
+    }
+    services = {
+      api    = {}
+      worker = { runtime = "cloud-run-job" }
+    }
+  }
+
+  assert {
+    condition     = output.services["api"].vpc_egress == "ALL_TRAFFIC" && output.services["worker"].vpc_egress == "ALL_TRAFFIC"
+    error_message = "with the egress proxy on, every Cloud Run service and job must use ALL_TRAFFIC egress."
+  }
+
+  assert {
+    condition = alltrue([for k in ["api", "worker"] : (
+      local.service_env_vars[k]["HTTPS_PROXY"] == "http://10.10.16.50:443" &&
+      local.service_env_vars[k]["HTTP_PROXY"] == "http://10.10.16.50:443" &&
+      local.service_env_vars[k]["https_proxy"] == "http://10.10.16.50:443" &&
+      local.service_env_vars[k]["http_proxy"] == "http://10.10.16.50:443" &&
+      local.service_env_vars[k]["NO_PROXY"] == local.service_env_vars[k]["no_proxy"]
+    )])
+    error_message = "every service and job must get HTTPS_PROXY / HTTP_PROXY (both cases) pointing at the proxy endpoint."
+  }
+
+  assert {
+    condition = alltrue([for entry in ["metadata.google.internal", "169.254.169.254", ".googleapis.com", ".run.app", "10.10.255.254", ".hub.internal"] :
+      contains(split(",", local.service_env_vars["api"]["NO_PROXY"]), entry)
+    ])
+    error_message = "NO_PROXY must cover the metadata server, Google APIs, run.app and the caller's extra entries."
+  }
+}
+
+run "egress_proxy_off_keeps_private_ranges_only" {
+  command = plan
+
+  variables {
+    services = { api = {}, worker = { runtime = "cloud-run-job" } }
+  }
+
+  assert {
+    condition     = output.services["api"].vpc_egress == "PRIVATE_RANGES_ONLY" && output.services["worker"].vpc_egress == "PRIVATE_RANGES_ONLY"
+    error_message = "without the egress proxy, the default egress stays PRIVATE_RANGES_ONLY."
+  }
+
+  assert {
+    condition     = !contains(keys(local.service_env_vars["api"]), "HTTPS_PROXY") && !contains(keys(local.service_env_vars["worker"]), "NO_PROXY")
+    error_message = "without the egress proxy, no proxy variables are injected."
+  }
+}
+
+run "egress_proxy_non_production_override_is_kept" {
+  command = plan
+
+  variables {
+    egress_proxy = { enabled = true, address = "10.10.16.50" }
+    services     = { api = { vpc_egress = "PRIVATE_RANGES_ONLY", env_vars = { NO_PROXY = "custom.example" } } }
+  }
+
+  assert {
+    condition     = output.services["api"].vpc_egress == "PRIVATE_RANGES_ONLY"
+    error_message = "outside production an explicit vpc_egress wins."
+  }
+
+  assert {
+    condition     = local.service_env_vars["api"]["HTTPS_PROXY"] == "http://10.10.16.50:443" && local.service_env_vars["api"]["NODE_USE_ENV_PROXY"] == "1"
+    error_message = "the proxy URL defaults to port 443 and NODE_USE_ENV_PROXY=1 is injected."
+  }
+
+  # A service's NO_PROXY is appended to the defaults, never a replacement.
+  assert {
+    condition = alltrue([for v in ["NO_PROXY", "no_proxy"] : alltrue([for entry in ["custom.example", ".googleapis.com", ".run.app", "metadata.google.internal"] :
+      contains(split(",", local.service_env_vars["api"][v]), entry)
+    ])])
+    error_message = "a service that sets NO_PROXY must keep .googleapis.com, .run.app and the metadata server in both NO_PROXY and no_proxy."
+  }
+}
+
+run "egress_proxy_per_service_no_proxy_appends" {
+  command = plan
+
+  variables {
+    egress_proxy = { enabled = true, address = "10.10.16.50" }
+    services = {
+      api    = { no_proxy = ["internal.example"], env_vars = { no_proxy = "lower.example, spaced.example", HTTPS_PROXY = "http://override:3128" } }
+      worker = { runtime = "cloud-run-job", no_proxy = ["jobs.example"] }
+    }
+  }
+
+  assert {
+    condition = alltrue([for v in ["NO_PROXY", "no_proxy"] : alltrue([for entry in ["internal.example", "lower.example", "spaced.example", ".googleapis.com", ".run.app", "10.0.0.0-10.255.255.255"] :
+      contains(split(",", local.service_env_vars["api"][v]), entry)
+    ])])
+    error_message = "services[*].no_proxy and an env_vars no_proxy must be appended to the defaults in both cases."
+  }
+
+  assert {
+    condition     = contains(split(",", local.service_env_vars["worker"]["NO_PROXY"]), "jobs.example") && !contains(split(",", local.service_env_vars["worker"]["NO_PROXY"]), "internal.example")
+    error_message = "a job gets its own no_proxy entries, not another service's."
+  }
+
+  assert {
+    condition     = local.service_env_vars["api"]["HTTPS_PROXY"] == "http://override:3128"
+    error_message = "a service's own env_vars still win for the other proxy variables."
+  }
+}
+
+run "no_proxy_untouched_with_proxy_off" {
+  command = plan
+
+  variables {
+    services = { api = { no_proxy = ["ignored.example"], env_vars = { NO_PROXY = "custom.example" } } }
+  }
+
+  assert {
+    condition     = local.service_env_vars["api"]["NO_PROXY"] == "custom.example" && !contains(keys(local.service_env_vars["api"]), "no_proxy") && !contains(keys(local.service_env_vars["api"]), "NODE_USE_ENV_PROXY")
+    error_message = "with the proxy off, a service's NO_PROXY stays as given and nothing is injected."
   }
 }

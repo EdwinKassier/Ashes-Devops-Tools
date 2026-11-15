@@ -3,11 +3,20 @@
 # organization_contract override keeps the aws-organization remote-state read
 # out of the plan (count = 0), so no override_data is needed.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 
 variables {
   # Isolate the suite from any committed config/landing-zone.yaml.
   landing_zone_config_path = ""
+  alarm_subscriber_emails  = ["netops@acme.io"]
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "acme-org-log-archive"
   organization_contract = {
@@ -95,6 +104,72 @@ run "rejects_invalid_aws_region" {
 
   variables {
     aws_region = "eu_west_2"
+  }
+
+  expect_failures = [var.aws_region]
+}
+
+# Region names: GovCloud (`us-gov-west-1`) and the AWS European Sovereign Cloud
+# (`eusc-de-east-1`) pass; malformed or commercial look-alike names do not. The
+# accepting runs pass the region's zones because the mocked zone lookup returns
+# eu-west-2 zones.
+run "accepts_govcloud_region" {
+  command = plan
+
+  variables {
+    aws_region          = "us-gov-west-1"
+    aws_enabled_regions = ["us-gov-west-1"]
+    availability_zones  = ["us-gov-west-1a", "us-gov-west-1b"]
+    az_count            = 2
+  }
+
+  assert {
+    condition     = local.aws_region == "us-gov-west-1"
+    error_message = "GovCloud region names must pass the region validation."
+  }
+}
+
+run "accepts_eusc_region" {
+  command = plan
+
+  variables {
+    aws_region          = "eusc-de-east-1"
+    aws_enabled_regions = ["eusc-de-east-1"]
+    availability_zones  = ["eusc-de-east-1a", "eusc-de-east-1b"]
+    az_count            = 2
+  }
+
+  assert {
+    condition     = local.aws_region == "eusc-de-east-1"
+    error_message = "AWS European Sovereign Cloud region names must pass the region validation."
+  }
+}
+
+run "rejects_eusc_region_without_country" {
+  command = plan
+
+  variables {
+    aws_region = "eusc-east-1"
+  }
+
+  expect_failures = [var.aws_region]
+}
+
+run "rejects_govcloud_region_zero_ordinal" {
+  command = plan
+
+  variables {
+    aws_region = "us-gov-west-0"
+  }
+
+  expect_failures = [var.aws_region]
+}
+
+run "rejects_four_letter_commercial_prefix" {
+  command = plan
+
+  variables {
+    aws_region = "euwe-west-1"
   }
 
   expect_failures = [var.aws_region]
@@ -304,4 +379,37 @@ run "az_count_one_rejected" {
   }
 
   expect_failures = [var.az_count]
+}
+
+# SEC-1: the config loader's file() must not read a file on the runner.
+run "absolute_config_path_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "/proc/self/environ"
+  }
+
+  expect_failures = [var.landing_zone_config_path]
+}
+
+run "config_path_leaving_the_repository_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../../outside/landing-zone.yaml"
+  }
+
+  expect_failures = [var.landing_zone_config_path]
+}
+
+# IAC-3: a set path that names no file fails instead of silently dropping the
+# config (and falling back to eu-west-2).
+run "missing_config_file_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-typo.yaml"
+  }
+
+  expect_failures = [var.landing_zone_config_path]
 }

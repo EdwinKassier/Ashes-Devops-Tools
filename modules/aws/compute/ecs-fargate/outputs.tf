@@ -32,3 +32,8 @@ output "container_name" {
   description = "Name of the primary container (the container CI rewrites the image of)."
   value       = local.container_name
 }
+
+output "autoscaling_target_ids" {
+  description = "IDs of the Application Auto Scaling targets (empty when enable_autoscaling is false)."
+  value       = aws_appautoscaling_target.this[*].id
+}

@@ -68,10 +68,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_db_subnet_group.this (modules/aws/data/rds-aurora/main.tf#L35)
-- resource.aws_rds_cluster.this (modules/aws/data/rds-aurora/main.tf#L44)
-- resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L97)
-- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L143)
+- resource.aws_db_subnet_group.this (modules/aws/data/rds-aurora/main.tf#L38)
+- resource.aws_rds_cluster.this (modules/aws/data/rds-aurora/main.tf#L74)
+- resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L129)
+- resource.aws_rds_cluster_parameter_group.this (modules/aws/data/rds-aurora/main.tf#L52)
+- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L175)
 
 
 ## Inputs
@@ -85,7 +86,10 @@ The following resources are created:
 | <a name="input_apply_immediately"></a> [apply\_immediately](#input\_apply\_immediately) | Whether modifications are applied immediately rather than during the next maintenance window. | `bool` | `false` | no |
 | <a name="input_backup_retention_period"></a> [backup\_retention\_period](#input\_backup\_retention\_period) | Number of days automated backups are retained. | `number` | `7` | no |
 | <a name="input_database_name"></a> [database\_name](#input\_database\_name) | Name of the initial database created in the cluster. | `string` | `"app"` | no |
-| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Whether the cluster is protected from deletion. Secure default is true.<br/><br/>When true, the cluster's AWS-side deletion\_protection is set and a<br/>terraform\_data guard with prevent\_destroy is created. The guard is replaced<br/>whenever the cluster would be replaced, so Terraform refuses any plan that<br/>destroys or replaces the cluster. Setting this to false while the guard<br/>exists is also refused. To intentionally destroy or replace a protected<br/>cluster, first run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_guard[0]'<br/>then set this to false and apply. | `bool` | `true` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Deprecated: use enable\_deletion\_protection. Removed in v1.0. | `bool` | `null` | no |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Whether the cluster is protected from deletion. Secure default is true.<br/><br/>When true, the cluster's AWS-side deletion\_protection is set and a<br/>terraform\_data guard with prevent\_destroy is created. The guard is replaced<br/>whenever the cluster would be replaced, so Terraform refuses any plan that<br/>destroys or replaces the cluster. Setting this to false while the guard<br/>exists is also refused. To intentionally destroy or replace a protected<br/>cluster, first run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_guard[0]'<br/>then set this to false and apply.<br/><br/>Null (default) uses the deprecated deletion\_protection input, else true. | `bool` | `null` | no |
+| <a name="input_enable_force_ssl"></a> [enable\_force\_ssl](#input\_enable\_force\_ssl) | Attach a cluster parameter group with rds.force\_ssl = 1, so the cluster refuses unencrypted client connections. Default true. A new cluster enforces it from the start. An existing cluster shows an in-place parameter group change and enforces TLS only after each instance reboots (apply\_method pending-reboot); reboot them in a maintenance window. | `bool` | `true` | no |
+| <a name="input_enable_org_backup"></a> [enable\_org\_backup](#input\_enable\_org\_backup) | Tag the cluster backup = true so the organization BACKUP\_POLICY (aws-backup) backs it up daily, next to the RDS automated backups. Default true. For cross-account copy to the central copy vault the kms\_key\_id key policy must also let the backup account use the key. | `bool` | `true` | no |
 | <a name="input_enable_serverless_v2"></a> [enable\_serverless\_v2](#input\_enable\_serverless\_v2) | Whether to run the cluster as Aurora Serverless v2 (engine\_mode provisioned + serverlessv2\_scaling\_configuration, instances use db.serverless). | `bool` | `false` | no |
 | <a name="input_enabled_cloudwatch_logs_exports"></a> [enabled\_cloudwatch\_logs\_exports](#input\_enabled\_cloudwatch\_logs\_exports) | Log types to export to CloudWatch Logs (e.g. postgresql). | `list(string)` | <pre>[<br/>  "postgresql"<br/>]</pre> | no |
 | <a name="input_engine_version"></a> [engine\_version](#input\_engine\_version) | aurora-postgresql engine version (e.g. 16.6). | `string` | `"16.6"` | no |
@@ -115,6 +119,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_cluster_arn"></a> [cluster\_arn](#output\_cluster\_arn) | ARN of the Aurora cluster. |
 | <a name="output_cluster_identifier"></a> [cluster\_identifier](#output\_cluster\_identifier) | Identifier of the Aurora cluster. |
+| <a name="output_cluster_tags"></a> [cluster\_tags](#output\_cluster\_tags) | Tags set on the cluster. Contains backup = true when enable\_org\_backup is true; exported so composing stages can assert it. |
 | <a name="output_database_name"></a> [database\_name](#output\_database\_name) | Name of the initial database. |
 | <a name="output_endpoint"></a> [endpoint](#output\_endpoint) | Writer (primary) endpoint of the cluster. |
 | <a name="output_instance_identifiers"></a> [instance\_identifiers](#output\_instance\_identifiers) | Identifiers of the cluster instances (writer + readers). |

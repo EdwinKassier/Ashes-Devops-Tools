@@ -3,9 +3,27 @@
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "tfc_organization" {
@@ -64,7 +82,7 @@ variable "aws_region" {
   default     = null
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
     error_message = "aws_region (or org.regions.aws in config/landing-zone.yaml) must be a valid AWS region name, e.g. eu-west-2."
   }
 }
@@ -74,6 +92,8 @@ variable "aws_overrides" {
   type = object({
     aws_enabled_regions                     = optional(list(string))
     log_archive_bucket_name                 = optional(string)
+    log_archive_retention_days              = optional(number)
+    log_archive_object_lock_mode            = optional(string)
     key_admin_arn                           = optional(string)
     key_admin_role_name                     = optional(string)
     kms_key_user_arns                       = optional(map(list(string)))
@@ -90,6 +110,12 @@ variable "aws_overrides" {
     enable_incident_response                = optional(bool)
     enable_service_quotas                   = optional(bool)
     enable_internal_access_analyzer         = optional(bool)
+    enable_patch_install                    = optional(bool)
+    patch_install_target_tag = optional(object({
+      key   = string
+      value = string
+    }))
+    patch_operating_systems = optional(set(string))
     notification_subscribers = optional(map(object({
       protocol = string # one of: email, https, sms, sqs, lambda, etc.
       endpoint = string # e.g. an email address or HTTPS URL
@@ -120,6 +146,30 @@ variable "aws_overrides" {
   })
   default  = {}
   nullable = false
+
+  # CMP-2. The effective values are inlined (local.aws reads this variable).
+  # local.retention_floor reads only the config file.
+  validation {
+    condition     = coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365) >= max(1, local.retention_floor)
+    error_message = "The log-archive retention (aws_overrides.log_archive_retention_days, else compliance.audit_log_retention_days, else 365) is ${coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365)} days. It must be at least 1 and at least the ${local.retention_floor}-day floor of compliance.frameworks (${join(", ", local.cfg.compliance_frameworks)})."
+  }
+
+  # A regulated workload environment (compliance_class: regulated) keeps its
+  # VPC flow logs, which land in the log-archive bucket, at least 365 days.
+  validation {
+    condition     = length(local.cfg.workload_regulated) == 0 || coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365) >= 365
+    error_message = "aws.workload_environments ${join(", ", local.cfg.workload_regulated)} is compliance_class: regulated, so the log-archive retention, which holds every account's VPC flow logs, must be at least 365 days. It is ${coalesce(try(var.aws_overrides.log_archive_retention_days, null), local.cfg.audit_log_retention_days, 365)} (aws_overrides.log_archive_retention_days, else compliance.audit_log_retention_days, else 365)."
+  }
+
+  validation {
+    condition     = contains(["COMPLIANCE", "GOVERNANCE"], coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE"))
+    error_message = "aws_overrides.log_archive_object_lock_mode must be COMPLIANCE or GOVERNANCE."
+  }
+
+  validation {
+    condition     = (length(local.cfg.compliance_frameworks) == 0 && length(local.cfg.workload_regulated) == 0) || coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE") == "COMPLIANCE"
+    error_message = "compliance.frameworks is set or an AWS workload environment is regulated (${join(", ", concat(local.cfg.compliance_frameworks, local.cfg.workload_regulated))}), so aws_overrides.log_archive_object_lock_mode must stay COMPLIANCE. GOVERNANCE lets privileged principals shorten or remove the retention."
+  }
 }
 
 # key_policy_admin_role_name stays its own variable: null is a meaningful value
@@ -214,4 +264,3 @@ variable "profile" {
     error_message = "profile must be production or starter."
   }
 }
-

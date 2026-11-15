@@ -79,8 +79,8 @@ org:
     # gcp_workloads_project: landing-zone-gcp-workloads
     # aws_workloads_project: landing-zone-aws-workloads
     # Production workloads (gcp.environments[*].is_production,
-    # aws.workload_environments[*].is_production; unset = keys prod/production)
-    # get no speculative PR plans (tfc-admin disable_speculative_on_production).
+    # aws.workload_environments[*].is_production; is_production is required on
+    # every environment) get no speculative PR plans (tfc-admin disable_speculative_on_production).
     # Optional VCS connection for every tfc-admin workspace (IDs, not secrets).
     # vcs_repo:
     #   identifier: my-org/landing-zone
@@ -199,9 +199,11 @@ aws:
   # here through app-services. Empty or absent leaves GitHub federation unpinned.
   # github_federation_owners:
   #   - my-github-org
-  # Phase-0 management-account roles (aws-bootstrap runbook Step 2).
+  # Phase-0 management-account roles (aws-bootstrap runbook Step 2). Replace
+  # each with the phase-0 stack output: TerraformRunRoleArn and
+  # BreakGlassRoleArn (templates/aws/bootstrap/phase0-management.yaml).
   terraform_run_role_arn: arn:aws:iam::123456789012:role/tfc-mgmt-apply
-  break_glass_role_arn: arn:aws:iam::123456789012:role/break-glass
+  break_glass_role_arn: arn:aws:iam::123456789012:role/OrganizationBreakGlass
   # Central log-archive bucket (aws-organization, aws-security, aws-network).
   log_archive_bucket_name: acme-org-log-archive
   # Foundational SRA accounts: key => {email, ou}. Root emails must be real,
@@ -222,12 +224,13 @@ aws:
   # (account key => aws-workload-<env>). vpc_cidr is optional.
   workload_environments:
     dev:
+      is_production: false
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
 
   # Network Firewall egress posture (aws-network). A production estate (profile
-  # production AND a workload environment with is_production, or keyed
-  # prod/production) fails the plan unless unmatched traffic is dropped AND the
+  # production AND a workload environment with is_production: true; the flag
+  # is required on every environment) fails the plan unless unmatched traffic is dropped AND the
   # allowlist is non-empty. A leading dot matches subdomains. Extend the list
   # with every domain your workloads call (package mirrors, SaaS APIs); matching
   # is on HTTP Host / TLS SNI, and everything else is dropped.

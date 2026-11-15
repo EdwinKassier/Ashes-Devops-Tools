@@ -18,6 +18,8 @@ npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-sec
 
 `npm ci` installs exactly the committed `package-lock.json` (integrity-checked); `--ignore-scripts` means no dependency lifecycle script ever runs on the apply runner (`pg` and its dependencies are pure JavaScript and need none). The runner needs Node.js 18+ and npm on `PATH` plus registry access. To prime locally, run the same command.
 
+npm runs under `env -i`, so it sees no secret environment. It gets back only `PATH`, `HOME`, `TMPDIR`, `npm_config_cache` / `NPM_CONFIG_CACHE`, the proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, in both cases) and `NODE_EXTRA_CA_CERTS`, each one only when it is set. `POSTGRES_URL`, `VAULT_DESIRED_JSON`, `SUPABASE_SSL_CERT` and the workspace's `SUPABASE_ACCESS_TOKEN` reach `node` only. Any other npm setting (a private registry, registry auth) belongs in an `.npmrc` file under `HOME`, not in an environment variable.
+
 ## Database objects and privileges
 
 `bootstrap.mjs` creates two `SECURITY DEFINER` helpers in the private schema **`iac_vault`**:
@@ -103,8 +105,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.terraform_data.bootstrap (modules/supabase/vault-secrets/main.tf#L77)
-- resource.terraform_data.reconcile (modules/supabase/vault-secrets/main.tf#L94)
+- resource.terraform_data.bootstrap (modules/supabase/vault-secrets/main.tf#L90)
+- resource.terraform_data.reconcile (modules/supabase/vault-secrets/main.tf#L107)
 
 
 ## Inputs
@@ -123,3 +125,7 @@ The following resources are created:
 | <a name="output_managed_secret_names"></a> [managed\_secret\_names](#output\_managed\_secret\_names) | Sorted list of secret names managed by this module. Visible in plan output — useful for verifying the desired-state map without exposing values. |
 | <a name="output_reconcile_trigger_id"></a> [reconcile\_trigger\_id](#output\_reconcile\_trigger\_id) | Unique ID of the reconcile terraform\_data resource; changes when secrets are reconciled. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

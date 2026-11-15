@@ -1,5 +1,5 @@
 # Example: deploy the hub VPC and DNS hub that all spoke projects peer to.
-# In a full landing zone this is called from envs/gcp/organization/main.tf.
+# In a full landing zone this is called from envs/gcp/network-hub/main.tf.
 # Replace locals with outputs from the organization stage or remote state.
 
 locals {
@@ -26,8 +26,14 @@ module "network_hub" {
   # Example: { "prod-app" = "123456789012" }
   spoke_project_numbers = {}
 
-  # Folders from the organization stage — used to attach hub DNS policies.
+  # Folders from the organization stage (contract.folders). The "shared" folder
+  # owns the hierarchical firewall policy, which is associated with every folder.
   folders = {
+    shared = {
+      id           = "123456789000"
+      name         = "folders/123456789000"
+      display_name = "Shared"
+    }
     dev = {
       id           = "123456789001"
       name         = "folders/123456789001"

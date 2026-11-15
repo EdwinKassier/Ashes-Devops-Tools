@@ -16,10 +16,15 @@
 #       managed policy) so the apply identity cannot leave the org, blind the
 #       detective controls, rewrite its own trust/boundary, squat or modify the
 #       break-glass / OrganizationAccountAccessRole / stacksets-exec-* roles,
-#       destroy or re-policy protected KMS keys, touch dp:* perimeter tags,
-#       mint long-lived IAM user credentials, or create/grant to a role that
-#       does not carry the same boundary (boundary propagation); every other
-#       action stays allowed.
+#       destroy or re-policy protected KMS keys, delete the locked backup
+#       copy vault's lock, access policy or vault, touch dp:* perimeter tags,
+#       mint long-lived IAM user credentials, grant through IAM groups or
+#       users, re-version customer-managed policies outside /tfc-managed/,
+#       retarget the aliases of protected KMS keys, write to the StackSet-*
+#       stacks, update any role trust
+#       (trust-update lock), or create/grant to a role that does not carry
+#       the same boundary (boundary propagation); every other action stays
+#       allowed.
 #
 # Optionally (enable_member_break_glass_role) a sibling StackSet deploys the
 # member-account break-glass role (see the end of this file).
@@ -143,6 +148,38 @@ locals {
     },
   ] : s if var.enable_apply_boundary_propagation]
 
+  # Trust-update lock: IAM does not evaluate iam:PermissionsBoundary for
+  # UpdateAssumeRolePolicy, so boundary propagation cannot stop the apply
+  # identity from re-trusting a pre-existing UNBOUNDED role to itself and
+  # assuming it. A condition-based deny would match every role anyway, so the
+  # lock denies the action on every role. CreateRole sets the trust of a new
+  # role, so new roles are unaffected. A trust change on an existing role
+  # needs break-glass or a replacement of the role (destroy, then create).
+  # The break-glass and StackSet execution roles do not carry this boundary.
+  apply_trust_update_lock_statements = [for s in [{
+    Sid      = "DenyTrustPolicyUpdates"
+    Effect   = "Deny"
+    Action   = ["iam:UpdateAssumeRolePolicy"]
+    Resource = "*"
+  }] : s if var.enable_apply_trust_update_lock]
+
+  # The locked backup copy vault (protected_backup_vault_names): during the
+  # Vault Lock's changeable_for_days window the apply identity must not delete
+  # the lock, the vault access policy or the vault. Only Delete* is denied:
+  # the first aws-backup apply creates the lock and the policy with
+  # PutBackupVaultLockConfiguration / PutBackupVaultAccessPolicy, and IAM has no
+  # condition key that tells a first Put from a later overwrite (known-gaps).
+  # Break-glass is a separate role and is not capped by this boundary.
+  # (for-expression filter: an empty Resource list is invalid policy.)
+  protected_backup_vault_statements = [for s in [
+    {
+      Sid      = "DenyProtectedBackupVaultUnlock"
+      Effect   = "Deny"
+      Action   = ["backup:DeleteBackupVault", "backup:DeleteBackupVaultAccessPolicy", "backup:DeleteBackupVaultLockConfiguration"]
+      Resource = [for n in var.protected_backup_vault_names : { "Fn::Sub" = "arn:$${AWS::Partition}:backup:*:$${AWS::AccountId}:backup-vault:${n}" }]
+    },
+  ] : s if length(var.protected_backup_vault_names) > 0]
+
   apply_boundary_document = {
     Version = "2012-10-17"
     Statement = concat([
@@ -210,6 +247,12 @@ locals {
         # no destruction and no key-policy rewrite (which would let the
         # pipeline grant itself kms:Decrypt). Mirrors the SCP; CreateKey with a
         # policy is unaffected (no resource tag exists yet).
+        # UpdateAlias / DeleteAlias: KMS authorizes an alias change on the
+        # alias AND on the current and the target key, so the tag condition
+        # matches when either key is protected. Retargeting alias/log-archive
+        # to a key the pipeline controls would move new log encryption off the
+        # protected key. CreateAlias stays allowed (the kms-key module creates
+        # the alias together with the key).
         Sid    = "DenyProtectedKeyTampering"
         Effect = "Deny"
         Action = [
@@ -218,6 +261,8 @@ locals {
           "kms:DisableKeyRotation",
           "kms:DeleteImportedKeyMaterial",
           "kms:PutKeyPolicy",
+          "kms:UpdateAlias",
+          "kms:DeleteAlias",
         ]
         Resource  = "*"
         Condition = { StringEquals = { "aws:ResourceTag/${var.kms_protection_tag_key}" = "true" } }
@@ -269,6 +314,7 @@ locals {
         Condition = { "ForAnyValue:StringLike" = { "aws:TagKeys" = "dp:*" } }
       },
       local.baseline_tamper_statement,
+      local.stackset_stack_tamper_statement,
       {
         # No new trust anchors from the pipeline. A role carrying this
         # boundary may still be granted AdministratorAccess; if the pipeline
@@ -296,10 +342,55 @@ locals {
         Action   = ["iam:CreateUser", "iam:CreateAccessKey", "iam:CreateLoginProfile"]
         Resource = "*"
       },
+      {
+        # Escalation through a pre-existing IAM group or user: boundary
+        # propagation covers roles only, so a policy on a group or user (or a
+        # console password reset) would grant an unbounded identity. No module
+        # in this repo manages IAM groups or users.
+        Sid    = "DenyGroupUserAndLoginProfileEscalation"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateGroup",
+          "iam:PutGroupPolicy",
+          "iam:AttachGroupPolicy",
+          "iam:AddUserToGroup",
+          "iam:AttachUserPolicy",
+          "iam:PutUserPolicy",
+          "iam:UpdateLoginProfile",
+        ]
+        Resource = "*"
+      },
+      {
+        # A new default version of a customer-managed policy that is attached
+        # to an unbounded (pre-existing) role, group or user would grant that
+        # identity anything. The pipeline may re-version only the
+        # customer-managed policies under the /tfc-managed/ path. No module in
+        # this repo creates an aws_iam_policy. The StackSet execution role
+        # (not capped by this boundary) owns the StackSet policies.
+        Sid         = "DenyForeignPolicyVersioning"
+        Effect      = "Deny"
+        Action      = ["iam:CreatePolicyVersion", "iam:SetDefaultPolicyVersion"]
+        NotResource = [{ "Fn::Sub" = "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/tfc-managed/*" }]
+      },
       ],
+      local.protected_backup_vault_statements,
       local.apply_boundary_propagation_statements,
+      local.apply_trust_update_lock_statements,
     )
   }
+
+  # Size of the boundary as IAM stores it: CloudFormation resolves each
+  # {"Fn::Sub": "..."} to its string, with the longest partition name
+  # (aws-us-gov) and a 12-digit account ID. IAM counts a managed policy
+  # without whitespace, and jsonencode adds none. Checked by a precondition on
+  # the StackSet, so a long protected_role_names entry fails the plan instead
+  # of the StackSet rollout.
+  apply_boundary_policy_measured = replace(replace(replace(
+    jsonencode(local.apply_boundary_document),
+    "/\\{\"Fn::Sub\":(\"[^\"]*\")\\}/", "$1"),
+    "$${AWS::Partition}", "aws-us-gov"),
+  "$${AWS::AccountId}", "123456789012")
+  apply_boundary_policy_size = length(local.apply_boundary_policy_measured)
 
   apply_boundary_resource = local.create_apply_boundary ? {
     TfcApplyBoundary = {
@@ -469,6 +560,35 @@ locals {
     Resource = [for a in local.baseline_protected_arns : { "Fn::Sub" = a }]
   }
 
+  # The stacks that service-managed StackSets create in this account are named
+  # StackSet-<stack set name>-<id> (AWS CloudFormation User Guide, StackSets
+  # drift detection example StackId ".../stack/StackSet-stack-set-drift-example-...",
+  # checked 2026-11-12). The same guide: "Changes made through CloudFormation
+  # to a stack directly, rather than at the StackSet level, aren't considered
+  # drift." A direct UpdateStack or change set on such a stack could rewrite
+  # this baseline (roles, boundary, plan deny) unseen, so the apply identity
+  # may not write to them. The wildcards cover CreateStack (name squatting),
+  # UpdateStack, DeleteStack, CancelUpdateStack, RollbackStack, every
+  # change-set action and Create/ExecuteStackRefactor (stack resource type in
+  # the Service Authorization Reference, checked 2026-11-12); reads stay
+  # allowed. "arn:*" (any partition) instead of
+  # an Fn::Sub keeps the boundary under its 6,144-character quota. Mirrors the
+  # org SCP DenyStackSetStackTampering. Lives with the tamper deny: in the
+  # embedded boundary, or inline on the apply role with an external boundary.
+  stackset_stack_tamper_statement = {
+    Sid    = "DenyStackSetStackTampering"
+    Effect = "Deny"
+    Action = [
+      "cloudformation:*Stack",
+      "cloudformation:*ChangeSet",
+      "cloudformation:*StackRefactor",
+      "cloudformation:SetStackPolicy",
+      "cloudformation:UpdateTerminationProtection",
+      "cloudformation:ContinueUpdateRollback",
+    ]
+    Resource = "arn:*:cloudformation:*:*:stack/StackSet-*"
+  }
+
   # External boundary mode: the embedded boundary (and the tamper deny in it)
   # does not exist, so the same deny is attached to the apply role itself.
   apply_role_policies_property = {
@@ -476,7 +596,7 @@ locals {
       PolicyName = "deny-baseline-tampering"
       PolicyDocument = {
         Version   = "2012-10-17"
-        Statement = [local.baseline_tamper_statement]
+        Statement = [local.baseline_tamper_statement, local.stackset_stack_tamper_statement]
       }
     }]
   }
@@ -638,6 +758,13 @@ resource "aws_cloudformation_stack_set" "this" {
       # would be required.
       condition     = length(local.template_body) <= 51200
       error_message = "The generated StackSet template exceeds CloudFormation's 51,200-byte inline limit — reduce account_bindings or split the baseline."
+    }
+
+    precondition {
+      # IAM managed-policy size quota: 6,144 characters, whitespace excluded,
+      # measured after Fn::Sub substitution (apply_boundary_policy_size).
+      condition     = !local.create_apply_boundary || local.apply_boundary_policy_size <= 6144
+      error_message = "The tfc-apply boundary renders to ${local.apply_boundary_policy_size} characters after substitution, over the 6,144-character managed-policy quota. Shorten protected_role_names, break_glass_role_name, protected_backup_vault_names or kms_protection_tag_key (use name patterns)."
     }
 
     precondition {

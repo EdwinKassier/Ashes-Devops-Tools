@@ -12,13 +12,13 @@ org:
 gcp:
   enabled: true
   environments:
-    dev: {cidr_block: 10.10.0.0/16}
+    dev: {is_production: false, cidr_block: 10.10.0.0/16}
     prod: {cidr_block: 10.30.0.0/16, is_production: true}
 aws:
   enabled: true
   workload_environments:
-    dev: {account_key: workload_dev}
-    staging: {account_key: workload_staging, is_production: true}
+    dev: {is_production: false, account_key: workload_dev, vpc_cidr: 10.72.0.0/16}
+    staging: {account_key: workload_staging, is_production: true, vpc_cidr: 10.73.0.0/16}
 saas:
   enabled: true
   workspaces: [web, admin]

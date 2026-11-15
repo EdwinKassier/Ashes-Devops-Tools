@@ -160,6 +160,25 @@ run "production_allows_host_project_workloads_when_explicit" {
   }
 }
 
+# ARC-16: the production flag and health_check_path reach the Cloud Run module
+# through the hand-kept key allowlist (a dropped key would leave these unset).
+run "production_service_is_warm_and_probed" {
+  command = plan
+
+  variables {
+    is_production                 = true
+    enable_host_project_workloads = true
+    app_services = {
+      api = { health_check_path = "/healthz" }
+    }
+  }
+
+  assert {
+    condition     = output.app_services["api"].min_instances == 1 && output.app_services["api"].health_check_path == "/healthz"
+    error_message = "A production service must keep one warm instance and probe the configured path."
+  }
+}
+
 run "non_production_database_stays_zonal" {
   command = plan
 
@@ -203,6 +222,173 @@ run "enforced_perimeter_stages_dry_run_delta" {
   }
 }
 
+# An enforced perimeter admits the environment's own plan and apply service
+# accounts (ARC-13): one ingress rule, those two identities only, on the
+# restricted services (and the staged dry-run ones) only.
+run "enforced_perimeter_admits_the_environment_pipeline" {
+  command = plan
+
+  variables {
+    vpc_service_controls = {
+      access_policy_name          = "1234567890"
+      enable_dry_run              = false
+      dry_run_restricted_services = ["storage.googleapis.com", "bigquery.googleapis.com", "logging.googleapis.com"]
+    }
+    automation_identities = [
+      "serviceAccount:wl-dev-plan@admin-abc.iam.gserviceaccount.com",
+      "serviceAccount:wl-dev-apply@admin-abc.iam.gserviceaccount.com",
+    ]
+  }
+
+  assert {
+    condition = anytrue([
+      for p in local.effective_vpc_sc_ingress_policies :
+      toset(p.identities) == toset(var.automation_identities)
+    ])
+    error_message = "the perimeter must carry one ingress rule for the environment's own plan and apply service accounts"
+  }
+
+  assert {
+    condition     = length(local.effective_vpc_sc_ingress_policies) == 1 && local.effective_vpc_sc_ingress_policies[0].sources[0].access_level == "*" && local.effective_vpc_sc_ingress_policies[0].resources == tolist(["*"])
+    error_message = "The pipeline rule must admit the identities from any source (TFC runs outside Google Cloud) to every resource in the perimeter."
+  }
+
+  assert {
+    condition = (
+      toset([for o in local.effective_vpc_sc_ingress_policies[0].operations : o.service_name]) == setunion(toset(var.vpc_service_controls.restricted_services), toset(var.vpc_service_controls.dry_run_restricted_services)) &&
+      alltrue([for o in local.effective_vpc_sc_ingress_policies[0].operations : o.method_selectors[0].method == "*"])
+    )
+    error_message = "The pipeline rule must name the restricted services (enforced plus staged dry-run) one by one, never service_name \"*\"."
+  }
+}
+
+run "no_identities_means_no_default_rule" {
+  command = plan
+
+  variables {
+    vpc_service_controls = {
+      access_policy_name          = "1234567890"
+      enable_dry_run              = false
+      dry_run_restricted_services = ["storage.googleapis.com", "bigquery.googleapis.com", "logging.googleapis.com"]
+    }
+    automation_identities = []
+  }
+
+  assert {
+    condition     = length(local.effective_vpc_sc_ingress_policies) == length(var.vpc_service_controls.ingress_policies)
+    error_message = "without automation identities the stage must add no ingress rule"
+  }
+}
+
+# ARC-C1: the environment perimeter protects every project the environment
+# owns, not only the Shared VPC host. Google requires the host and its service
+# projects in one perimeter, and the team projects hold the services and data.
+run "perimeter_protects_host_and_every_team_project" {
+  command = plan
+
+  variables {
+    vpc_service_controls = { access_policy_name = "1234567890", enable_dry_run = false }
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+      ledger = {
+        project_admin_group_email = "ledger-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  override_module {
+    target = module.service_team["payments"]
+    outputs = {
+      project_id            = "payments-1a2b"
+      project_number        = "333333333333"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "acme-dev-host-abcd"
+    }
+  }
+
+  override_module {
+    target = module.service_team["ledger"]
+    outputs = {
+      project_id            = "ledger-3c4d"
+      project_number        = "444444444444"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "acme-dev-host-abcd"
+    }
+  }
+
+  assert {
+    condition     = module.host.vpc_service_controls["dev_perimeter"].protected_project_numbers == tolist(["222222222222", "444444444444", "333333333333"])
+    error_message = "The perimeter must protect the host project and every service-team project (host first, then teams in key order), by project number."
+  }
+
+  assert {
+    condition = toset(module.host.vpc_service_controls["dev_perimeter"].perimeter.status[0].resources) == toset([
+      "projects/222222222222", "projects/333333333333", "projects/444444444444",
+    ])
+    error_message = "The enforced status of the perimeter must list the host project and both team projects."
+  }
+}
+
+# Adding a team adds its project; a dry-run perimeter carries it in the spec.
+run "dry_run_perimeter_adds_a_new_team_project" {
+  command = plan
+
+  variables {
+    vpc_service_controls = { access_policy_name = "1234567890" }
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  override_module {
+    target = module.service_team["payments"]
+    outputs = {
+      project_id            = "payments-1a2b"
+      project_number        = "333333333333"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "acme-dev-host-abcd"
+    }
+  }
+
+  assert {
+    condition = (
+      !module.host.vpc_service_controls["dev_perimeter"].enforced &&
+      length(module.host.vpc_service_controls["dev_perimeter"].perimeter.status) == 0 &&
+      toset(module.host.vpc_service_controls["dev_perimeter"].perimeter.spec[0].resources) == toset(["projects/222222222222", "projects/333333333333"])
+    )
+    error_message = "A dry-run perimeter must list the host project and the new team project in its spec, and enforce nothing."
+  }
+}
+
+run "perimeter_without_teams_protects_the_host_only" {
+  command = plan
+
+  variables {
+    vpc_service_controls = { access_policy_name = "1234567890", enable_dry_run = false }
+  }
+
+  assert {
+    condition     = module.host.vpc_service_controls["dev_perimeter"].protected_project_numbers == tolist(["222222222222"])
+    error_message = "With no service teams the perimeter protects the host project only."
+  }
+}
+
 run "explicit_psc_target_wins" {
   command = plan
 
@@ -214,6 +400,33 @@ run "explicit_psc_target_wins" {
   assert {
     condition     = output.components.psc_target == "all-apis"
     error_message = "An explicit private_service_connect_target must win over the derived one."
+  }
+}
+
+# ARC-1: the spoke PSC endpoint gets a Google-compliant name and an explicit
+# IP by default; network.private_service_connect_name/address override both.
+run "psc_endpoint_defaults" {
+  command = plan
+
+  assert {
+    condition     = module.host.private_service_connect.name == "acmedevvpcpsc" && module.host.private_service_connect.address == "10.10.255.254"
+    error_message = "The spoke PSC endpoint must default to acmedevvpcpsc at 10.10.255.254."
+  }
+}
+
+run "psc_endpoint_overrides_pass_through" {
+  command = plan
+
+  variables {
+    network = {
+      private_service_connect_name    = "devapis"
+      private_service_connect_address = "10.10.200.10"
+    }
+  }
+
+  assert {
+    condition     = module.host.private_service_connect.name == "devapis" && module.host.private_service_connect.address == "10.10.200.10"
+    error_message = "network.private_service_connect_name and _address must reach net-spoke."
   }
 }
 
@@ -277,6 +490,49 @@ run "service_team_registry_fans_out" {
   assert {
     condition     = length(local.team_service_apis["payments"]) == 0
     error_message = "A team that hosts no service must not get extra APIs."
+  }
+}
+
+# The team stage takes its Shared VPC host from module.host's
+# shared_vpc_host_project_id output, which waits for the spoke network only.
+# Taking var.host_project.project_id (with a module-wide depends_on) would be a
+# cycle with the perimeter, which lists the team projects (ARC-C1).
+run "service_team_attaches_through_the_net_spoke_output" {
+  command = plan
+
+  variables {
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+  }
+
+  override_module {
+    target = module.host
+    outputs = {
+      shared_vpc_host_project_id = "acme-host-from-output"
+      network_id                 = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      network_name               = "acme-dev-vpc"
+      network_self_link          = "https://www.googleapis.com/compute/v1/projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      subnets                    = { private = {}, public = {}, database = {} }
+      vpc_service_controls       = {}
+      vpc_peerings               = {}
+      dns_zones                  = {}
+      cloud_armor                = null
+      security_policy_id         = null
+      security_policy_self_link  = null
+      nat_ip                     = null
+      ncc_spoke_id               = null
+    }
+  }
+
+  assert {
+    condition     = module.service_team["payments"].host_project_id == "acme-host-from-output"
+    error_message = "module.service_team must take shared_vpc_host_project_id from module.host.shared_vpc_host_project_id, not from var.host_project.project_id."
   }
 }
 
@@ -434,6 +690,12 @@ run "public_ingress_backend_and_neg_exist" {
     error_message = "Public ingress must create the backend service and HTTPS forwarding rule."
   }
 
+  # CMP-5: the front door gets the module's TLS 1.2 SSL policy.
+  assert {
+    condition     = module.app_ingress["api"].ssl_policy_id != null
+    error_message = "Public ingress must attach an SSL policy (TLS 1.2 minimum) to the HTTPS proxy."
+  }
+
   assert {
     condition     = output.public_ingress["api"].ip_address != null
     error_message = "The load balancer IP must be exposed for DNS."
@@ -501,5 +763,216 @@ run "spoke_additional_region_router_nat" {
   assert {
     condition     = module.host.additional_region_routers == { "europe-west4" = "acme-dev-vpc-router-europe-west4" }
     error_message = "An additional spoke region with nat = true must get its own Cloud Router and NAT."
+  }
+}
+
+# gcp-workload passes the spoke VPC name from the gcp-projects contract.
+run "network_name_from_caller" {
+  command = plan
+
+  variables {
+    network = { name = "acme-dev-custom-vpc" }
+  }
+
+  assert {
+    condition     = output.network_name == "acme-dev-custom-vpc" && module.host.additional_region_subnets == {}
+    error_message = "network.name must name the spoke VPC."
+  }
+}
+
+# CMP-8: the Backup and DR vault is off by default and, when on, protects every
+# app-service database. A team database is in the team project, so the vault's
+# service agent gets its Cloud SQL operator role there; the host-project
+# database needs no grant.
+run "backup_vault_off_by_default" {
+  command = plan
+
+  variables {
+    app_services = { api = { database = {} } }
+  }
+
+  assert {
+    condition     = length(module.backup_vault) == 0 && output.components.backup_vault == false
+    error_message = "The Backup and DR vault must be off unless backup_vault.enabled is true."
+  }
+}
+
+run "backup_vault_protects_every_database" {
+  command = plan
+
+  variables {
+    backup_vault = { enabled = true, enforced_retention_days = 90 }
+    service_teams = {
+      payments = {
+        project_admin_group_email = "payments-admins@acme.test"
+        shared_vpc_subnets = {
+          private = { region = "europe-west1", subnet_name = "acme-dev-vpc-private-europe-west1-b" }
+        }
+      }
+    }
+    app_services = {
+      api    = { service_team = "payments", database = {} }
+      orders = { database = {} }
+      worker = {}
+    }
+  }
+
+  override_module {
+    target = module.service_team["payments"]
+    outputs = {
+      project_id            = "payments-1a2b"
+      project_number        = "333333333333"
+      service_account_email = null
+      subnet_iam_bindings   = {}
+      host_project_id       = "acme-dev-host-abcd"
+    }
+  }
+
+  assert {
+    condition     = output.components.backup_vault && module.backup_vault[0].enforced_retention_days == 90
+    error_message = "backup_vault.enabled must create the vault with the configured enforced retention."
+  }
+
+  assert {
+    condition = module.backup_vault[0].protected_instances == {
+      api    = "projects/payments-1a2b/instances/api-db"
+      orders = "projects/acme-dev-host-abcd/instances/orders-db"
+    }
+    error_message = "Every app-service database, in the host or a team project, must be associated with the vault's Cloud SQL plan."
+  }
+
+  assert {
+    condition     = local.backup_vault_source_projects == { payments = "payments-1a2b" }
+    error_message = "Only a team project that hosts a database is a source project (it gets the Cloud SQL operator grant); the host project needs none."
+  }
+}
+
+# CMP-12: app_platform.require_database_cmek reaches every app-service database.
+run "require_database_cmek_reaches_app_services" {
+  command = plan
+
+  variables {
+    app_platform = {
+      require_database_cmek = true
+    }
+    app_services = {
+      api = {
+        database = { encryption_key_name = "projects/acme-kms/locations/europe-west1/keyRings/sql/cryptoKeys/api" }
+      }
+    }
+  }
+
+  assert {
+    condition     = output.app_services["api"].database_cmek_required == true
+    error_message = "app_platform.require_database_cmek must reach the app-service databases."
+  }
+}
+
+run "deprecated_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    deletion_protection = true
+  }
+
+  assert {
+    condition     = output.network_name == "acme-dev-vpc"
+    error_message = "The deprecated deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+    deletion_protection        = true
+  }
+
+  assert {
+    condition     = output.network_name == "acme-dev-vpc"
+    error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
+  }
+}
+
+# IAC-1: network.explicit_zones pins the spoke's zones, so the subnet CIDRs no
+# longer follow the zones GCP returns (the mock returns b, c, d).
+run "explicit_zones_pin_the_spoke_subnets" {
+  command = plan
+
+  variables {
+    network = {
+      explicit_zones = ["europe-west1-d", "europe-west1-c"]
+    }
+  }
+
+  assert {
+    condition     = join(",", module.host.zones) == "europe-west1-d,europe-west1-c"
+    error_message = "network.explicit_zones must reach net-spoke in the given order."
+  }
+
+  assert {
+    condition     = module.host.subnets.private["europe-west1-d"].ip_cidr_range == "10.10.16.0/24" && module.host.subnets.private["europe-west1-c"].ip_cidr_range == "10.10.17.0/24" && length(module.host.subnets.private) == 2
+    error_message = "The first pinned zone must take the first private CIDR, and no discovered zone may add a subnet."
+  }
+}
+
+run "zones_are_discovered_when_not_pinned" {
+  command = plan
+
+  assert {
+    condition     = join(",", module.host.zones) == "europe-west1-b,europe-west1-c,europe-west1-d"
+    error_message = "Without network.explicit_zones the spoke keeps the discovered zones."
+  }
+}
+
+# ARC-H1: the environment egress proxy reaches every app service and job. The
+# address is the spoke's PSC endpoint for the hub proxy (unknown until apply
+# under the mock), so the run checks the wiring, not the literal URL.
+run "egress_proxy_reaches_app_services" {
+  command = plan
+
+  variables {
+    is_production                 = true
+    enable_host_project_workloads = true
+    hub = {
+      egress_proxy = {
+        enabled            = true
+        service_attachment = "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
+        port               = 8443
+      }
+      dns_zones = {
+        hub = { dns_name = "hub.internal.", visibility = "private", peering_network = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc" }
+      }
+    }
+    app_services = { api = {}, worker = { runtime = "cloud-run-job" } }
+  }
+
+  assert {
+    condition     = output.app_services["api"].vpc_egress == "ALL_TRAFFIC" && output.app_services["worker"].vpc_egress == "ALL_TRAFFIC"
+    error_message = "with the environment egress proxy on, every app service and job must use ALL_TRAFFIC egress."
+  }
+
+  assert {
+    condition = (
+      module.app_services.egress_proxy_settings.enabled &&
+      module.app_services.egress_proxy_settings.port == 8443 &&
+      contains(module.app_services.egress_proxy_settings.no_proxy, "10.10.255.254") &&
+      contains(module.app_services.egress_proxy_settings.no_proxy, ".hub.internal")
+    )
+    error_message = "the app services must get the hub proxy port and NO_PROXY entries for the PSC endpoint and the hub DNS domain."
+  }
+}
+
+run "egress_proxy_off_leaves_app_services_on_private_ranges" {
+  command = plan
+
+  variables {
+    app_services = { api = {} }
+  }
+
+  assert {
+    condition     = output.app_services["api"].vpc_egress == "PRIVATE_RANGES_ONLY" && !module.app_services.egress_proxy_settings.enabled
+    error_message = "without the egress proxy, app services keep PRIVATE_RANGES_ONLY egress and no proxy settings."
   }
 }

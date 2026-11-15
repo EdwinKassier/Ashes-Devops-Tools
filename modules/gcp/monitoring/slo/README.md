@@ -75,3 +75,7 @@ The following resources are created:
 | <a name="output_burn_rate_alert_policy_id"></a> [burn\_rate\_alert\_policy\_id](#output\_burn\_rate\_alert\_policy\_id) | ID of the burn-rate alert policy, or null when not enabled. |
 | <a name="output_slo_name"></a> [slo\_name](#output\_slo\_name) | Full resource name of the SLO. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

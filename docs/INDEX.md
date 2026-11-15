@@ -11,7 +11,7 @@
 
 ## Core Concepts
 
-- GCP is five layered roots, applied in order: `envs/gcp/bootstrap` (`gcp-bootstrap`, phase-0) →
+- GCP is five layered roots plus the security-team `gcp-guardrails`, applied in order: `envs/gcp/bootstrap` (`gcp-bootstrap`, phase-0) →
   `envs/gcp/organization` (`gcp-organization`) → `envs/gcp/projects` (`gcp-projects`) →
   `envs/gcp/network-hub` (`gcp-network-hub`) → `envs/gcp/workload` (`gcp-workload-<env>`).
 - `envs/tfc-admin` codifies the Terraform Cloud workspace layer itself.
@@ -57,7 +57,7 @@ make lint
 
 ```bash
 make plan-gcp-organization
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
+make plan-gcp-workload APP_ENV=dev
 ```
 
 ## Runbooks
@@ -87,7 +87,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 
 ## GCP Landing Zone
 
-- [GCP Landing Zone](architecture/gcp-landing-zone.md): enterprise-foundations architecture — folder/project model, five-root layer map, Shared VPC hub-spoke topology, security services, foundation conformance checklist
+- [GCP Landing Zone](architecture/gcp-landing-zone.md): enterprise-foundations architecture — folder/project model, layer map, Shared VPC hub-spoke topology, security services, foundation conformance checklist
 - [Adding a Cloud](architecture/adding-a-cloud.md): the per-cloud-root contract (naming, one provider per root, credential-free remote state)
 - [Provider Selection](architecture/provider-selection.md): any-combination cloud matrix, per-cloud-root model
 - [Bootstrap](runbooks/bootstrap.md): phase-0 stand-up from zero state to a runnable `gcp-organization` workspace
@@ -97,6 +97,8 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 - [CIDR Expansion](runbooks/cidr-expansion.md): expand subnet ranges without downtime
 - [Break Glass](runbooks/break-glass.md): emergency access when Workload Identity Federation fails
 - [Incident Response](runbooks/incident-response.md): quarantine and forensics flow via SCC + VPC-SC
+- [Disaster Recovery](runbooks/disaster-recovery.md): recovery objectives (design targets), what each backup path covers, restore procedures
+- [Regulatory Notification](runbooks/regulatory-notification.md): GDPR, DORA, NIS2, HIPAA, PCI and SEC breach-notification deadlines and procedure
 - [Teardown](runbooks/teardown.md): reverse-order destroy, `prevent_destroy` and CMEK caveats
 - [GCP Workspace Rename](runbooks/gcp-workspace-rename.md): migrate live TFC workspaces to the `gcp-organization` / `gcp-workload-<env>` names
 
@@ -127,6 +129,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 
 - [Security Policy](../SECURITY.md): vulnerability reporting, disclosure timeline, and security architecture
 - [Changelog](../CHANGELOG.md): release notes, breaking changes, and migration guides
+- [Versioning and Compatibility](policies/versioning-and-compatibility.md): one SemVer for the repository, what counts as breaking, support window, provider floors, how to pin a release
 - [Branch Protection](guides/BRANCH_PROTECTION.md): recommended GitHub branch protection and tag ruleset settings
 - [Known Gaps](known-gaps.md): open / unvalidated / deferred items
 - [Compliance Control Matrix](compliance/control-matrix.md): implemented controls mapped to SOC 2, ISO 27001:2022, NIST 800-53 r5 and CIS, with gaps and audit-evidence sources
@@ -147,12 +150,13 @@ Point-in-time reviews; later audits supersede earlier "resolved" claims. Only th
 
 - [Network Topology](architecture/network-topology.md): hub-spoke VPC layout, VPC-SC perimeter, WIF OIDC flow
 - [Architecture Overview](architecture/ARCHITECTURE.md): control plane, app root, and CI/CD flow
-- [GCP Landing Zone](architecture/gcp-landing-zone.md): folder/project model, five-root layer map, and Shared VPC hub-spoke topology
-- [GCP State Decomposition](architecture/gcp-state-decomposition.md): why and how the GCP control plane is split into five roots/states
+- [GCP Landing Zone](architecture/gcp-landing-zone.md): folder/project model, layer map, and Shared VPC hub-spoke topology
+- [GCP State Decomposition](architecture/gcp-state-decomposition.md): why and how the GCP control plane is split into separate roots and states
 - [CIDR Plan](architecture/cidr-plan.md): global IP allocation plan across both clouds
 - [AWS Landing Zone](architecture/aws-landing-zone.md): multi-account SRA model, layer map, and network/security topology
 - [Cross-Cloud Comparison](architecture/cross-cloud-comparison.md): where each capability lives per provider, side by side
 - [Landing-Zone Conformance](architecture/landing-zone-conformance.md): 2026 best-practice adherence review and gap register for both clouds
+- [Regulated Environments](architecture/regulated-environments.md): the opt-in `compliance_class: regulated` environment class on both clouds
 - [Provider Selection](architecture/provider-selection.md): per-cloud-root model and any-combination matrix
 - [Adding a Cloud](architecture/adding-a-cloud.md): per-cloud-root contract for extending the platform
 

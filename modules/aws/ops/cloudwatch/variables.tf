@@ -70,7 +70,7 @@ variable "sns_topic_arn" {
 }
 
 variable "sns_kms_master_key_id" {
-  description = "KMS key id/alias for encrypting the created SNS topic (only used when create_sns_topic = true). Null = AWS-managed key."
+  description = "KMS key id/alias for encrypting the created SNS topic (only used when create_sns_topic = true). Null = no server-side encryption. Do not use the AWS managed key (alias/aws/sns): its key policy does not let CloudWatch publish alarms to the topic. A customer managed key needs a key policy that allows cloudwatch.amazonaws.com kms:Decrypt and kms:GenerateDataKey*."
   type        = string
   default     = null
 }
@@ -88,9 +88,16 @@ variable "dashboard_name" {
 }
 
 variable "dashboard_widgets" {
-  description = "List of CloudWatch dashboard widget objects (rendered into the dashboard body via jsonencode). Empty = a minimal single-text-widget placeholder."
-  type        = list(any)
-  default     = []
+  description = "List of CloudWatch dashboard widget objects (rendered into the dashboard body via jsonencode). Widgets may differ in shape (text, metric, alarm). Empty = a minimal single-text-widget placeholder."
+  # any, not list(any): list(any) forces every widget to one object type, so a
+  # text widget next to a metric widget would be rejected.
+  type    = any
+  default = []
+
+  validation {
+    condition     = can(concat(var.dashboard_widgets, []))
+    error_message = "dashboard_widgets must be a list of widget objects."
+  }
 }
 
 variable "tags" {

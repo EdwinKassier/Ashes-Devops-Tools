@@ -86,3 +86,114 @@ run "module_tags_applied" {
     error_message = "module-level tags must land on aws_vpc_endpoint.interface"
   }
 }
+
+run "shared_private_dns_serves_other_vpcs" {
+  command = plan
+
+  variables {
+    vpc_id                    = "vpc-0123456789abcdef0"
+    region                    = "eu-west-2"
+    org_id                    = "o-abc1234567"
+    subnet_ids                = ["subnet-0a", "subnet-0b"]
+    interface_services        = ["ssm", "sts"]
+    allowed_cidrs             = ["10.64.0.0/10"]
+    enable_shared_private_dns = true
+  }
+
+  assert {
+    condition     = alltrue([for e in aws_vpc_endpoint.interface : !e.private_dns_enabled])
+    error_message = "Shared endpoints must not use the hidden per-VPC private DNS zone; their names come from shareable private hosted zones."
+  }
+
+  assert {
+    condition     = aws_route53_zone.endpoint["ssm"].name == "ssm.eu-west-2.amazonaws.com" && aws_route53_record.endpoint["sts"].name == "sts.eu-west-2.amazonaws.com" && aws_route53_record.endpoint["sts"].type == "A"
+    error_message = "Each service needs a private hosted zone for its regional name with an alias A record to the endpoint."
+  }
+
+  assert {
+    condition     = length(aws_security_group.endpoints) == 1 && length(aws_security_group.endpoints[0].ingress) == 1 && alltrue([for r in aws_security_group.endpoints[0].ingress : r.from_port == 443 && r.to_port == 443 && r.protocol == "tcp" && toset(r.cidr_blocks) == toset(["10.64.0.0/10"])])
+    error_message = "The endpoints need a security group that admits HTTPS from allowed_cidrs; the VPC default group denies everything."
+  }
+
+  assert {
+    condition     = length(aws_security_group.endpoints[0].egress) == 0
+    error_message = "The endpoint security group needs no egress rule (security groups are stateful)."
+  }
+
+  assert {
+    condition     = toset(keys(output.shared_dns_zone_arns)) == toset(["ssm", "sts"])
+    error_message = "The zone ARNs must be exported keyed by service, for the Route 53 Profile."
+  }
+}
+
+run "private_dns_stays_on_by_default" {
+  command = plan
+
+  variables {
+    vpc_id             = "vpc-0123456789abcdef0"
+    region             = "eu-west-2"
+    org_id             = "o-abc1234567"
+    security_group_ids = ["sg-0123456789abcdef0"]
+  }
+
+  assert {
+    condition     = alltrue([for e in aws_vpc_endpoint.interface : e.private_dns_enabled]) && length(aws_route53_zone.endpoint) == 0 && length(output.shared_dns_zone_arns) == 0
+    error_message = "Without enable_shared_private_dns the endpoints keep their own private DNS and no service zones are created."
+  }
+
+  assert {
+    condition     = length(aws_security_group.endpoints) == 0 && aws_vpc_endpoint.interface["ssm"].security_group_ids == toset(["sg-0123456789abcdef0"])
+    error_message = "Caller security groups must be used as given, with no module-owned group."
+  }
+}
+
+# endpoint_policy_mode = org_principals_and_resources adds aws:ResourceOrgID
+# to every endpoint except the exempt services (their resources are AWS-owned).
+run "resource_org_condition" {
+  command = plan
+
+  variables {
+    vpc_id               = "vpc-0123456789abcdef0"
+    region               = "eu-west-2"
+    org_id               = "o-abcde12345"
+    endpoint_policy_mode = "org_principals_and_resources"
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_vpc_endpoint.interface["kms"].policy).Statement[0].Condition.StringEquals["aws:ResourceOrgID"] == "o-abcde12345" &&
+      jsondecode(aws_vpc_endpoint.interface["kms"].policy).Statement[0].Condition.StringEquals["aws:PrincipalOrgID"] == "o-abcde12345"
+    )
+    error_message = "org_principals_and_resources must require both an org principal and an org-owned resource."
+  }
+
+  assert {
+    condition     = !contains(keys(jsondecode(aws_vpc_endpoint.interface["ssm"].policy).Statement[0].Condition.StringEquals), "aws:ResourceOrgID")
+    error_message = "An exempt service (ssm) must keep the principal-only policy."
+  }
+
+  assert {
+    condition     = join(",", output.resource_org_scoped_services) == "kms"
+    error_message = "Of the default services only kms is outside the exempt list."
+  }
+}
+
+run "principal_only_by_default" {
+  command = plan
+
+  variables {
+    vpc_id = "vpc-0123456789abcdef0"
+    region = "eu-west-2"
+    org_id = "o-abcde12345"
+  }
+
+  assert {
+    condition     = alltrue([for e in aws_vpc_endpoint.interface : keys(jsondecode(e.policy).Statement[0].Condition.StringEquals) == ["aws:PrincipalOrgID"]])
+    error_message = "The default endpoint policy must stay aws:PrincipalOrgID only."
+  }
+
+  assert {
+    condition     = length(output.resource_org_scoped_services) == 0
+    error_message = "No service may carry aws:ResourceOrgID by default."
+  }
+}

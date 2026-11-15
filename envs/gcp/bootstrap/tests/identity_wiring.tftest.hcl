@@ -184,3 +184,36 @@ run "ncc_roles_from_config" {
     error_message = "gcp.network.ncc_hub.enabled: true must grant the network-hub SAs hubAdmin and the workload SAs spokeAdmin."
   }
 }
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+    environments             = null
+  }
+
+  expect_failures = [var.environments]
+}
+
+# The contract carries organization-apply's allow-list and the org admins this
+# root grants organizationAdmin, for gcp-organization's plan-time checks.
+run "contract_carries_org_admins_and_allowlist" {
+  command = plan
+
+  variables {
+    organization_admin_members = ["group:gcp-org-admins@example.com"]
+  }
+
+  assert {
+    condition = (
+      output.contract.organization_admin_members == tolist(["group:gcp-org-admins@example.com"]) &&
+      module.bootstrap.organization_apply_grantable_roles == output.contract.organization_apply_grantable_roles &&
+      contains(output.contract.organization_apply_grantable_roles, "roles/billing.admin") &&
+      length(output.contract.organization_apply_grantable_roles) <= 10
+    )
+    error_message = "the gcp-bootstrap contract must publish organization_admin_members and organization_apply_grantable_roles."
+  }
+}

@@ -182,3 +182,94 @@ run "workload_boundary_disabled_with_null_name" {
     error_message = "tfc_apply_boundary_policy_name = null must disable the boundary."
   }
 }
+
+# ARC-2: the S3 and DynamoDB gateway endpoints bypass the hub egress firewall.
+# Off by default: no endpoint policy (AWS full access).
+run "gateway_endpoint_policies_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(local.gateway_endpoint_policies) == 0
+    error_message = "gateway endpoint policies must be off unless enable_gateway_endpoint_policies is set"
+  }
+}
+
+# On: S3 and DynamoDB reach only organization-owned resources, plus read-only
+# access to the documented AWS-owned buckets of the home region.
+run "gateway_endpoint_policies_restrict_to_org_and_aws_owned_buckets" {
+  command = plan
+
+  variables {
+    enable_gateway_endpoint_policies = true
+    organization_id                  = "o-abc1234567"
+    gateway_endpoint_extra_s3_arns   = ["arn:aws:s3:::partner-drop-bucket/*"]
+  }
+
+  # Org resources: aws:ResourceOrgID on both services.
+  assert {
+    condition = alltrue([
+      for svc in ["s3", "dynamodb"] : anytrue([
+        for s in jsondecode(local.gateway_endpoint_policies[svc]).Statement :
+        s.Sid == "AllowOrganizationResources" && s.Effect == "Allow" && s.Action == "${svc}:*" &&
+        s.Condition.StringEquals["aws:ResourceOrgID"] == "o-abc1234567"
+      ])
+    ])
+    error_message = "both gateway endpoints must allow their service only on resources of the organization"
+  }
+
+  # No statement allows every resource without a condition (that would
+  # restore full access and make the policy a no-op).
+  assert {
+    condition = alltrue(flatten([
+      for svc, p in local.gateway_endpoint_policies : [
+        for s in jsondecode(p).Statement : s.Effect == "Allow" && (s.Resource != "*" || can(s.Condition))
+      ]
+    ]))
+    error_message = "every Allow on Resource \"*\" must carry a condition"
+  }
+
+  # AWS-owned buckets (ECR layers, Amazon Linux repositories, SSM Agent and
+  # Patch Manager), read-only, for the home region (eu-west-2).
+  assert {
+    condition = length(setsubtract([
+      "arn:aws:s3:::prod-eu-west-2-starport-layer-bucket/*",
+      "arn:aws:s3:::al2023-repos-eu-west-2-de612dc2/*",
+      "arn:aws:s3:::amazonlinux-2-repos-eu-west-2/*",
+      "arn:aws:s3:::amazon-ssm-eu-west-2/*",
+      "arn:aws:s3:::aws-ssm-eu-west-2/*",
+      "arn:aws:s3:::patch-baseline-snapshot-eu-west-2/*",
+      "arn:aws:s3:::aws-patch-manager-eu-west-2-902a2bc74/*",
+      "arn:aws:s3:::eu-west-2-birdwatcher-prod/*",
+      "arn:aws:s3:::partner-drop-bucket/*",
+      ], one([for s in jsondecode(local.gateway_endpoint_policies["s3"]).Statement : s if s.Sid == "AllowAwsOwnedAndListedObjectReads"]).Resource
+    )) == 0
+    error_message = "the S3 policy must allow reads of the documented AWS-owned buckets of the region and the extra ARNs"
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(local.gateway_endpoint_policies["s3"]).Statement : s if s.Sid == "AllowAwsOwnedAndListedObjectReads"]).Action == "s3:GetObject"
+    error_message = "the AWS-owned bucket exemption must be read-only (s3:GetObject)"
+  }
+}
+
+# A region with a unique-suffix snapshot bucket uses the documented name.
+run "gateway_endpoint_policies_use_documented_regional_names" {
+  command = plan
+
+  variables {
+    aws_region                       = "me-south-1"
+    kms_key_arn                      = "arn:aws:kms:me-south-1:222222222222:key/abcd-1234"
+    enable_gateway_endpoint_policies = true
+    organization_id                  = "o-abc1234567"
+  }
+
+  assert {
+    condition = length(setsubtract([
+      "arn:aws:s3:::patch-baseline-snapshot-me-south-1-uduvl7q8/*",
+      "arn:aws:s3:::aws-patch-manager-me-south-1-a53fc9dce/*",
+      "arn:aws:s3:::prod-me-south-1-starport-layer-bucket/*",
+      ], one([for s in jsondecode(local.gateway_endpoint_policies["s3"]).Statement : s if s.Sid == "AllowAwsOwnedAndListedObjectReads"]).Resource
+    )) == 0
+    error_message = "the regional bucket names must follow the AWS Patch Manager bucket reference"
+  }
+}

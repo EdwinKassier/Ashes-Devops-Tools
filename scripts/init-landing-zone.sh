@@ -40,6 +40,8 @@ PROFILE=""
 MONTHLY_BUDGET=""
 VCS_REPO=""
 VCS_APP_ID=""
+TFC_PLAN=""
+NOTIFICATION_EMAILS=""
 CODEOWNERS=false
 CODEOWNERS_OUTPUT="${REPO_ROOT}/.github/CODEOWNERS"
 PLATFORM_TEAM=""
@@ -91,7 +93,15 @@ Options:
                                 Default false.
   --profile production|starter  Cost/assurance profile (org.profile). Default production, about
                                 $1.4-1.9k/month idle on AWS; interactive runs show that figure
-                                and ask for confirmation. starter requires --monthly-budget.
+                                and ask for confirmation. production also writes
+                                compliance.backup.copy_to_central_vault: true (an AWS
+                                Vault Lock that becomes irreversible; UPGRADING.md).
+                                starter requires --monthly-budget. starter writes
+                                org.tfc.plan only with --tfc-plan, and it keeps the GCP and
+                                AWS prod environments (is_production: true), so the
+                                tfc-admin plan fails until --tfc-plan standard (or premium)
+                                and --vcs-repo are set, or org.tfc.policy_sets_waiver, or
+                                you remove those environments.
   --monthly-budget USD          Monthly budget in USD (org.monthly_budget_usd); required with
                                 --profile starter.
   --yes                         Skip the production-profile cost confirmation.
@@ -100,6 +110,16 @@ Options:
   --vcs-github-app-installation-id ID
                                 GitHub App installation ID for vcs_repo (ghain-...). Without it
                                 the placeholder stays and is reported as still to fill in.
+  --tfc-plan PLAN               HCP Terraform plan (org.tfc.plan): free, essentials, standard or
+                                premium. Default standard with --profile production, else not
+                                written. With --vcs-repo, standard and premium turn on the OPA
+                                policy sets; a production environment without them fails the
+                                tfc-admin plan unless org.tfc.policy_sets_waiver is set.
+  --notification-emails LIST    Comma-separated alert addresses (notifications.emails): the
+                                aws-security security contact and the aws-network alarm
+                                subscribers, among others. A production AWS estate fails both
+                                plans without one; without the flag the key is reported as
+                                still required.
   --codeowners                  Also render templates/CODEOWNERS.tftpl to .github/CODEOWNERS.
                                 Needs --github-owner (or the team flags below).
   --codeowners-output PATH      Where to write it. Default .github/CODEOWNERS (needs --force
@@ -148,6 +168,8 @@ while [[ $# -gt 0 ]]; do
     --monthly-budget) need_arg "$@"; MONTHLY_BUDGET="$2"; shift 2 ;;
     --vcs-repo) need_arg "$@"; VCS_REPO="$2"; shift 2 ;;
     --vcs-github-app-installation-id) need_arg "$@"; VCS_APP_ID="$2"; shift 2 ;;
+    --tfc-plan) need_arg "$@"; TFC_PLAN="$2"; shift 2 ;;
+    --notification-emails) need_arg "$@"; NOTIFICATION_EMAILS="$2"; shift 2 ;;
     --codeowners) CODEOWNERS=true; shift ;;
     --codeowners-output) need_arg "$@"; CODEOWNERS_OUTPUT="$2"; shift 2 ;;
     --platform-team) need_arg "$@"; PLATFORM_TEAM="$2"; shift 2 ;;
@@ -215,6 +237,12 @@ prompt DISPLAY_NAME "Organization display name" "${ORG_NAME}"
 DISPLAY_NAME="${DISPLAY_NAME:-${ORG_NAME}}"
 prompt TFC_ORG "Terraform Cloud organization" "${ORG_NAME}"
 TFC_ORG="${TFC_ORG:-${ORG_NAME}}"
+# org.tfc.plan: standard by default for production (the lowest plan with VCS
+# policy sets); a starter scaffold leaves it commented unless given.
+default_tfc_plan=""
+[[ "${PROFILE}" == production ]] && default_tfc_plan="standard"
+prompt TFC_PLAN "HCP Terraform plan (free|essentials|standard|premium)" "${default_tfc_plan}"
+TFC_PLAN="${TFC_PLAN:-${default_tfc_plan}}"
 
 if has_cloud gcp; then
   prompt DOMAIN "GCP organization domain (e.g. acme.com)"
@@ -235,6 +263,7 @@ fi
 if has_cloud aws; then
   prompt AWS_MGMT_ACCOUNT "AWS management account ID (12 digits, blank to fill in later)"
   prompt AWS_REGION "Default AWS region" "eu-west-2"
+  prompt NOTIFICATION_EMAILS "Security contact and alarm emails, comma-separated (blank to fill in later)"
 fi
 GCP_REGION="${GCP_REGION:-europe-west2}"
 AWS_REGION="${AWS_REGION:-eu-west-2}"
@@ -310,6 +339,25 @@ fi
 if [[ -n "${VCS_APP_ID}" ]]; then
   [[ "${VCS_APP_ID}" =~ ^[A-Za-z0-9_-]+$ ]] || die "--vcs-github-app-installation-id is not a valid ID"
 fi
+case "${TFC_PLAN}" in
+  "" | free | essentials | standard | premium) ;;
+  *) die "--tfc-plan must be free, essentials, standard or premium" ;;
+esac
+# notifications.emails: the same placeholder-domain rule as the aws-security
+# and aws-network guards (example, .invalid, .localhost and .test are rejected).
+notification_list=()
+if [[ -n "${NOTIFICATION_EMAILS}" ]]; then
+  IFS=',' read -r -a raw_emails <<<"$(printf '%s' "${NOTIFICATION_EMAILS}" | tr -d ' ')"
+  for e in ${raw_emails[@]+"${raw_emails[@]}"}; do
+    [[ -n "${e}" ]] || continue
+    [[ "${e}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]+$ ]] || die "--notification-emails: '${e}' is not a valid email address"
+    host="$(printf '%s' "${e#*@}" | tr '[:upper:]' '[:lower:]')"
+    [[ ! "${host}" =~ (^|\.)(example\.(com|net|org)|example|invalid|localhost|test)$ ]] ||
+      die "--notification-emails: '${e}' uses a placeholder domain; give a real, staffed address"
+    notification_list+=("${e}")
+  done
+  [[ "${#notification_list[@]}" -gt 0 ]] || die "--notification-emails: no address given"
+fi
 if [[ "${CODEOWNERS}" == true ]]; then
   [[ -n "${PLATFORM_TEAM}" && -n "${SECURITY_TEAM}" || -n "${GITHUB_OWNER}" ]] ||
     die "--codeowners needs --github-owner (or both --platform-team and --security-team)"
@@ -320,7 +368,10 @@ if [[ "${CODEOWNERS}" == true ]]; then
   done
 fi
 [[ "${GCP_REGION}" =~ ^[a-z]+-[a-z]+[0-9]+$ ]] || die "--gcp-region '${GCP_REGION}' is not a GCP region name"
-[[ "${AWS_REGION}" =~ ^[a-z]{2}-[a-z]+-[1-9][0-9]?$ ]] || die "--aws-region '${AWS_REGION}' is not an AWS region name"
+# Canonical AWS region regex (scripts/check-consistency.sh): commercial and
+# China names, GovCloud (us-gov-*) and the European Sovereign Cloud (eusc-*).
+aws_region_re='^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$'
+[[ "${AWS_REGION}" =~ ${aws_region_re} ]] || die "--aws-region '${AWS_REGION}' is not an AWS region name"
 
 [[ "${AUDIT_BUCKET_LOCK}" == true || "${AUDIT_BUCKET_LOCK}" == false ]] ||
   die "--audit-bucket-lock must be true or false"
@@ -369,6 +420,19 @@ sed_args=(
   -e "s|^  enable_org_config_recorders: false\$|  enable_org_config_recorders: ${AWS_CONFIG_RECORDERS}|"
   -e "s|^  enable_config_recorder_scp: false\$|  enable_config_recorder_scp: ${AWS_CONFIG_RECORDERS}|"
 )
+# Zones (gcp.network.zones, gcp.environments.prod.zones): the example lists
+# <region>-a, -b and -c, which the region substitution above derives. Two
+# regions have no -a zone; they get -b, -c and -d, and the platform team's
+# subnet the -b one. Reported as derived, not verified: the operator checks
+# them with gcloud compute zones list.
+case "${GCP_REGION}" in
+  us-east1 | europe-west1)
+    sed_args+=(
+      -e "s|\[${GCP_REGION}-a, ${GCP_REGION}-b, ${GCP_REGION}-c\]|[${GCP_REGION}-b, ${GCP_REGION}-c, ${GCP_REGION}-d]|"
+      -e "s|-private-${GCP_REGION}-a}|-private-${GCP_REGION}-b}|"
+    )
+    ;;
+esac
 if [[ -n "${DOMAIN}" ]]; then
   sed_args+=(
     -e "s|^  domain: my-org\\.example\\.com\$|  domain: $(esc "${DOMAIN}")|"
@@ -385,6 +449,7 @@ if [[ -n "${AWS_EMAIL_PATTERN}" ]]; then
   sed_args+=(-e "s|aws+\([a-z0-9-]*\)@example\.com|$(esc "${email_lhs}")\1$(esc "${email_rhs}")|g")
 fi
 sed_args+=(-e "s|^  profile: production\$|  profile: ${PROFILE}|")
+[[ -z "${TFC_PLAN}" ]] || sed_args+=(-e "s|^    # plan: standard\$|    plan: ${TFC_PLAN}|")
 if [[ -n "${VCS_REPO}" ]]; then
   sed_args+=(
     -e "/^    # vcs_repo:\$/,/^    #   github_app_installation_id:/{s|^    #   |      |;s|^    # vcs_repo:|    vcs_repo:|;}"
@@ -431,8 +496,57 @@ trap 'rm -f "${tmp}"' EXIT
 } | awk -v gcp="$(has_cloud gcp && echo true || echo false)" \
   -v aws="$(has_cloud aws && echo true || echo false)" \
   -v saas="$(has_cloud saas && echo true || echo false)" \
-  -v org_id="${GCP_ORG_ID}" -v budget="${MONTHLY_BUDGET}" '
+  -v org_id="${GCP_ORG_ID}" -v budget="${MONTHLY_BUDGET}" -v profile="${PROFILE}" \
+  -v emails="$(IFS=,; printf '%s' "${notification_list[*]-}")" '
   /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  # --notification-emails: uncomment notifications: and emails: with the given
+  # addresses. The comments move in to the content indent; hcp_email_user_ids
+  # stays commented. emails: and its comments go last, so no comment follows
+  # the deeper list (yamllint comments-indentation).
+  emails != "" && $0 == "# notifications:" { notify = 1; seen_emails = 0; email_notes = ""; print "notifications:"; next }
+  notify && !/^#/ {
+    printf "%s", email_notes
+    print "  emails:"
+    n = split(emails, list, ",")
+    # Double-quoted: a local part may start with %, which YAML cannot start a
+    # plain scalar with. The address rule allows no quote or backslash.
+    for (i = 1; i <= n; i++) print "    - \"" list[i] "\""
+    notify = 0
+  }
+  notify {
+    if ($0 == "#   emails:") { in_emails = 1; seen_emails = 1; next }
+    if (in_emails && $0 ~ /^#     - /) next
+    in_emails = 0
+    line = ($0 ~ /^#   # /) ? "  # " substr($0, 7) : "  # " substr($0, 5)
+    if (!seen_emails) email_notes = email_notes line "\n"
+    else print line
+    next
+  }
+  # Production profile (decision D3): uncomment compliance: with only
+  # backup.copy_to_central_vault set. The other keys stay commented, one level
+  # deeper, and the backup: block moves last so every comment is indented like
+  # the content around it (yamllint comments-indentation).
+  profile == "production" && $0 == "# compliance:" { compliance = 1; in_backup = 0; deferred = ""; print "compliance:"; next }
+  compliance && !/^#/ { printf "%s", deferred; compliance = 0 }
+  compliance {
+    body = substr($0, 2)
+    match(body, /^ */)
+    key = substr(body, RLENGTH + 1)
+    indent = substr(body, 2, RLENGTH - 1)
+    if (key == "backup:") { in_backup = 1; deferred = deferred indent key "\n"; next }
+    if (length(indent) <= 2) in_backup = 0
+    if (!in_backup) { print indent "# " key; next }
+    if (key ~ /^copy_to_central_vault:/) {
+      deferred = deferred indent "# Production profile: copy every AWS recovery point to the locked central\n"
+      deferred = deferred indent "# copy vault (apply aws-organization, then aws-backup). Its Compliance-mode\n"
+      deferred = deferred indent "# Vault Lock becomes irreversible changeable_for_days (aws-backup, default 3)\n"
+      deferred = deferred indent "# after the first aws-backup apply. Read UPGRADING.md before that apply.\n"
+      deferred = deferred indent "copy_to_central_vault: true\n"
+      next
+    }
+    deferred = deferred indent "# " key "\n"
+    next
+  }
   section == "org" && /^  # monthly_budget_usd: / {
     if (budget != "") print "  monthly_budget_usd: " budget; else print
     next
@@ -501,6 +615,22 @@ remaining="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_clo
     if (section == "saas" && !saas) next
     print NR ":" $0
   }' "${OUTPUT}")"
+# Values the scaffolder derived from --domain / --prefix (group emails, the
+# platform team's subnet). They look real but nothing checked that they exist.
+# The AWS phase-0 role ARNs are built from --aws-management-account and the
+# phase-0 stack's default role names; they must match that stack's outputs.
+derived="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_cloud aws && echo 1 || echo 0)" \
+  -v admin="${GCP_ADMIN_EMAIL}" '
+  /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  /^[[:space:]]*#/ { next }
+  section == "gcp" && gcp && /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/ && !/@example\.com/ {
+    if (admin != "" && index($0, admin) > 0) next
+    print NR ":" $0
+  }
+  section == "gcp" && gcp && /subnet_name:/ { print NR ":" $0 }
+  section == "gcp" && gcp && /^ +zones:/ { print NR ":" $0 }
+  section == "aws" && aws && /^  (terraform_run_role_arn|break_glass_role_arn):/ && !/REPLACE_WITH_/ { print NR ":" $0 }
+' "${OUTPUT}")"
 cat <<EOF
 
 Next steps:
@@ -511,11 +641,54 @@ if [[ -n "${remaining}" ]]; then
   printf '     Still placeholders (the plan rejects them until replaced):\n'
   printf '%s\n' "${remaining}" | sed 's/^/       line /'
 fi
+# Production prerequisites the plans enforce but the scaffold cannot fill in.
+# A production environment is an is_production: true entry in an enabled cloud.
+production_envs="$(awk -v gcp="$(has_cloud gcp && echo 1 || echo 0)" -v aws="$(has_cloud aws && echo 1 || echo 0)" '
+  /^[a-z_]+:/ { section = $1; sub(":", "", section) }
+  /^[[:space:]]*#/ { next }
+  /is_production: true/ && ((section == "gcp" && gcp) || (section == "aws" && aws)) { n++ }
+  END { print n + 0 }' "${OUTPUT}")"
+aws_production=false
+if has_cloud aws && { [[ "${PROFILE}" == production ]] ||
+  awk '/^[a-z_]+:/ { s = $1 } s == "aws:" && !/^[[:space:]]*#/ && /is_production: true/ { f = 1 } END { exit !f }' "${OUTPUT}"; }; then
+  aws_production=true
+fi
+required=()
+if [[ "${production_envs}" -gt 0 ]]; then
+  policy_off=""
+  if [[ -z "${VCS_REPO}" ]]; then
+    policy_off="no org.tfc.vcs_repo (--vcs-repo)"
+  elif [[ "${TFC_PLAN}" != standard && "${TFC_PLAN}" != premium ]]; then
+    policy_off="org.tfc.plan is ${TFC_PLAN:-unset}, not standard or premium (--tfc-plan)"
+  fi
+  [[ -z "${policy_off}" ]] || required+=("OPA policy sets are off: ${policy_off}. With a production environment the tfc-admin plan fails until they are on, or until org.tfc.policy_sets_waiver: { reason, expires } is set.")
+fi
+if [[ "${aws_production}" == true && "${#notification_list[@]}" -eq 0 ]]; then
+  required+=("notifications.emails: the aws-security security contact and the aws-network alarm subscribers. Both production plans fail without a real address (--notification-emails).")
+fi
+if [[ "${#required[@]}" -gt 0 ]]; then
+  printf '     Still required for production (the plans fail until set):\n'
+  printf '       - %s\n' "${required[@]}"
+fi
+if [[ -n "${derived}" ]]; then
+  printf '     Derived, not verified (before the first apply each group must exist in\n'
+  printf '     Cloud Identity, each subnet in the environment, each zone in the region\n'
+  printf '     (gcloud compute zones list), and each AWS role ARN must equal the\n'
+  printf '     phase-0 stack outputs TerraformRunRoleArn / BreakGlassRoleArn,\n'
+  printf '     or your hand-created role):\n'
+  printf '%s\n' "${derived}" | sed 's/^/       line /'
+fi
 cat <<EOF
-  2. Commit it: git add ${OUTPUT#"${REPO_ROOT}/"} && git commit -m "config: landing zone"
+  2. Commit it: git add ${OUTPUT#"${REPO_ROOT}/"} && git commit -m "chore(config): landing zone"
      (no secrets belong in it; tokens go in TFC sensitive variables).
   3. Create the tfc-admin workspace by hand once, then apply envs/tfc-admin
      (it derives every workspace from this file).
   4. Bootstrap in order: docs/guides/QUICK_START.md
      (GCP: docs/runbooks/bootstrap.md, AWS: docs/runbooks/aws-bootstrap.md).
 EOF
+if has_cloud saas; then
+  cat <<EOF
+  5. SaaS (Supabase / Vercel): docs/runbooks/saas-bootstrap.md
+     (it assumes the tfc-admin workspace from step 3 exists).
+EOF
+fi

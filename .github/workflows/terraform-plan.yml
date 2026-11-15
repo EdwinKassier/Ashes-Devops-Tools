@@ -45,6 +45,13 @@ env:
   # (Absolute path: the runner/HOME contexts are not available at workflow level.)
   TF_PLUGIN_CACHE_DIR: /home/runner/.terraform.d/plugin-cache
 
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   discover:
     name: Discover Terraform Roots
@@ -53,6 +60,7 @@ jobs:
     outputs:
       roots: ${{ steps.roots.outputs.roots }}
       test_dirs: ${{ steps.tests.outputs.test_dirs }}
+      examples: ${{ steps.examples.outputs.examples }}
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
       - name: Harden runner
@@ -62,6 +70,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Discover roots
         id: roots
@@ -91,6 +101,20 @@ jobs:
           fi
           echo "test_dirs=${dirs}" >> "$GITHUB_OUTPUT"
 
+      - name: Discover module examples
+        id: examples
+        # Same fail-closed rule: zero examples would make every examples-plan
+        # shard trivially green.
+        run: |
+          dirs="$(./scripts/terraform-roots.sh module-examples-json)"
+          count="$(jq 'length' <<<"$dirs")"
+          echo "Discovered ${count} module examples"
+          if [ "$count" -lt 1 ]; then
+            echo "::error::Module example discovery returned no examples"
+            exit 1
+          fi
+          echo "examples=${dirs}" >> "$GITHUB_OUTPUT"
+
   fmt:
     name: Terraform Format
     runs-on: ubuntu-latest
@@ -104,6 +128,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
@@ -134,6 +160,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install terraform-docs
         run: |
@@ -186,6 +214,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
@@ -252,6 +282,70 @@ jobs:
             exit 1
           fi
 
+  # validate accepts an example that cannot plan (a for_each over an unknown
+  # value, a precondition, a validation that only sees the real input, a
+  # provider alias the module needs). Every modules/**/examples/basic is
+  # planned here under mock providers: scripts/plan-module-examples.sh copies
+  # it beside itself, mocks every provider and alias it declares, and runs
+  # `terraform test` with one `command = plan` run. No credentials.
+  examples-plan:
+    name: Examples Plan (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      # Egress/process audit for this job (audit mode: observe, never block).
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Restore provider plugin cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            tf-plugins-${{ runner.os }}-
+
+      - name: Plan the module examples in this shard
+        env:
+          EXAMPLES_JSON: ${{ needs.discover.outputs.examples }}
+          SHARD_INDEX: ${{ strategy.job-index }}
+          SHARD_TOTAL: ${{ strategy.job-total }}
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          mapfile -t dirs < <(jq -r --argjson i "$SHARD_INDEX" --argjson n "$SHARD_TOTAL" \
+            'to_entries[] | select(.key % $n == $i) | .value' <<<"$EXAMPLES_JSON")
+          echo "Shard $((SHARD_INDEX + 1))/${SHARD_TOTAL}: ${#dirs[@]} examples"
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "::notice::No examples assigned to this shard (fewer examples than shards)."
+            exit 0
+          fi
+          if ! ./scripts/plan-module-examples.sh "${dirs[@]}" | tee plan-examples.log; then
+            {
+              echo "### Examples plan shard $((SHARD_INDEX + 1)) failures"
+              grep '^FAIL ' plan-examples.log | sed 's/^FAIL /- /'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::module example(s) failed to plan in this shard"
+            exit 1
+          fi
+
   lint:
     name: TFLint
     runs-on: ubuntu-latest
@@ -268,6 +362,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
@@ -322,6 +418,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Python
@@ -337,10 +434,12 @@ jobs:
         with:
           extra_args: yamllint --all-files
 
+      # Check-only manual-stage twin of the markdownlint hook (no --fix), the same
+      # hook `make markdownlint-check` runs.
       - name: Run markdownlint (pre-commit)
         uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd  # v3.0.1
         with:
-          extra_args: markdownlint --all-files
+          extra_args: markdownlint-check --all-files --hook-stage manual
 
       # The upstream repository ships placeholder owners on purpose; a fork must
       # replace them (scripts/init-landing-zone.sh --codeowners) or code-owner
@@ -366,16 +465,24 @@ jobs:
         # Regenerate after bumping .github/requirements/commitizen.in:
         #   uv pip compile --generate-hashes --universal --python-version 3.12 \
         #     .github/requirements/commitizen.in -o .github/requirements/commitizen.txt
+        # Event values reach the shell through env, never by expression
+        # interpolation into the script: a branch name must not run code.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           python -m pip install --no-deps --require-hashes -r .github/requirements/commitizen.txt
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # Full fetch (not --depth=1) so the merge-base is resolvable, then
-            # anchor the range on it. A plain origin/<base>..HEAD range includes
-            # commits already merged into the base (e.g. when the base advanced
-            # via a merge commit), dragging in pre-linting history and failing
-            # the check spuriously. merge-base..HEAD is exactly this PR's commits.
-            git fetch --no-tags origin "${{ github.base_ref }}"
-            base_sha="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            # Full history (fetch-depth: 0 above fetches every branch) so the
+            # merge-base is resolvable, then anchor the range on it. A plain
+            # origin/<base>..HEAD range includes commits already merged into the
+            # base (e.g. when the base advanced via a merge commit), dragging in
+            # pre-linting history and failing the check spuriously.
+            # merge-base..HEAD is exactly this PR's commits. The fetch runs only
+            # when the checkout lacks the base branch.
+            git rev-parse --verify --quiet "origin/${BASE_REF}" >/dev/null \
+              || git fetch --no-tags origin "${BASE_REF}"
+            base_sha="$(git merge-base "origin/${BASE_REF}" HEAD)"
             cz check --rev-range "${base_sha}..HEAD"
           else
             cz check --rev-range "HEAD~1..HEAD"
@@ -387,18 +494,56 @@ jobs:
         # somewhere in the PR. Uses the full-history checkout above and the
         # same merge-base range as the commit check.
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          base_sha="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          git rev-parse --verify --quiet "origin/${BASE_REF}" >/dev/null \
+            || git fetch --no-tags origin "${BASE_REF}"
+          base_sha="$(git merge-base "origin/${BASE_REF}" HEAD)"
+          # grep reads all of its input (no -q): an early-exiting grep -q can
+          # SIGPIPE git, which pipefail would turn into a false result.
           if git log --format=%B "${base_sha}..HEAD" \
-              | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE'; then
-            if ! git diff --name-only "${base_sha}..HEAD" | grep -qx 'UPGRADING.md'; then
+              | grep -E '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE' >/dev/null; then
+            if ! git diff --name-only "${base_sha}..HEAD" | grep -x 'UPGRADING.md' >/dev/null; then
               msg="A commit in this PR is marked breaking (!: or BREAKING CHANGE)"
               msg+=" but UPGRADING.md is not in the diff. Add an entry under 'Unreleased'."
               echo "::error::${msg}"
               exit 1
             fi
           fi
+
+      # Removing or renaming a module input or output (or deleting a module)
+      # needs a breaking-change commit, which the step above ties to an
+      # UPGRADING.md entry. Policy: docs/policies/versioning-and-compatibility.md.
+      # `make module-api` runs the same check locally.
+      - name: Module API removals must be marked breaking
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git rev-parse --verify --quiet "origin/${BASE_REF}" >/dev/null \
+            || git fetch --no-tags origin "${BASE_REF}"
+          ./scripts/check-module-api.sh "origin/${BASE_REF}"
+
+      # zizmor (GitHub Actions static analysis), hash-locked like commitizen,
+      # offline audits only (no token), with the rules in .github/zizmor.yml.
+      # `make zizmor` runs the same version and arguments.
+      # Regenerate after bumping .github/requirements/zizmor.in:
+      #   uv pip compile --generate-hashes --universal --python-version 3.12 \
+      #     .github/requirements/zizmor.in -o .github/requirements/zizmor.txt
+      - name: GitHub Actions static analysis (zizmor)
+        run: |
+          python -m pip install --no-deps --require-hashes -r .github/requirements/zizmor.txt
+          zizmor --offline --format github --config .github/zizmor.yml .github/workflows
+
+      # python-hcl2 for scripts/check-plan-time-exec.py and
+      # scripts/check-example-module-attrs.py (run by the consistency
+      # guards and by its script test below), hash-locked like commitizen.
+      # Regenerate after bumping .github/requirements/hcl2.in:
+      #   uv pip compile --generate-hashes --universal --python-version 3.12 \
+      #     .github/requirements/hcl2.in -o .github/requirements/hcl2.txt
+      - name: Install HCL parser (hash-locked)
+        run: python -m pip install --no-deps --require-hashes -r .github/requirements/hcl2.txt
 
       - name: Consistency guards (canonical region regex + provider pins)
         run: ./scripts/check-consistency.sh
@@ -411,7 +556,7 @@ jobs:
       - name: Scaffold fixtures match the scaffolder output
         run: make scaffold-fixtures-check
 
-      - name: Config schema (landing-zone.yaml examples and fixtures)
+      - name: Config schema (the real landing-zone.yaml when present, examples and fixtures)
         # Accepted risk: version-pinned lint tool installed without hashes
         # (dev-only, read-only job; no secrets in scope).
         run: |
@@ -481,6 +626,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e  # v4.0.1
@@ -543,6 +690,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       # Pinned release binary, sha256-verified before extraction. Keep the
       # version equal to .tool-versions (`make shellcheck` / pre-commit use the
@@ -578,6 +727,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       # Pinned static release binary, sha256-verified (digest from the GitHub
       # release asset) before it is made executable. No conftest: the rego unit
@@ -613,6 +764,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       # .github/CODEOWNERS ships with @your-org/* placeholder teams. Opt in by
       # setting the repository variable CODEOWNERS_ENFORCE=true once real teams
@@ -638,7 +791,7 @@ jobs:
     name: Validation Summary
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [discover, fmt, docs, validate, lint, meta-lint, security, test, shellcheck, opa, codeowners]
+    needs: [discover, fmt, docs, validate, examples-plan, lint, meta-lint, security, test, shellcheck, opa, codeowners]
     if: always()
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
@@ -658,6 +811,7 @@ jobs:
             echo "| Format | ${{ needs.fmt.result }} |"
             echo "| Docs | ${{ needs.docs.result }} |"
             echo "| Validate | ${{ needs.validate.result }} |"
+            echo "| Examples Plan | ${{ needs.examples-plan.result }} |"
             echo "| TFLint | ${{ needs.lint.result }} |"
             echo "| Meta Lint | ${{ needs.meta-lint.result }} |"
             echo "| Security | ${{ needs.security.result }} |"
@@ -683,6 +837,7 @@ jobs:
             "fmt=${{ needs.fmt.result }}" \
             "docs=${{ needs.docs.result }}" \
             "validate=${{ needs.validate.result }}" \
+            "examples-plan=${{ needs.examples-plan.result }}" \
             "lint=${{ needs.lint.result }}" \
             "meta-lint=${{ needs.meta-lint.result }}" \
             "security=${{ needs.security.result }}" \

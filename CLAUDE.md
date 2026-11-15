@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent Onboarding
 
-Terraform GCP + AWS landing zone. 125 modules, 15 deployable roots, remote state via Terraform Cloud.
+Terraform GCP + AWS landing zone. 126 modules, 15 deployable roots, remote state via Terraform Cloud.
 
 ---
 
@@ -35,7 +35,7 @@ modules/               # grouped by owning cloud (domain)
     iam/                # organization, role, service-account, workload-identity, identity-group*, deny-policy, principal-access-boundary
     monitoring/         # alert-policy, compute-dashboard, slo, control-plane (landing-zone self-observability)
     ops/                # os-config (VM Manager patch deployments)
-    backup/             # backup-plan (snapshot schedules)
+    backup/             # backup-plan (snapshot schedules), backup-vault (Backup and DR vault for Cloud SQL)
     compute/            # cloud-run, cloud-run-job, gke-autopilot (application runtimes)
     data/               # cloud-sql, secret-manager
     firebase/           # project
@@ -100,16 +100,18 @@ One committed file, `config/landing-zone.yaml` (schema and placeholders: `config
 
 ```bash
 make fmt-check      # terraform fmt -check (CI gate)
-make docs           # terraform-docs on every module (auto-generates READMEs)
+make docs           # terraform-docs on every module and the 15 roots (auto-generates READMEs)
 make docs-check     # same but exits non-zero if READMEs are stale
 make test           # runs all *.tftest.hcl with mock_provider — no real creds needed
 make validate-all   # terraform validate across all modules
+make examples-plan  # plan every modules/**/examples/basic under mock providers (terraform test); EXAMPLES="dirs" limits it
 make lint           # tflint
 make security       # trivy config + checkov (versions pinned in .tool-versions; tfsec is EOL/removed)
 make count          # print live module/root/test-suite counts (make count-check enforces README/CLAUDE.md)
 make links          # fail on broken repo-relative Markdown links
 make shellcheck     # shellcheck scripts/*.sh
-make ci             # fmt-check + consistency + count-check + links + shellcheck + docs-check + validate-all + lint + test + security
+make ci-quick       # fast offline gates (no terraform init): fmt, consistency, config, fixtures, counts, links, refs, required checks, shellcheck, script tests, docs
+make ci             # ci-quick + yamllint, markdownlint-check, zizmor, commit-check, module-api, codeowners-check, backend-check, validate-all, examples-plan, lint, test, opa-test, security (every workstation-runnable CI gate; needs pre-commit, cz, uv (zizmor), check-jsonschema, opa 1.22.2, a fetched origin/main)
 ```
 
 ---
@@ -126,7 +128,7 @@ make ci             # fmt-check + consistency + count-check + links + shellcheck
 
 - State backend: **Terraform Cloud** (remote).
 - **Never run `terraform apply` locally** against any GCP root — `envs/gcp/bootstrap`, `envs/gcp/organization`, `envs/gcp/guardrails`, `envs/gcp/projects`, `envs/gcp/network-hub` or `envs/gcp/workload` (except the documented phase-0 `gcp-bootstrap` first apply, which runs as a human admin by design). The Makefile `apply-gcp-*` targets deliberately refuse.
-- CI (GitHub Actions) runs `fmt`, `docs-check`, `validate` (10 shards), `lint`, Trivy, `checkov`, `test` and meta-lint (yaml/markdown/commits, counts, links) on PR; `Validation Summary` is the single required check.
+- CI (GitHub Actions) runs `fmt`, `docs-check`, `validate` (10 shards), `examples-plan` (4 shards: every module example planned under mock providers), `lint`, Trivy, `checkov`, `test` and meta-lint (yaml/markdown/commits, counts, links) on PR; `Validation Summary` is the single required check.
 - Terraform Cloud executes the actual apply.
 
 ---
@@ -219,7 +221,7 @@ Vercel executes `ignore_command` in `/bin/sh`, not bash. Use POSIX sh syntax:
 
 ### vault-secrets Node.js dependency
 
-`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: the bootstrap and reconcile provisioners (which `import { Pool } from "pg"`) each run `npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts` in the same command, before `node`, so a fresh runner works on every apply. No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --ignore-scripts --prefix modules/supabase/vault-secrets/scripts`. The vault RPCs live in the unexposed `iac_vault` schema (never in `public`).
+`modules/supabase/vault-secrets` installs its Node.js dependencies **automatically** at apply time: the bootstrap and reconcile provisioners (which `import { Pool } from "pg"`) each run `npm ci --ignore-scripts --no-audit --no-fund --prefix modules/supabase/vault-secrets/scripts` in the same command, before `node`, so a fresh runner works on every apply. npm runs under `env -i` and sees no secret environment: only `PATH`, `HOME`, `TMPDIR`, the npm cache variables, the proxy variables and `NODE_EXTRA_CA_CERTS` (each when set) reach it. `POSTGRES_URL`, `VAULT_DESIRED_JSON`, `SUPABASE_SSL_CERT` and `SUPABASE_ACCESS_TOKEN` reach `node` only. No manual step — the apply runner just needs **Node.js 18+ and npm** on PATH. To prime locally: `npm ci --ignore-scripts --prefix modules/supabase/vault-secrets/scripts`. The vault RPCs live in the unexposed `iac_vault` schema (never in `public`).
 
 ### AWS modules
 
@@ -290,7 +292,7 @@ terraform plan   # read-only local check — apply only via TFC
 
 ### Standing up the AWS landing zone
 
-Follow [`docs/runbooks/aws-bootstrap.md`](docs/runbooks/aws-bootstrap.md): run phase-0 (out-of-band org creation → a runnable `aws-organization` workspace), apply `aws-organization`, enable/delegate IAM Identity Center, then apply the remaining layers in order (`aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). Ordering is enforced by apply order + remote-state reads, not cross-root `depends_on`.
+Follow [`docs/runbooks/aws-bootstrap.md`](docs/runbooks/aws-bootstrap.md): run phase-0 (the operator creates only the management account and the phase-0 roles → a runnable `aws-organization` workspace), apply `aws-organization` (it creates the organization, or imports an existing one through `aws.adopt`: `envs/aws/organization/adopt.tf`, [`aws-brownfield-adoption.md`](docs/runbooks/aws-brownfield-adoption.md); it also registers the IAM Identity Center delegated administrator), enable IAM Identity Center in the console, then apply the remaining layers in order (`aws-security` → `aws-network` → `aws-identity` → `aws-shared-services` → `aws-backup` → `aws-workload`). Ordering is enforced by apply order + remote-state reads, not cross-root `depends_on`.
 
 ### Adding an AWS account / workload
 

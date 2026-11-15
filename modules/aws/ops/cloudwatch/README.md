@@ -78,9 +78,9 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_cloudwatch_dashboard.this (modules/aws/ops/cloudwatch/main.tf#L56)
-- resource.aws_cloudwatch_metric_alarm.this (modules/aws/ops/cloudwatch/main.tf#L33)
-- resource.aws_sns_topic.this (modules/aws/ops/cloudwatch/main.tf#L26)
+- resource.aws_cloudwatch_dashboard.this (modules/aws/ops/cloudwatch/main.tf#L63)
+- resource.aws_cloudwatch_metric_alarm.this (modules/aws/ops/cloudwatch/main.tf#L40)
+- resource.aws_sns_topic.this (modules/aws/ops/cloudwatch/main.tf#L33)
 
 
 ## Inputs
@@ -91,9 +91,9 @@ The following resources are created:
 | <a name="input_alarms"></a> [alarms](#input\_alarms) | Map of CloudWatch metric alarms to create, keyed by alarm name. The parity counterpart to GCP's monitoring/alert-policy. | <pre>map(object({<br/>    namespace           = string<br/>    metric_name         = string<br/>    statistic           = optional(string, "Average")<br/>    comparison_operator = string<br/>    threshold           = number<br/>    period              = optional(number, 300)<br/>    evaluation_periods  = optional(number, 1)<br/>    datapoints_to_alarm = optional(number)<br/>    dimensions          = optional(map(string), {})<br/>    treat_missing_data  = optional(string, "notBreaching")<br/>    alarm_description   = optional(string)<br/>    unit                = optional(string)<br/>  }))</pre> | `{}` | no |
 | <a name="input_create_sns_topic"></a> [create\_sns\_topic](#input\_create\_sns\_topic) | Create an SNS topic and wire it as the alarm/OK action for every alarm. When false, supply sns\_topic\_arn to reuse an existing topic (or leave null for no notifications). | `bool` | `false` | no |
 | <a name="input_dashboard_name"></a> [dashboard\_name](#input\_dashboard\_name) | Name of the CloudWatch dashboard (defaults to "<name\_prefix>-dashboard" when null). | `string` | `null` | no |
-| <a name="input_dashboard_widgets"></a> [dashboard\_widgets](#input\_dashboard\_widgets) | List of CloudWatch dashboard widget objects (rendered into the dashboard body via jsonencode). Empty = a minimal single-text-widget placeholder. | `list(any)` | `[]` | no |
+| <a name="input_dashboard_widgets"></a> [dashboard\_widgets](#input\_dashboard\_widgets) | List of CloudWatch dashboard widget objects (rendered into the dashboard body via jsonencode). Widgets may differ in shape (text, metric, alarm). Empty = a minimal single-text-widget placeholder. | `any` | `[]` | no |
 | <a name="input_enable_dashboard"></a> [enable\_dashboard](#input\_enable\_dashboard) | Create a CloudWatch dashboard from dashboard\_widgets. The parity counterpart to GCP's monitoring/compute-dashboard. | `bool` | `false` | no |
-| <a name="input_sns_kms_master_key_id"></a> [sns\_kms\_master\_key\_id](#input\_sns\_kms\_master\_key\_id) | KMS key id/alias for encrypting the created SNS topic (only used when create\_sns\_topic = true). Null = AWS-managed key. | `string` | `null` | no |
+| <a name="input_sns_kms_master_key_id"></a> [sns\_kms\_master\_key\_id](#input\_sns\_kms\_master\_key\_id) | KMS key id/alias for encrypting the created SNS topic (only used when create\_sns\_topic = true). Null = no server-side encryption. Do not use the AWS managed key (alias/aws/sns): its key policy does not let CloudWatch publish alarms to the topic. A customer managed key needs a key policy that allows cloudwatch.amazonaws.com kms:Decrypt and kms:GenerateDataKey*. | `string` | `null` | no |
 | <a name="input_sns_topic_arn"></a> [sns\_topic\_arn](#input\_sns\_topic\_arn) | Existing SNS topic ARN to use for alarm/OK actions when create\_sns\_topic = false. Null = no notification actions. | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to taggable resources (SNS topic, metric alarms). | `map(string)` | `{}` | no |
 

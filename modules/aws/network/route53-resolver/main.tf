@@ -1,21 +1,81 @@
 # Centralized DNS resolution for the SRA landing zone.
 #
-# Inbound and outbound Route 53 Resolver endpoints let on-prem resolvers query
-# private hosted zones (inbound) and let VPC workloads forward selected domains
-# to on-prem or third-party resolvers (outbound, via FORWARD rules). A Route 53
-# Profile carries the DNS configuration and is shared org-wide over RAM so every
-# member VPC inherits the same resolver posture. DNS Firewall blocks known-bad
-# domains, query logging ships resolver queries to the central Log Archive, and
-# optional DNSSEC validation hardens resolution against spoofing.
+# A Route 53 Profile carries the DNS configuration (DNS Firewall rule group,
+# FORWARD rules and private hosted zones such as the central interface endpoint
+# zones) and is shared org-wide over RAM. Each member VPC associates the shared
+# profile (aws_route53profiles_association, in the VPC's own account) and
+# inherits that configuration. Inbound and outbound Route 53 Resolver endpoints
+# are opt-in (enable_resolver_endpoints): on-premises resolvers query private
+# hosted zones through the inbound endpoint, and FORWARD rules send selected
+# domains to on-premises or third-party resolvers through the outbound one.
+# Query logging ships resolver queries to the central Log Archive, and optional
+# DNSSEC validation hardens resolution against spoofing.
 
-# --- Resolver endpoints ------------------------------------------------------
+# --- Resolver endpoints (opt-in) ---------------------------------------------
 # ip_address is a set block with a provider-enforced minimum of 2 entries, so at
-# least two subnet_ids must be supplied (one endpoint IP per AZ subnet).
+# least two subnet_ids must be supplied (one endpoint IP per AZ subnet). The
+# endpoint security groups are ForceNew in the provider.
+
+locals {
+  forward_target_cidrs        = sort(distinct(flatten([for r in values(var.forward_rules) : [for ip in r.target_ips : "${ip}/32"]])))
+  resolver_security_group_ids = length(var.security_group_ids) > 0 ? var.security_group_ids : aws_security_group.resolver[*].id
+}
+
+resource "aws_security_group" "resolver" {
+  # checkov:skip=CKV2_AWS_5:The group is attached to the inbound and outbound resolver endpoints through local.resolver_security_group_ids (a conditional local); Checkov's graph does not follow it.
+  count = var.enable_resolver_endpoints && length(var.security_group_ids) == 0 ? 1 : 0
+
+  name_prefix = "${var.name_prefix}-resolver-"
+  description = "Route 53 Resolver endpoints: DNS from allowed_cidrs, DNS out to the forward targets."
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description = "DNS over UDP"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = var.allowed_cidrs
+  }
+
+  ingress {
+    description = "DNS over TCP"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = var.allowed_cidrs
+  }
+
+  # Egress is DNS to the forward_rules target IPs only. Replies to inbound
+  # queries need no egress rule (security groups are stateful). Attribute
+  # syntax, so an empty list removes the AWS default allow-all egress rule
+  # (an omitted egress block would leave it in place).
+  egress = [
+    for proto in(length(local.forward_target_cidrs) > 0 ? ["tcp", "udp"] : []) : {
+      description      = "DNS over ${upper(proto)} to forward targets"
+      from_port        = 53
+      to_port          = 53
+      protocol         = proto
+      cidr_blocks      = local.forward_target_cidrs
+      ipv6_cidr_blocks = []
+      prefix_list_ids  = []
+      security_groups  = []
+      self             = false
+    }
+  ]
+
+  tags = merge(var.tags, { Name = "${var.name_prefix}-resolver" })
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
 
 resource "aws_route53_resolver_endpoint" "inbound" {
+  count = var.enable_resolver_endpoints ? 1 : 0
+
   name               = "${var.name_prefix}-inbound"
   direction          = "INBOUND"
-  security_group_ids = var.security_group_ids
+  security_group_ids = local.resolver_security_group_ids
 
   dynamic "ip_address" {
     for_each = toset(var.subnet_ids)
@@ -28,9 +88,11 @@ resource "aws_route53_resolver_endpoint" "inbound" {
 }
 
 resource "aws_route53_resolver_endpoint" "outbound" {
+  count = var.enable_resolver_endpoints ? 1 : 0
+
   name               = "${var.name_prefix}-outbound"
   direction          = "OUTBOUND"
-  security_group_ids = var.security_group_ids
+  security_group_ids = local.resolver_security_group_ids
 
   dynamic "ip_address" {
     for_each = toset(var.subnet_ids)
@@ -40,6 +102,16 @@ resource "aws_route53_resolver_endpoint" "outbound" {
   }
 
   tags = var.tags
+}
+
+moved {
+  from = aws_route53_resolver_endpoint.inbound
+  to   = aws_route53_resolver_endpoint.inbound[0]
+}
+
+moved {
+  from = aws_route53_resolver_endpoint.outbound
+  to   = aws_route53_resolver_endpoint.outbound[0]
 }
 
 # --- Forward rules -----------------------------------------------------------
@@ -52,7 +124,7 @@ resource "aws_route53_resolver_rule" "fwd" {
   name                 = each.key
   domain_name          = each.value.domain_name
   rule_type            = "FORWARD"
-  resolver_endpoint_id = aws_route53_resolver_endpoint.outbound.id
+  resolver_endpoint_id = aws_route53_resolver_endpoint.outbound[0].id
 
   dynamic "target_ip" {
     for_each = toset(each.value.target_ips)
@@ -81,15 +153,34 @@ resource "aws_route53profiles_profile" "this" {
   tags = var.tags
 }
 
-resource "aws_route53profiles_resource_association" "vpc" {
-  name         = "${var.name_prefix}-profile-vpc"
-  profile_id   = aws_route53profiles_profile.this.id
-  resource_arn = "arn:${local.partition}:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:vpc/${var.vpc_id}"
+# Profile resources: what every VPC that associates the profile inherits. The
+# Route 53 Profiles API accepts a private hosted zone, a DNS Firewall rule
+# group, a Resolver rule or an interface VPC endpoint here. A VPC is not a
+# profile resource: VPCs join with aws_route53profiles_association.
+resource "aws_route53profiles_resource_association" "firewall" {
+  count = var.enable_dns_firewall ? 1 : 0
+
+  name                = "${var.name_prefix}-profile-dns-firewall"
+  profile_id          = aws_route53profiles_profile.this.id
+  resource_arn        = aws_route53_resolver_firewall_rule_group.this[0].arn
+  resource_properties = jsonencode({ priority = 101 })
 }
 
-data "aws_region" "current" {}
+resource "aws_route53profiles_resource_association" "rules" {
+  for_each = var.forward_rules
 
-data "aws_caller_identity" "current" {}
+  name         = "${var.name_prefix}-profile-rule-${each.key}"
+  profile_id   = aws_route53profiles_profile.this.id
+  resource_arn = aws_route53_resolver_rule.fwd[each.key].arn
+}
+
+resource "aws_route53profiles_resource_association" "hosted_zones" {
+  for_each = var.profile_hosted_zone_arns
+
+  name         = "${var.name_prefix}-profile-phz-${each.key}"
+  profile_id   = aws_route53profiles_profile.this.id
+  resource_arn = each.value
+}
 
 resource "aws_ram_resource_share" "profile" {
   name                      = "${var.name_prefix}-profile-share"

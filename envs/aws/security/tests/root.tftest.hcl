@@ -23,6 +23,8 @@ variables {
   aws_overrides = {
     log_archive_bucket_name = "ashes-org-log-archive"
     enable_security_lake    = false
+    # CMP-6: a production plan needs a real security contact.
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
   }
 }
 
@@ -215,5 +217,29 @@ run "production_default_plans_without_meta_store_role" {
   assert {
     condition     = local.enable_security_lake == true
     error_message = "the default production profile must plan with Security Lake on and no hand-made metastore role."
+  }
+}
+
+# CMP-3: aws_overrides.patch_install_target_tag reaches the systems-manager
+# module in the security-tooling account.
+run "patch_install_target_tag_reaches_module" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      organization_id       = "o-abcdefghij"
+      organization_root_id  = "r-abcd"
+      management_account_id = "111111111111"
+      account_ids           = { security_tooling = "222222222222", log_archive = "333333333333", shared_services = "444444444444", forensics = "555555555555" }
+      account_role_arns     = { security_tooling = "arn:aws:iam::222222222222:role/cross-account", log_archive = "arn:aws:iam::333333333333:role/cross-account", shared_services = "arn:aws:iam::444444444444:role/cross-account", forensics = "arn:aws:iam::555555555555:role/cross-account" }
+    }
+    aws_overrides = merge(var.aws_overrides, {
+      patch_install_target_tag = { key = "PatchInstall", value = "true" }
+    })
+  }
+
+  assert {
+    condition     = module.aws_security.patch_install_targets.key == "tag:PatchInstall" && module.aws_security.patch_install_targets.values[0] == "true"
+    error_message = "aws_overrides.patch_install_target_tag must narrow the install association to tagged instances."
   }
 }

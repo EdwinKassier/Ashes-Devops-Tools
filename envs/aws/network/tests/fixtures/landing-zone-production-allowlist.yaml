@@ -10,7 +10,7 @@ org:
 aws:
   log_archive_bucket_name: cfgco-org-log-archive
   workload_environments:
-    prod: {account_key: workload_prod}
+    prod: {is_production: true, account_key: workload_prod}
   contracts:
     organization:
       organization_id: o-cfgcfgcfg0
@@ -18,5 +18,14 @@ aws:
       account_ids:
         network: "066666666666"
   network:
-    egress_domain_allowlist: [.amazonaws.com, .github.com, .githubusercontent.com, .terraform.io]
+    egress_domain_allowlist:
+      - api.ecr.eu-west-2.amazonaws.com
+      - .dkr.ecr.eu-west-2.amazonaws.com
+      - secretsmanager.eu-west-2.amazonaws.com
+      - .github.com
+      - .githubusercontent.com
+      - .terraform.io
     stateful_default_actions: [aws:drop_established, aws:alert_established]
+    internal_pass_cidrs: [192.168.0.0/16]
+    suricata_rules: |
+      pass tcp $HOME_NET any -> 203.0.113.10 22 (msg:"sftp partner"; flow:to_server; sid:100001; rev:1;)

@@ -9,7 +9,7 @@ Terraform modules for provisioning and managing Supabase resources. These module
 | [`project`](project/) | Creates a Supabase project via `supabase_project`. Lifecycle guard ignores `database_password` after initial creation — the Management API does not re-expose the password. |
 | [`settings`](settings/) | Manages auth and API settings on an existing project via `supabase_settings`. Destroying this resource is a no-op by provider design — settings revert to Supabase defaults. |
 | [`environment`](environment/) | Composite module: `project` + `settings` + `data.supabase_apikeys`. Primary building block for per-environment deployments. The `anon_key` output is intentionally non-sensitive. |
-| [`vault-secrets`](vault-secrets/) | Bootstraps the Supabase Vault with `SECURITY DEFINER` helper functions and reconciles a desired-state `map(string)` of secrets. Requires **Node.js >= 18** and `pg ^8.20.0`. |
+| [`vault-secrets`](vault-secrets/) | Bootstraps the Supabase Vault with `SECURITY DEFINER` helper functions and reconciles a desired-state `map(string)` of secrets. Requires **Node.js >= 18** and `pg` 8.20.0 (exact pin in `scripts/package.json`). |
 
 ## Provider
 

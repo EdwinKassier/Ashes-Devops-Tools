@@ -90,3 +90,22 @@ output "log_analytics_linked_dataset" {
   description = "Name of the linked BigQuery dataset on the Log Analytics bucket, or null when disabled."
   value       = local.enable_log_analytics && var.enable_log_analytics_linked_dataset ? google_logging_linked_dataset.audit_analytics[0].name : null
 }
+
+output "log_retention_days" {
+  description = "Days the audit-log bucket keeps objects: the age of its lifecycle Delete rule (and of the locked retention policy when enable_bucket_lock is true)."
+  value       = one([for r in google_storage_bucket.audit_logs.lifecycle_rule : one(r.condition).age if one(r.action).type == "Delete"])
+}
+
+output "network_log_sink" {
+  description = "The org sink that copies firewall, Cloud NAT, load balancer request, Secure Web Proxy and Cloud NGFW threat logs into the audit bucket: name, destination and filter. Null when enable_network_log_export is false or org_id is null."
+  value = local.enable_network_log_export ? {
+    name        = google_logging_organization_sink.org_network_logs_sink[0].name
+    destination = google_logging_organization_sink.org_network_logs_sink[0].destination
+    filter      = google_logging_organization_sink.org_network_logs_sink[0].filter
+  } : null
+}
+
+output "network_log_sink_writer_identity" {
+  description = "Writer identity of the network log sink: the org Logging service account it shares with org-audit-sink (a postcondition checks that they match). Null when the sink is not created."
+  value       = local.enable_network_log_export ? google_logging_organization_sink.org_network_logs_sink[0].writer_identity : null
+}

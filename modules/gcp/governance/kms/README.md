@@ -117,3 +117,7 @@ The following resources are created:
 | <a name="output_keyring_name"></a> [keyring\_name](#output\_keyring\_name) | Name of the KMS Keyring |
 | <a name="output_keyring_self_link"></a> [keyring\_self\_link](#output\_keyring\_self\_link) | The full resource name of the KMS keyring: projects/<project>/locations/<location>/keyRings/<name>. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

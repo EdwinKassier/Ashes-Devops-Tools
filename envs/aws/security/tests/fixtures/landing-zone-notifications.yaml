@@ -28,4 +28,4 @@ aws:
         log_archive: arn:aws:iam::033333333333:role/cross-account
         forensics: arn:aws:iam::055555555555:role/cross-account
 notifications:
-  emails: [alerts@cfg.test, oncall@cfg.test]
+  emails: [alerts@cfg-corp.io, oncall@cfg-corp.io]

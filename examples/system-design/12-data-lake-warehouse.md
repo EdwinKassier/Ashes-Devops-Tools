@@ -368,12 +368,13 @@ Three layers, each catching what the one inside it misses.
 **1. Perimeter: who can reach the data APIs at all.**
 
 - **GCP: VPC Service Controls.** This repo's environment stage already draws a
-  perimeter around each `gcp-workload-<env>` host project, restricting
+  perimeter around each environment's host project and its `service_teams`
+  projects (`gcp-workload-<env>`), restricting
   `bigquery.googleapis.com` and `storage.googleapis.com` among others, and the
-  root warns at plan (a check block, which never fails the plan) if a
-  production perimeter is absent or in dry-run
-  ([`envs/gcp/workload/main.tf`](../../envs/gcp/workload/main.tf), check
-  `vpc_sc_enforced_in_prod`). Protecting the BigQuery API also protects the
+  root fails the plan if a production perimeter is absent or in dry-run, unless
+  a time-boxed `production_vpc_sc_dry_run_waiver` is set
+  ([`envs/gcp/workload/main.tf`](../../envs/gcp/workload/main.tf),
+  `terraform_data.production_vpc_sc_enforced`). Protecting the BigQuery API also protects the
   BigQuery Storage, Reservation and Connection APIs; the lakehouse catalog is a
   separate service, `biglake.googleapis.com`. BigQuery has known gaps: console
   users inside an ingress rule can save results to a local file, and querying
@@ -521,8 +522,10 @@ Three layers, each catching what the one inside it misses.
 No component takes a VPC tier: S3, S3 Tables, Glue, Athena, BigQuery and Cloud
 Storage are reached over endpoints or Private Google Access, per
 [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)). Spark clusters you run
-go in `private`. On GCP, egress is the environment's Cloud NAT, not inspected
-through the hub, which is one more reason the perimeter matters.
+go in `private`. On GCP, egress is the environment's Cloud NAT, not inspected,
+while the egress proxy is off or waived (with `egress_proxy` on, the hub Secure
+Web Proxy allowlists host names but does not inspect content). Either way the
+perimeter matters.
 
 ### Config
 
@@ -539,7 +542,9 @@ gcp:
     prod:
       region: europe-west2
       cidr_block: 10.40.0.0/16
-      is_production: true # gcp-workload-prod then warns on a dry-run perimeter
+      is_production: true # gcp-workload-prod then fails its plan on a dry-run perimeter
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c] # required when is_production
+      egress_proxy: true # or production_egress_proxy_waiver on the workspace; see #14
   workload:
     presets_by_environment:
       prod: [prod-gcp-workload] # enforces the perimeter

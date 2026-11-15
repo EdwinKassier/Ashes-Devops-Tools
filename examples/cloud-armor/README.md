@@ -1,6 +1,6 @@
 # Cloud Armor Example
 
-A production-ready Cloud Armor WAF policy with OWASP managed rules, Log4Shell
+A Cloud Armor WAF policy with OWASP managed rules, Log4Shell
 protection, adaptive protection (ML-based), and a custom IP-block rule.
 
 ## What this creates
@@ -10,7 +10,7 @@ protection, adaptive protection (ML-based), and a custom IP-block rule.
 | `google_compute_security_policy` | WAF policy attached to an external LB backend |
 | OWASP managed rules (sensitivity 2) | CRS-based ruleset — blocks SQLi, XSS, RCE, etc. |
 | Log4Shell WAF rule (priority 999) | Blocks CVE-2021-44228 JNDI payloads |
-| Adaptive protection | ML-based anomaly detection; set `enable_adaptive_protection = true` in prod |
+| Adaptive protection | ML-based Layer 7 DDoS anomaly detection; this example sets `enable_adaptive_protection = true` |
 | Custom IP-block rule | Denies a specific CIDR — replace with your blocklist |
 
 ## Prerequisites
@@ -47,7 +47,7 @@ resource "google_compute_backend_service" "api" {
 | Variable | What to change |
 |----------|---------------|
 | `owasp_sensitivity` | Lower (1) = fewer false positives; higher (4) = stricter blocking |
-| `enable_adaptive_protection` | Set `true` in production once baseline traffic is established |
+| `enable_adaptive_protection` | On in this example. Its alerts are tuned against baseline traffic, so expect noise until traffic is established; set `false` in a throwaway sandbox if you do not want the alerts |
 | `custom_rules` | Add CIDRs, country-based rules, or header-based conditions |
 | `default_rule_action` | Change to `"deny(403)"` for an allowlist model |
 

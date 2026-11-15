@@ -1,10 +1,11 @@
 # Test fixture: aws.network.vpn from the config file (vpn.tftest.hcl). No secret:
 # AWS generates the tunnel pre-shared keys. aws.contracts.organization replaces the
-# aws-organization remote-state read.
+# aws-organization remote-state read. The VPN needs the Network Firewall, so
+# the profile is production (starter rejects the VPN).
 version: 1
 org:
   name: cfgco
-  profile: starter
+  profile: production
   owner: cfg-platform
   cost_center: cc-1234
   regions:

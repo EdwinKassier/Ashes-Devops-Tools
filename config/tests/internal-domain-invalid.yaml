@@ -1,0 +1,12 @@
+# Negative fixture: gcp.network.internal_domain from the config file
+# (internal_domain.tftest.hcl).
+version: 1
+org:
+  prefix: acme
+  regions:
+    gcp: europe-west1
+gcp:
+  network:
+    hub_cidr_block: 10.0.0.0/16
+    dns_hub_cidr_block: 10.1.0.0/16
+    internal_domain: Corp_Example.com.

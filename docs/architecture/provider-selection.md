@@ -64,12 +64,39 @@ The GCP roots (`gcp-bootstrap`, `gcp-organization`, `gcp-projects`, `gcp-network
 
 ### Minimum AWS footprint
 
-The minimum governed, monitored AWS baseline is:
+The minimum governed, monitored AWS baseline is `aws-organization` + `aws-security`, with
+four member accounts (`log_archive`, `security_tooling`, `forensics`, `shared_services`) plus
+the management account. Ask tfc-admin for only those workspaces:
 
-```text
-aws-organization   # foundational accounts + org structure
-aws-security       # security tooling, log archive, guardrails
+```yaml
+aws:
+  layers: []            # any of: network, identity, shared-services, backup (absent = all four)
+  accounts:             # keep only the accounts the chosen layers need
+    log_archive: {email: ..., ou: Security}
+    security_tooling: {email: ..., ou: Security}
+    forensics: {email: ..., ou: Security}
+    shared_services: {email: ..., ou: Infrastructure}
 ```
+
+`shared_services` stays in the minimum: `aws-organization` registers it as the IAM Identity
+Center delegated administrator, and `aws-security` reads its account ID. `network` needs the
+`network` account, and `backup` needs the `backup` account. `identity` and `shared-services`
+use `shared_services`. Accounts come only from `aws.accounts` and `aws.workload_accounts`:
+`aws.layers` creates or removes no account, so list or remove them yourself
+(`scripts/aws-preflight.sh` counts what you list).
+
+`aws.layers` decides which `aws-<layer>` workspaces tfc-admin creates (the variable
+`aws_layers` overrides it). A dropped layer has no workspace, run trigger, remote-state
+grant, team grant, drift entry or `TFC_AWS_*` variable. `aws-organization` reads the same key:
+it binds the OIDC trust of a foundational account only to workspaces that exist, and makes
+the dedicated management role pair for `aws-backup` only with the `backup` layer.
+
+`aws-workload-<env>` in hub mode reads the `aws-network` state. Without the `network` layer,
+tfc-admin sets `enable_network_hub = false` on every `aws-workload-<env>` (a standalone VPC),
+unless `aws.contracts.network` supplies the hub contract. tfc-admin fails the plan when a
+workload is set back to hub mode with neither the `network` layer nor that contract. No
+other AWS layer reads another optional layer: `aws-identity`, `aws-shared-services` and
+`aws-backup` read only `aws-organization`.
 
 ### Within a cloud: the layers are a dependency DAG, not independent add-ons
 
@@ -113,6 +140,7 @@ aws:
     network:
       tgw_id: tgw-0123456789abcdef0
       ipam_pool_ids: {eu-west-2: ipam-pool-0123456789abcdef0}
+      resolver_profile_id: rp-0123456789abcdef  # optional: the spoke associates the org DNS profile
     security:
       log_archive_bucket_name: my-org-org-log-archive
 gcp:
@@ -180,16 +208,18 @@ So the credentials a deployment needs are exactly the union of the credentials o
 
 ```hcl
 provider "supabase" {
-  access_token = var.enable_supabase ? null : local.supabase_disabled_placeholder_token
+  access_token = local.enable_supabase ? null : "sbp_disabled_placeholder"
 }
 
 provider "vercel" {
-  api_token = var.enable_vercel ? null : local.vercel_disabled_placeholder_token
+  api_token = local.enable_vercel ? null : "000000000000000000000000"
 }
 ```
 
+The placeholders are inline literals because `no_plan_time_code_execution` and `scripts/check-plan-time-exec.py` allow only these exact literals (`allowed_credential_literals`) in these arguments; a check cannot see what a local evaluates to.
+
 - **Enabled:** the attribute is `null`, so the provider reads `SUPABASE_ACCESS_TOKEN` / `VERCEL_API_TOKEN` from the environment exactly as before.
-- **Disabled:** the provider gets a format-valid placeholder (`sbp_` + 40 zeros, or 24 zeros). Neither provider calls its API while configuring, and with the feature off no resource or data source uses it, so the placeholder is never sent anywhere. It is not a credential. Provider configuration takes precedence over the environment, so a stray token in the environment is ignored for the disabled provider.
+- **Disabled:** the provider gets a fixed placeholder (`sbp_disabled_placeholder`, or 24 zeros). Neither provider calls its API while configuring, and with the feature off no resource or data source uses it, so the placeholder is never sent anywhere. It is not a credential. Provider configuration takes precedence over the environment, so a stray token in the environment is ignored for the disabled provider.
 
 **Evidence** (2026-11-05, `supabase/supabase` 1.9.1, `vercel/vercel` 4.8.2, Terraform 1.14). A real `terraform plan` ran against a local-backend copy of the root with both token variables unset, not under `mock_provider`:
 

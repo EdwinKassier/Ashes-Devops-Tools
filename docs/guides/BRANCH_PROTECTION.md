@@ -16,7 +16,7 @@ job in `terraform-plan.yml`).
 | `Validation Summary` | `summary` (fail-closed aggregator) |
 
 `Validation Summary` `needs:` every other PR job — `discover`, `fmt`, `docs`, `validate`,
-`lint`, `meta-lint`, `security`, `test`, `shellcheck`, `opa`, `codeowners` — runs with
+`examples-plan`, `lint`, `meta-lint`, `security`, `test`, `shellcheck`, `opa`, `codeowners` — runs with
 `if: always()`, and fails closed if any of them failed **or was skipped**. One stable
 context therefore gates every check, and adding or renaming a job never needs a
 branch-protection change.
@@ -25,7 +25,8 @@ Do **not** add the individual job contexts. Several emit a different context per
 shape and would block every PR forever if listed verbatim:
 
 - **Sharded matrix jobs** emit one context *per shard*, never a bare name:
-  `Validate (shard N)` (10 shards) and `Terraform Tests (shard N)` (6 shards). A
+  `Validate (shard N)` (10 shards), `Examples Plan (shard N)` (4 shards) and
+  `Terraform Tests (shard N)` (6 shards). A
   required `Terraform Tests` or `validate` context is never reported, so GitHub waits
   on it indefinitely. The shard count can also change.
 - **The `security` job calls a reusable workflow**, so its contexts are
@@ -40,7 +41,8 @@ command below and fails if any listed context is not a non-matrix job `name:` in
 Set via **Settings → Branches → main → Require status checks to pass before merging**.
 
 > **The repo checks validate; they do not plan (audit H6).** `Validation Summary`
-> and every job it gates run `terraform validate -backend=false` and the `mock_provider` tests. None
+> and every job it gates run `terraform validate -backend=false`, the `mock_provider` tests and a
+> `mock_provider` plan of every module example (`make examples-plan`). None
 > runs a real plan against state, so none shows the blast radius of a change. The
 > actual plan is Terraform Cloud's **speculative plan**, posted as its own check
 > (e.g. `Terraform Cloud/<org>/<workspace>`) by the TFC VCS integration. For roots
@@ -68,8 +70,33 @@ name**. Whoever can create or rename a workspace can assume those roles. So:
 
 - **Required approvals:** 1 (raise to 2 for teams larger than 4)
 - **Dismiss stale reviews:** enabled (new commits invalidate prior approval)
-- **Require CODEOWNERS review:** enabled (`.github/CODEOWNERS` enforced)
+- **Require CODEOWNERS review:** must be enabled (`require_code_owner_reviews`).
+  Without it, `.github/CODEOWNERS` only requests reviews and enforces nothing.
 - **Restrict who can bypass:** disable bypass for administrators
+
+#### What code-owner review enforces
+
+GitHub uses the last line in `.github/CODEOWNERS` that matches a changed file,
+and one approval from any owner on that line satisfies it. So:
+
+- A line that lists the platform team and the security team accepts a platform
+  approval alone.
+- A line that lists only the security team requires a security approval. The
+  guardrail paths have such lines: `/policies/`, `/envs/gcp/guardrails/`,
+  `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
+  `/.github/requirements/` and `/.github/CODEOWNERS`.
+
+This separation holds only when all of these are true:
+
+- The security team has at least one member who is not on the platform team
+  and is not the pull request author (GitHub does not count the author's own
+  approval).
+- The security team is visible (not secret) and has Write access or higher to
+  the repository. GitHub ignores an owner that does not meet this, and a line
+  with no valid owner needs no code-owner review, so a security-only line
+  fails open. The same holds for every other team in the file.
+- `gh api repos/{owner}/{repo}/codeowners/errors` shows no errors. Run it
+  after every change to `.github/CODEOWNERS` or to team access.
 
 ### Additional Restrictions
 
@@ -95,24 +122,25 @@ gh api repos/OWNER/REPO/branches/main/protection \
 
 Tags that trigger the `terraform-apply.yml` workflow should be protected. That
 workflow ("Terraform Release Metadata") applies nothing: HCP Terraform runs every
-apply, and the workflow only publishes a GitHub Release for an applied tag. It
+apply, and the workflow only publishes a GitHub Release when the latest run of the
+workspace applied the tagged commit (a VCS run; a CLI or API run fails the workflow). It
 keeps its file name because docs and environment policies link to it. The
 workflow acts on all of these patterns (keep this list in sync with its `on.push.tags`):
-`gcp-organization/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`.
+`gcp-bootstrap/v*`, `gcp-organization/v*`, `gcp-guardrails/v*`, `gcp-projects/v*`, `gcp-network-hub/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`, `tfc-admin/v*`.
 
 - Only allow tag creation by the **infra-admins** team or repository admins
 - Require signed tags if your signing policy enforces it
 - Never force-push to release tags
 
 ```bash
-# Create a tag ruleset (GitHub Enterprise or GitHub.com with rulesets beta)
-gh api repos/OWNER/REPO/rulesets \
-  --method POST \
-  --field name="Release tag protection" \
-  --field target="tag" \
-  --field enforcement="active" \
-  --field conditions='{"ref_name":{"include":["refs/tags/gcp-organization/v*","refs/tags/gcp-workload/*/v*","refs/tags/aws-*/v*","refs/tags/aws-workload/*/v*","refs/tags/saas/*/v*"],"exclude":[]}}' \
-  --field rules='[{"type":"deletion"},{"type":"non_fast_forward"}]'
+# The same ruleset as docs/guides/CI_SECRETS.md (scripts/check-tag-patterns.py keeps them
+# equal). Without bypass_actors the creation rule would block every release tag.
+gh api -X POST repos/OWNER/REPO/rulesets --input - <<'JSON'
+{"name": "deployment-tags", "target": "tag", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/tags/gcp-bootstrap/v*", "refs/tags/gcp-organization/v*", "refs/tags/gcp-guardrails/v*", "refs/tags/gcp-projects/v*", "refs/tags/gcp-network-hub/v*", "refs/tags/gcp-workload/*/v*", "refs/tags/aws-*/v*", "refs/tags/aws-workload/*/v*", "refs/tags/saas/*/v*", "refs/tags/tfc-admin/v*"], "exclude": []}},
+ "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}, {"type": "non_fast_forward"}],
+ "bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always"}]}
+JSON
 ```
 
 ---
@@ -120,6 +148,14 @@ gh api repos/OWNER/REPO/rulesets \
 ### Release gate: `Sandbox convergence`
 
 Once the sandbox workflow exists, add **`Sandbox convergence`** (HCP Terraform health-assessment result for the sandbox) as a required check on release-please PRs (head branch `release-please--*`), via a ruleset scoped to that branch pattern. It is not a required context on ordinary PRs. Until the workflow lands the check does not exist and the release PR is gated by maintainer review only; do not add it as a required context before it reports, or releases will block.
+
+---
+
+## Private vulnerability reporting
+
+`SECURITY.md` names GitHub private vulnerability reporting as the only reporting channel. A repository
+admin must switch it on: **Settings → Code security → Private vulnerability reporting → Enable**.
+Run `make security-contact-live` to confirm (read-only; it fails while the setting is off).
 
 ---
 
@@ -142,6 +178,7 @@ Secrets required by CI/CD — scope each to the minimum environment:
 | `TFC_TOKEN` | Environment `tfc-readonly` | Read-only TFC team token for run status verification |
 | `TFC_TOKEN_DRIFT` | Environment `tfc-drift` | Queue plans + read state versions, for the refresh-only drift check |
 | `TFC_TOKEN_STATE_BACKUP` | Environment `tfc-state-backup` | Read state versions, for the scheduled state export ([state backup](../runbooks/state-backup.md)) |
+| `TFC_TOKEN_AUDIT_TRAIL` | Environment `tfc-audit-trail` | Audit trail token (not an organization token), for the scheduled audit trail export ([audit trail export](../runbooks/state-backup.md#audit-trail-export)) |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Repository | WIF provider name for GCP authentication |
 | `GCP_SERVICE_ACCOUNT` | Repository | Terraform admin SA for plan/apply |
 

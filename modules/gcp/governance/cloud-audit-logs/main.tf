@@ -85,10 +85,10 @@ resource "google_storage_bucket" "audit_logs" {
   # checkov:skip=CKV2_GCP_4:A GCS bucket lock (retention_policy { locked = true }) is
   # not used BY DEFAULT on this bucket (it is available opt-in via
   # var.enable_bucket_lock — see the dynamic block above). Rationale for the default:
-  #   1. Durability/immutability is achieved via the org-level Cloud Logging sink
-  #      (google_logging_project_sink.audit_logs_sink, below) writing into this bucket —
-  #      the authoritative, tamper-evident copy of audit events lives in Cloud Logging's
-  #      own storage, independent of this bucket's lifecycle.
+  #   1. The sink stores nothing; this bucket IS the stored copy. Without the lock, an
+  #      identity with storage.objects.delete or lifecycle rights on this bucket can
+  #      remove audit history. The opt-in lock (enable_bucket_lock) and admin containment
+  #      (IAM-12 deny policy on `containment/protected`) are the tamper controls.
   #   2. This bucket's `lifecycle_rule` (age = var.log_retention_days, action = Delete)
   #      enforces a deliberate, operator-controlled retention window. A locked retention
   #      policy would make that window immutable and irreversible even for legitimate
@@ -208,6 +208,87 @@ resource "google_storage_bucket_iam_member" "org_log_writer" {
   bucket = google_storage_bucket.audit_logs.name
   role   = "roles/storage.objectCreator"
   member = google_logging_organization_sink.org_audit_sink[0].writer_identity
+}
+
+# =============================================================================
+# NETWORK AND EDGE LOGS (CMP-02, opt-in)
+# =============================================================================
+# Firewall rule logs, Cloud NAT logs, Application Load Balancer request logs
+# (which carry the Cloud Armor verdict in jsonPayload.enforcedSecurityPolicy),
+# Secure Web Proxy request logs and Cloud NGFW threat logs stay in each
+# project's _Default log bucket (30 days) unless something routes them. This
+# aggregated org sink copies them into the same protected audit bucket as the
+# audit logs, so they get the same retention, lifecycle, WORM lock, CMEK and
+# containment tag. It is a separate sink so the audit sink's filter never
+# changes. Log IDs and resource types (checked 2026-11-13):
+#   compute.googleapis.com/firewall     firewall rules and firewall policy
+#     rules, gce_subnetwork
+#     https://docs.cloud.google.com/firewall/docs/using-firewall-rules-logging
+#   compute.googleapis.com/nat_flows    Cloud NAT, nat_gateway
+#     https://docs.cloud.google.com/nat/docs/monitoring
+#   requests                            http_load_balancer (global external
+#     ALB) https://docs.cloud.google.com/cdn/docs/logging, and
+#     internal_http_lb_rule
+#     https://docs.cloud.google.com/load-balancing/docs/l7-internal/monitoring
+#   loadbalancing.googleapis.com/requests (internal_http_lb_rule) and
+#   loadbalancing.googleapis.com/external_regional_requests
+#     (http_external_regional_lb_rule)
+#     https://docs.cloud.google.com/logging/docs/api/platform-logs
+#   networkservices.googleapis.com/gateway_requests  Secure Web Proxy,
+#     networkservices.googleapis.com/Gateway
+#     https://docs.cloud.google.com/secure-web-proxy/docs/monitor-logs
+#   networksecurity.googleapis.com/firewall_threat   Cloud NGFW threats,
+#     networksecurity.googleapis.com/FirewallEndpoint
+#     https://docs.cloud.google.com/firewall/docs/threat_logs
+# Cloud Armor logs are part of the load balancer request logs:
+#   https://docs.cloud.google.com/armor/docs/request-logging
+# log_id() takes the unencoded log ID and matches it exactly. The generic
+# request log IDs are also scoped to the load balancer resource types.
+locals {
+  enable_network_log_export = var.org_id != null && var.enable_network_log_export
+
+  network_log_lb_resource_types = ["http_load_balancer", "internal_http_lb_rule", "http_external_regional_lb_rule"]
+  network_log_clauses = [
+    "log_id(\"compute.googleapis.com/firewall\")",
+    "log_id(\"compute.googleapis.com/nat_flows\")",
+    "((log_id(\"requests\") OR log_id(\"loadbalancing.googleapis.com/requests\") OR log_id(\"loadbalancing.googleapis.com/external_regional_requests\")) AND (${join(" OR ", [for t in local.network_log_lb_resource_types : "resource.type=\"${t}\""])}))",
+    "log_id(\"networkservices.googleapis.com/gateway_requests\")",
+    "log_id(\"networksecurity.googleapis.com/firewall_threat\")",
+  ]
+  network_log_filter = join(" OR ", local.network_log_clauses)
+}
+
+# No IAM grant of its own. Since 2023-05-22 Cloud Logging uses one service
+# account for all sinks in a resource ("As of May 22, 2023, Logging uses the
+# same service account for all sinks in the underlying resource",
+# https://docs.cloud.google.com/logging/docs/export/aggregated_sinks, checked
+# 2026-11-13). That account already holds objectCreator on the audit bucket
+# (org_log_writer). A second binding would duplicate it, and destroying it when
+# the export is turned off would stop the audit export. A new grant would also
+# be refused: admin containment denies setIamPolicy on the tagged audit bucket.
+# The postcondition catches the one case where the identities differ: an audit
+# sink created before 2023-05-22 keeps its own legacy service account. After a
+# break-glass objectCreator grant to the shared identity, the operator sets
+# network_log_writer_granted = true. A failed postcondition does not undo the
+# create: the sink stays in state (not tainted) and every later plan fails
+# until the grant is made and the flag is set, or the export is turned off.
+resource "google_logging_organization_sink" "org_network_logs_sink" {
+  count = local.enable_network_log_export ? 1 : 0
+
+  name             = "org-network-logs"
+  org_id           = var.org_id
+  destination      = "storage.googleapis.com/${google_storage_bucket.audit_logs.name}"
+  include_children = true
+  filter           = local.network_log_filter
+  description      = "Routes firewall, Cloud NAT, load balancer request (Cloud Armor), Secure Web Proxy and Cloud NGFW threat logs into the protected audit bucket."
+
+  lifecycle {
+    # org_audit_sink exists whenever this sink does: both need org_id.
+    postcondition {
+      condition     = self.writer_identity == google_logging_organization_sink.org_audit_sink[0].writer_identity || var.network_log_writer_granted
+      error_message = "The org-network-logs sink writes as ${self.writer_identity}, but org-audit-sink writes as ${google_logging_organization_sink.org_audit_sink[0].writer_identity}. org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated service account, so only that account holds roles/storage.objectCreator on the audit bucket, and this sink cannot deliver. Grant roles/storage.objectCreator on gs://${google_storage_bucket.audit_logs.name} to ${self.writer_identity} as break-glass (admin containment denies setIamPolicy on the audit bucket to the automation identity), then set gcp.network_log_writer_granted: true and apply. Or set gcp.enable_network_log_export: false. See UPGRADING.md (CMP-02)."
+    }
+  }
 }
 
 # =============================================================================

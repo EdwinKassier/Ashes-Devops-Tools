@@ -1,0 +1,27 @@
+# Fixture, invalid against the schema on purpose: a gcp.audit_store_waiver
+# with a blank reason and no real date (CMP-05: the plan must fail).
+# Standard, non-production estate, so nothing else fails.
+org:
+  prefix: acme
+  display_name: Acme
+  domain: acme.io
+  tfc:
+    organization: acme-tfc
+gcp:
+  billing_account: ABCDEF-123456-789012
+  admin_email: admin@acme.io
+  organization_admin_groups: [gcp-org-admins@acme.io]
+  billing_admin_groups: [gcp-billing-admins@acme.io]
+  break_glass_group: gcp-break-glass@acme.io
+  alert_emails: [secops@acme.io]
+  allowed_regions: [europe-west1]
+  audit_store_waiver:
+    reason: " "
+    expires: "2099-02-30"
+  environments:
+    dev:
+      display_name: Development
+      region: europe-west1
+      cidr_block: 10.10.0.0/16
+      budget_monthly_limit: 100
+      is_production: false

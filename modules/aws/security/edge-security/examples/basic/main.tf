@@ -23,6 +23,11 @@ module "edge_security" {
   name_prefix        = "example"
   origin_domain_name = "origin.example.com"
 
+  # Without domain_name the distribution uses the default *.cloudfront.net
+  # certificate, whose minimum TLS version AWS fixes and you cannot raise. Set
+  # domain_name for production: the module then issues an ACM certificate and
+  # pins TLSv1.2_2021.
+
   providers = {
     aws           = aws
     aws.us_east_1 = aws.us_east_1

@@ -33,27 +33,39 @@ locals {
       # account ID) to import when enable_cloudtrail_delegated_admin turns on.
       cloudtrail_delegated_admin_account_id = try(tostring(local.lz.aws.adopt.cloudtrail_delegated_admin_account_id), null)
     }
-    management_account_id   = try(tostring(local.lz.aws.management_account_id), null)
-    log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
-    allowed_regions         = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
-    aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
-    guard_alert_emails      = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
-    profile                 = try(tostring(local.lz.org.profile), null)
-    monthly_budget_usd      = try(tonumber(local.lz.org.monthly_budget_usd), null)
-    notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    management_account_id = try(tostring(local.lz.aws.management_account_id), null)
+    # aws.tagging.required_for: types the root tag policy reports the four
+    # tag keys as required for (CMP-10, ARC-17).
+    tag_policy_required_resource_types = try([for t in local.lz.aws.tagging.required_for : tostring(t)], null)
+    log_archive_bucket_name            = try(tostring(local.lz.aws.log_archive_bucket_name), null)
+    allowed_regions                    = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
+    aws_enabled_regions                = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
+    guard_alert_emails                 = try([for e in local.lz.aws.guard_alert_emails : tostring(e)], null)
+    profile                            = try(tostring(local.lz.org.profile), null)
+    monthly_budget_usd                 = try(tonumber(local.lz.org.monthly_budget_usd), null)
+    notification_emails                = try([for e in local.lz.notifications.emails : tostring(e)], null)
     # Config recorder migration flags (docs/runbooks/aws-config-recorder-migration.md).
     enable_org_config_recorders = try(tobool(local.lz.aws.enable_org_config_recorders), null)
     enable_config_recorder_scp  = try(tobool(local.lz.aws.enable_config_recorder_scp), null)
+    # Roles that write StackSet-* stacks for StackSets this repo does not own
+    # (AWS Control Tower: AWSControlTowerExecution).
+    stackset_stack_writer_role_names = try([for n in local.lz.aws.stackset_stack_writer_role_names : tostring(n)], null)
     # Org trail managed by the CloudTrail delegated admin (docs/runbooks/aws-cloudtrail-delegated-admin-migration.md).
     enable_cloudtrail_delegated_admin = try(tobool(local.lz.aws.enable_cloudtrail_delegated_admin), null)
-    terraform_run_role_arn            = try(tostring(local.lz.aws.terraform_run_role_arn), null)
-    break_glass_role_arn              = try(tostring(local.lz.aws.break_glass_role_arn), null)
+    # compliance.backup (CMP-1): the CMK member vault and the DR-region vault.
+    backup_copy_to_central_vault = try(tobool(local.lz.compliance.backup.copy_to_central_vault), null)
+    backup_dr_region             = try(tostring(local.lz.compliance.backup.dr_region), null)
+    terraform_run_role_arn       = try(tostring(local.lz.aws.terraform_run_role_arn), null)
+    break_glass_role_arn         = try(tostring(local.lz.aws.break_glass_role_arn), null)
     # tfc-admin puts the aws-* workspaces in <project_name_prefix>aws.
     tfc_project = try(tostring(local.lz.org.tfc.aws_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws")
     # With org.tfc.split_workload_projects, tfc-admin puts aws-workload-<env> in
     # <prefix>aws-workloads; the workload accounts' OIDC trust must name it.
     split_workload_projects = try(tobool(local.lz.org.tfc.split_workload_projects), false)
     tfc_workloads_project   = try(tostring(local.lz.org.tfc.aws_workloads_project), "${try(tostring(local.lz.org.tfc.project_name_prefix), "landing-zone-")}aws-workloads")
+    # aws.layers: the optional AWS layer workspaces tfc-admin creates (absent =
+    # all four). Their OIDC trust bindings and management role pairs follow it.
+    aws_layers = try([for l in local.lz.aws.layers : tostring(l)], ["network", "identity", "shared-services", "backup"])
     # Accounts normalised to the attribute types of var.accounts.
     accounts          = { for k, a in try({ for k, a in local.lz.aws.accounts : k => a }, {}) : k => local.normalise_account[k] }
     workload_accounts = { for k, a in try({ for k, a in local.lz.aws.workload_accounts : k => a }, {}) : k => local.normalise_account[k] }
@@ -121,6 +133,8 @@ locals {
   aws_region               = coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
   tfc_organization         = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   github_federation_owners = coalesce(var.github_federation_owners, local.cfg.github_federation_owners, [])
+  # Variable (even an empty list) > config > [].
+  stackset_stack_writer_role_names = var.stackset_stack_writer_role_names != null ? var.stackset_stack_writer_role_names : coalesce(local.cfg.stackset_stack_writer_role_names, [])
   adopt_existing = (
     var.adopt_existing != null ? var.adopt_existing :
     local.cfg.adopt != null ? local.cfg.adopt :
@@ -135,6 +149,8 @@ locals {
   # Same precedence and fallback as the aws-security root: the guard alerts
   # forward from every region the security services run in.
   aws_enabled_regions = var.aws_enabled_regions != null ? var.aws_enabled_regions : coalesce(local.cfg.aws_enabled_regions, ["eu-west-2"])
+  # Explicit variable > aws.tagging.required_for > [] (no required-tag reporting).
+  tag_policy_required_resource_types = coalesce(var.tag_policy_required_resource_types, local.cfg.tag_policy_required_resource_types, [])
   # variable > aws.guard_alert_emails > notifications.emails > none.
   notification_emails = coalesce(local.cfg.notification_emails, [])
   guard_alert_emails = var.guard_alert_emails != null ? var.guard_alert_emails : (
@@ -168,16 +184,39 @@ locals {
   terraform_run_role_arn            = coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "arn:aws:iam::000000000000:role/unset")
   break_glass_role_arn              = coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "arn:aws:iam::000000000000:role/unset")
   tfc_project                       = coalesce(var.tfc_project, local.cfg.tfc_project)
+  # Cross-account (copy_to_central_vault) and cross-region (dr_region) copy
+  # both need the customer managed key vault.
+  member_backup_vault_encryption = coalesce(
+    var.member_backup_vault_encryption,
+    local.cfg.backup_copy_to_central_vault == true || local.cfg.backup_dr_region != null ? "cmk" : null,
+    "aws_managed",
+  )
+  member_backup_dr_region = var.member_backup_dr_region != null ? var.member_backup_dr_region : local.cfg.backup_dr_region
+  # The workspaces tfc-admin creates for the foundational accounts:
+  # aws-security always, the other layers per aws.layers.
+  layer_workspace_bindings = {
+    for acct, wss in local.default_workspace_bindings : acct => [
+      for ws in wss : ws if ws == "aws-security" || contains(local.cfg.aws_layers, trimprefix(ws, "aws-"))
+    ]
+  }
   # Foundational bindings + the workload bindings derived from the config file;
-  # an explicit var.tfc_workspace_bindings replaces both.
+  # an explicit var.tfc_workspace_bindings replaces both. Only accounts that
+  # exist (accounts / workload_accounts) and still bind a workspace get one.
   tfc_workspace_bindings = var.tfc_workspace_bindings != null ? var.tfc_workspace_bindings : {
-    for acct in distinct(concat(keys(local.default_workspace_bindings), keys(local.cfg.workload_bindings))) : acct => {
-      workspaces = distinct(concat(lookup(local.default_workspace_bindings, acct, []), lookup(local.cfg.workload_bindings, acct, [])))
+    for acct in distinct(concat(keys(local.layer_workspace_bindings), keys(local.cfg.workload_bindings))) : acct => {
+      workspaces = distinct(concat(lookup(local.layer_workspace_bindings, acct, []), lookup(local.cfg.workload_bindings, acct, [])))
       # Workload-only accounts trust the workloads project when it is split out.
       project = (
         local.cfg.split_workload_projects && length(lookup(local.default_workspace_bindings, acct, [])) == 0
         ? local.cfg.tfc_workloads_project : null
       )
     }
+    if contains(keys(merge(local.accounts, local.workload_accounts)), acct) &&
+    length(distinct(concat(lookup(local.layer_workspace_bindings, acct, []), lookup(local.cfg.workload_bindings, acct, [])))) > 0
+  }
+  # Dedicated management role pairs: aws-security always, aws-backup only with
+  # the backup layer.
+  tfc_management_workspaces = {
+    for ws in ["aws-security", "aws-backup"] : ws => {} if ws == "aws-security" || contains(local.cfg.aws_layers, "backup")
   }
 }

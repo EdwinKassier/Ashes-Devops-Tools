@@ -14,7 +14,7 @@ output "inspection_vpc_id" {
 }
 
 output "egress_vpc_id" {
-  description = "The ID of the centralized egress VPC that hosts NAT, interface endpoints, and resolver endpoints."
+  description = "The ID of the centralized egress VPC that hosts NAT, the interface endpoints and the optional resolver endpoints."
   value       = module.egress_vpc.vpc_id
 }
 
@@ -29,7 +29,7 @@ output "interface_endpoint_phz_id" {
 }
 
 output "tgw_inspection_routes" {
-  description = "The centralized-inspection routing contract fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall, plus (with spoke_attachments) inspection 0.0.0.0/0 to egress and shared top_cidr to inspection."
+  description = "The static routes fed to the transit gateway: the segment default routes (0.0.0.0/0) pointed at the inspection attachment so prod and nonprod traffic is forced through the firewall (without the firewall: at the egress attachment), plus (with the firewall and spoke_attachments) inspection 0.0.0.0/0 to egress and shared top_cidr to inspection, and (with the VPN) hybrid 0.0.0.0/0 and shared <onprem prefix> to inspection."
   value       = local.tgw_routes
 }
 
@@ -48,6 +48,16 @@ output "vpn_connection_id" {
   value       = try(module.vpn[0].vpn_connection_id, null)
 }
 
+output "resolver_endpoints_enabled" {
+  description = "Whether the Route 53 Resolver inbound and outbound endpoints exist (enable_resolver_endpoints, else enable_vpn)."
+  value       = local.enable_resolver_endpoints
+}
+
+output "resolver_inbound_endpoint_ips" {
+  description = "IP addresses of the inbound Route 53 Resolver endpoint (point the on-premises conditional forwarders at them), or an empty list when the resolver endpoints are off."
+  value       = module.route53_resolver.inbound_endpoint_ips
+}
+
 output "vpn_tunnel_addresses" {
   description = "AWS-side public IPs of the two VPN tunnels (configure these on the on-premises device), or an empty list when enable_vpn = false."
   value       = var.enable_vpn ? [module.vpn[0].tunnel1_address, module.vpn[0].tunnel2_address] : []
@@ -59,6 +69,44 @@ output "vpn_preshared_key_arn" {
 }
 
 output "spoke_attachment_route_tables" {
-  description = "Map of spoke_attachments key to the TGW route table its attachment is associated with (prod or nonprod segment); every listed spoke also propagates into the inspection route table."
+  description = "Map of spoke_attachments key to the TGW route table its attachment is associated with (prod or nonprod segment); every listed spoke also propagates into the inspection route table (without the firewall: the shared route table)."
   value       = { for k, s in var.spoke_attachments : k => module.transit_gateway.route_table_ids[s.segment] }
+}
+
+output "hub_static_ipam_allocations" {
+  description = "Map of static hub VPC name (inspection, egress) to the CIDR reserved for it in the home-region IPAM pool, so IPAM never allocates that range to a spoke. Empty for hub VPCs created from the pool and for hub VPCs outside the pool CIDR."
+  value       = { for k, a in aws_vpc_ipam_pool_cidr_allocation.hub_static : k => a.cidr }
+}
+
+output "availability_zones" {
+  description = "Availability zone names the inspection and egress VPC subnets are placed in (the first az_count entries of availability_zones)."
+  value       = module.inspection_vpc.availability_zones
+}
+
+output "segment_isolation_routes" {
+  description = "Blackhole routes that isolate prod and non-prod spokes, keyed <table>|<spoke>: the route table (prod or nonprod) and the other segment's spoke CIDR it drops."
+  value       = local.segment_isolation_routes
+}
+
+output "alarm_topic_arn" {
+  description = "ARN of the SNS topic the hub network alarms publish to (the caller's alarm_sns_topic_arn, else the topic the stage created)."
+  value       = module.network_alarms.sns_topic_arn
+}
+
+output "network_alarm_arns" {
+  description = "Map of alarm key to CloudWatch alarm ARN: tgw-blackhole-drops, nat-port-allocation-errors-<az index>, and vpn-tunnel-not-up with enable_vpn."
+  value       = module.network_alarms.alarm_arns
+}
+
+output "network_alarms" {
+  description = "The CloudWatch alarm definitions the hub creates, keyed like network_alarm_arns: namespace, metric name, statistic, threshold and dimensions."
+  value = {
+    for k, a in merge(local.nat_alarms, local.tgw_alarms, local.vpn_alarms, local.firewall_alarms) : k => {
+      namespace   = a.namespace
+      metric_name = a.metric_name
+      statistic   = a.statistic
+      threshold   = a.threshold
+      dimensions  = a.dimensions
+    }
+  }
 }

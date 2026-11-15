@@ -8,17 +8,17 @@ bucket-level access and public-access prevention.
 
 | Resource | Notes |
 |----------|-------|
-| `raw-ingest` bucket | CMEK-encrypted, versioning enabled, lifecycle rules |
-| `processed` bucket | CMEK-encrypted, versioning enabled |
-| Access-logs bucket | Receives GCS access logs for all data buckets |
-| Audit-logs bucket | Terraform state and audit log archive |
-| Bucket IAM (objectAdmin) | Granted to `allowed_members` on every data bucket |
+| `raw-ingest` bucket | CMEK-encrypted, versioning enabled, 7-day soft delete. No expiry rule: set `retention_days` on the entry to add one |
+| `processed` bucket | CMEK-encrypted, versioning enabled, 7-day soft delete |
+| Logs bucket (`<project_id>-logs`) | Receives the usage logs of the data buckets; also meant as a destination for an audit log sink (output `logs_bucket_name`). Objects deleted after `log_retention_days` |
+| Access-logs bucket (`<project_id>-bucket-access-logs`) | Receives the usage logs of the logs bucket. Objects deleted after `log_retention_days` |
+| Bucket IAM (`roles/storage.objectViewer`) | Granted to `allowed_members` on every data bucket (read only; additive) |
 
 ## Prerequisites
 
 - A GCP project with the **Cloud Storage** and **Cloud KMS** APIs enabled.
 - A KMS key in the same region as the buckets. Use the `examples/kms` example
-  to create one, then copy its `key_id` output.
+  to create one, then copy its `app_key_id` output.
 - The KMS crypto key must have the Cloud Storage service agent granted
   `roles/cloudkms.cryptoKeyEncrypterDecrypter`.
 
@@ -53,6 +53,6 @@ gcloud kms keys add-iam-policy-binding <key-id> \
 
 | Parameter | What to change |
 |-----------|---------------|
-| `data_buckets` | Add/remove buckets; set `force_destroy = true` in non-prod |
-| `log_retention_days` | Increase for compliance (default 30) |
-| `allowed_members` | Service accounts, groups, or users needing objectAdmin access |
+| `data_buckets` | Add/remove buckets; set `force_destroy = true` in non-prod; `retention_days` adds an object expiry rule; `soft_delete_retention_seconds` (default 7 days, `0` = off) |
+| `log_retention_days` | Days the two log buckets keep objects. The module default is 90; this example sets 30. Increase for compliance |
+| `allowed_members` | Service accounts, groups, or users that need read access (`roles/storage.objectViewer`). Grant write roles outside the module |

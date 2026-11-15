@@ -20,7 +20,11 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    project_prefix            = try(tostring(local.lz.org.prefix), null)
+    project_prefix = try(tostring(local.lz.org.prefix), null)
+    # org.cost_center / org.owner: the cost-center and owner provider default
+    # labels (providers.tf), the same keys as the AWS roots' default_tags.
+    cost_center               = try(tostring(local.lz.org.cost_center), null)
+    owner                     = try(tostring(local.lz.org.owner), null)
     organization_name         = try(tostring(local.lz.org.display_name), null)
     domain                    = try(tostring(local.lz.org.domain), null)
     default_region            = try(tostring(local.lz.org.regions.gcp), null)
@@ -51,8 +55,20 @@ locals {
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
         labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
         is_production           = tobool(try(e.is_production, false))
+        data_classification     = tostring(try(e.data_classification, "internal"))
+        # Published in environment_config (re-audit 6 CMP-4): gcp-workload
+        # treats an environment as regulated when either its own config file or
+        # this contract says so, so repointing one workload's config path at
+        # another estate's file does not drop the class.
+        compliance_class = tostring(try(e.compliance_class, "standard"))
       }
     }
+    # Environment keys whose is_production is missing or not a boolean. The
+    # schema requires it; the environments validation names them.
+    environments_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
 
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
@@ -64,6 +80,9 @@ locals {
       delegated_workload_folder_roles = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_workload_folder_roles, []) : tostring(r)]
       delegated_network_folder_roles  = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_network_folder_roles, []) : tostring(r)]
       guardrail_owner_mode            = tostring(try(local.lz.gcp.contracts.bootstrap.guardrail_owner_mode, "separate"))
+      # Read by gcp-organization only; kept so the type matches the variable.
+      organization_apply_grantable_roles = try([for r in local.lz.gcp.contracts.bootstrap.organization_apply_grantable_roles : tostring(r)], null)
+      organization_admin_members         = try([for m in local.lz.gcp.contracts.bootstrap.organization_admin_members : tostring(m)], null)
       workload_service_accounts = {
         for k, sa in try({ for k, sa in local.lz.gcp.contracts.bootstrap.workload_service_accounts : k => sa }, {}) : k => { plan = tostring(sa.plan), apply = tostring(sa.apply) }
       }
@@ -79,11 +98,14 @@ locals {
         apply = [for r in try(local.lz.gcp.contracts.bootstrap.network_folder_roles.apply, []) : tostring(r)]
       }
     }
+    # folders: id is the bare folder number (google_folder.folder_id) and name is
+    # folders/<number>, the shape gcp-organization emits. An id given as
+    # folders/<number> is accepted, and name is derived from id when absent.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
       org_id                   = try(tostring(local.lz.gcp.contracts.organization.org_id), null)
-      billing_account          = tostring(local.lz.gcp.contracts.organization.billing_account)
+      billing_account          = trimprefix(tostring(local.lz.gcp.contracts.organization.billing_account), "billingAccounts/")
       admin_project_number     = try(tostring(local.lz.gcp.contracts.organization.admin_project_number), null)
-      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
+      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = trimprefix(tostring(f.id), "folders/"), name = tostring(try(f.name, "folders/${trimprefix(tostring(f.id), "folders/")}")), display_name = tostring(try(f.display_name, k)) } }
       tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }
       scoped_access_policy_ids = { for k, v in try(local.lz.gcp.contracts.organization.scoped_access_policy_ids, {}) : k => tostring(v) }
     }

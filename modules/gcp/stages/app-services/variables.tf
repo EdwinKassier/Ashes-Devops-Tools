@@ -62,7 +62,7 @@ variable "environment" {
 }
 
 variable "is_production" {
-  description = "Whether this is a production environment. Production turns Cloud SQL high availability (REGIONAL) on for every service database whose database.enable_high_availability is unset; an explicit false opts out."
+  description = "Whether this is a production environment. Production turns Cloud SQL high availability (REGIONAL) on for every service database whose database.enable_high_availability is unset; an explicit false opts out. Production also keeps one warm Cloud Run instance for every service whose min_instances is unset."
   type        = bool
   default     = false
   nullable    = false
@@ -96,6 +96,13 @@ variable "labels" {
   description = "Labels applied to every labelable resource."
   type        = map(string)
   default     = {}
+}
+
+variable "require_database_cmek" {
+  description = "Every app-service database must set database.encryption_key_name, and keep deletion protection on, or the plan fails (cloud-sql require_cmek). gcp-workload sets it for compliance_class: regulated. A key cannot be added to an existing instance without replacing it; see UPGRADING.md for the migration."
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 variable "enable_deletion_protection" {
@@ -194,8 +201,12 @@ variable "services" {
                            (Shared VPC subnet access is granted to its Cloud Run
                            service agent). Default: the host project.
       github   = {...}  -> deploy SA `<name>-deploy` bound via WIF to the GitHub
-                           repo's IMMUTABLE numeric repository_id (optionally a
-                           ref and/or GitHub environment). Needs enable_app_deploy_wif.
+                           repo's IMMUTABLE numeric repository_id plus `ref`
+                           and/or GitHub `environment`. With `environment` null
+                           and `ref` null, the GitHub environment is
+                           var.environment: the deploy job must declare
+                           `environment: <var.environment>`. There is no
+                           repository-wide binding. Needs enable_app_deploy_wif.
       secrets  = { ENV_VAR = { secret = "<secret id in the service project, or projects/<p>/secrets/<s>>" } }
                            -> env vars from Secret Manager; the runtime SA gets
                            secretAccessor on exactly those secrets.
@@ -211,19 +222,21 @@ variable "services" {
     The default `{}` creates nothing.
   EOT
   type = map(object({
-    runtime                     = optional(string, "cloud-run") # cloud-run | cloud-run-job
+    runtime                     = optional(string, "cloud-run") # cloud-run or cloud-run-job
     image                       = optional(string)              # null => var.bootstrap_image
     ingress                     = optional(string, "INGRESS_TRAFFIC_INTERNAL_ONLY")
     cpu                         = optional(string, "1000m")
     memory                      = optional(string, "512Mi")
-    min_instances               = optional(number, 0)
+    min_instances               = optional(number)      # null = 1 in production (var.is_production), 0 elsewhere
+    health_check_path           = optional(string, "/") # HTTP probe path; "" keeps the TCP startup probe
     max_instances               = optional(number, 10)
     concurrency                 = optional(number, 80)
     timeout                     = optional(string, "300s")
     env_vars                    = optional(map(string), {})
     secrets                     = optional(map(object({ secret = string, version = optional(string, "latest") })), {})
     subnetwork_id               = optional(string)
-    vpc_egress                  = optional(string, "PRIVATE_RANGES_ONLY")
+    vpc_egress                  = optional(string)           # null = ALL_TRAFFIC when egress_proxy.enabled, else PRIVATE_RANGES_ONLY
+    no_proxy                    = optional(list(string), []) # extra NO_PROXY entries, appended to the defaults (egress_proxy.enabled only)
     enable_binary_authorization = optional(bool, false)
     binary_authorization_policy = optional(string)
     enable_unauthenticated      = optional(bool, false)
@@ -268,12 +281,17 @@ variable "services" {
       enable_high_availability      = optional(bool)
       enable_point_in_time_recovery = optional(bool, true)
       # Region or multi-region of the automated backups (cross-region copy).
-      # Null = Cloud SQL's default, the multi-region nearest the instance.
-      backup_location            = optional(string)
-      encryption_key_name        = optional(string)
-      enable_deletion_protection = optional(bool)
+      # Null = the instance region (cloud-sql module default, CMP-8).
+      backup_location = optional(string)
+      # Days of transaction (WAL) logs kept for point-in-time recovery: 1 to 7
+      # on ENTERPRISE, 1 to 35 on ENTERPRISE_PLUS. Null = 7 (cloud-sql default).
+      transaction_log_retention_days = optional(number)
+      encryption_key_name            = optional(string)
+      enable_deletion_protection     = optional(bool)
     }))
 
+    # Deploy identity. Bound on repository_id + ref and/or GitHub environment;
+    # environment null and ref null => environment = var.environment.
     github = optional(object({
       repository_id = string
       repository    = optional(string)
@@ -300,7 +318,7 @@ variable "services" {
     # Service-level objective on the Cloud Run service (runtime = "cloud-run"
     # only). Null (default) creates none.
     slo = optional(object({
-      sli_type               = optional(string, "availability") # availability | latency
+      sli_type               = optional(string, "availability") # availability or latency
       goal                   = optional(number, 0.99)           # (0, 1)
       rolling_period_days    = optional(number, 28)
       latency_threshold      = optional(string, "1s") # latency SLI only
@@ -395,8 +413,17 @@ variable "services" {
   }
 
   validation {
-    condition     = alltrue([for k, s in var.services : contains(["ALL_TRAFFIC", "PRIVATE_RANGES_ONLY"], s.vpc_egress)])
-    error_message = "services[*].vpc_egress must be ALL_TRAFFIC or PRIVATE_RANGES_ONLY."
+    condition     = alltrue([for k, s in var.services : s.vpc_egress == null || contains(["ALL_TRAFFIC", "PRIVATE_RANGES_ONLY"], coalesce(s.vpc_egress, "-"))])
+    error_message = "services[*].vpc_egress must be ALL_TRAFFIC or PRIVATE_RANGES_ONLY (or unset)."
+  }
+
+  # With PRIVATE_RANGES_ONLY, Cloud Run sends internet traffic on its own path,
+  # outside the VPC, so it skips the hub Secure Web Proxy. Production with the
+  # proxy on may not do that; to opt out, turn the proxy off for the
+  # environment, which needs the reviewed production_egress_proxy_waiver.
+  validation {
+    condition     = !(var.is_production && var.egress_proxy.enabled) || alltrue([for k, s in var.services : s.vpc_egress != "PRIVATE_RANGES_ONLY"])
+    error_message = "services[*].vpc_egress = PRIVATE_RANGES_ONLY is not allowed in production while the environment egress proxy is on: that service's internet traffic would leave outside the VPC and skip the Secure Web Proxy. Remove vpc_egress (the default is then ALL_TRAFFIC) or set ALL_TRAFFIC."
   }
 
   validation {
@@ -525,4 +552,44 @@ variable "gke_master_authorized_networks" {
     display_name = optional(string)
   }))
   default = []
+}
+
+variable "egress_proxy" {
+  description = <<-EOT
+    The environment's central egress proxy (the hub Secure Web Proxy, preview), reached through
+    the PSC endpoint the spoke network creates. enabled = true (set by stages/environment when
+    the environment's egress proxy is on) makes ALL_TRAFFIC the default vpc_egress of every
+    Cloud Run service and job: Cloud Run's PRIVATE_RANGES_ONLY internet path would skip the
+    proxy, and stages/net-spoke drops the private tier from Cloud NAT when the proxy is on. It also injects HTTPS_PROXY,
+    HTTP_PROXY and NO_PROXY (upper and lower case) = http://<address>:<port>. NO_PROXY always
+    holds localhost, the metadata server (metadata.google.internal, 169.254.169.254),
+    .googleapis.com, .run.app and the RFC 1918 ranges (as CIDRs and as Node.js first-last
+    ranges), plus no_proxy here (for example the PSC endpoint for Google APIs and the internal
+    DNS domains), plus the service's own services[*].no_proxy, plus any NO_PROXY / no_proxy
+    value in its env_vars: these are appended, the defaults always stay. It also injects
+    NODE_USE_ENV_PROXY=1, which makes Node.js 24+ (and 22.21+) fetch() and http(s).request
+    honour the variables. A service's own env_vars win over the other injected values. port is
+    the proxy's listening port (default 443, the hub default). Production rejects an explicit
+    PRIVATE_RANGES_ONLY while enabled. A direct caller whose spoke has nat.enabled = false also
+    has no default internet route, so Private Google Access to public Google IPs stops and
+    Google APIs need the PSC endpoint for googleapis.com.
+  EOT
+  type = object({
+    enabled  = optional(bool, false)
+    address  = optional(string)
+    port     = optional(number, 443)
+    no_proxy = optional(list(string), [])
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = !var.egress_proxy.enabled || var.egress_proxy.address != null
+    error_message = "egress_proxy.address (the PSC endpoint address of the hub proxy) is required when egress_proxy.enabled is true."
+  }
+
+  validation {
+    condition     = var.egress_proxy.port == null || (floor(coalesce(var.egress_proxy.port, 0)) == coalesce(var.egress_proxy.port, 0) && coalesce(var.egress_proxy.port, 0) >= 1 && coalesce(var.egress_proxy.port, 0) <= 65535)
+    error_message = "egress_proxy.port must be a whole number from 1 to 65535."
+  }
 }

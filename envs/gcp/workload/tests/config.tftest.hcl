@@ -4,7 +4,17 @@
 # overridden; the environment stage runs against mocks. How the stage resolves
 # team projects and APIs is asserted in modules/gcp/stages/environment/tests.
 
-mock_provider "google" {}
+# A planned peering's state is unknown, which leaves check.hub_peering_active
+# unknown, and terraform test fails a plan run on an unknown check (a real plan
+# only warns). ACTIVE is what a peered environment reports.
+mock_provider "google" {
+  mock_resource "google_compute_network_peering" {
+    override_during = plan
+    defaults = {
+      state = "ACTIVE"
+    }
+  }
+}
 mock_provider "google-beta" {}
 # tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
 # no run contacts HCP Terraform.
@@ -38,10 +48,11 @@ override_data {
       contract = {
         environment_config = {
           dev = {
-            folder_id           = "folders/111"
+            folder_id           = "111"
             folder_name         = "Development"
             host_project_id     = "cfgco-dev-host-abcd"
             host_project_number = "222222222222"
+            is_production       = false
             region              = "europe-west1"
             cidr_block          = "10.10.0.0/16"
             labels              = {}
@@ -71,6 +82,27 @@ run "services_from_config" {
   assert {
     condition     = join(",", module.environment.components.service_teams) == "payments" && local.service_teams["payments"].project_admin_group_email == "payments-admins@cfg.example" && local.service_teams["payments"].enable_shared_vpc_attachment
     error_message = "gcp.environments.dev.service_teams must create the team project, with the typed defaults applied."
+  }
+}
+
+# gcp.environments.<env>.services.<name>.database.backup_location and
+# .transaction_log_retention_days reach the service's Cloud SQL instance; a
+# database without them keeps the cloud-sql defaults (instance region, 7 days).
+run "database_backup_settings_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.database-backup.yaml"
+  }
+
+  assert {
+    condition     = output.app_services["api"].database_backup_location == "europe-west2" && output.app_services["api"].database_transaction_log_retention_days == 14
+    error_message = "the config file's database.backup_location and database.transaction_log_retention_days must reach the Cloud SQL instance."
+  }
+
+  assert {
+    condition     = output.app_services["worker"].database_backup_location == "europe-west1" && output.app_services["worker"].database_transaction_log_retention_days == 7
+    error_message = "a config database without the keys must keep the instance region and 7 days."
   }
 }
 
@@ -366,4 +398,16 @@ run "accepts_known_map_input_keys" {
     vm_backup_schedules  = { nightly = { daily_schedule = { start_time = "02:00" }, retention_policy = { max_retention_days = 7 } } }
     os_patch_deployments = { weekly = { reboot_config = "NEVER", day_of_week = "SATURDAY" } }
   }
+}
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+  }
+
+  expect_failures = [var.environment]
 }

@@ -190,6 +190,8 @@ module "log_archive_bucket" {
   log_archive_bucket_name = var.aws.log_archive_bucket_name
   kms_key_arn             = module.log_cmk.key_arn
   org_id                  = var.org_id
+  retention_days          = var.aws.log_archive_retention_days
+  object_lock_mode        = var.aws.log_archive_object_lock_mode
   # The organization trail is owned by the management account, also when the
   # CloudTrail delegated administrator manages it.
   cloudtrail_trail_account_id = var.management_account_id
@@ -219,7 +221,7 @@ module "cloudtrail" {
     aws = aws.management
   }
 
-  log_archive_bucket = module.log_archive_bucket.bucket_name
+  log_archive_bucket = module.log_archive_bucket.policy_attached_bucket_name
   kms_key_arn        = module.log_cmk.key_arn
 
   # CIS AWS 3.8/3.9: S3 object-level data events (WriteOnly by default; the
@@ -241,8 +243,6 @@ module "cloudtrail" {
   alarm_sns_topic_arn                  = var.aws.cloudtrail_alarm_sns_topic_arn
   alarm_subscriptions                  = coalesce(var.aws.cloudtrail_alarm_subscribers, var.aws.notification_subscribers)
   cis_alarms_excluded                  = var.aws.cloudtrail_cis_alarms_excluded
-
-  depends_on = [module.log_archive_bucket]
 }
 
 # ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ module "cloudtrail_delegated_admin" {
 
   trail_name             = var.aws.cloudtrail_delegated_admin_trail_name
   trail_owner_account_id = var.management_account_id
-  log_archive_bucket     = module.log_archive_bucket.bucket_name
+  log_archive_bucket     = module.log_archive_bucket.policy_attached_bucket_name
   kms_key_arn            = module.log_cmk.key_arn
 
   cloudtrail_s3_data_events           = var.aws.cloudtrail_s3_data_events
@@ -287,8 +287,6 @@ module "cloudtrail_delegated_admin" {
   cloudwatch_logs_kms_key_manager_arns          = []
   alarm_subscriptions                           = coalesce(var.aws.cloudtrail_alarm_subscribers, var.aws.notification_subscribers)
   cis_alarms_excluded                           = var.aws.cloudtrail_cis_alarms_excluded
-
-  depends_on = [module.log_archive_bucket]
 }
 
 # ---------------------------------------------------------------------------
@@ -439,6 +437,11 @@ module "systems_manager" {
   # SSM sessions run in the security-tooling account, so they must use a key that
   # account can access — the sectool CMK, not the cross-account log CMK.
   kms_key_id = module.sectool_cmk.key_arn
+
+  # CMP-3: weekly patch install on the account's SSM-managed instances.
+  enable_patch_install     = var.aws.enable_patch_install
+  patch_install_target_tag = var.aws.patch_install_target_tag
+  patch_operating_systems  = var.aws.patch_operating_systems
 }
 
 # ---------------------------------------------------------------------------
@@ -455,8 +458,11 @@ module "incident_response" {
   forensics_account_id     = var.forensics_account_id
   org_id                   = var.org_id
   # Let the forensics role decrypt snapshots encrypted with the forensics CMK.
-  forensics_kms_key_arn = module.forensics_cmk.key_arn
-  quarantine_vpc_id     = var.quarantine_vpc_id
+  # The CMK is created in this plan, so its ARN is unknown: the grant is gated
+  # by the plan-known flag, not by the ARN.
+  forensics_kms_key_arn      = module.forensics_cmk.key_arn
+  enable_forensics_kms_grant = true
+  quarantine_vpc_id          = var.quarantine_vpc_id
   # Both IR roles are created in the security-tooling account.
   permissions_boundary_arn = local.security_tooling_boundary_arn
 }

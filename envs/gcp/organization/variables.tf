@@ -1,7 +1,25 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "domain" {
@@ -80,7 +98,7 @@ variable "shared_iam_group_role_bindings" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. is_production (default false) marks production environments: it drives the production guardrail checks here and in gcp-bootstrap / gcp-workload. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
+  description = "Map of application environment definitions. is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml) marks production environments: it drives the production guardrail checks here and in gcp-bootstrap / gcp-workload. compliance_class (standard or regulated, default standard) marks regulated environments: any regulated environment makes this root require a hardened audit store (gcp.logging_project_id and gcp.enable_audit_bucket_lock, or an unexpired gcp.audit_store_waiver). Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
     display_name            = string
     region                  = string
@@ -89,6 +107,7 @@ variable "environments" {
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
     is_production           = optional(bool, false)
+    compliance_class        = optional(string, "standard")
   }))
   default = null
 
@@ -110,6 +129,27 @@ variable "environments" {
     condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.cidr_block] : [for e in values(local.cfg.environments) : e.cidr_block]) : can(cidrnetmask(c))])
     error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16."
   }
+
+  validation {
+    condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.compliance_class] : [for e in values(local.cfg.environments) : e.compliance_class]) : contains(["standard", "regulated"], c)])
+    error_message = "Each environment's compliance_class must be standard or regulated."
+  }
+
+  validation {
+    # Re-audit 6 CMP-3: an explicit environments map (a workspace variable no
+    # review sees) must not drop compliance_class: regulated, or the regulated
+    # audit-store guard switches off.
+    condition = var.environments == null || alltrue([
+      for k, e in coalesce(local.cfg.environments, {}) :
+      try(var.environments[k].compliance_class, "missing") == "regulated" if try(e.compliance_class, "standard") == "regulated"
+    ])
+    error_message = "environments drops compliance_class: regulated from ${join(", ", [for k, e in coalesce(local.cfg.environments, {}) : k if try(e.compliance_class, "standard") == "regulated" && try(var.environments[k].compliance_class, "missing") != "regulated"])} (regulated in config/landing-zone.yaml). A regulated environment stays, under its own key, regulated."
+  }
+
+  validation {
+    condition     = var.environments != null || length(local.cfg.environments_missing_is_production) == 0
+    error_message = "Every gcp.environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.environments_missing_is_production)}."
+  }
 }
 
 variable "default_region" {
@@ -119,7 +159,7 @@ variable "default_region" {
 }
 
 variable "gcp_overrides" {
-  description = "Explicit overrides of the gcp section (config/landing-zone.yaml gcp.*) fed to the organization stage. Every key is optional and the type is the stage's gcp object: a set (non-null) key wins over the config file, an unset or null key keeps the config value, else the stage default. Keys that are not in the config schema (enable_pam, logging_project_id, ...) are set only here. Precedence: gcp_overrides > config/landing-zone.yaml > built-in default. See UPGRADING.md for the old variable names."
+  description = "Explicit overrides of the gcp section (config/landing-zone.yaml gcp.*) fed to the organization stage. Every key is optional and the type is the stage's gcp object: a set (non-null) key wins over the config file, an unset or null key keeps the config value, else the stage default. Keys that are not in the config schema (enable_pam, audit_soft_delete_retention_days, ...) are set only here. Precedence: gcp_overrides > config/landing-zone.yaml > built-in default. See UPGRADING.md for the old variable names."
   type = object({
     admin_email                           = optional(string)
     break_glass_user                      = optional(string)
@@ -135,6 +175,7 @@ variable "gcp_overrides" {
     budget_currency                       = optional(string)
     logging_project_id                    = optional(string)
     logging_project_number                = optional(string)
+    audit_key_protection_level            = optional(string)
     audit_soft_delete_retention_days      = optional(number)
     enable_control_plane_alerting         = optional(bool)
     enable_cis_log_metrics                = optional(bool)
@@ -182,6 +223,8 @@ variable "gcp_overrides" {
     prefer_managed_constraints                  = optional(bool)
     enable_log_analytics                        = optional(bool)
     log_analytics_retention_days                = optional(number)
+    enable_network_log_export                   = optional(bool)
+    network_log_writer_granted                  = optional(bool)
     enable_logging_organization_settings        = optional(bool)
     scc_api_version                             = optional(string)
     disable_default_sink                        = optional(bool)
@@ -189,6 +232,7 @@ variable "gcp_overrides" {
     enable_principal_access_boundary            = optional(bool)
     principal_access_boundary_allowed_resources = optional(list(string))
     restrict_cloud_run_ingress                  = optional(bool)
+    restrict_tls_versions                       = optional(bool)
     allowed_workload_identity_issuers           = optional(list(string))
     allowed_workload_identity_aws_accounts      = optional(list(string))
     org_policy_overrides = optional(map(object({
@@ -221,6 +265,9 @@ variable "bootstrap_contract" {
     delegated_workload_folder_roles = optional(list(string), [])
     delegated_network_folder_roles  = optional(list(string), [])
     guardrail_owner_mode            = optional(string, "separate")
+    # gcp-organization's plan-time checks read these (omitted = null, no check).
+    organization_apply_grantable_roles = optional(list(string))
+    organization_admin_members         = optional(list(string))
   })
   default = null
 
@@ -249,6 +296,27 @@ variable "monthly_budget_amount" {
   validation {
     condition     = var.monthly_budget_amount == null || coalesce(var.monthly_budget_amount, 0) >= 0
     error_message = "monthly_budget_amount must be 0 (disabled) or a positive number."
+  }
+}
+
+variable "audit_log_retention_days" {
+  description = "Days the org audit bucket keeps audit logs: its lifecycle Delete age, and the locked retention period when the WORM lock (gcp.enable_audit_bucket_lock) is on. Null = compliance.audit_log_retention_days from config/landing-zone.yaml, else 365. It must be at least the floor of every compliance.frameworks entry (retention_floor_days in config.tf): pci_dss 365 (PCI DSS v4.0.1 10.5.1: 12 months, the latest 3 months immediately available), hipaa 2190 (45 CFR 164.316(b)(2)(i): 6 years for required documentation, a common reading for audit logs; confirm with counsel), fedramp_moderate 913 (OMB M-21-31, referenced by FedRAMP Rev5 AU-11: 12 months active plus 18 months cold storage). A floor is a minimum, not proof that a framework is met. With the lock on it must be at least 365, and GCS refuses any decrease of a locked period at apply."
+  type        = number
+  default     = null
+
+  # The effective value is inlined: local.audit_log_retention_days reads this
+  # variable, so referencing it here would form a cycle. local.retention_floor
+  # reads only the config file.
+  validation {
+    condition     = coalesce(var.audit_log_retention_days, local.cfg.audit_log_retention_days, 365) >= max(1, local.retention_floor)
+    error_message = "The audit retention (audit_log_retention_days, else compliance.audit_log_retention_days, else 365) is ${coalesce(var.audit_log_retention_days, local.cfg.audit_log_retention_days, 365)} days. It must be at least 1 and at least the ${local.retention_floor}-day floor of compliance.frameworks (${join(", ", local.cfg.compliance_frameworks)})."
+  }
+
+  # Every bucket this root locked before the value became a root input is
+  # locked at 365 days, and GCS never shortens a locked retention period.
+  validation {
+    condition     = !coalesce(try(var.gcp_overrides.enable_audit_bucket_lock, null), local.cfg.enable_audit_bucket_lock, false) || coalesce(var.audit_log_retention_days, local.cfg.audit_log_retention_days, 365) >= 365
+    error_message = "The audit bucket WORM lock (gcp.enable_audit_bucket_lock) is on, so the audit retention (audit_log_retention_days, else compliance.audit_log_retention_days) must be at least 365 days. A locked GCS retention period can be increased, never decreased."
   }
 }
 
@@ -299,4 +367,3 @@ variable "wif_github_owner_ids" {
   default     = []
   nullable    = false
 }
-

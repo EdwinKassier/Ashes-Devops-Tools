@@ -106,6 +106,15 @@ variable "aws" {
     # Deterministic name of the central log-archive bucket. Cross-root naming contract: it must match
     # the name the log-tamper SCP references.
     log_archive_bucket_name = optional(string)
+    # Days the log-archive bucket keeps objects: the Object Lock default retention and the lifecycle
+    # expiry. The default retention applies to new objects only; an object already written keeps its
+    # retain-until date, and in COMPLIANCE mode nobody can shorten it. The aws-security root reads
+    # compliance.audit_log_retention_days. Default 365.
+    log_archive_retention_days = optional(number, 365)
+    # Object Lock default retention mode for new objects: COMPLIANCE (default; nobody, including the
+    # root user, can shorten or remove it) or GOVERNANCE (principals with
+    # s3:BypassGovernanceRetention can).
+    log_archive_object_lock_mode = optional(string, "COMPLIANCE")
     # Account-qualified ARN of the principal granted key ADMINISTRATION (management actions only: no
     # Encrypt/Decrypt/GenerateDataKey/ReEncrypt, no CreateGrant) on the log-archive, forensics and
     # security-tooling CMKs. Null (default) grants each key's OWN account role key_admin_role_name
@@ -166,15 +175,26 @@ variable "aws" {
     # Create the ORGANIZATION_INTERNAL_ACCESS analyzer (alongside the external one) in the home region
     # and every enabled region. External analyzers are always created in every enabled region.
     enable_internal_access_analyzer = optional(bool, true)
-    # Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name. At
-    # least one is required (findings would otherwise fire into a void). Defaults to a placeholder
-    # SecOps email the root is expected to override.
+    # Weekly Patch Manager install (AWS-RunPatchBaseline, RebootIfNeeded, Sunday 03:00 UTC, 10%
+    # concurrency) on every SSM-managed instance in the security-tooling account (home region).
+    # False keeps the daily patch scan only. Default true.
+    enable_patch_install = optional(bool, true)
+    # Install patches only on the managed instances that carry this tag (key and value), which
+    # narrows the reboot scope. Null (default) installs on every SSM-managed instance.
+    patch_install_target_tag = optional(object({
+      key   = string
+      value = string
+    }))
+    # Operating systems that get a custom patch baseline (set as the account default for that OS) in
+    # the security-tooling account. Default Amazon Linux 2023.
+    patch_operating_systems = optional(set(string), ["AMAZON_LINUX_2023"])
+    # Subscribers attached to the security-notifications SNS topic, keyed by an arbitrary name.
+    # Default {} (no subscriber: the topic and rules exist, but nobody is notified). The aws-security
+    # root fails a production plan without a real subscriber and warns otherwise.
     notification_subscribers = optional(map(object({
       protocol = string # one of: email, https, sms, sqs, lambda, etc.
       endpoint = string # e.g. an email address or HTTPS URL
-      })), {
-      secops = { protocol = "email", endpoint = "secops@example.com" }
-    })
+    })), {})
     # Dedicated identity account for IAM Identity Center delegated administration. Default null = the
     # shared-services account (unchanged). Set to a dedicated identity account to tighten the
     # delegated-admin blast radius. PREVIEW: opt-in (default off), not yet validated against a real
@@ -274,6 +294,16 @@ variable "aws" {
   }
 
   validation {
+    condition     = var.aws.log_archive_retention_days >= 1 && var.aws.log_archive_retention_days == floor(var.aws.log_archive_retention_days)
+    error_message = "aws_overrides.log_archive_retention_days (compliance.audit_log_retention_days in config/landing-zone.yaml) must be a whole number of days, at least 1."
+  }
+
+  validation {
+    condition     = contains(["COMPLIANCE", "GOVERNANCE"], var.aws.log_archive_object_lock_mode)
+    error_message = "aws_overrides.log_archive_object_lock_mode must be COMPLIANCE or GOVERNANCE."
+  }
+
+  validation {
     condition     = var.aws.key_admin_arn == null || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:(role|user)/.+$", coalesce(var.aws.key_admin_arn, "x")))
     error_message = "aws_overrides.key_admin_arn must be null or an account-qualified IAM role/user ARN."
   }
@@ -313,11 +343,6 @@ variable "aws" {
       for s in var.aws.enabled_security_services : contains(["macie", "inspector", "detective", "resource-explorer"], s)
     ])
     error_message = "aws_overrides.enabled_security_services entries must be one of: macie, inspector, detective, resource-explorer."
-  }
-
-  validation {
-    condition     = length(var.aws.notification_subscribers) > 0
-    error_message = "aws_overrides.notification_subscribers must contain at least one subscriber."
   }
 
   validation {

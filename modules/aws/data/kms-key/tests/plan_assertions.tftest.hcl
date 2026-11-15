@@ -72,10 +72,19 @@ run "key_and_policy_configured" {
     error_message = "the protection tag must be off by default"
   }
 
-  # aws:SourceOrgID scoping is present on the log-service grants.
+  # Re-audit 5 IAC-3: EVERY log-service grant (one Allow-* statement per
+  # log_service_principals entry) carries aws:SourceOrgID = org_id, not just
+  # one statement somewhere in the document.
   assert {
-    condition     = can(regex("aws:SourceOrgID", aws_kms_key.this.policy))
-    error_message = "Log-service grants must be scoped by aws:SourceOrgID"
+    condition = length(var.log_service_principals) > 1 && alltrue([
+      for p in var.log_service_principals : length([
+        for s in jsondecode(aws_kms_key.this.policy).Statement : s
+        if s.Sid == "Allow-${replace(p, ".", "-")}" && try(s.Principal.Service, null) == p &&
+        try(s.Condition.StringEquals["aws:SourceOrgID"], null) == var.org_id &&
+        length(keys(s.Condition.StringEquals)) == 1
+      ]) == 1
+    ])
+    error_message = "Every log-service grant must be its own statement scoped by aws:SourceOrgID = org_id (no other StringEquals key)"
   }
 
   # CloudTrail's EncryptionContext condition is present.
@@ -282,5 +291,39 @@ run "deletion_guard_can_be_disabled" {
   assert {
     condition     = length(terraform_data.deletion_guard) == 0
     error_message = "enable_deletion_protection = false must omit the guard"
+  }
+}
+
+# enable_key_user_grants: key users may create grants for AWS resources (the
+# pattern AWS Backup and EBS need), scoped like KeyUsage by via_services.
+run "key_user_grants_opt_in" {
+  command = plan
+
+  variables {
+    key_user_arns          = ["arn:aws:iam::111122223333:root"]
+    via_services           = ["backup.eu-west-2.amazonaws.com"]
+    enable_key_user_grants = true
+  }
+
+  assert {
+    condition = (
+      one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUserGrants"]).Action == ["kms:CreateGrant", "kms:ListGrants", "kms:RevokeGrant"] &&
+      one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUserGrants"]).Condition.Bool["kms:GrantIsForAWSResource"] == "true" &&
+      one([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUserGrants"]).Condition.StringEquals["kms:ViaService"] == ["backup.eu-west-2.amazonaws.com"]
+    )
+    error_message = "KeyUserGrants must allow grant management for AWS resources only, through via_services."
+  }
+}
+
+run "no_key_user_grants_by_default" {
+  command = plan
+
+  variables {
+    key_user_arns = ["arn:aws:iam::111122223333:role/LogReader"]
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_kms_key.this.policy).Statement : s if s.Sid == "KeyUserGrants"]) == 0
+    error_message = "KeyUserGrants must be opt-in."
   }
 }

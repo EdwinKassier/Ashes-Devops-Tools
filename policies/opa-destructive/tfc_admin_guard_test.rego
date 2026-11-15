@@ -148,3 +148,384 @@ test_team_without_org_access_allowed if allowed(change("tfe_team", ["create"], n
 
 # ── Unrelated resources ─────────────────────────────────────────────────────
 test_other_types_ignored if allowed(change("tfe_variable", ["delete"], {"key": "x"}, null))
+
+# ── Execution mode and agent pools ──────────────────────────────────────────
+settings(mode, pool) := {"workspace_id": "ws-1", "execution_mode": mode, "agent_pool_id": pool, "global_remote_state": false}
+
+# Two messages: the agent mode and the pool.
+test_execution_mode_to_agent_denied if {
+	inp := change("tfe_workspace_settings", ["update"], settings("remote", null), settings("agent", "apool-1"))
+	count(p.deny) == 2 with input as inp
+}
+
+test_execution_mode_to_local_denied if denied(change("tfe_workspace_settings", ["update"], settings("remote", null), settings("local", null)))
+
+# gcp-bootstrap leaves local mode after pass 2 (bootstrap.md): toward remote passes.
+test_execution_mode_local_to_remote_allowed if allowed(change("tfe_workspace_settings", ["update"], settings("local", null), settings("remote", null)))
+
+# Two messages: the agent mode and the pool.
+test_new_settings_in_agent_mode_denied if {
+	inp := change("tfe_workspace_settings", ["create"], null, settings("agent", "apool-1"))
+	count(p.deny) == 2 with input as inp
+}
+
+test_new_settings_in_remote_mode_allowed if allowed(change("tfe_workspace_settings", ["create"], null, settings("remote", null)))
+
+test_agent_pool_repointed_denied if denied(change("tfe_workspace_settings", ["update"], settings("agent", "apool-1"), settings("agent", "apool-2")))
+
+test_remote_state_change_allowed if allowed(change("tfe_workspace_settings", ["update"], settings("remote", null), object.union(settings("remote", null), {"global_remote_state": true})))
+
+test_unknown_agent_pool_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace_settings.x",
+		"mode": "managed",
+		"type": "tfe_workspace_settings",
+		"change": {
+			"actions": ["update"],
+			"before": settings("agent", "apool-1"),
+			"after": object.remove(settings("agent", null), ["agent_pool_id"]),
+			"after_unknown": {"agent_pool_id": true},
+		},
+	}]}}
+	denied(inp)
+}
+
+test_new_agent_pool_denied if denied(change("tfe_agent_pool", ["create"], null, {"name": "pool", "organization": "acme"}))
+
+test_new_agent_token_denied if denied(change("tfe_agent_token", ["create"], null, {"agent_pool_id": "apool-1", "description": "t"}))
+
+test_agent_pool_allowed_workspaces_widened_denied if denied(change("tfe_agent_pool_allowed_workspaces", ["update"], {"agent_pool_id": "apool-1", "allowed_workspace_ids": ["ws-1"]}, {"agent_pool_id": "apool-1", "allowed_workspace_ids": ["ws-1", "ws-2"]}))
+
+# ── Protected workspace wiring: VCS, working directory, project ─────────────
+pws(tags) := {
+	"name": "gcp-organization", "tag_names": tags, "auto_apply": false, "auto_apply_run_trigger": false,
+	"working_directory": "envs/gcp/organization", "project_id": "prj-gcp",
+	"vcs_repo": [{"identifier": "acme/lz", "branch": "main", "oauth_token_id": null, "github_app_installation_id": "ghain-1"}],
+}
+
+test_protected_vcs_branch_changed_denied if denied(change("tfe_workspace", ["update"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"vcs_repo": [{"identifier": "acme/lz", "branch": "attacker", "oauth_token_id": null, "github_app_installation_id": "ghain-1"}]})))
+
+test_protected_vcs_identifier_changed_denied if denied(change("tfe_workspace", ["update"], pws(["tier:production"]), object.union(pws(["tier:production"]), {"vcs_repo": [{"identifier": "attacker/lz", "branch": "main", "oauth_token_id": null, "github_app_installation_id": "ghain-1"}]})))
+
+test_protected_vcs_connection_changed_denied if denied(change("tfe_workspace", ["update"], pws(["layer:bootstrap"]), object.union(pws(["layer:bootstrap"]), {"vcs_repo": [{"identifier": "acme/lz", "branch": "main", "oauth_token_id": "ot-attacker", "github_app_installation_id": null}]})))
+
+# Disconnecting VCS would let the CLI apply uploaded code.
+test_protected_vcs_removed_denied if denied(change("tfe_workspace", ["update"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"vcs_repo": []})))
+
+test_protected_working_directory_changed_denied if denied(change("tfe_workspace", ["update"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"working_directory": "envs/attacker"})))
+
+test_protected_project_moved_denied if denied(change("tfe_workspace", ["update"], pws(["tier:production"]), object.union(pws(["tier:production"]), {"project_id": "prj-other"})))
+
+test_protected_project_unknown_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace.x",
+		"mode": "managed",
+		"type": "tfe_workspace",
+		"change": {
+			"actions": ["update"],
+			"before": pws(["layer:control-plane"]),
+			"after": object.remove(pws(["layer:control-plane"]), ["project_id"]),
+			"after_unknown": {"project_id": true},
+		},
+	}]}}
+	denied(inp)
+}
+
+test_unprotected_vcs_branch_changed_allowed if allowed(change("tfe_workspace", ["update"], pws(["layer:workload"]), object.union(pws(["layer:workload"]), {"vcs_repo": [{"identifier": "acme/lz", "branch": "dev", "oauth_token_id": null, "github_app_installation_id": "ghain-1"}]})))
+
+test_unprotected_project_moved_allowed if allowed(change("tfe_workspace", ["update"], pws(["layer:workload"]), object.union(pws(["layer:workload"]), {"project_id": "prj-other"})))
+
+test_new_protected_workspace_allowed if allowed(change("tfe_workspace", ["create"], null, pws(["layer:control-plane"])))
+
+# A computed vcs_repo field that the guard does not compare does not count.
+test_protected_vcs_computed_field_unknown_allowed if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace.x",
+		"mode": "managed",
+		"type": "tfe_workspace",
+		"change": {
+			"actions": ["update"],
+			"before": pws(["layer:control-plane"]),
+			"after": object.union(pws(["layer:control-plane"]), {"description": "x"}),
+			"after_unknown": {"vcs_repo": [{"repository_http_url": true}]},
+		},
+	}]}}
+	allowed(inp)
+}
+
+test_protected_vcs_branch_unknown_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace.x",
+		"mode": "managed",
+		"type": "tfe_workspace",
+		"change": {
+			"actions": ["update"],
+			"before": pws(["layer:control-plane"]),
+			"after": pws(["layer:control-plane"]),
+			"after_unknown": {"vcs_repo": [{"branch": true}]},
+		},
+	}]}}
+	denied(inp)
+}
+
+# A new workspace's deprecated execution_mode / agent_pool_id are computed.
+test_new_workspace_with_unknown_execution_mode_allowed if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace.x",
+		"mode": "managed",
+		"type": "tfe_workspace",
+		"change": {
+			"actions": ["create"],
+			"before": null,
+			"after": pws(["layer:control-plane"]),
+			"after_unknown": {"execution_mode": true, "agent_pool_id": true, "id": true},
+		},
+	}]}}
+	allowed(inp)
+}
+
+test_protected_trigger_patterns_changed_allowed if allowed(change("tfe_workspace", ["update"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"trigger_patterns": ["envs/gcp/organization/**"]})))
+
+# ── Variables that steer credentials, the CLI or the runner ─────────────────
+var(key, category, value) := {"workspace_id": "ws-1", "key": key, "category": category, "value": value, "hcl": false, "sensitive": false, "value_wo_version": null}
+
+test_new_tfc_env_var_denied if denied(change("tfe_variable", ["create"], null, var("TFC_AWS_APPLY_ROLE_ARN", "env", "arn:aws:iam::999999999999:role/x")))
+
+test_tfc_env_var_value_changed_denied if denied(change("tfe_variable", ["update"], var("TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL", "env", "a@p.iam.gserviceaccount.com"), var("TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL", "env", "b@p.iam.gserviceaccount.com")))
+
+test_tf_cli_args_env_var_denied if denied(change("tfe_variable", ["create"], null, var("TF_CLI_ARGS_plan", "env", "-var-file=x.tfvars")))
+
+test_tfe_hostname_env_var_denied if denied(change("tfe_variable", ["create"], null, var("TFE_HOSTNAME", "env", "attacker.example")))
+
+test_code_exec_env_var_denied if denied(change("tfe_variable", ["create"], null, var("LD_PRELOAD", "env", "/tmp/x.so")))
+
+test_rotated_sensitive_tfc_var_denied if denied(change("tfe_variable", ["update"], object.union(var("TFC_X", "env", null), {"sensitive": true, "value_wo_version": 1}), object.union(var("TFC_X", "env", null), {"sensitive": true, "value_wo_version": 2})))
+
+test_tfc_var_description_change_allowed if allowed(change("tfe_variable", ["update"], var("TFC_AWS_PROVIDER_AUTH", "env", "true"), object.union(var("TFC_AWS_PROVIDER_AUTH", "env", "true"), {"description": "new"})))
+
+test_tfc_var_deleted_allowed if allowed(change("tfe_variable", ["delete"], var("TFC_AWS_PROVIDER_AUTH", "env", "true"), null))
+
+test_ordinary_env_var_allowed if allowed(change("tfe_variable", ["create"], null, var("APP_NAME", "env", "x")))
+
+test_terraform_input_named_tfc_allowed if allowed(change("tfe_variable", ["create"], null, var("TFC_note", "terraform", "x")))
+
+test_provider_token_env_var_allowed if allowed(change("tfe_variable", ["create"], null, object.union(var("SUPABASE_ACCESS_TOKEN", "env", null), {"sensitive": true, "value_wo_version": 1})))
+
+# ── Review fixes: unknown execution values, replaces, variable sets ─────────
+settings_unknown(actions, before, after, unknown) := {"plan": {"resource_changes": [{
+	"address": "tfe_workspace_settings.x",
+	"mode": "managed",
+	"type": "tfe_workspace_settings",
+	"change": {"actions": actions, "before": before, "after": after, "after_unknown": unknown},
+}]}}
+
+# tfe 0.83.0: agent_pool_id is Optional+Computed, unknown on every create.
+test_new_remote_settings_unknown_pool_allowed if allowed(settings_unknown(["create"], null, object.remove(settings("remote", null), ["agent_pool_id"]), {"agent_pool_id": true, "id": true}))
+
+test_new_agent_settings_unknown_pool_denied if {
+	inp := settings_unknown(["create"], null, object.remove(settings("agent", null), ["agent_pool_id"]), {"agent_pool_id": true})
+	count(p.deny) == 2 with input as inp
+}
+
+test_unknown_execution_mode_denied if denied(settings_unknown(["update"], settings("remote", null), object.remove(settings("remote", null), ["execution_mode"]), {"execution_mode": true}))
+
+test_unknown_mode_and_pool_denied if {
+	inp := settings_unknown(["update"], settings("remote", null), object.remove(settings("remote", null), ["execution_mode", "agent_pool_id"]), {"execution_mode": true, "agent_pool_id": true})
+	count(p.deny) == 2 with input as inp
+}
+
+ws_unknown(actions, before, unknown) := {"plan": {"resource_changes": [{
+	"address": "tfe_workspace.x",
+	"mode": "managed",
+	"type": "tfe_workspace",
+	"change": {"actions": actions, "before": before, "after": pws(["layer:workload"]), "after_unknown": unknown},
+}]}}
+
+test_workspace_update_unknown_execution_mode_denied if denied(ws_unknown(["update"], pws(["layer:workload"]), {"execution_mode": true}))
+
+# A replace re-plans the deprecated computed attributes, like a create.
+test_workspace_replace_unknown_execution_mode_allowed if allowed(ws_unknown(["delete", "create"], pws(["layer:workload"]), {"execution_mode": true, "agent_pool_id": true}))
+
+# M-2: a replace of a protected workspace is judged like an update.
+test_protected_replace_rewired_denied if denied(change("tfe_workspace", ["delete", "create"], pws(["layer:control-plane"]), object.union(pws(["layer:control-plane"]), {"working_directory": "envs/attacker"})))
+
+test_protected_replace_same_wiring_allowed if allowed(change("tfe_workspace", ["delete", "create"], pws(["layer:control-plane"]), pws(["layer:control-plane"])))
+
+# M-1: an unknown key or category cannot be checked.
+var_unknown(unknown) := {"plan": {"resource_changes": [{
+	"address": "tfe_variable.x",
+	"mode": "managed",
+	"type": "tfe_variable",
+	"change": {"actions": ["create"], "before": null, "after": object.remove(var("APP", "env", "x"), object.keys(unknown)), "after_unknown": unknown},
+}]}}
+
+test_unknown_variable_key_denied if denied(var_unknown({"key": true}))
+
+test_unknown_variable_category_denied if denied(var_unknown({"category": true}))
+
+test_unknown_variable_value_ordinary_key_allowed if allowed(var_unknown({"value": true}))
+
+# M-4: residual interpreter and shell names.
+test_residual_exec_names_denied if {
+	every k in ["SHELLOPTS", "PS4", "BASH_FUNC_foo%%", "GCONV_PATH", "SSH_ASKPASS", "SSH_ASKPASS_REQUIRE", "PERL5OPT", "PERL5LIB", "RUBYOPT", "RUBYLIB", "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS"] {
+		denied(change("tfe_variable", ["create"], null, var(k, "env", "x")))
+	}
+}
+
+test_home_not_denied if allowed(change("tfe_variable", ["create"], null, var("HOME", "env", "/home/x")))
+
+# M-3: variable sets.
+vs_attach(type, set_id) := {"plan": {"resource_changes": [
+	{
+		"address": "tfe_variable_set.common",
+		"mode": "managed",
+		"type": "tfe_variable_set",
+		"change": {"actions": ["no-op"], "before": {"id": "varset-common", "global": false}, "after": {"id": "varset-common", "global": false}, "after_unknown": {}},
+	},
+	{
+		"address": sprintf("%s.x", [type]),
+		"mode": "managed",
+		"type": type,
+		"change": {"actions": ["create"], "before": null, "after": {"variable_set_id": set_id, "workspace_id": "ws-1", "project_id": "prj-1"}, "after_unknown": {}},
+	},
+]}}
+
+test_attach_managed_set_allowed if allowed(vs_attach("tfe_workspace_variable_set", "varset-common"))
+
+test_attach_foreign_set_to_workspace_denied if denied(vs_attach("tfe_workspace_variable_set", "varset-handmade"))
+
+test_attach_foreign_set_to_project_denied if denied(vs_attach("tfe_project_variable_set", "varset-handmade"))
+
+# An attachment whose set ID is unknown at plan time (the set is created in
+# this plan). It passes only when its configuration expression references a
+# tfe_variable_set; `refs` is that expression's references list.
+new_set_root(refs) := {"plan": {
+	"resource_changes": [
+		{
+			"address": "tfe_variable_set.common",
+			"mode": "managed",
+			"type": "tfe_variable_set",
+			"change": {"actions": ["create"], "before": null, "after": {"global": false}, "after_unknown": {"id": true}},
+		},
+		{
+			"address": "tfe_workspace_variable_set.x",
+			"mode": "managed",
+			"type": "tfe_workspace_variable_set",
+			"name": "x",
+			"change": {"actions": ["create"], "before": null, "after": {"workspace_id": "ws-1"}, "after_unknown": {"variable_set_id": true}},
+		},
+	],
+	"configuration": {"root_module": {"resources": [
+		{"address": "tfe_variable_set.common", "mode": "managed", "type": "tfe_variable_set", "name": "common", "expressions": {}},
+		{
+			"address": "tfe_workspace_variable_set.x",
+			"mode": "managed",
+			"type": "tfe_workspace_variable_set",
+			"name": "x",
+			"expressions": {"variable_set_id": {"references": refs}},
+		},
+	]}},
+}}
+
+test_attach_new_managed_set_allowed if allowed(new_set_root(["tfe_variable_set.common.id", "tfe_variable_set.common"]))
+
+# Before: any tfe_variable_set created in the same plan let an unknown ID pass.
+test_attach_unknown_set_not_referenced_denied if denied(new_set_root(["var.handmade_set_id"]))
+
+test_attach_unknown_set_without_configuration_denied if denied({"plan": object.remove(new_set_root(["tfe_variable_set.common.id"]).plan, ["configuration"])})
+
+# The tfc-admin shape (plan JSON of Terraform 1.17.1): module.workspace[key]
+# holds tfe_workspace_variable_set.this[k] with variable_set_id = each.value,
+# for_each = var.variable_set_ids, and the module call passes
+# { common = tfe_variable_set.common.id }.
+new_set_module(call_refs) := {"plan": {
+	"resource_changes": [
+		{
+			"address": "tfe_variable_set.common",
+			"mode": "managed",
+			"type": "tfe_variable_set",
+			"change": {"actions": ["create"], "before": null, "after": {"global": false}, "after_unknown": {"id": true}},
+		},
+		{
+			"address": "module.workspace[\"gcp-organization\"].tfe_workspace_variable_set.this[\"common\"]",
+			"module_address": "module.workspace[\"gcp-organization\"]",
+			"mode": "managed",
+			"type": "tfe_workspace_variable_set",
+			"name": "this",
+			"change": {"actions": ["create"], "before": null, "after": {}, "after_unknown": {"variable_set_id": true, "workspace_id": true}},
+		},
+	],
+	"configuration": {"root_module": {
+		"resources": [{"address": "tfe_variable_set.common", "mode": "managed", "type": "tfe_variable_set", "name": "common", "expressions": {}}],
+		"module_calls": {"workspace": {
+			"source": "../../modules/tfc/workspace",
+			"expressions": {"variable_set_ids": {"references": call_refs}},
+			"for_each_expression": {"references": ["local.workspaces"]},
+			"module": {"resources": [{
+				"address": "tfe_workspace_variable_set.this",
+				"mode": "managed",
+				"type": "tfe_workspace_variable_set",
+				"name": "this",
+				"expressions": {"variable_set_id": {"references": ["each.value"]}, "workspace_id": {"references": ["tfe_workspace.this.id", "tfe_workspace.this"]}},
+				"for_each_expression": {"references": ["var.variable_set_ids"]},
+			}]},
+		}},
+	}},
+}}
+
+test_attach_unknown_set_through_module_allowed if allowed(new_set_module(["local.guardrails_workspaces", "each.key", "tfe_variable_set.common.id", "tfe_variable_set.common"]))
+
+test_attach_unknown_set_through_module_local_denied if denied(new_set_module(["local.handmade_set_ids"]))
+
+# Existing attachments are never denied: a no-op on a set this configuration
+# does not manage passes.
+test_noop_attachment_of_foreign_set_allowed if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "tfe_workspace_variable_set.legacy",
+		"mode": "managed",
+		"type": "tfe_workspace_variable_set",
+		"change": {"actions": ["no-op"], "before": {"variable_set_id": "varset-handmade", "workspace_id": "ws-1"}, "after": {"variable_set_id": "varset-handmade", "workspace_id": "ws-1"}, "after_unknown": {}},
+	}]}}
+	allowed(inp)
+}
+
+test_variable_set_made_global_denied if denied(change("tfe_variable_set", ["update"], {"id": "varset-1", "global": false}, {"id": "varset-1", "global": true}))
+
+test_new_global_variable_set_denied if denied(change("tfe_variable_set", ["create"], null, {"name": "x", "global": true}))
+
+test_steering_var_in_variable_set_denied if denied(change("tfe_variable", ["create"], null, object.union(object.remove(var("TFC_AWS_PROVIDER_AUTH", "env", "true"), ["workspace_id"]), {"variable_set_id": "varset-1"})))
+
+# Two module levels: root -> module.outer[k] (ids = { common = tfe_variable_set.common.id })
+# -> module.inner (ids = var.ids) -> the attachment (each.value over var.ids).
+nested_set_plan(root_refs) := {"plan": {
+	"resource_changes": [{
+		"address": "module.outer[\"a\"].module.inner.tfe_project_variable_set.this[\"common\"]",
+		"module_address": "module.outer[\"a\"].module.inner",
+		"mode": "managed",
+		"type": "tfe_project_variable_set",
+		"name": "this",
+		"change": {"actions": ["create"], "before": null, "after": {}, "after_unknown": {"variable_set_id": true}},
+	}],
+	"configuration": {"root_module": {
+		"resources": [{"address": "tfe_variable_set.common", "mode": "managed", "type": "tfe_variable_set", "name": "common", "expressions": {}}],
+		"module_calls": {"outer": {
+			"expressions": {"ids": {"references": root_refs}},
+			"for_each_expression": {"references": ["local.keys"]},
+			"module": {"module_calls": {"inner": {
+				"expressions": {"ids": {"references": ["var.ids"]}},
+				"module": {"resources": [{
+					"address": "tfe_project_variable_set.this",
+					"mode": "managed",
+					"type": "tfe_project_variable_set",
+					"name": "this",
+					"expressions": {"variable_set_id": {"references": ["each.value"]}},
+					"for_each_expression": {"references": ["var.ids"]},
+				}]},
+			}}},
+		}},
+	}},
+}}
+
+test_attach_unknown_set_two_modules_deep_allowed if allowed(nested_set_plan(["tfe_variable_set.common.id", "tfe_variable_set.common"]))
+
+test_attach_unknown_set_two_modules_deep_unreferenced_denied if denied(nested_set_plan(["var.foreign_ids"]))

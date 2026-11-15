@@ -17,7 +17,6 @@ variable "project_id" {
 variable "region" {
   description = "The primary GCP region of the network (e.g., 'us-central1', 'europe-west1')."
   type        = string
-  default     = "us-central1"
 
   validation {
     condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.region))
@@ -49,10 +48,17 @@ variable "labels" {
   default     = {}
 }
 
-variable "deletion_protection" {
-  description = "Guard the VPC and subnet stack with a prevent_destroy terraform_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard."
+variable "enable_deletion_protection" {
+  description = "Guard the VPC and subnet stack with a prevent_destroy terraform_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard. Null (default) uses the deprecated deletion_protection input, else false."
   type        = bool
-  default     = false
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 variable "project_prefix" {
@@ -101,7 +107,7 @@ variable "network" {
     error_message = "network.cidr_block must be valid CIDR notation without host bits set (e.g. \"10.0.0.0/16\")."
   }
   validation {
-    condition     = alltrue([for z in var.network.explicit_zones : can(regex("^[a-z]+-[a-z]+[0-9]-[a-z]$", z))])
+    condition     = alltrue([for z in var.network.explicit_zones : can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))])
     error_message = "Each entry in network.explicit_zones must be a valid GCP zone name (e.g. 'us-central1-a')."
   }
 }
@@ -159,10 +165,12 @@ variable "private_service_access" {
 }
 
 variable "private_service_connect" {
-  description = "Private Service Connect endpoint for Google APIs; target is 'all-apis' or 'vpc-sc'."
+  description = "Private Service Connect endpoint for Google APIs. target is 'all-apis' or 'vpc-sc'. name (null = the network name in lower case without non-alphanumerics, cut to 17 characters, plus psc) must follow Google's rule: 1-20 lower-case letters and numbers, starting with a letter. address (null = the second-to-last address of network.cidr_block, for example 10.0.255.254 for 10.0.0.0/16) is the endpoint's internal IPv4 address; the plan fails when it is inside a subnet range of this VPC, including the secure_web_proxy proxy_only_subnet_cidr and psc_nat_subnet_cidr when the proxy is enabled."
   type = object({
     enabled = optional(bool, true)
     target  = optional(string, "all-apis")
+    name    = optional(string)
+    address = optional(string)
   })
   default  = {}
   nullable = false
@@ -170,6 +178,17 @@ variable "private_service_connect" {
   validation {
     condition     = contains(["all-apis", "vpc-sc"], var.private_service_connect.target)
     error_message = "private_service_connect.target must be 'all-apis' or 'vpc-sc'."
+  }
+
+  validation {
+    # Source: https://docs.cloud.google.com/vpc/docs/configure-private-service-connect-apis (checked 2026-11-12).
+    condition     = var.private_service_connect.name == null || can(regex("^[a-z][a-z0-9]{0,19}$", coalesce(var.private_service_connect.name, "x")))
+    error_message = "private_service_connect.name (config: gcp.network.private_service_connect.name) must be 1-20 characters, only lower-case letters and numbers, starting with a letter (Google's rule for a Private Service Connect endpoint for Google APIs). Hyphens are not allowed."
+  }
+
+  validation {
+    condition     = var.private_service_connect.address == null || (can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$", coalesce(var.private_service_connect.address, "x"))) && try(cidrhost("${var.private_service_connect.address}/32", 0) == var.private_service_connect.address, false))
+    error_message = "private_service_connect.address (config: gcp.network.private_service_connect.address) must be a single IPv4 address (for example 10.0.255.254), not a range or an IPv6 address."
   }
 }
 
@@ -210,6 +229,9 @@ variable "vpn" {
     lists the peer interface IPv4 addresses (one per tunnel). local_ips and
     peer_ips are the BGP link-local addresses. The pre-shared key is the separate
     vpn_shared_secret_wo (write-only) or legacy vpn_shared_secret input. With ncc.enabled, the tunnels also join the NCC hub as a hybrid spoke.
+    advertised_ip_ranges (non-empty) switches the Cloud Router to CUSTOM mode, which
+    announces only those ranges plus advertised_groups (ALL_SUBNETS = every hub subnet,
+    what DEFAULT mode announces). Empty = DEFAULT mode (the hub subnets only).
   EOT
   type = object({
     enabled          = optional(bool, false)
@@ -219,6 +241,8 @@ variable "vpn" {
     peer_gateway_ips = optional(list(string), [])
     local_ips        = optional(list(string), ["169.254.0.1", "169.254.0.3"])
     peer_ips         = optional(list(string), ["169.254.0.2", "169.254.0.4"])
+    # CUSTOM mode only: ALL_SUBNETS keeps every hub subnet next to the ranges.
+    advertised_groups = optional(list(string), [])
     advertised_ip_ranges = optional(list(object({
       range       = string
       description = string

@@ -525,8 +525,10 @@ google v8.10.0 (the provider's registry docs source), checked 2026-11:
   has an interface endpoint for its API is **verify before relying on**.
 - **GCP:** the environment's host project, `gcp-workload-<env>` from
   `envs/gcp/workload`, on the first `private` subnet. Egress is the
-  environment's own Cloud NAT, **not** inspected through the hub; with the
-  app-services default `PRIVATE_RANGES_ONLY`, provider calls bypass the VPC.
+  environment's own Cloud NAT, **not** inspected, while the egress proxy is off
+  or waived; with the app-services default `PRIVATE_RANGES_ONLY` (egress proxy
+  off), provider calls bypass the VPC. With `egress_proxy` on, they go through
+  the hub Secure Web Proxy, so the provider hostnames must be on its allowlist.
 - **Apply order:** the layers up to `aws-network` and `gcp-network-hub`, then
   the workload root with the config and raw resources below.
 

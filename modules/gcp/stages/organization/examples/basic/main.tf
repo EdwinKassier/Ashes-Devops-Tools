@@ -17,6 +17,7 @@ locals {
 }
 
 module "organization" {
+  # checkov:skip=CKV_TF_1:Published example pinned to the release tag that release-please bumps (x-release-please-version); a commit SHA would break that flow. Release tags are not yet protected as immutable (tracked in docs/known-gaps.md).
   source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/gcp/stages/organization?ref=v0.1.0" # x-release-please-version
 
   domain                = "example.com"
@@ -55,5 +56,7 @@ module "organization" {
     security_contact_email                = "security@example.com"
     billing_contact_email                 = "billing@example.com"
     budget_currency                       = "USD"
+    # Control-plane (guardrail-change) alerts are on by default and need a recipient.
+    alert_notification_emails = ["secops@example.com"]
   }
 }

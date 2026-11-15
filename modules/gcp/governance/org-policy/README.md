@@ -134,3 +134,7 @@ The following resources are created:
 | <a name="output_preset_security_hardening"></a> [preset\_security\_hardening](#output\_preset\_security\_hardening) | Recommended security hardening boolean policy pack (SQL public IP, uniform bucket access, Shielded VM, OS Login, serial port, service account key creation) |
 | <a name="output_preset_us_eu_locations"></a> [preset\_us\_eu\_locations](#output\_preset\_us\_eu\_locations) | Regional restriction list policy pack — limits resource creation to US and EU regions |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

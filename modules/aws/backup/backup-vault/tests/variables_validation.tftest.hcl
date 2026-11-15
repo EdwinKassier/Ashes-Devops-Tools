@@ -33,3 +33,33 @@ run "malformed_restore_testing_role_arn_rejected" {
 
   expect_failures = [var.restore_testing_role_arn]
 }
+
+run "unknown_restore_testing_resource_type_rejected" {
+  command = plan
+
+  variables {
+    restore_testing_resource_types = ["EBS", "Redshift"]
+  }
+
+  expect_failures = [var.restore_testing_resource_types]
+}
+
+run "malformed_organization_id_rejected" {
+  command = plan
+
+  variables {
+    allow_copy_from_organization_id = "123456789012"
+  }
+
+  expect_failures = [var.allow_copy_from_organization_id]
+}
+
+run "malformed_notification_topic_arn_rejected" {
+  command = plan
+
+  variables {
+    notification_topic_arn = "arn:aws:sqs:eu-west-2:444444444444:backup-events"
+  }
+
+  expect_failures = [var.notification_topic_arn]
+}

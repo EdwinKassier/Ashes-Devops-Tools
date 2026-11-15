@@ -90,13 +90,14 @@ The following resources are created:
 
 - resource.google_compute_backend_service.default (modules/gcp/network/cdn/main.tf#L32)
 - resource.google_compute_global_address.default (modules/gcp/network/cdn/main.tf#L12)
-- resource.google_compute_global_forwarding_rule.default (modules/gcp/network/cdn/main.tf#L83)
-- resource.google_compute_global_forwarding_rule.http_redirect (modules/gcp/network/cdn/main.tf#L122)
+- resource.google_compute_global_forwarding_rule.default (modules/gcp/network/cdn/main.tf#L100)
+- resource.google_compute_global_forwarding_rule.http_redirect (modules/gcp/network/cdn/main.tf#L139)
 - resource.google_compute_managed_ssl_certificate.default (modules/gcp/network/cdn/main.tf#L20)
-- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/cdn/main.tf#L113)
-- resource.google_compute_target_https_proxy.default (modules/gcp/network/cdn/main.tf#L74)
+- resource.google_compute_ssl_policy.this (modules/gcp/network/cdn/main.tf#L76)
+- resource.google_compute_target_http_proxy.redirect (modules/gcp/network/cdn/main.tf#L130)
+- resource.google_compute_target_https_proxy.default (modules/gcp/network/cdn/main.tf#L88)
 - resource.google_compute_url_map.default (modules/gcp/network/cdn/main.tf#L66)
-- resource.google_compute_url_map.redirect (modules/gcp/network/cdn/main.tf#L99)
+- resource.google_compute_url_map.redirect (modules/gcp/network/cdn/main.tf#L116)
 
 
 ## Inputs
@@ -111,7 +112,10 @@ The following resources are created:
 | <a name="input_enable_cdn"></a> [enable\_cdn](#input\_enable\_cdn) | Enable Cloud CDN for this Global Load Balancer | `bool` | `true` | no |
 | <a name="input_enable_http_redirect"></a> [enable\_http\_redirect](#input\_enable\_http\_redirect) | Enable HTTP to HTTPS redirect (recommended for production) | `bool` | `true` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource this module creates (merged with the provider default\_labels; resource-specific labels win). | `map(string)` | `{}` | no |
+| <a name="input_min_tls_version"></a> [min\_tls\_version](#input\_min\_tls\_version) | Minimum TLS version of the SSL policy this module creates when ssl\_policy\_id is null. | `string` | `"TLS_1_2"` | no |
 | <a name="input_security_policy"></a> [security\_policy](#input\_security\_policy) | Self link of a Cloud Armor security policy to attach to the backend service | `string` | `null` | no |
+| <a name="input_ssl_policy_id"></a> [ssl\_policy\_id](#input\_ssl\_policy\_id) | Optional SSL policy ID (self\_link) for the HTTPS proxy, used as is. Null creates a MODERN TLS 1.2 policy (min\_tls\_version, ssl\_policy\_profile). | `string` | `null` | no |
+| <a name="input_ssl_policy_profile"></a> [ssl\_policy\_profile](#input\_ssl\_policy\_profile) | Profile of the created SSL policy: MODERN (default) or RESTRICTED (required for TLS\_1\_3). | `string` | `"MODERN"` | no |
 
 ## Outputs
 
@@ -125,3 +129,7 @@ The following resources are created:
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The self link of the backend service |
 | <a name="output_url_map_id"></a> [url\_map\_id](#output\_url\_map\_id) | The ID of the URL map |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -55,3 +55,13 @@ run "rejects_bad_name_prefix" {
     name_prefix = "bad prefix!"
   }
 }
+
+run "rejects_non_list_dashboard_widgets" {
+  command = plan
+
+  variables {
+    dashboard_widgets = { type = "text" }
+  }
+
+  expect_failures = [var.dashboard_widgets]
+}

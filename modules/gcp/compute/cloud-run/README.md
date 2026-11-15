@@ -61,7 +61,7 @@ The following resources are created:
 
 
 - resource.google_cloud_run_v2_service.this (modules/gcp/compute/cloud-run/main.tf#L13)
-- resource.google_cloud_run_v2_service_iam_member.unauthenticated (modules/gcp/compute/cloud-run/main.tf#L119)
+- resource.google_cloud_run_v2_service_iam_member.unauthenticated (modules/gcp/compute/cloud-run/main.tf#L146)
 
 
 ## Inputs
@@ -80,6 +80,7 @@ The following resources are created:
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Prevent accidental destruction of the Cloud Run service. Maps directly to the<br/>resource's deletion\_protection attribute. Defaults to true; set to false to allow<br/>`terraform destroy` to remove the service. | `bool` | `true` | no |
 | <a name="input_enable_unauthenticated"></a> [enable\_unauthenticated](#input\_enable\_unauthenticated) | When true, the service is invokable without authentication (how is set by<br/>public\_access\_mode). Defaults to false: the service is private and only callable<br/>by principals with an explicit invoker binding. | `bool` | `false` | no |
 | <a name="input_env_vars"></a> [env\_vars](#input\_env\_vars) | Plain (non-secret) environment variables injected into the container as name => value. | `map(string)` | `{}` | no |
+| <a name="input_health_check_path"></a> [health\_check\_path](#input\_health\_check\_path) | HTTP path for a startup probe (up to 120 s to become ready) and a liveness probe (every 30 s) on the container port. Null (default) keeps Cloud Run's default TCP startup probe. | `string` | `null` | no |
 | <a name="input_ingress"></a> [ingress](#input\_ingress) | Ingress traffic policy. Defaults to INGRESS\_TRAFFIC\_INTERNAL\_LOAD\_BALANCER so the<br/>service is reachable only via an internal HTTP(S) load balancer (not the public<br/>internet). Set to INGRESS\_TRAFFIC\_ALL only for deliberately public services. | `string` | `"INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to the Cloud Run service. | `map(string)` | `{}` | no |
 | <a name="input_max_instance_count"></a> [max\_instance\_count](#input\_max\_instance\_count) | Maximum number of instances. | `number` | `100` | no |
@@ -94,9 +95,11 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_health_check_path_effective"></a> [health\_check\_path\_effective](#output\_health\_check\_path\_effective) | HTTP path of the startup and liveness probes (null when the service keeps Cloud Run's default TCP startup probe). |
 | <a name="output_id"></a> [id](#output\_id) | The fully qualified identifier of the Cloud Run service. |
 | <a name="output_ingress"></a> [ingress](#output\_ingress) | The ingress traffic policy applied to the service. |
 | <a name="output_latest_ready_revision"></a> [latest\_ready\_revision](#output\_latest\_ready\_revision) | The name of the latest revision that is serving ready traffic. |
+| <a name="output_min_instance_count_effective"></a> [min\_instance\_count\_effective](#output\_min\_instance\_count\_effective) | Minimum instance count the service runs with. |
 | <a name="output_name"></a> [name](#output\_name) | The name of the Cloud Run service. |
 | <a name="output_uri"></a> [uri](#output\_uri) | The main URI at which the Cloud Run service is reachable. |
 <!-- END_TF_DOCS -->
@@ -126,3 +129,7 @@ module "api" {
   ]
 }
 ```
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

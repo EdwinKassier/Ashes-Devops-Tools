@@ -41,16 +41,22 @@ itself.
    with no organization permissions.
 2. Set its ID as `state_backup_team_id` on `envs/tfc-admin` and apply. tfc-admin
    grants it custom access on every project except the security-only guardrails
-   project: `state_versions = read`, `runs = read`, `variables = none`. A
-   precondition rejects a team that already holds another grant.
+   project and the saas project: `state_versions = read`, `runs = read`,
+   `variables = none`. A precondition rejects a team that already holds another
+   grant.
 3. `gcp-guardrails` lives in the guardrails project, where only the security
    team has access. To back it up as well, the security team grants the backup
    team the same custom permissions on that project by hand. Otherwise it is
    not exported, and `STATE_BACKUP_WORKSPACES` must not list it.
-4. A self-managed `tfc-admin` workspace sits in the platform project, which is
+4. `saas-*` state holds the Supabase database password and service-role key,
+   so the saas project is left out by default and `STATE_BACKUP_WORKSPACES`
+   must not list `saas-*`. HCP Terraform keeps every state version, so a restore
+   from HCP Terraform stays possible. Set `enable_saas_state_backup = true` on
+   `envs/tfc-admin` to export them as well; the bucket then holds those secrets.
+5. A self-managed `tfc-admin` workspace sits in the platform project, which is
    included. A hand-created one outside any managed project needs the same
    grant by hand.
-5. Create a team token with an expiry (at most 90 days) and store it as the
+6. Create a team token with an expiry (at most 90 days) and store it as the
    secret `TFC_TOKEN_STATE_BACKUP` in a GitHub environment named
    `tfc-state-backup`, with deployment branches limited to `main`
    ([CI secrets](../guides/CI_SECRETS.md#environment-scoped-secrets)).
@@ -145,7 +151,9 @@ If the whole organization is lost:
    apply.
 3. Restore the other workspaces in the run-trigger order: `gcp-bootstrap` and
    `aws-organization`, then the control plane, then the hubs, then the
-   workloads and `saas-*`.
+   workloads and `saas-*` (from the bucket only with
+   `enable_saas_state_backup = true`; without a copy, import the existing
+   Supabase and Vercel resources before the first apply).
 
 ### 3. Push the state
 
@@ -175,6 +183,87 @@ so the push takes the backup's.
    object if there is one.
 3. Run the drift check for the workspace (Actions, Drift Detection, Run
    workflow) once it has applied again.
+
+## Audit trail export
+
+HCP Terraform records who ran, approved and changed what in its
+[audit trail](https://developer.hashicorp.com/terraform/cloud-docs/api-docs/audit-trails),
+but it keeps only 14 days of it. The scheduled workflow
+[`.github/workflows/tfc-audit-trail.yml`](../../.github/workflows/tfc-audit-trail.yml)
+copies the audit trail to the same write-once buckets as the state backup,
+under the `tfc-audit/` prefix.
+
+### How the export works
+
+- Runs daily at 05:45 UTC and on manual dispatch. Each run reads the events of
+  the last 26 hours from `GET /api/v2/organization/audit-trail` (all pages), so
+  daily runs overlap by 2 hours.
+- Writes one new object per run:
+  `tfc-audit/<org>/<yyyy>/<mm>/<dd>/<since>_<until>_run-<id>-<attempt>.ndjson`,
+  one JSON event per line. It never overwrites an object. Because the windows
+  overlap, the same event can be in two objects: de-duplicate by the event
+  `id`.
+- Is off until the secret `TFC_TOKEN_AUDIT_TRAIL` is set: a scheduled run then
+  skips with a warning, and a manual dispatch fails. Once the secret is set,
+  the run fails closed. An incomplete target, an API error or an unexpected
+  response shape fails it, and nothing is written.
+- A gap longer than 14 days loses events for good. Treat a failed run as an
+  incident. To catch up, run the workflow by hand with `lookback_hours` up to
+  `336`.
+
+### Setup
+
+1. The organization needs HCP Terraform Standard or Premium. The audit trail
+   API is not available on other editions or on Terraform Enterprise.
+2. The API refuses user and team tokens. It accepts an organization token or
+   an **audit trail token**. Use the audit trail token: it exists for pulling
+   audit trail data, while an organization token can manage the organization's
+   teams, workspaces and settings. A member of the owners team creates it, with
+   an expiry (at most 90 days):
+
+   ```bash
+   curl --header "Authorization: Bearer $OWNER_TOKEN" \
+     --header "Content-Type: application/vnd.api+json" --request POST \
+     --data '{"data":{"type":"authentication-token","attributes":{"expired-at":"2027-02-01T00:00:00.000Z"}}}' \
+     "https://app.terraform.io/api/v2/organizations/<org>/authentication-token?token=audit-trails"
+   ```
+
+   An organization has one audit trail token. Creating a new one replaces the
+   old one, so an existing integration (for example a SIEM app) that uses it
+   stops working. Share the token with that integration, or rotate both
+   together.
+3. Store the token as the secret `TFC_TOKEN_AUDIT_TRAIL` in a GitHub
+   environment named `tfc-audit-trail`, with deployment branches limited to
+   `main` ([CI secrets](../guides/CI_SECRETS.md#environment-scoped-secrets)).
+   Store it in no other environment and not at repository level, so no other
+   job can read it.
+4. Allow the new environment on the existing targets:
+   - AWS: add `repo:<owner>/<repo>:environment:tfc-audit-trail` to the `sub`
+     condition of the role in `STATE_BACKUP_AWS_ROLE_ARN`, and allow
+     `s3:PutObject` and `s3:GetObject` on the `tfc-audit/*` prefix as well.
+   - GCP: add the `tfc-audit-trail` environment to the attribute condition of
+     the provider in `STATE_BACKUP_GCP_WIF_PROVIDER`. The service account's
+     bucket roles already cover every prefix.
+5. Run the workflow once by hand (Actions, HCP Terraform Audit Trail Export,
+   Run workflow) and check the summary: the event count and the object name.
+
+How the workflow limits the token's exposure: the token is in one environment
+that only `main` can deploy to. The job checks out no repository code. Only
+the "Fetch audit trail" step receives the token, and that step runs `curl` and
+`jq` only. The cloud login actions run before it, and the upload step after it
+gets no token.
+
+### Read the exported events
+
+```bash
+# AWS
+aws s3 ls "s3://<bucket>/tfc-audit/<org>/2026/11/12/"
+aws s3 cp "s3://<bucket>/tfc-audit/<org>/2026/11/12/<object>.ndjson" - \
+  | jq -c '{timestamp, who: .auth.description, action: .resource.action, type: .resource.type, id: .resource.id}'
+# GCP
+gcloud storage cat "gs://<bucket>/tfc-audit/<org>/2026/11/12/*.ndjson" \
+  | jq -s 'unique_by(.id) | .[] | {timestamp, who: .auth.description, action: .resource.action}'
+```
 
 ## Related
 

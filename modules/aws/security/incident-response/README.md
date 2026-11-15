@@ -121,7 +121,7 @@ The following resources are created:
 - resource.aws_cloudwatch_event_target.isolate (modules/aws/security/incident-response/main.tf#L93)
 - resource.aws_iam_role.forensics_snapshot (modules/aws/security/incident-response/main.tf#L141)
 - resource.aws_iam_role.isolation_lambda (modules/aws/security/incident-response/main.tf#L23)
-- resource.aws_iam_role_policy.forensics_kms (modules/aws/security/incident-response/main.tf#L172)
+- resource.aws_iam_role_policy.forensics_kms (modules/aws/security/incident-response/main.tf#L175)
 - resource.aws_lambda_function.isolate (modules/aws/security/incident-response/main.tf#L62)
 - resource.aws_lambda_permission.eventbridge (modules/aws/security/incident-response/main.tf#L103)
 - resource.aws_security_group.quarantine (modules/aws/security/incident-response/main.tf#L116)
@@ -133,6 +133,7 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_enable_forensics_kms_grant"></a> [enable\_forensics\_kms\_grant](#input\_enable\_forensics\_kms\_grant) | Grant the forensics snapshot-sharing role kms:Decrypt/DescribeKey/CreateGrant on forensics\_kms\_key\_arn with a plan-safe count. Use true when forensics\_kms\_key\_arn comes from a key created in the same plan (its ARN is unknown until apply); a precondition then requires the ARN to be non-empty. Null (default) grants when forensics\_kms\_key\_arn is non-empty, which needs the ARN known at plan. False creates no grant. | `bool` | `null` | no |
 | <a name="input_enable_incident_response"></a> [enable\_incident\_response](#input\_enable\_incident\_response) | Master switch for the incident-response automation. When false, no Lambda, EventBridge rule, or forensics role is created. | `bool` | `true` | no |
 | <a name="input_forensics_account_id"></a> [forensics\_account\_id](#input\_forensics\_account\_id) | 12-digit AWS account ID of the forensics account that is trusted to assume the snapshot-sharing role. Required when enable\_incident\_response is true. | `string` | `""` | no |
 | <a name="input_forensics_kms_key_arn"></a> [forensics\_kms\_key\_arn](#input\_forensics\_kms\_key\_arn) | ARN of the forensics CMK. When set, the forensics snapshot-sharing role is granted kms:Decrypt/DescribeKey/CreateGrant on it (scoped by aws:PrincipalOrgID) so shared encrypted snapshots are usable in the forensics account. Empty (default) omits the grant. | `string` | `""` | no |
@@ -145,6 +146,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_forensics_kms_grant_enabled"></a> [forensics\_kms\_grant\_enabled](#output\_forensics\_kms\_grant\_enabled) | True when the forensics role is granted use of forensics\_kms\_key\_arn (known at plan, even when the key ARN is not). |
 | <a name="output_forensics_role_arn"></a> [forensics\_role\_arn](#output\_forensics\_role\_arn) | ARN of the forensics snapshot-sharing role, or null when disabled. |
 | <a name="output_guardduty_rule_arn"></a> [guardduty\_rule\_arn](#output\_guardduty\_rule\_arn) | ARN of the EventBridge rule matching high-severity GuardDuty findings, or null when disabled. |
 | <a name="output_isolation_lambda_arn"></a> [isolation\_lambda\_arn](#output\_isolation\_lambda\_arn) | ARN of the isolation Lambda, or null when incident response is disabled. |

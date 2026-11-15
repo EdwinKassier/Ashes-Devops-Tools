@@ -195,7 +195,7 @@ variable "production_workload_environments" {
 }
 
 variable "workload_folder_roles" {
-  description = "Roles each workload plan/apply SA holds on its OWN environment folder. Also the allow-list (with network_folder_roles) for the projects-apply SA's delegated folder-IAM grant, except the IAM-controlling roles (projectIamAdmin, serviceAccountAdmin, serviceAccountKeyAdmin, serviceAccountTokenCreator, workloadIdentityPoolAdmin): those are never delegable, and gcp-organization grants them directly. Avoid roles/owner: anything else listed here becomes grantable on the environment folders by projects-apply."
+  description = "Roles each workload plan/apply SA holds on its OWN environment folder. Also the allow-list (with network_folder_roles) for the projects-apply SA's delegated folder-IAM grant, except the roles that control IAM, identities, data-plane IAM or project ownership (projectIamAdmin, serviceAccountAdmin, serviceAccountKeyAdmin, serviceAccountTokenCreator, workloadIdentityPoolAdmin, serviceAccountUser, secretmanager.admin, cloudkms.admin, storage.admin, run.admin, bigquery.admin, pubsub.admin, artifactregistry.admin, backupdr.admin, resourcemanager.projectCreator): those are never delegable, and gcp-organization grants them directly. Avoid roles/owner: anything else listed here becomes grantable on the environment folders by projects-apply."
   type = object({
     plan  = list(string)
     apply = list(string)
@@ -220,6 +220,7 @@ variable "workload_folder_roles" {
       "roles/container.clusterViewer",
       "roles/monitoring.viewer",
       "roles/osconfig.patchDeploymentViewer",
+      "roles/backupdr.viewer",
     ]
     apply = [
       "roles/resourcemanager.projectIamAdmin",
@@ -245,6 +246,7 @@ variable "workload_folder_roles" {
       "roles/cloudsql.admin",                 # app-services databases
       "roles/container.admin",                # optional GKE Autopilot
       "roles/osconfig.patchDeploymentAdmin",  # VM Manager patch deployments (ops/os-config)
+      "roles/backupdr.admin",                 # Backup and DR vault + Cloud SQL plan (backup/backup-vault)
     ]
   }
 
@@ -354,6 +356,23 @@ variable "plan_viewer_role_id" {
   validation {
     condition     = can(regex("^[a-zA-Z0-9_.]{3,64}$", var.plan_viewer_role_id))
     error_message = "plan_viewer_role_id must be 3-64 characters of letters, digits, '_' and '.'."
+  }
+}
+
+variable "logging_config_viewer_role_id" {
+  description = "role_id of the org-level custom role that gives the organization plan identity read-only Cloud Logging configuration access (sinks, settings, buckets, links, metrics, views, exclusions) without log entries. It replaces roles/logging.viewer, which reads the log entries of every project. A deleted custom role ID is unusable for 37 days, so change it if you recreate the role within that window."
+  type        = string
+  default     = "landingZoneLoggingConfigViewer"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9_.]{3,64}$", var.logging_config_viewer_role_id))
+    error_message = "logging_config_viewer_role_id must be 3-64 characters of letters, digits, '_' and '.'."
+  }
+
+  validation {
+    condition     = var.logging_config_viewer_role_id != var.plan_viewer_role_id
+    error_message = "logging_config_viewer_role_id must differ from plan_viewer_role_id: both are custom roles in the same organization."
   }
 }
 
@@ -492,4 +511,48 @@ variable "phase0_admin_impersonation_expires_at" {
   description = "RFC 3339 UTC timestamp after which the phase-0 admin_email -> terraform-admin impersonation grant stops working (IAM condition). Set it to the end of the bootstrap window. Null = no expiry (a check warns on production estates)."
   type        = string
   default     = null
+}
+
+variable "organization_apply_grantable_roles" {
+  description = "Roles the gcp-organization apply SA may add or remove through its org-level iam.securityAdmin, anywhere in the organization: the grant carries the condition modifiedGrantsByRole.hasOnly(<this list>). The default is every role the organization stage grants that way: billing.admin (billing admin groups on the org), logging.bucketWriter and logging.logWriter (log-sink writer identities on the audit project), and storage.objectCreator and cloudkms.cryptoKeyEncrypterDecrypter (sink writers and service agents on the audit buckets and keys of a separate logging project). Folder IAM goes through folderIamAdmin and needs no entry. At most 10 roles. Roles that control IAM, identities, projects or PAM are rejected: organization-apply could grant one to itself and reach roles/iam.denyAdmin."
+  type        = list(string)
+  default = [
+    "roles/billing.admin",
+    "roles/logging.bucketWriter",
+    "roles/logging.logWriter",
+    "roles/storage.objectCreator",
+    "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+  ]
+  nullable = false
+
+  validation {
+    condition     = length(distinct(var.organization_apply_grantable_roles)) >= 1 && length(distinct(var.organization_apply_grantable_roles)) <= 10
+    error_message = "organization_apply_grantable_roles must list 1 to 10 roles: IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list."
+  }
+
+  validation {
+    condition = alltrue([
+      for r in var.organization_apply_grantable_roles :
+      can(regex("^roles/[a-zA-Z0-9.]+$", r)) &&
+      !contains(["roles/owner", "roles/editor"], r) &&
+      !startswith(r, "roles/iam.") &&
+      !startswith(r, "roles/resourcemanager.") &&
+      !startswith(r, "roles/privilegedaccessmanager.") &&
+      !endswith(r, "IamAdmin") &&
+      !endswith(lower(r), "securityadmin")
+    ])
+    error_message = "organization_apply_grantable_roles must hold only predefined roles (roles/...) that control no IAM, identity, project or PAM entitlement: no roles/owner, roles/editor, roles/iam.* (denyAdmin, securityAdmin, serviceAccount*, workloadIdentityPool*, ...), roles/resourcemanager.* (organizationAdmin, folderAdmin, projectIamAdmin, ...), roles/privilegedaccessmanager.*, *IamAdmin or *securityAdmin role, and no custom role. organization-apply could grant such a role to itself and reach roles/iam.denyAdmin."
+  }
+}
+
+variable "organization_admin_members" {
+  description = "Members (group:... or user:...) that hold the standing roles/resourcemanager.organizationAdmin. Granted here by bootstrap-apply, not by gcp-organization: organization-apply may not grant organizationAdmin. gcp-organization fails its plan when a member it expects (gcp.organization_admin_groups, plus the admin users with allow_user_principals_for_break_glass) is missing here. Default [] = none."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for m in var.organization_admin_members : can(regex("^(group|user):[^@]+@[^@]+$", m))])
+    error_message = "organization_admin_members entries must be group:<email> or user:<email>."
+  }
 }

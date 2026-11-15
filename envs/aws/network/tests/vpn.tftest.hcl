@@ -2,10 +2,19 @@
 # VPN stays off when absent. Nothing secret is configured: AWS generates the
 # tunnel keys.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 
 variables {
   landing_zone_config_path = ""
+  alarm_subscriber_emails  = ["netops@acme.io"]
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "ashes-org-log-archive"
   default_tags             = { CostCenter = "networking" }
@@ -87,11 +96,72 @@ run "explicit_vpn_variable_reaches_stage" {
 
   variables {
     enable_vpn = true
-    vpn        = { customer_gateway_ip = "203.0.113.20", customer_gateway_bgp_asn = 65020 }
+    vpn        = { customer_gateway_ip = "203.0.113.20", customer_gateway_bgp_asn = 65020, onprem_cidrs = ["10.200.0.0/24"] }
   }
 
   assert {
     condition     = local.vpn.customer_gateway_ip == "203.0.113.20" && local.vpn.customer_gateway_bgp_asn == 65020
     error_message = "an explicit vpn variable must reach the network-hub stage."
+  }
+}
+
+run "resolver_endpoints_off_without_the_vpn" {
+  command = plan
+
+  assert {
+    condition     = local.enable_resolver_endpoints == null && !module.aws_network_hub.resolver_endpoints_enabled && length(output.resolver_inbound_endpoint_ips) == 0
+    error_message = "With no VPN and no setting, the resolver endpoints must stay off (ARC-21)."
+  }
+}
+
+run "resolver_endpoints_follow_the_vpn_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-vpn.yaml"
+    landing_zone_name        = null
+    log_archive_bucket_name  = null
+    availability_zones       = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs           = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+  }
+
+  assert {
+    condition     = local.enable_resolver_endpoints == null && module.aws_network_hub.resolver_endpoints_enabled
+    error_message = "With the VPN on from config, the stage must turn the resolver endpoints on."
+  }
+}
+
+run "resolver_endpoints_from_config_without_the_vpn" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-resolver-endpoints.yaml"
+    landing_zone_name        = null
+    log_archive_bucket_name  = null
+    availability_zones       = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs           = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+  }
+
+  assert {
+    condition     = local.enable_vpn == false && local.enable_resolver_endpoints == true && module.aws_network_hub.resolver_endpoints_enabled
+    error_message = "aws.network.resolver_endpoints.enabled must turn the resolver endpoints on without the VPN."
+  }
+}
+
+run "resolver_endpoints_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-resolver-endpoints.yaml"
+    landing_zone_name         = null
+    log_archive_bucket_name   = null
+    availability_zones        = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs            = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+    enable_resolver_endpoints = false
+  }
+
+  assert {
+    condition     = local.enable_resolver_endpoints == false && !module.aws_network_hub.resolver_endpoints_enabled && length(output.resolver_inbound_endpoint_ips) == 0
+    error_message = "An explicit enable_resolver_endpoints variable must win over the config file."
   }
 }

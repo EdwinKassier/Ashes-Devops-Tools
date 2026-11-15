@@ -62,6 +62,11 @@ override_data {
         }
         delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
         delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
+        organization_apply_grantable_roles = [
+          "roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter",
+          "roles/logging.logWriter", "roles/storage.objectCreator",
+        ]
+        organization_admin_members = ["group:gcp-org-admins@acme.io"]
       }
     }
   }
@@ -108,14 +113,14 @@ override_module {
     folder_iam_members                 = {}
     enabled_apis                       = []
     organizational_units = {
-      shared = { id = "folders/100", name = "folders/100", display_name = "Shared Services" }
-      dev    = { id = "folders/200", name = "folders/200", display_name = "Development" }
-      prod   = { id = "folders/300", name = "folders/300", display_name = "Production" }
+      shared = { id = "100", name = "folders/100", display_name = "Shared Services" }
+      dev    = { id = "200", name = "folders/200", display_name = "Development" }
+      prod   = { id = "300", name = "folders/300", display_name = "Production" }
     }
     folders = {
-      shared = { id = "folders/100", name = "folders/100", display_name = "Shared Services" }
-      dev    = { id = "folders/200", name = "folders/200", display_name = "Development" }
-      prod   = { id = "folders/300", name = "folders/300", display_name = "Production" }
+      shared = { id = "100", name = "folders/100", display_name = "Shared Services" }
+      dev    = { id = "200", name = "folders/200", display_name = "Development" }
+      prod   = { id = "300", name = "folders/300", display_name = "Production" }
     }
   }
 }
@@ -294,6 +299,8 @@ run "production_environment_with_containment" {
     condition     = module.organization.production_environment_keys == tolist(["prod"])
     error_message = "is_production must flow into the organization stage."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # The bootstrap read is skippable (bootstrap_contract), mirroring gcp-projects:
@@ -314,6 +321,10 @@ run "bootstrap_contract_skips_remote_state" {
       containment_exempt_principals = ["principalSet://goog/group/break-glass@acme.io"]
     })
   }
+
+  # A hand-supplied contract without the gcp-bootstrap allow-list and org-admin
+  # list cannot be checked: the plan warns.
+  expect_failures = [check.supplied_bootstrap_contract_is_current]
 
   assert {
     condition     = length(data.terraform_remote_state.gcp_bootstrap) == 0 && output.admin_project_number == "999988887777"
@@ -381,6 +392,8 @@ run "containment_derived_on_for_production_from_config" {
     condition     = output.admin_containment_enabled == true && jsonencode(local.containment_exempt_principals) == jsonencode(["principalSet://goog/group/gcp-break-glass@acme.io"]) && jsonencode(local.gcp.alert_notification_emails) == jsonencode(["secops@acme.io"]) && length(module.organization.admin_containment_rules) > 0
     error_message = "a production estate must turn containment on with the config break-glass group and alert emails."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # A break-glass group alone derives containment ON, before any production
@@ -423,6 +436,8 @@ run "config_false_waives_containment" {
     condition     = output.admin_containment_enabled == false && length(module.organization.admin_containment_rules) == 0
     error_message = "gcp.admin_containment: false must waive containment for a production estate and plan."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # Production without a break-glass principal fails the plan instead of
@@ -443,7 +458,7 @@ run "production_without_break_glass_fails" {
     }
   }
 
-  expect_failures = [output.contract]
+  expect_failures = [output.contract, check.production_audit_store]
 }
 
 run "production_containment_explicit_opt_out" {
@@ -469,6 +484,8 @@ run "production_containment_explicit_opt_out" {
     condition     = output.admin_containment_enabled == false
     error_message = "an explicit gcp_overrides.enable_admin_containment = false must win over the production default."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # gcp.principal_access_boundary is shared with gcp-bootstrap and gcp-guardrails:
@@ -491,6 +508,8 @@ run "principal_access_boundary_from_config" {
     condition     = local.gcp.enable_principal_access_boundary && contains(flatten([for r in module.organization.admin_containment_rules : r.denied_permissions]), "iam.googleapis.com/principalaccessboundarypolicies.unbind")
     error_message = "gcp.principal_access_boundary: true must turn the boundary (and its containment deny rules) on."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 run "principal_access_boundary_variable_wins_over_config" {
@@ -512,6 +531,8 @@ run "principal_access_boundary_variable_wins_over_config" {
     condition     = !local.gcp.enable_principal_access_boundary && output.principal_access_boundary_policy == null
     error_message = "an explicit gcp_overrides.enable_principal_access_boundary = false must override the config key."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # notifications.emails feeds the control-plane alert channels when neither
@@ -532,6 +553,46 @@ run "emails_feed_gcp_channels" {
   assert {
     condition     = join(",", local.gcp.alert_notification_emails) == "alerts@acme.io"
     error_message = "notifications.emails must feed the GCP control-plane alert channels."
+  }
+}
+
+# compliance.breach_notification_contacts joins the control-plane alert
+# channels, without duplicates.
+run "breach_contacts_join_gcp_channels" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-breach-contacts.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = join(",", local.gcp.alert_notification_emails) == "alerts@acme.io,dpo@acme.io"
+    error_message = "compliance.breach_notification_contacts must join notifications.emails in the alert channels, once each."
+  }
+}
+
+run "breach_contacts_alone_feed_gcp_channels" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-breach-only.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  assert {
+    condition     = join(",", local.gcp.alert_notification_emails) == "dpo@acme.io"
+    error_message = "compliance.breach_notification_contacts alone must feed the alert channels."
   }
 }
 
@@ -689,6 +750,8 @@ run "override_wins_over_config" {
     condition     = output.principal_access_boundary_policy == null && output.log_analytics_bucket_id == null
     error_message = "the overridden values must reach the stage (boundary and Log Analytics off)."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # ... and an unset (or null) key keeps the config value, else the stage default.
@@ -717,6 +780,8 @@ run "unset_override_keeps_config_value" {
     condition     = contains(flatten([for r in module.organization.admin_containment_rules : r.denied_permissions]), "iam.googleapis.com/principalaccessboundarypolicies.unbind")
     error_message = "the config value (boundary on) must reach the stage."
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 # ... and a key unset in both the config file and gcp_overrides takes the stage
@@ -738,5 +803,56 @@ run "unset_everywhere_takes_stage_default" {
   assert {
     condition     = try(local.gcp.strict_folder_policy_environment_keys, null) == null && module.organization.strict_folder_policy_environment_keys == tolist(["prod"])
     error_message = "a key unset in config and gcp_overrides must reach the stage as its default (strict folder bundle on prod)."
+  }
+
+  expect_failures = [check.production_audit_store]
+}
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+    domain                   = null
+    project_prefix           = null
+    billing_account          = null
+    tfc_organization         = null
+    environments             = null
+    gcp_overrides            = {}
+  }
+
+  expect_failures = [var.environments]
+}
+
+# Apply order: a gcp-bootstrap state from before the organizationAdmin move has
+# neither list in its contract. Applying this root then would delete the
+# standing organizationAdmin bindings, so the plan fails.
+run "stale_bootstrap_contract_fails_the_plan" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.gcp_bootstrap
+    values = {
+      outputs = {
+        contract = {
+          admin_project_id      = "acme-admin-abcd"
+          admin_project_number  = "123456789012"
+          terraform_admin_email = "terraform-admin@acme-admin-abcd.iam.gserviceaccount.com"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.bootstrap_grants_org_admins]
+}
+
+run "current_bootstrap_contract_plans" {
+  command = plan
+
+  assert {
+    condition     = length(terraform_data.bootstrap_grants_org_admins) == 1 && local.bootstrap_contract_is_current
+    error_message = "a gcp-bootstrap contract with both lists must pass the apply-order guard."
   }
 }

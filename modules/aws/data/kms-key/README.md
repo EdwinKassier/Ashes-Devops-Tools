@@ -74,10 +74,10 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_kms_alias.this (modules/aws/data/kms-key/main.tf#L221)
-- resource.aws_kms_key.this (modules/aws/data/kms-key/main.tf#L201)
-- resource.terraform_data.deletion_guard (modules/aws/data/kms-key/main.tf#L239)
-- data source.aws_caller_identity.current (modules/aws/data/kms-key/main.tf#L44)
+- resource.aws_kms_alias.this (modules/aws/data/kms-key/main.tf#L245)
+- resource.aws_kms_key.this (modules/aws/data/kms-key/main.tf#L225)
+- resource.terraform_data.deletion_guard (modules/aws/data/kms-key/main.tf#L263)
+- data source.aws_caller_identity.current (modules/aws/data/kms-key/main.tf#L48)
 - data source.aws_partition.current (modules/aws/data/kms-key/partition.tf#L4)
 
 
@@ -91,7 +91,8 @@ The following resources are created:
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | AWS Organizations organization ID (o-xxxxxxxxxx). Used in the aws:SourceOrgID condition that scopes log-service grants to this org. | `string` | n/a | yes |
 | <a name="input_deletion_window_in_days"></a> [deletion\_window\_in\_days](#input\_deletion\_window\_in\_days) | Waiting period, in days, before the CMK is deleted after scheduling deletion. AWS permits 7-30. | `number` | `30` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Create a prevent\_destroy guard that makes any plan which destroys or replaces the KMS key fail. Turning it off does not remove an existing guard: run terraform state rm on the guard first. | `bool` | `true` | no |
-| <a name="input_enable_protection_tag"></a> [enable\_protection\_tag](#input\_enable\_protection\_tag) | Tag the key <protection\_tag\_key> = "true" so the organization deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey/DisableKeyRotation and protection-tag removal except via break-glass. Default false; the security stage enables it for the log-archive, forensics and security-tooling keys. | `bool` | `false` | no |
+| <a name="input_enable_key_user_grants"></a> [enable\_key\_user\_grants](#input\_enable\_key\_user\_grants) | Add a KeyUserGrants statement: key\_user\_arns may call kms:CreateGrant, ListGrants and RevokeGrant for AWS resources only (kms:GrantIsForAWSResource = true), scoped by via\_services when set. Services such as AWS Backup, EBS and RDS use a customer managed key through grants. Default false (no grant statement). | `bool` | `false` | no |
+| <a name="input_enable_protection_tag"></a> [enable\_protection\_tag](#input\_enable\_protection\_tag) | Tag the key <protection\_tag\_key> = "true" so the organization deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey/DisableKeyRotation, alias retargeting or deletion (UpdateAlias/DeleteAlias) and protection-tag removal except via break-glass. Default false; the security stage enables it for the log-archive, forensics and security-tooling keys. | `bool` | `false` | no |
 | <a name="input_key_account_id"></a> [key\_account\_id](#input\_key\_account\_id) | 12-digit ID of the account the key lives in, used for the account-scoped ServiceUsage condition. Null (default) = the provider's account (aws\_caller\_identity). | `string` | `null` | no |
 | <a name="input_key_policy_admin_arns"></a> [key\_policy\_admin\_arns](#input\_key\_policy\_admin\_arns) | Principal ARNs granted kms:PutKeyPolicy — and nothing else — on the CMK. Whoever can rewrite the key policy can grant itself kms:Decrypt, so set this to the break-glass role(s) and keep the pipeline out. When set, the CreateKey lockout safety check is bypassed (the caller is intentionally not a policy admin) and later Terraform key-policy changes must be applied as one of these principals. Empty (default) = legacy behaviour: key\_admin\_arn also holds PutKeyPolicy. | `list(string)` | `[]` | no |
 | <a name="input_key_user_arns"></a> [key\_user\_arns](#input\_key\_user\_arns) | Optional list of principal ARNs granted key USAGE (Encrypt/Decrypt/ReEncrypt/GenerateDataKey/DescribeKey) on the CMK. Kept separate from key\_admin\_arn, which receives management actions only. Empty by default (no general-usage statement). | `list(string)` | `[]` | no |

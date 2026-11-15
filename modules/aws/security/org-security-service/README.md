@@ -118,3 +118,7 @@ The following resources are created:
 | <a name="output_macie_account_id"></a> [macie\_account\_id](#output\_macie\_account\_id) | The Macie account ID in the Security Tooling account, or null when Macie is not enabled. |
 | <a name="output_resource_explorer_index_arn"></a> [resource\_explorer\_index\_arn](#output\_resource\_explorer\_index\_arn) | The Resource Explorer aggregator index ARN, or null when Resource Explorer is not enabled. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

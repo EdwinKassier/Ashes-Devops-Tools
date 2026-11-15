@@ -59,3 +59,26 @@ run "accepts_default_cdn_policy" {
   command = plan
   # Verifies the default {} resolves to CACHE_ALL_STATIC without error
 }
+
+run "rejects_tls_1_0_minimum" {
+  command = plan
+
+  variables {
+    domains         = ["example.com"]
+    min_tls_version = "TLS_1_0"
+  }
+
+  expect_failures = [var.min_tls_version]
+}
+
+run "rejects_tls_1_3_without_restricted_profile" {
+  command = plan
+
+  variables {
+    domains            = ["example.com"]
+    min_tls_version    = "TLS_1_3"
+    ssl_policy_profile = "MODERN"
+  }
+
+  expect_failures = [var.ssl_policy_profile]
+}

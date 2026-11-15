@@ -10,10 +10,29 @@ cd "$(dirname "$0")/.." || exit 1
 fail=0
 note() { echo "  - $1"; fail=1; }
 
-echo "==> AWS region regex is canonical (single form, no single-digit-ordinal drift)"
-# Canonical: ^[a-z]{2}-[a-z]+-[1-9][0-9]?$  ·  Rejected: the older ...-[0-9]$ form.
-drift=$(grep -rln 'a-z]{2}-\[a-z\]+-\[0-9\]\$' --include='*.tf' modules envs 2>/dev/null || true)
-[ -z "$drift" ] || { echo "$drift" | while read -r f; do note "region regex drift (use [1-9][0-9]?\$): $f"; done; fail=1; }
+echo "==> AWS region and ARN partition regexes are canonical (one form each)"
+# Region canonical: ^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$
+#   commercial and China names keep the old two-letter form; GovCloud (us-gov-*)
+#   and the European Sovereign Cloud (eusc-<cc>-*) are named explicitly.
+# Partition canonical (strict ARN checks): arn:aws(-us-gov|-cn|-eusc)?:
+# Every .tf or script regex that starts with a two-letter region prefix must be
+# the canonical one; the older forms (...-[0-9]$, (-[a-z]+)+, the pre-sovereign
+# two-letter-only form) and the pre-sovereign partition list are drift.
+region_canon='^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$'
+drift=$(grep -rnoE --include='*.tf' --include='*.sh' --exclude-dir='.terraform' \
+  '\^(\(\[a-z\]\{2\}[^$]*|\[a-z\]\{2\}[^$]*)\$' modules envs scripts templates 2>/dev/null \
+  | grep -vF -- "${region_canon}" | grep -v '^scripts/check-consistency.sh:' || true)
+[ -z "$drift" ] || { echo "$drift" | while read -r f; do note "region regex drift (use ${region_canon}): $f"; done; fail=1; }
+pdrift=$(grep -rnF --include='*.tf' --exclude-dir='.terraform' 'aws(-us-gov|-cn)?' modules envs templates 2>/dev/null || true)
+[ -z "$pdrift" ] || { echo "$pdrift" | while read -r f; do note "ARN partition drift (use aws(-us-gov|-cn|-eusc)?): $f"; done; fail=1; }
+
+echo "==> Audit-retention framework floors are identical in every root that reads compliance.frameworks"
+# Each such config.tf holds one retention_floor_days line; all copies must match.
+floors="$(grep -rhoE 'retention_floor_days *= *\{[^}]*\}' --include='config.tf' --exclude-dir='.terraform' envs 2>/dev/null | sed 's/  */ /g' | sort -u || true)"
+[ "$(printf '%s\n' "$floors" | grep -c . || true)" -le 1 ] || note "retention_floor_days drift: $(printf '%s' "$floors" | tr '\n' '|')"
+nofloor=$(grep -rl 'local\.lz\.compliance\.frameworks' --include='config.tf' --exclude-dir='.terraform' envs 2>/dev/null \
+  | while read -r f; do grep -q 'retention_floor_days *=' "$f" || echo "$f"; done || true)
+[ -z "$nofloor" ] || { echo "$nofloor" | while read -r f; do note "reads compliance.frameworks without retention_floor_days: $f"; done; fail=1; }
 
 echo "==> AWS provider pin is the canonical floored pin in every AWS versions.tf"
 badaws=$(grep -rl 'source *= *"hashicorp/aws"' --include='versions.tf' --exclude-dir='.terraform' modules/aws envs/aws 2>/dev/null \
@@ -110,6 +129,56 @@ for preset in examples/presets/*.tfvars; do
   done
 done
 
+echo "==> Every committed workspace-variable entry is a variable of its workspace's root"
+# tfc-admin writes each `workspaces.<ws>.<key>` of a tfc-workspaces YAML file as
+# a workspace variable; a Terraform-category key the root does not declare is
+# silently ignored by the run. Checked: config/tfc-workspaces.example.yaml, any
+# committed config/**/tfc-workspaces.yaml, and every fenced YAML block of
+# examples/presets/README.md that starts with `workspaces:`. Workspace => root:
+# <cloud>-workload-<env> => envs/<cloud>/workload, saas-<name> => envs/saas,
+# tfc-admin => envs/tfc-admin, <cloud>-<layer> => envs/<cloud>/<layer>.
+# Format: `workspaces:`, a workspace name at indent 2, a key at indent 4; a long
+# form with `category: env` (inline or at indent 6) is an env var and skipped.
+ws_root_dir() {
+  case "$1" in
+    gcp-workload-*) echo envs/gcp/workload ;;
+    aws-workload-*) echo envs/aws/workload ;;
+    saas-*) echo envs/saas ;;
+    tfc-admin) echo envs/tfc-admin ;;
+    gcp-* | aws-*) echo "envs/${1%%-*}/${1#*-}" ;;
+    *) echo "" ;;
+  esac
+}
+ws_entries() {
+  awk '
+    function flush() { if (key != "") print ws, key, cat; key = "" }
+    /^workspaces:/ { inw = 1; next }
+    inw && /^[^[:space:]#]/ { flush(); inw = 0 }
+    !inw { next }
+    /^  [a-z0-9][a-z0-9-]*:/ { flush(); ws = $1; sub(/:$/, "", ws); next }
+    /^    [A-Za-z_][A-Za-z0-9_]*:/ {
+      flush(); key = $1; sub(/:$/, "", key)
+      cat = ($0 ~ /category:[[:space:]]*"?env"?/) ? "env" : "terraform"; next
+    }
+    /^      category:[[:space:]]*"?env"?/ { cat = "env" }
+    END { flush() }'
+}
+ws_files=$(find config -name 'tfc-workspaces*.yaml' -not -path '*/tests/*' 2>/dev/null | sort)
+ws_blocks=$(awk '/^```yaml$/ { inb = 1; first = 1; next } /^```$/ { inb = 0 } inb && first { keep = ($0 ~ /^workspaces:/); first = 0 } inb && keep' examples/presets/README.md)
+[ -n "$ws_blocks" ] || note "examples/presets/README.md has no \`workspaces:\` YAML block (the VCS-driven preset example is missing)"
+while read -r src ws key cat; do
+  [ -n "$ws" ] && [ "$cat" = terraform ] || continue
+  dir=$(ws_root_dir "$ws")
+  if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+    note "$src: workspace '$ws' maps to no root under envs/"
+    continue
+  fi
+  grep -qs "variable \"$key\"" "$dir"/*.tf || note "$src: $ws sets '$key', which is not a variable of $dir"
+done < <(
+  for f in $ws_files; do ws_entries < "$f" | sed "s|^|$f |"; done
+  printf '%s\n' "$ws_blocks" | ws_entries | sed 's|^|examples/presets/README.md |'
+)
+
 echo "==> Every preset referenced in the docs exists"
 for ref in $(grep -rhoE 'presets/[a-z0-9-]+\.tfvars' --include='*.md' --include='*.tf' --exclude-dir='.terraform' --exclude-dir='audit' . 2>/dev/null | sort -u); do
   [ -f "examples/$ref" ] || note "docs reference missing preset examples/$ref"
@@ -140,6 +209,18 @@ for pf in envs/gcp/*/providers.tf; do
   fi
 done
 
+echo "==> gcp-projects turns off google provider batching on every google/google-beta provider"
+# projects-apply's delegated folderIamAdmin carries one modifiedGrantsByRole
+# hasOnly() condition per 10 roles (gcp-organization). Provider IAM batching
+# merges the folder IAM changes on one folder into one setIamPolicy call, which
+# can span two conditions and is then denied on a real apply (mocks never show it).
+pf=envs/gcp/projects/providers.tf
+nprov=$(grep -cE '^provider "google(-beta)?"' "$pf" || true)
+nbatch=$(grep -cE '^[[:space:]]*enable_batching[[:space:]]*=[[:space:]]*false' "$pf" || true)
+if [ "$nprov" -eq 0 ] || [ "$nbatch" -lt "$nprov" ]; then
+  note "$pf: $nprov google provider block(s) but $nbatch 'enable_batching = false' setting(s)"
+fi
+
 echo "==> GitHub WIF tenant condition is the one canonical string wherever it is rendered or checked"
 # Canonical: assertion.repository_owner_id == "<id>" (double quotes, nothing
 # appended). custom.wifProviderTenantPinned (stages/organization) compares a
@@ -168,17 +249,37 @@ if [ -n "$prov" ]; then
   fail=1
 fi
 
-echo "==> No plan-time code execution outside the allowlist (external/http data sources, provisioners)"
+echo "==> No plan-time code execution, unlisted providers or endpoint overrides (HCL/JSON parse)"
 # A plan runs with the workspace's credentials and environment variables (TFE_TOKEN,
-# SUPABASE_ACCESS_TOKEN, cloud plan identities). A data "external" or data "http"
-# block in a PR runs during the speculative plan and can send those values out;
-# a provisioner runs during apply. Only the reviewed callers below may use them.
+# SUPABASE_ACCESS_TOKEN, cloud plan identities), and HCP Terraform runs the OPA
+# policy no_plan_time_code_execution only after the plan. This gate enforces the
+# same rules on the repository source in the pull request, so a violation cannot
+# merge when Validation Summary is a required check (a speculative plan that
+# HCP Terraform starts for the same pull request is not stopped). It parses every .tf and
+# .tf.json file (python-hcl2, hash-locked in .github/requirements/hcl2.txt) and
+# reads its allowlists from policies/opa/no_plan_time_code_execution*.rego. It
+# also covers provisioners in removed blocks, which the plan JSON does not show.
 # The TFC permission model (runs = read on secret-bearing projects) covers CLI
 # uploads that never reach this check.
-exec_allow='^(modules/supabase/vault-secrets/main\.tf|tests/e2e/aws/main\.tf):'
-execs=$(grep -rnE '^[[:space:]]*(data[[:space:]]+"(external|http)"|provisioner[[:space:]]+"|source[[:space:]]*=[[:space:]]*"hashicorp/(external|http)")' \
-  --include='*.tf' --exclude-dir='.terraform' modules envs examples templates tests 2>/dev/null | grep -vE "$exec_allow" || true)
-[ -z "$execs" ] || { echo "$execs" | while read -r l; do note "plan/apply-time code execution outside the allowlist: $l"; done; fail=1; }
+python3 -P scripts/check-plan-time-exec.py \
+  || note "plan/apply-time code execution or credential redirection (see the errors above; exit 2 = python-hcl2 missing or the policy unreadable)"
+
+echo "==> Non-delegable workload folder roles are identical in bootstrap, organization and projects"
+# gcp-bootstrap drops these roles from projects-apply's delegation allow-list,
+# gcp-organization grants them to the workload SAs directly, and gcp-projects
+# skips them. A role missing from one copy is either delegable (projects-apply
+# could grant it to itself) or granted by no stage.
+python3 - <<'PY_ROLES' || note "non-delegable workload folder role lists differ between bootstrap, organization and projects"
+import re, sys
+def roles(path, start):
+    s = open(path, encoding="utf-8").read()
+    i = s.index("[", s.index(start))
+    return sorted(re.findall(r'"(roles/[^"]+)"', s[i:s.index("]", i)]))
+a = roles("modules/gcp/stages/bootstrap/service_accounts.tf", "non_delegable_folder_roles = [")
+b = roles("modules/gcp/stages/organization/variables.tf", 'variable "non_delegable_workload_folder_roles"')
+c = roles("modules/gcp/stages/projects/variables.tf", 'variable "non_delegable_workload_folder_roles"')
+sys.exit(0 if a and a == b == c else 1)
+PY_ROLES
 
 echo "==> Lockfiles: multi-platform and one version per provider (Renovate owns them)"
 # A lockfile written by a plain local `terraform init` carries one h1: hash per
@@ -251,6 +352,88 @@ done
 for extra in $(printf '%s\n' "$trigger_map" | awk '$2 !~ /^modules\// { print $2 }' | sort -u); do
   [ -d "$extra" ] || note "root_trigger_dirs lists $extra, which is not a directory"
 done
+
+echo "==> Allowlists of any-typed inputs match their stage types (scripts/check-any-allowlists.py)"
+# Each `type = any` input's key allowlist (<owner>/allowed_keys.tf) must equal the
+# attributes of the stage object it is forwarded to (scripts/any-allowlists.json).
+python3 -I scripts/check-any-allowlists.py >/dev/null || note "an any-typed input's allowlist drifted from its stage type (see the errors above)"
+
+echo "==> Example tfvars set no identity or placement inputs (scripts/check-example-tfvars.sh)"
+./scripts/check-example-tfvars.sh >/dev/null || note "examples/*.tfvars.example sets an input config/landing-zone.yaml owns"
+
+echo "==> Example roots pass only attributes the module types declare (scripts/check-example-module-attrs.py)"
+# Terraform drops an object attribute the variable type does not declare, so
+# terraform validate passes an example whose setting never takes effect.
+python3 -I scripts/check-example-module-attrs.py >/dev/null || note "an example root passes a module attribute the module does not declare (run python3 scripts/check-example-module-attrs.py)"
+
+echo "==> Compliance matrices cite existing paths and unique IDs (scripts/check-matrix-paths.sh)"
+./scripts/check-matrix-paths.sh || note "docs/compliance matrices cite a missing path or repeat a control ID"
+
+echo "==> Production is decided by is_production only (scripts/check-production-rule.sh)"
+./scripts/check-production-rule.sh >/dev/null || note "a root decides production from an environment name"
+
+echo "==> tfc-admin and tfc_admin_guard refuse the same code-execution env vars (scripts/check-env-pattern-sync.sh)"
+./scripts/check-env-pattern-sync.sh >/dev/null || note "code_exec_env_pattern (envs/tfc-admin/main.tf) and steering_env_pattern (policies/opa-destructive/tfc_admin_guard.rego) list different env vars"
+
+echo "==> Deployment-tag patterns agree between terraform-apply.yml and its rulesets (scripts/check-tag-patterns.py)"
+python3 -I scripts/check-tag-patterns.py >/dev/null || note "a documented deployment-tag ruleset or tfc-readonly policy differs from terraform-apply.yml on.push.tags (run python3 scripts/check-tag-patterns.py)"
+
+echo "==> check-jsonschema pin agrees across CI, setup.sh and pre-commit"
+cj_ci="$(grep -oE 'check-jsonschema==[0-9.]+' .github/workflows/terraform-plan.yml | head -1 | cut -d= -f3)"
+cj_pc="$(awk '/check-jsonschema$/{f=1} f && /rev:/{print $2; exit}' .pre-commit-config.yaml)"
+[ -n "$cj_ci" ] || note ".github/workflows/terraform-plan.yml: no check-jsonschema==<version> pin found"
+grep -q 'check-jsonschema' scripts/setup.sh || note "scripts/setup.sh does not install check-jsonschema"
+[ -z "$cj_pc" ] || [ "$cj_pc" = "$cj_ci" ] || note "check-jsonschema: CI ${cj_ci}, pre-commit ${cj_pc}"
+
+echo "==> Deletion protection has one input name: enable_<thing>_deletion_protection"
+dp="$(grep -rnE --include='variables.tf' '^variable "(deletion_protection|delete_protection|[a-z_]+_enable_deletion_protection)"' envs modules | grep -v '/\.terraform/' || true)"
+dp_new="$(printf '%s\n' "${dp}" | while IFS=: read -r f n _; do
+  [[ -z "${f}" ]] || sed -n "${n},/^}/p" "${f}" | grep -q 'deprecated *=' || printf '%s\n' "${f}:${n}"
+done || true)"
+[[ -z "${dp_new}" ]] || note "deletion-protection input without the enable_ prefix and no deprecated marker: ${dp_new}"
+
+echo "==> The network log sink (CMP-02) has no IAM binding of its own"
+# It shares the org Logging service account with org-audit-sink. A binding of
+# its writer identity would duplicate the audit sink's grant (and remove it when
+# the export is turned off), and containment denies setIamPolicy on the bucket.
+nlgrant="$(awk '/^resource "google_[a-z_]*iam_(member|binding|policy)"/ { inres = 1; hdr = $0 } inres && /org_network_logs_sink/ { print hdr } /^}/ { inres = 0 }' modules/gcp/governance/cloud-audit-logs/*.tf)"
+[[ -z "${nlgrant}" ]] || note "IAM resource bound to org_network_logs_sink in modules/gcp/governance/cloud-audit-logs: ${nlgrant}"
+
+echo "==> An example's provider constraints equal its module's"
+# provider_pin <versions.tf> <name>: the version string of required_providers.<name>.
+provider_pin() {
+  awk -v p="$2" '
+    $0 ~ "^[[:space:]]*" p "[[:space:]]*=[[:space:]]*\\{" { inblk = 1; next }
+    inblk && /version[[:space:]]*=/ { sub(/.*version[[:space:]]*=[[:space:]]*/, ""); gsub(/"/, ""); print; exit }
+    inblk && /}/ { inblk = 0 }
+  ' "$1" 2>/dev/null
+}
+while IFS= read -r ex; do
+  mod="${ex%%/examples/*}"
+  [[ -f "${mod}/versions.tf" ]] || continue
+  for p in archive random null tls time; do
+    m="$(provider_pin "${mod}/versions.tf" "$p")"
+    e="$(provider_pin "${ex}/versions.tf" "$p")"
+    [[ -z "$m" || -z "$e" || "$m" == "$e" ]] || note "${ex}/versions.tf ${p} \"${e}\" differs from ${mod}/versions.tf \"${m}\""
+  done
+done < <(find modules -path '*/examples/*' -name versions.tf ! -path '*/.terraform/*' -exec dirname {} \; | sort)
+
+echo "==> Every module with examples/basic links it from its README"
+# readme_links_example <module dir>: its README links examples/basic/main.tf
+# (an "## Examples" section after END_TF_DOCS, as in templates/aws/module).
+readme_links_example() { grep -qF '](examples/basic/main.tf)' "$1/README.md" 2>/dev/null; }
+while IFS= read -r mod; do
+  readme_links_example "${mod}" || note "${mod}/README.md does not link examples/basic/main.tf (add an \"## Examples\" section after END_TF_DOCS)"
+done < <(find modules -type d -path '*/examples/basic' ! -path '*/.terraform/*' | sed 's#/examples/basic$##' | sort)
+
+echo "==> Every workflow job that holds a secret or an OIDC token blocks egress"
+./scripts/check-github-governance.sh || note "a credential-holding job is not harden-runner egress-policy: block (see above)"
+
+echo "==> Every workflow run: step that pipes runs under pipefail (shell: bash)"
+python3 -I scripts/check-workflow-pipefail.py || note "a workflow run: step pipes without pipefail (see above)"
+
+echo "==> GCP region and zone regexes accept multi-digit regions (europe-west10)"
+./scripts/check-gcp-region-regex.sh || note "a GCP region/zone regex accepts a single region digit (see above)"
 
 if [ "$fail" -eq 0 ]; then
   echo "OK: all consistency invariants hold."

@@ -86,7 +86,7 @@ run "unknown_route_tier_rejected" {
   expect_failures = [var.tgw_route_tiers]
 }
 
-run "ipam_default_plans_legacy_netmask_shape" {
+run "ipam_default_is_explicit_cidr" {
   command = plan
 
   variables {
@@ -94,21 +94,102 @@ run "ipam_default_plans_legacy_netmask_shape" {
   }
 
   assert {
-    condition     = local.ipam_allocation == "netmask"
-    error_message = "the default must keep the legacy pool + netmask_length shape (explicit CIDR would replace existing VPCs)"
+    condition     = local.ipam_allocation == "explicit_cidr"
+    error_message = "The spoke must request vpc_cidr explicitly from the pool by default (ARC-1)."
   }
 }
 
-run "ipam_explicit_cidr_is_opt_in" {
+run "ipam_legacy_netmask_is_opt_out" {
   command = plan
+
+  # In netmask mode IPAM fills cidr_block, so it is unknown at plan. Pin the
+  # allocation to vpc_cidr, so the vpc module's subnet-math check passes.
+  override_resource {
+    target          = module.vpc.aws_vpc.this
+    override_during = plan
+    values = {
+      cidr_block = "10.72.0.0/16"
+    }
+  }
 
   variables {
     ipam_pool_id       = "ipam-pool-0123456789abcdef0"
-    ipam_explicit_cidr = true
+    ipam_explicit_cidr = false
   }
 
   assert {
-    condition     = local.ipam_allocation == "explicit_cidr"
-    error_message = "ipam_explicit_cidr must select the explicit-CIDR allocation"
+    condition     = local.ipam_allocation == "netmask"
+    error_message = "ipam_explicit_cidr = false must keep the legacy netmask shape."
+  }
+}
+
+run "spoke_associates_the_dns_profile" {
+  command = plan
+
+  variables {
+    environment         = "dev"
+    resolver_profile_id = "rp-0123456789abcdef"
+  }
+
+  assert {
+    condition     = length(aws_route53profiles_association.spoke) == 1 && aws_route53profiles_association.spoke[0].profile_id == "rp-0123456789abcdef" && aws_route53profiles_association.spoke[0].name == "workload-dev-dns-profile"
+    error_message = "A hub-attached spoke must associate the org Route 53 Profile, so it gets DNS Firewall, forward rules and the endpoint zones."
+  }
+}
+
+run "no_profile_no_association" {
+  command = plan
+
+  variables {
+    environment = "dev"
+  }
+
+  assert {
+    condition     = length(aws_route53profiles_association.spoke) == 0
+    error_message = "Without a profile ID (standalone or an older network contract) nothing is associated."
+  }
+}
+
+# CMP-3: the systems_manager child is not overridden here either, so these runs
+# check that the stage passes the patch inputs through.
+run "patch_install_on_by_default" {
+  command = plan
+
+  variables {
+    environment = "dev"
+  }
+
+  assert {
+    condition     = module.systems_manager[0].patch_install_schedule == "cron(0 3 ? * SUN *)" && module.systems_manager[0].patch_operating_systems == tolist(["AMAZON_LINUX_2023"]) && module.systems_manager[0].patch_install_targets.key == "InstanceIds"
+    error_message = "the workload account must get the weekly install association and an Amazon Linux 2023 baseline by default."
+  }
+}
+
+run "patch_install_target_tag_reaches_module" {
+  command = plan
+
+  variables {
+    environment              = "dev"
+    patch_install_target_tag = { key = "PatchInstall", value = "true" }
+  }
+
+  assert {
+    condition     = module.systems_manager[0].patch_install_targets.key == "tag:PatchInstall" && module.systems_manager[0].patch_install_targets.values[0] == "true"
+    error_message = "patch_install_target_tag must narrow the install association to tagged instances."
+  }
+}
+
+run "patch_install_opt_out" {
+  command = plan
+
+  variables {
+    environment             = "dev"
+    enable_patch_install    = false
+    patch_operating_systems = ["AMAZON_LINUX_2", "AMAZON_LINUX_2023"]
+  }
+
+  assert {
+    condition     = module.systems_manager[0].patch_install_schedule == null && module.systems_manager[0].patch_operating_systems == tolist(["AMAZON_LINUX_2", "AMAZON_LINUX_2023"])
+    error_message = "enable_patch_install = false must drop the install association and patch_operating_systems must reach the module."
   }
 }

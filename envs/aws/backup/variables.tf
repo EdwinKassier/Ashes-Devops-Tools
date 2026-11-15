@@ -3,9 +3,27 @@
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "tfc_organization" {
@@ -59,7 +77,7 @@ variable "aws_region" {
   default     = null
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
     error_message = "aws_region (or org.regions.aws in config/landing-zone.yaml) must be a valid AWS region name, e.g. eu-west-2."
   }
 }
@@ -101,6 +119,40 @@ variable "changeable_for_days" {
     condition     = var.changeable_for_days >= 3
     error_message = "changeable_for_days must be at least 3 (AWS Compliance-mode Vault Lock minimum cooling-off period)."
   }
+}
+
+variable "enable_central_copy" {
+  description = "Copy every member recovery point to a new CMK-encrypted, Compliance-mode Vault-Locked copy vault (org-backup-copy-vault) in the backup account, enable org-wide cross-account backup and point the BACKUP_POLICY at the <vault_name>-cmk member vault. IRREVERSIBLE after changeable_for_days (UPGRADING.md). Apply aws-organization first with the same compliance.backup settings. Null = compliance.backup.copy_to_central_vault from config/landing-zone.yaml, else false."
+  type        = bool
+  default     = null
+}
+
+variable "copy_retention_days" {
+  description = "Days each copy is kept in the central copy vault; must lie between min_retention_days and max_retention_days. Null = compliance.backup.copy_retention_days from config/landing-zone.yaml, else 365."
+  type        = number
+  default     = null
+}
+
+variable "dr_region" {
+  description = "Second region for a cross-region copy to the member <vault_name>-cmk vault there (aws-organization creates it from the same compliance.backup.dr_region). Must differ from aws_region and be in aws.allowed_regions (else [\"eu-west-2\"], the aws-organization default). Null = compliance.backup.dr_region from config/landing-zone.yaml, else no cross-region copy."
+  type        = string
+  default     = null
+
+  # The region SCP denies every region outside aws.allowed_regions, so a copy
+  # there would fail at run time. Same fallback list as envs/aws/organization.
+  validation {
+    condition = (var.dr_region != null ? var.dr_region : local.cfg.backup_dr_region) == null || (
+      contains(coalesce(local.cfg.allowed_regions, ["eu-west-2"]), coalesce(var.dr_region, local.cfg.backup_dr_region, "unset")) &&
+      coalesce(var.dr_region, local.cfg.backup_dr_region, "unset") != coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
+    )
+    error_message = "dr_region (or compliance.backup.dr_region in config/landing-zone.yaml) must be in aws.allowed_regions (default [\"eu-west-2\"]) and differ from aws_region (org.regions.aws)."
+  }
+}
+
+variable "copy_vault_notification_topic_arn" {
+  description = "SNS topic in the backup account that receives the central copy vault's failed backup, copy and restore events (restore-testing restores included) and RECOVERY_POINT_MODIFIED. Null (default) = no vault notifications. Used only with central copy on. The topic policy (and the key policy of a KMS-encrypted topic) must allow backup.amazonaws.com to publish."
+  type        = string
+  default     = null
 }
 
 # -----------------------------------------------------------------------------

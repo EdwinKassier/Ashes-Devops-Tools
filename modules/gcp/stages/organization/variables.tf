@@ -49,7 +49,7 @@ variable "customer_id" {
 }
 
 variable "gcp" {
-  description = "The gcp section of the organization stage: every tuning input the gcp-organization root takes from config/landing-zone.yaml (gcp.*) or from its gcp_overrides variable, in one object. Each attribute is documented in the type; an unset (or null) attribute takes the default shown there. admin_email is required. The root fills enable_admin_containment, containment_exempt_principals, guardrail_owner_mode and allowed_workload_identity_issuers from its own derivations."
+  description = "The gcp section of the organization stage: every tuning input the gcp-organization root takes from config/landing-zone.yaml (gcp.*) or from its gcp_overrides variable, in one object. Each attribute is documented in the type; an unset (or null) attribute takes the default shown there. admin_email is required. The root fills enable_admin_containment, containment_exempt_principals, guardrail_owner_mode and allowed_workload_identity_issuers from its own derivations. The allowed_regions default allows two EU regions (europe-west1, europe-west2) and one US region (us-central1). The deployable root reads gcp.allowed_regions from config/landing-zone.yaml instead. A direct caller of this stage with data-residency needs must set allowed_regions."
   type = object({
     # Email address of the primary administrator. Granted standing org/billing admin as a user:
     # principal ONLY when allow_user_principals_for_break_glass = true.
@@ -93,17 +93,26 @@ variable "gcp" {
     budget_currency = optional(string, "USD")
     # Dedicated logging project ID for the org audit sink, audit bucket, BigQuery audit dataset, audit
     # CMEK keyring and control-plane alerts (separation of duties). Default null = the admin/bootstrap
-    # project (unchanged). The project MUST NOT be owned (roles/owner, roles/editor, or storage/KMS
-    # admin) by the Terraform admin / automation service account — otherwise the identity being
-    # audited can delete object generations or destroy the key protecting its own audit trail. Create
-    # it out-of-band (or from a separate identity) and grant the automation SA only what it needs to
-    # manage the resources here. Decide BEFORE the first apply: KMS keys cannot be deleted, so moving
+    # project (unchanged). The project MUST NOT be owned (roles/owner, roles/editor, projectIamAdmin)
+    # by the Terraform admin / automation service account. Create it outside Terraform, directly under
+    # the organization node (not in a folder), with a security group as owner, and grant the
+    # automation SA only the resource roles it needs here (docs/runbooks/production-hardening.md). The
+    # WORM lock and admin containment (both opt-in) keep it from deleting the audit trail. Decide BEFORE
+    # the first apply: KMS keys cannot be deleted, so moving
     # the audit keys later orphans the old ones. Requires logging_project_number. PREVIEW: not yet
     # validated against a real apply.
     logging_project_id = optional(string)
     # Numeric project number of logging_project_id (required when it is set). Used to grant the
     # logging project's GCS and BigQuery service agents access to the audit CMEK keys.
     logging_project_number = optional(string)
+    # Cloud KMS protection level of the two audit CMEK keys (audit-logs, audit-analytics): SOFTWARE
+    # (default) or HSM (Cloud HSM, FIPS 140-2 Level 3). It is set on the key's version template,
+    # which the provider marks ForceNew, and the KMS module sets prevent_destroy: changing it on
+    # existing keys fails the plan. Use HSM only where the audit keys are created fresh (a new
+    # estate, or a new logging_project_id). HSM key versions cost more than SOFTWARE ones
+    # (https://docs.cloud.google.com/kms/docs/key-management-service). The billing and SCC keys
+    # stay SOFTWARE.
+    audit_key_protection_level = optional(string, "SOFTWARE")
     # Soft-delete window (days) on the org audit-log buckets: deleted/overwritten objects stay
     # restorable for this long. 7-90, or 0 to disable. Default 30.
     audit_soft_delete_retention_days = optional(number, 30)
@@ -127,7 +136,7 @@ variable "gcp" {
     # so list the member accounts of a break-glass group here.
     break_glass_principal_emails = optional(list(string), [])
     # Opt-in custom organization-policy constraints (CEL-defined resource-shape guardrails), created
-    # AND enforced at the org node (enforcement = enforce | dry_run | off; dry_run logs violations
+    # AND enforced at the org node (enforcement = enforce, dry_run or off; dry_run logs violations
     # without blocking, the way to stage a new one). Default [] = none. See docs/known-gaps.md.
     custom_org_constraints = optional(list(object({
       name           = string
@@ -237,20 +246,31 @@ variable "gcp" {
     # Retention (days) of the audit Log Analytics bucket. Locked (irreversibly) together with the GCS
     # audit bucket when enable_audit_bucket_lock = true.
     log_analytics_retention_days = optional(number, 400)
+    # Copy firewall, Cloud NAT, Application Load Balancer request (with the Cloud Armor verdict),
+    # Secure Web Proxy and Cloud NGFW threat logs from every project into the GCS audit bucket
+    # through an aggregated org sink (org-network-logs). They then have the audit bucket's
+    # retention, lifecycle, lock and CMEK. No new IAM grant: the sink shares the org Logging
+    # service account of the audit sink.
+    # Default false here; the gcp-organization root turns it on for regulated or framework estates.
+    enable_network_log_export = optional(bool, false)
+    # Set true only after a break-glass grant of roles/storage.objectCreator on the audit bucket to
+    # the network log sink's writer identity, when org-audit-sink has a legacy (pre-2023-05-22)
+    # dedicated identity. Lets the sink's identity postcondition pass. Default false.
+    network_log_writer_granted = optional(bool, false)
     # Manage the organization's Cloud Logging settings (google_logging_organization_settings): the
-    # storage location of the _Default/_Required buckets of new projects
+    # storage location of the `_Default` and `_Required` log buckets of new projects
     # (logging_settings_storage_location, default default_region) and optionally their CMEK
     # (logging_settings_kms_key_name). Default false.
     enable_logging_organization_settings = optional(bool, false)
     # SCC API generation for the notification stream: v1 (default, unchanged), both (add the v2 twin
     # next to v1 to verify), or v2 (flip; v1 configs destroyed). See docs/runbooks/scc-v2-migration.md.
     scc_api_version = optional(string, "v1")
-    # With enable_logging_organization_settings: disable the organization's _Default log sink, so new
-    # projects stop routing org-level logs into the _Default bucket. Default false (unchanged). Only
+    # With enable_logging_organization_settings: disable the organization's Default log sink, so new
+    # projects stop routing org-level logs into the Default bucket. Default false (unchanged). Only
     # the audit-log sinks (cloudaudit) are routed centrally, so enable it only after confirming the
     # non-audit org logs you need are covered by another sink.
     disable_default_sink = optional(bool, false)
-    # Optional CMEK for the _Default/_Required buckets of new projects. Grant the org Cloud Logging
+    # Optional CMEK for the `_Default` and `_Required` log buckets of new projects. Grant the org Cloud Logging
     # service account (gcloud logging settings describe --organization=<id>)
     # roles/cloudkms.cryptoKeyEncrypterDecrypter on the key first. Null = Google-managed encryption.
     logging_settings_kms_key_name = optional(string)
@@ -262,13 +282,19 @@ variable "gcp" {
     # production org first.
     enable_principal_access_boundary = optional(bool, false)
     # Resources the bounded automation SAs may act on
-    # (//cloudresourcemanager.googleapis.com/organizations|folders|projects/<id>). Empty = this
+    # (//cloudresourcemanager.googleapis.com/organizations, folders or projects, then /<id>). Empty = this
     # organization only.
     principal_access_boundary_allowed_resources = optional(list(string), [])
     # Enforce run.allowedIngress org-wide so Cloud Run services accept only internal or Cloud Load
     # Balancing traffic (never ingress "all"). Public apps are served through the external ALB + Cloud
     # Armor. Default true.
     restrict_cloud_run_ingress = optional(bool, true)
+    # Set gcp.restrictTLSVersion org-wide, denying TLS 1.0 and 1.1 (TLS_VERSION_1, TLS_VERSION_1_1)
+    # on Google Cloud resource APIs served through the Google Front End. It does not cover Cloud Run,
+    # App Engine, Cloud Run functions, Apigee, Private Service Connect or custom domains (load
+    # balancers use SSL policies). Default false; envs/gcp/organization turns it on for the
+    # production profile.
+    restrict_tls_versions = optional(bool, false)
     # OIDC issuer URIs a workload identity pool provider may be created for (org policy
     # iam.workloadIdentityPoolProviders). Default: HCP Terraform dynamic credentials and GitHub
     # Actions (app-services deploy identities). Add https://gitlab.com (or your TFE / GitLab host)
@@ -371,6 +397,11 @@ variable "gcp" {
   validation {
     condition     = var.gcp.logging_project_id == null || var.gcp.logging_project_number != null
     error_message = "gcp_overrides.logging_project_number is required when gcp_overrides.logging_project_id is set."
+  }
+
+  validation {
+    condition     = contains(["SOFTWARE", "HSM"], var.gcp.audit_key_protection_level)
+    error_message = "gcp_overrides.audit_key_protection_level (gcp.audit_key_protection_level) must be SOFTWARE or HSM."
   }
 
   validation {
@@ -545,13 +576,17 @@ variable "budget_threshold_rules" {
 
 variable "audit_log_retention_days" {
   description = <<-EOT
-    Number of days to retain audit logs in Cloud Storage. Adjust to meet your
-    compliance requirements:
-      - Default (365 days) — sufficient for most cloud security baselines.
-      - PCI-DSS requires 12 months online + 12 months archival.
-      - HIPAA requires 6 years.
-      - FedRAMP requires 3 years.
-    Must be >= 1.
+    Days to retain audit logs in Cloud Storage. Set it from your retention
+    schedule (compliance.audit_log_retention_days in the gcp-organization root).
+    Reference points, not a statement that any framework is met:
+      - PCI DSS v4.0.1 10.5.1: at least 12 months, the latest 3 months
+        immediately available (this bucket is immediately available).
+      - HIPAA: 45 CFR 164.316(b)(2)(i) keeps required documentation for 6
+        years; applying it to audit logs is a common reading. Confirm with
+        counsel.
+      - FedRAMP Rev5 AU-11 / OMB M-21-31: 12 months active plus 18 months
+        cold storage (913 days in total when kept in one bucket).
+    Must be >= 1. On a locked bucket it can only be increased.
   EOT
   type        = number
   default     = 365
@@ -640,7 +675,7 @@ variable "workload_folder_roles" {
 }
 
 variable "non_delegable_workload_folder_roles" {
-  description = "Roles that projects-apply may never grant on an environment folder, whatever delegated_workload_folder_roles says. A folder IAM condition can limit which roles a delegate grants but not to whom, so a delegate that may grant one of these roles can grant it to itself and take over every project in the folder. This stage grants these roles to the workload SAs itself (when workload_folder_roles lists them)."
+  description = "Roles that projects-apply may never grant on an environment folder, whatever delegated_workload_folder_roles says. A folder IAM condition can limit which roles a delegate grants but not to whom, so a delegate that may grant one of these roles can grant it to itself and take over every project, identity or data store in the folder. The default covers IAM and identity control, data-plane admin roles that carry setIamPolicy, actAs and project creation. This stage grants these roles to the workload SAs itself (when workload_folder_roles lists them)."
   type        = list(string)
   default = [
     "roles/resourcemanager.projectIamAdmin",
@@ -648,6 +683,16 @@ variable "non_delegable_workload_folder_roles" {
     "roles/iam.serviceAccountKeyAdmin",
     "roles/iam.serviceAccountTokenCreator",
     "roles/iam.workloadIdentityPoolAdmin",
+    "roles/iam.serviceAccountUser",
+    "roles/secretmanager.admin",
+    "roles/cloudkms.admin",
+    "roles/storage.admin",
+    "roles/run.admin",
+    "roles/bigquery.admin",
+    "roles/pubsub.admin",
+    "roles/artifactregistry.admin",
+    "roles/backupdr.admin",
+    "roles/resourcemanager.projectCreator",
   ]
   nullable = false
 }
@@ -710,3 +755,16 @@ variable "wif_tenant_pins" {
   }
 }
 
+# --- organization-apply's role-conditioned securityAdmin (gcp-bootstrap) ---
+
+variable "organization_apply_grantable_roles" {
+  description = "gcp-bootstrap contract organization_apply_grantable_roles: the roles organization-apply's org iam.securityAdmin condition admits. A precondition fails the plan when this stage would grant any other role through it (the apply would get 403). Null = no check (older bootstrap contract)."
+  type        = list(string)
+  default     = null
+}
+
+variable "bootstrap_organization_admin_members" {
+  description = "gcp-bootstrap contract organization_admin_members: the members gcp-bootstrap grants roles/resourcemanager.organizationAdmin. This stage grants it to nobody; a precondition fails the plan when an org admin it expects (gcp.organization_admin_groups, plus the admin users with allow_user_principals_for_break_glass) is missing from this list. Null = no check (older bootstrap contract)."
+  type        = list(string)
+  default     = null
+}

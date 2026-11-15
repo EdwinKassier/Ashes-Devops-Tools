@@ -10,13 +10,15 @@ validated that no legitimate traffic is caught.
 | Resource | Notes |
 |----------|-------|
 | `google_access_context_manager_service_perimeter` | Dry-run perimeter around `protected_projects` |
-| Ingress policy | Lets one GitHub repository's federated identities (a WIF `principalSet` in `identities`) call BigQuery and Cloud Storage in the protected project |
+| Ingress policy | Lets one GitHub repository's `main` branch (a WIF `principalSet` on `attribute.repo_ref` in `identities`) call BigQuery and Cloud Storage in the protected project |
 | Restricted services | BigQuery, Cloud Storage, Secret Manager |
 
 ## How the ingress rule is built
 
 - `identities` names who may cross the perimeter: here the WIF `principalSet`
-  for one GitHub repository ID. Leave `identity_type` null when you list
+  on `attribute.repo_ref`, which pins one GitHub repository ID **and** one ref
+  (`refs/heads/main`), as mapped by `modules/gcp/iam/workload-identity`.
+  `attribute.repository_id` alone would trust every branch of the repository. Leave `identity_type` null when you list
   identities; avoid `ANY_IDENTITY` for CI. If the workflow impersonates a
   service account (the repo's usual pattern), list `serviceAccount:<email>`
   instead, because that is the identity the protected API sees.

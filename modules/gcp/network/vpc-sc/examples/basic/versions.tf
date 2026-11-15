@@ -10,5 +10,5 @@ terraform {
 }
 
 provider "google" {
-  impersonate_service_account = "terraform@my-seed-project.iam.gserviceaccount.com"
+  impersonate_service_account = var.terraform_admin_email
 }

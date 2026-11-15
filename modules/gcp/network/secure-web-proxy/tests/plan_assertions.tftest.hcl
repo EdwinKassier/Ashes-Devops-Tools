@@ -97,14 +97,14 @@ run "proxy_only_subnet_created_on_request" {
 
   variables {
     create_proxy_only_subnet = true
-    proxy_only_subnet_cidr   = "10.0.254.0/23"
+    proxy_only_subnet_cidr   = "10.0.250.0/23"
   }
 
   assert {
     condition = (
       google_compute_subnetwork.proxy_only[0].purpose == "REGIONAL_MANAGED_PROXY" &&
       google_compute_subnetwork.proxy_only[0].role == "ACTIVE" &&
-      google_compute_subnetwork.proxy_only[0].ip_cidr_range == "10.0.254.0/23"
+      google_compute_subnetwork.proxy_only[0].ip_cidr_range == "10.0.250.0/23"
     )
     error_message = "The proxy-only subnet must be an ACTIVE REGIONAL_MANAGED_PROXY subnet."
   }
@@ -115,7 +115,7 @@ run "service_attachment_accepts_listed_projects_only" {
 
   variables {
     create_service_attachment = true
-    psc_nat_subnet_cidr       = "10.0.253.0/24"
+    psc_nat_subnet_cidr       = "10.0.252.0/24"
     consumer_accept_projects  = ["111111111111", "222222222222"]
   }
 

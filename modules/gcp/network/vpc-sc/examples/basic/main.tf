@@ -1,7 +1,7 @@
 # Example: VPC Service Controls perimeter protecting BigQuery and Cloud Storage.
 #
 # VPC-SC prevents data exfiltration by restricting which identities and networks
-# can access GCP APIs. This example creates a dry-run (enforced = false) perimeter
+# can access GCP APIs. This example creates a dry-run (enable_dry_run = true) perimeter
 # so you can review violations in Cloud Audit Logs before enforcing.
 #
 # Replace all locals with real values or data sources from remote state.

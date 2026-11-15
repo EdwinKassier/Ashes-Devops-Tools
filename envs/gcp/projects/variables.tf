@@ -1,7 +1,25 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "project_prefix" {
@@ -46,7 +64,7 @@ variable "project_services" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. is_production (default false) is surfaced as environment_config[<env>].is_production for the gcp-workload guardrail checks. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
+  description = "Map of application environment definitions. is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml) is surfaced as environment_config[<env>].is_production for the gcp-workload guardrail checks. data_classification (public, internal (default), confidential or restricted) binds the data-classification tag value of that name to the environment host project. Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
     display_name            = string
     region                  = string
@@ -55,8 +73,21 @@ variable "environments" {
     iam_group_role_bindings = map(set(string))
     labels                  = optional(map(string), {})
     is_production           = optional(bool, false)
+    data_classification     = optional(string, "internal")
+    compliance_class        = optional(string, "standard")
   }))
   default = null
+
+  validation {
+    # Review of the re-audit 6 fixes: an explicit environments map (a workspace
+    # variable no review sees) must keep every regulated config environment,
+    # still regulated, or the contract would publish it as standard.
+    condition = var.environments == null || alltrue([
+      for k, e in coalesce(local.cfg.environments, {}) :
+      try(var.environments[k].compliance_class, "missing") == "regulated" if try(e.compliance_class, "standard") == "regulated"
+    ])
+    error_message = "environments must keep every environment that config/landing-zone.yaml marks regulated, with compliance_class = \"regulated\": ${join(", ", [for k, e in coalesce(local.cfg.environments, {}) : k if try(e.compliance_class, "standard") == "regulated" && try(var.environments[k].compliance_class, "missing") != "regulated"])}."
+  }
 
   validation {
     condition     = var.environments != null || length(local.cfg.environments) > 0
@@ -75,6 +106,16 @@ variable "environments" {
   validation {
     condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.cidr_block] : [for e in values(local.cfg.environments) : e.cidr_block]) : can(cidrnetmask(c))])
     error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16."
+  }
+
+  validation {
+    condition     = alltrue([for e in values(var.environments != null ? var.environments : local.cfg.environments) : contains(["public", "internal", "confidential", "restricted"], e.data_classification)])
+    error_message = "Each environment's data_classification (gcp.environments.<env>.data_classification in config/landing-zone.yaml) must be public, internal, confidential or restricted."
+  }
+
+  validation {
+    condition     = var.environments != null || length(local.cfg.environments_missing_is_production) == 0
+    error_message = "Every gcp.environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.environments_missing_is_production)}."
   }
 }
 
@@ -129,6 +170,9 @@ variable "bootstrap_contract" {
     delegated_workload_folder_roles = optional(list(string), [])
     delegated_network_folder_roles  = optional(list(string), [])
     guardrail_owner_mode            = optional(string, "separate")
+    # gcp-organization's plan-time checks read these (omitted = null, no check).
+    organization_apply_grantable_roles = optional(list(string))
+    organization_admin_members         = optional(list(string))
   })
   default = null
 
@@ -139,7 +183,7 @@ variable "bootstrap_contract" {
 }
 
 variable "organization_contract" {
-  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: billing_account, folders, tag_values (environment-<env>). Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (the bare ID XXXXXX-XXXXXX-XXXXXX that gcp-organization emits, or billingAccounts/XXXXXX-XXXXXX-XXXXXX; the root strips the prefix), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: billing_account, folders, tag_values (environment-<env>). Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
     org_id               = optional(string)
     billing_account      = optional(string)

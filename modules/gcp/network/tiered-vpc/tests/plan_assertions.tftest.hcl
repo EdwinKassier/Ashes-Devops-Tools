@@ -105,8 +105,8 @@ run "toggles_and_guards" {
   command = plan
 
   variables {
-    deletion_protection = true
-    shared_vpc_host     = true
+    enable_deletion_protection = true
+    shared_vpc_host            = true
     firewall = {
       enable_iap_access = false
     }
@@ -214,5 +214,32 @@ run "internet_route_for_cloud_nat" {
       google_compute_route.internet_egress[0].priority == 1000
     )
     error_message = "enable_internet_egress_route must plan a priority-1000 0.0.0.0/0 route to the default internet gateway, named <name>-egress-internet."
+  }
+}
+
+run "deprecated_deletion_protection_alias_is_honoured" {
+  command = plan
+
+  variables {
+    deletion_protection = true
+  }
+
+  assert {
+    condition     = length(terraform_data.deletion_protection_guard) == 1
+    error_message = "The deprecated deletion_protection = true must still create the guard."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+    deletion_protection        = true
+  }
+
+  assert {
+    condition     = length(terraform_data.deletion_protection_guard) == 0
+    error_message = "enable_deletion_protection = false must win over the deprecated deletion_protection = true."
   }
 }

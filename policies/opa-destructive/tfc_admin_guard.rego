@@ -10,7 +10,18 @@
 #     layer:bootstrap, tier:production), or strip one of those tags, so a
 #     change applies without a human confirmation;
 #   - widen team access: a new grant, team member, organization member or
-#     token, or a grant raised to a higher level.
+#     token, or a grant raised to a higher level;
+#   - move a run off HCP-managed runners: a workspace switched to local or
+#     agent execution, a repointed agent pool, or a new agent pool, agent
+#     token or agent pool grant (an agent sees every credential of the run,
+#     and a local run skips the policy sets);
+#   - rewire a control-plane, bootstrap or production workspace: a changed
+#     VCS repository, branch or connection (or a removed one, which lets the
+#     CLI apply uploaded code), working directory or project;
+#   - write an env var that steers credentials, the CLI or the runner
+#     (TFC_*, TF_CLI_ARGS*, TFE_*, TF_TOKEN_*, and the code-execution names
+#     tfc-admin refuses: TERRAFORM_CONFIG, TF_CLI_CONFIG_FILE, LD_*, DYLD_*,
+#     NODE_OPTIONS, NODE_PATH, GIT_*, BASH_ENV, ENV, PYTHON*, PATH).
 # Like destroy_guard, the set is overridable: the security team overrides an
 # intended change (a new environment's grant, say) on the run.
 package terraform.policies.tfc_admin_guard
@@ -275,4 +286,342 @@ deny contains msg if {
 	updates(rc)
 	widened(rc)
 	msg := sprintf("%s: plan raises a team's access level; the security team must override this run if it is intended", [rc.address])
+}
+
+# ── Execution mode and agent pools ──────────────────────────────────────────
+# Any unknown value inside the attribute (nested blocks included).
+attr_unknown(rc, attr) if {
+	u := object.get(rc.change.after_unknown, attr, false)
+	[_, v] := walk(u)
+	v == true
+}
+
+# Modes that leave HCP-managed runners: an agent sees every credential of the
+# run, and a local run is not judged by any policy set.
+off_platform_modes := {"local", "agent"}
+
+execution_types := {"tfe_workspace_settings", "tfe_workspace"}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in execution_types
+	lib.writes(rc)
+	mode := object.get(after_obj(rc), "execution_mode", null)
+	mode in off_platform_modes
+	object.get(before_obj(rc), "execution_mode", null) != mode
+	msg := sprintf("%s: plan sets execution_mode = %s, which moves runs off HCP-managed runners (an agent sees the run's credentials, a local run skips the policy sets); the security team must override this run if it is intended", [rc.address, mode])
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in execution_types
+	lib.writes(rc)
+	pool := object.get(after_obj(rc), "agent_pool_id", null)
+	pool != null
+	object.get(before_obj(rc), "agent_pool_id", null) != pool
+	msg := sprintf("%s: plan points the workspace at agent pool %s; the security team must override this run if it is intended", [rc.address, pool])
+}
+
+# Unknown values. On tfe_workspace both attributes are deprecated and
+# computed, so a create (or the create half of a replace) plans them unknown;
+# only an update is judged there. agent_pool_id is Optional+Computed on
+# tfe_workspace_settings too (tfe 0.83.0) and plans unknown on every create
+# with agent_pool_id = null, so it is judged only when the mode is agent or
+# itself unknown.
+unknown_judged(rc) if rc.type == "tfe_workspace_settings"
+
+unknown_judged(rc) if {
+	rc.type == "tfe_workspace"
+	not lib.creates(rc)
+}
+
+agent_or_unknown_mode(rc) if object.get(after_obj(rc), "execution_mode", null) == "agent"
+
+agent_or_unknown_mode(rc) if attr_unknown(rc, "execution_mode")
+
+unknown_execution_attr(rc, "execution_mode") if attr_unknown(rc, "execution_mode")
+
+unknown_execution_attr(rc, "agent_pool_id") if {
+	attr_unknown(rc, "agent_pool_id")
+	agent_or_unknown_mode(rc)
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in execution_types
+	lib.writes(rc)
+	unknown_judged(rc)
+	some attr in ["execution_mode", "agent_pool_id"]
+	unknown_execution_attr(rc, attr)
+	msg := sprintf("%s: %s is unknown at plan time, so the execution guard cannot check it; the security team must override this run if it is intended", [rc.address, attr])
+}
+
+agent_types := {
+	"tfe_agent_pool",
+	"tfe_agent_token",
+	"tfe_agent_pool_allowed_workspaces",
+	"tfe_agent_pool_allowed_projects",
+	"tfe_agent_pool_excluded_workspaces",
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in agent_types
+	lib.writes(rc)
+	msg := sprintf("%s: plan creates or changes a %s, which lets runs execute on a self-hosted agent; the security team must override this run if it is intended", [rc.address, rc.type])
+}
+
+# ── Protected workspace wiring ──────────────────────────────────────────────
+# Where a control-plane, bootstrap or production workspace takes its code
+# from. A plain create is not judged (the new workspace has no reviewed wiring
+# yet); an update or a replace (a write with a prior object) is.
+vcs_source(obj) := [{
+	"identifier": object.get(v, "identifier", null),
+	"branch": object.get(v, "branch", null),
+	"oauth_token_id": object.get(v, "oauth_token_id", null),
+	"github_app_installation_id": object.get(v, "github_app_installation_id", null),
+} |
+	some v in object.get(obj, "vcs_repo", [])
+]
+
+wiring_attrs := {"vcs_repo", "working_directory", "project_id"}
+
+rewrites(rc) if {
+	lib.writes(rc)
+	is_object(rc.change.before)
+}
+
+wiring(obj, "vcs_repo") := vcs_source(obj)
+
+wiring(obj, attr) := object.get(obj, attr, null) if attr != "vcs_repo"
+
+vcs_fields := {"identifier", "branch", "oauth_token_id", "github_app_installation_id"}
+
+# Unknown only in the fields compared above (other vcs_repo fields, such as
+# the computed repository_http_url, do not count).
+wiring_unknown(rc, "vcs_repo") if {
+	some v in object.get(rc.change.after_unknown, "vcs_repo", [])
+	is_object(v)
+	some f in vcs_fields
+	object.get(v, f, false) == true
+}
+
+wiring_unknown(rc, "vcs_repo") if object.get(rc.change.after_unknown, "vcs_repo", false) == true
+
+wiring_unknown(rc, attr) if {
+	attr != "vcs_repo"
+	attr_unknown(rc, attr)
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_workspace"
+	rewrites(rc)
+	protected_workspace(rc)
+	some attr in wiring_attrs
+	not wiring_unknown(rc, attr)
+	wiring(before_obj(rc), attr) != wiring(after_obj(rc), attr)
+	msg := sprintf("%s: plan changes %s on a control-plane, bootstrap or production workspace, which changes the code or the access its runs get; the security team must override this run if it is intended", [rc.address, attr])
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_workspace"
+	rewrites(rc)
+	protected_workspace(rc)
+	some attr in wiring_attrs
+	wiring_unknown(rc, attr)
+	msg := sprintf("%s: %s is unknown at plan time on a control-plane, bootstrap or production workspace, so the wiring guard cannot check it; the security team must override this run if it is intended", [rc.address, attr])
+}
+
+# ── Env vars that steer credentials, the CLI or the runner ──────────────────
+# Prefixes: dynamic credentials (TFC_*), CLI arguments (TF_CLI_ARGS*), the
+# tfe provider and host tokens (TFE_*, TF_TOKEN_*). Exact names and patterns:
+# the code-execution set envs/tfc-admin refuses (code_exec_env_pattern). Keep
+# the two lists in step.
+# scripts/check-env-pattern-sync.sh fails when the part after
+# "TF_TOKEN_).*|" differs from code_exec_env_pattern in envs/tfc-admin.
+steering_env_pattern := `^((TFC_|TF_CLI_ARGS|TFE_|TF_TOKEN_).*|TERRAFORM_CONFIG|TF_CLI_CONFIG_FILE|LD_[A-Z_]+|DYLD_[A-Z_]+|NODE_OPTIONS|NODE_PATH|GIT_[A-Z0-9_]+|BASH_ENV|BASH_FUNC_.+|ENV|SHELLOPTS|PS4|PYTHON[A-Z_]+|PERL5OPT|PERL5LIB|RUBYOPT|RUBYLIB|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|GCONV_PATH|SSH_ASKPASS[A-Z_]*|PATH)$`
+
+steering_var(obj) if {
+	object.get(obj, "category", null) == "env"
+	regex.match(steering_env_pattern, object.get(obj, "key", ""))
+}
+
+var_payload(obj) := {f: object.get(obj, f, null) | some f in ["key", "category", "value", "value_wo_version"]}
+
+var_changed(rc) if lib.creates(rc)
+
+var_changed(rc) if {
+	updates(rc)
+	var_payload(before_obj(rc)) != var_payload(after_obj(rc))
+}
+
+var_changed(rc) if {
+	updates(rc)
+	some f in ["key", "category", "value", "value_wo_version"]
+	attr_unknown(rc, f)
+}
+
+# A written variable whose key or category is unknown cannot be checked.
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_variable"
+	lib.writes(rc)
+	some f in ["key", "category"]
+	attr_unknown(rc, f)
+	msg := sprintf("%s: the variable's %s is unknown at plan time, so the env var guard cannot check it; the security team must override this run if it is intended", [rc.address, f])
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_variable"
+	var_changed(rc)
+	steering_var(after_obj(rc))
+	msg := sprintf("%s: plan writes the env var %s, which steers the run's credentials, the CLI or the runner; the security team must override this run if it is intended", [rc.address, after_obj(rc).key])
+}
+
+# ── Variable sets ───────────────────────────────────────────────────────────
+# The tfe_variable rule above judges every variable this configuration writes
+# into a set. A set managed elsewhere (made by hand in the UI) can hold any
+# key, so attaching it to a workspace or project is denied; so is a global
+# set, which reaches every workspace.
+managed_set_ids contains id if {
+	some rc in lib.managed
+	rc.type == "tfe_variable_set"
+	some obj in [before_obj(rc), after_obj(rc)]
+	id := object.get(obj, "id", null)
+	is_string(id)
+}
+
+variable_set_attachment_types := {"tfe_workspace_variable_set", "tfe_project_variable_set"}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in variable_set_attachment_types
+	lib.writes(rc)
+	set_id := object.get(after_obj(rc), "variable_set_id", null)
+	is_string(set_id)
+	not set_id in managed_set_ids
+	msg := sprintf("%s: plan attaches variable set %s, which this configuration does not manage, so its env vars are not judged; the security team must override this run if it is intended", [rc.address, set_id])
+}
+
+# An ID still unknown (the set is created or replaced in this plan) passes
+# only when the attachment's configuration expression references a
+# tfe_variable_set resource. The references are followed through `each.value`
+# (the resource's for_each), `var.<name>` (the calling module's argument) and
+# `each` of a module call, up through any module depth. Plan JSON fields
+# (terraform show -json, confirmed with Terraform 1.17.1):
+#   configuration.root_module(.module_calls.<name>.module)*.resources[i]
+#     .address (module-relative, no instance key), .expressions.<attr>.references,
+#     .for_each_expression.references
+#   ...module_calls.<name>.expressions.<arg>.references, .for_each_expression
+#   resource_changes[].module_address (with instance keys)
+# A reference the walk cannot follow (a local, a data source, a missing
+# configuration) never reaches a set, so the attachment is denied.
+#
+# Each module's configuration, keyed by its call path ("" for the root,
+# "workspace", "a.b" for nested calls).
+config_modules[key] := m if {
+	walk(object.get(object.get(input.plan, "configuration", {}), "root_module", {}), [path, m])
+	module_path(path)
+	key := concat(".", [path[i + 1] | some i, seg in path; seg == "module_calls"; i % 3 == 0])
+}
+
+module_path(path) if count(path) == 0
+
+module_path(path) if {
+	count(path) > 0
+	count(path) % 3 == 0
+	count([i | some i, seg in path; i % 3 == 0; seg != "module_calls"]) == 0
+	count([i | some i, seg in path; i % 3 == 2; seg != "module"]) == 0
+}
+
+# A resource change's module key: module.a["x"].module.b[0] -> "a.b".
+module_key(rc) := "" if object.get(rc, "module_address", "") == ""
+
+module_key(rc) := key if {
+	addr := object.get(rc, "module_address", "")
+	addr != ""
+	parts := split(regex.replace(addr, `\[[^\]]*\]`, ""), ".")
+	key := concat(".", [parts[i] | some i in numbers.range(1, count(parts) - 1); i % 2 == 1])
+}
+
+parent_key(key) := concat(".", array.slice(split(key, "."), 0, count(split(key, ".")) - 1))
+
+call_name(key) := split(key, ".")[count(split(key, ".")) - 1]
+
+# Graph node for a reference made in module `key` by the object `owner`
+# (a resource address, or module.<call> for a module call argument).
+ref_node(key, owner, ref) := sprintf("%s|each@%s", [key, owner]) if startswith(ref, "each.")
+
+ref_node(key, _, ref) := sprintf("%s|var.%s", [key, split(ref, ".")[1]]) if startswith(ref, "var.")
+
+ref_node(key, _, ref) := sprintf("%s|%s", [key, ref]) if {
+	not startswith(ref, "each.")
+	not startswith(ref, "var.")
+}
+
+refs_of(expr) := object.get(expr, "references", [])
+
+attach_edges contains [sprintf("%s|@%s", [key, r.address]), ref_node(key, r.address, ref)] if {
+	some key, m in config_modules
+	some r in object.get(m, "resources", [])
+	r.type in variable_set_attachment_types
+	some ref in refs_of(object.get(object.get(r, "expressions", {}), "variable_set_id", {}))
+}
+
+attach_edges contains [sprintf("%s|each@%s", [key, r.address]), ref_node(key, r.address, ref)] if {
+	some key, m in config_modules
+	some r in object.get(m, "resources", [])
+	r.type in variable_set_attachment_types
+	some ref in refs_of(object.get(r, "for_each_expression", {}))
+}
+
+attach_edges contains [sprintf("%s|var.%s", [key, arg]), ref_node(parent, owner, ref)] if {
+	some key, _ in config_modules
+	key != ""
+	parent := parent_key(key)
+	owner := sprintf("module.%s", [call_name(key)])
+	call := config_modules[parent].module_calls[call_name(key)]
+	some arg, expr in object.get(call, "expressions", {})
+	some ref in refs_of(expr)
+}
+
+attach_edges contains [sprintf("%s|each@module.%s", [parent, name]), ref_node(parent, sprintf("module.%s", [name]), ref)] if {
+	some parent, m in config_modules
+	some name, call in object.get(m, "module_calls", {})
+	some ref in refs_of(object.get(call, "for_each_expression", {}))
+}
+
+attach_nodes contains n if {
+	some e in attach_edges
+	some n in e
+}
+
+attach_graph := {n: {t | some [f, t] in attach_edges; f == n} | some n in attach_nodes}
+
+references_variable_set(rc) if {
+	start := sprintf("%s|@%s.%s", [module_key(rc), rc.type, rc.name])
+	some node in graph.reachable(attach_graph, {start})
+	ref := split(node, "|")[1]
+	startswith(ref, "tfe_variable_set.")
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type in variable_set_attachment_types
+	lib.writes(rc)
+	attr_unknown(rc, "variable_set_id")
+	not references_variable_set(rc)
+	msg := sprintf("%s: the attached variable set is unknown at plan time and its configuration does not reference a tfe_variable_set this configuration manages; the security team must override this run if it is intended", [rc.address])
+}
+
+deny contains msg if {
+	some rc in lib.managed
+	rc.type == "tfe_variable_set"
+	lib.writes(rc)
+	object.get(after_obj(rc), "global", false) == true
+	object.get(before_obj(rc), "global", false) != true
+	msg := sprintf("%s: plan makes a variable set global, so its variables reach every workspace; the security team must override this run if it is intended", [rc.address])
 }

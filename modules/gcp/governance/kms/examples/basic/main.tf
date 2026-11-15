@@ -1,5 +1,7 @@
-# Example: create a KMS keyring with two keys — one for CMEK encryption and
-# one for signing — with 30-day rotation and IAM access granted to a service account.
+# Example: create a KMS keyring with two keys — one for CMEK encryption (30-day
+# rotation, IAM access granted to a service account) and one for signing.
+# Cloud KMS rotates only symmetric keys automatically; the module sets no
+# rotation_period on asymmetric keys.
 # In a real deployment replace the locals below with data sources or remote state.
 
 locals {
@@ -28,7 +30,6 @@ module "kms" {
     }
 
     signing-key = {
-      rotation_period  = "7776000s" # 90 days (max)
       purpose          = "ASYMMETRIC_SIGN"
       algorithm        = "RSA_SIGN_PKCS1_4096_SHA512"
       protection_level = "SOFTWARE"

@@ -37,3 +37,28 @@ test_deleted_bucket_ignored if {
 	}]}}
 	count(p.deny) == 0 with input as plan
 }
+
+test_unknown_public_access_prevention_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "google_storage_bucket.b", "mode": "managed", "type": "google_storage_bucket",
+		"change": {"actions": ["create"], "after": {"uniform_bucket_level_access": true}, "after_unknown": {"public_access_prevention": true}},
+	}]}}
+	count(p.deny) == 1 with input as inp
+}
+
+test_unknown_ubla_denied if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "google_storage_bucket.b", "mode": "managed", "type": "google_storage_bucket",
+		"change": {"actions": ["create"], "after": {"public_access_prevention": "enforced"}, "after_unknown": {"uniform_bucket_level_access": true}},
+	}]}}
+	count(p.deny) == 1 with input as inp
+}
+
+# Computed attributes the policy does not check (id, url, self_link) stay unknown.
+test_unknown_computed_ids_pass if {
+	inp := {"plan": {"resource_changes": [{
+		"address": "google_storage_bucket.b", "mode": "managed", "type": "google_storage_bucket",
+		"change": {"actions": ["create"], "after": {"public_access_prevention": "enforced", "uniform_bucket_level_access": true}, "after_unknown": {"id": true, "url": true, "self_link": true}},
+	}]}}
+	count(p.deny) == 0 with input as inp
+}

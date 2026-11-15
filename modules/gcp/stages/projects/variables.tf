@@ -24,12 +24,19 @@ variable "admin_project_id" {
 }
 
 variable "folders" {
-  description = "Map of folder objects keyed by environment name, as output by the organization stage"
+  description = "Map of folder objects keyed by environment name, as output by the organization stage: id is the bare folder number, name the resource name folders/<number>. Projects are created under name, and the folder grants are made on name."
   type = map(object({
     id           = string
     name         = string
     display_name = string
   }))
+
+  validation {
+    # An empty name is the root's placeholder for an environment the contract
+    # lacks; the root's contract guard reports that case by name.
+    condition     = alltrue([for f in values(var.folders) : f.name == "" || can(regex("^folders/[0-9]+$", f.name))])
+    error_message = "Every folders entry's name must be the folder resource name folders/<number> (the gcp-organization contract's folders.<key>.name); id is the bare number."
+  }
 }
 
 variable "environments" {
@@ -41,12 +48,28 @@ variable "environments" {
       name            = string
       billing_account = optional(string)
       labels          = map(string)
+      # Resource-manager tag bindings on this project: static key => tag
+      # value ID (tagValues/<n>). gcp-projects binds data-classification to
+      # each environment host project.
+      tag_bindings = optional(map(string), {})
     }))
   }))
 
   validation {
     condition     = length(var.environments) > 0
     error_message = "At least one environment must be defined."
+  }
+}
+
+variable "owner" {
+  description = "Value of the owner label on every project (GCP label form: lowercase letters, digits, '_' and '-', at most 63 characters). The gcp-projects root passes org.owner."
+  type        = string
+  default     = "platform-team"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-z0-9_-]{1,63}$", var.owner))
+    error_message = "owner must be a GCP label value: 1-63 lowercase letters, digits, '_' or '-'."
   }
 }
 
@@ -163,6 +186,16 @@ variable "non_delegable_workload_folder_roles" {
     "roles/iam.serviceAccountKeyAdmin",
     "roles/iam.serviceAccountTokenCreator",
     "roles/iam.workloadIdentityPoolAdmin",
+    "roles/iam.serviceAccountUser",
+    "roles/secretmanager.admin",
+    "roles/cloudkms.admin",
+    "roles/storage.admin",
+    "roles/run.admin",
+    "roles/bigquery.admin",
+    "roles/pubsub.admin",
+    "roles/artifactregistry.admin",
+    "roles/backupdr.admin",
+    "roles/resourcemanager.projectCreator",
   ]
   nullable = false
 }

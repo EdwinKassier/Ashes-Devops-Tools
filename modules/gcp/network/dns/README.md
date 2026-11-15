@@ -102,8 +102,8 @@ The following resources are created:
 
 
 - resource.google_dns_managed_zone.private_zone (modules/gcp/network/dns/main.tf#L12)
-- resource.google_dns_managed_zone.public_zone (modules/gcp/network/dns/main.tf#L64)
-- resource.google_dns_record_set.records (modules/gcp/network/dns/main.tf#L88)
+- resource.google_dns_managed_zone.public_zone (modules/gcp/network/dns/main.tf#L65)
+- resource.google_dns_record_set.records (modules/gcp/network/dns/main.tf#L89)
 
 
 ## Inputs
@@ -116,6 +116,7 @@ The following resources are created:
 | <a name="input_description"></a> [description](#input\_description) | Description of the DNS zone | `string` | `"Private DNS zone managed by Terraform"` | no |
 | <a name="input_dnssec_enabled"></a> [dnssec\_enabled](#input\_dnssec\_enabled) | Enable DNSSEC for public zones. Private zones ignore this setting. | `bool` | `true` | no |
 | <a name="input_enable_logging"></a> [enable\_logging](#input\_enable\_logging) | Enable DNS query logging for the zone. Defaults to false at this primitive level because query logging is high-volume and cost-sensitive; enable it for zones where DNS query auditing is required (composing stages opt in per zone). Only public managed zones support query logging. | `bool` | `false` | no |
+| <a name="input_forwarding_path"></a> [forwarding\_path](#input\_forwarding\_path) | Path to the forwarding targets: private (through the VPC, over VPN or Interconnect for on-premises targets; needed for targets outside RFC 1918) or default (RFC 1918 targets through the VPC, others over the internet). Null (default) = the API default. | `string` | `null` | no |
 | <a name="input_forwarding_targets"></a> [forwarding\_targets](#input\_forwarding\_targets) | List of forwarding target IP addresses (for forwarding zones) | `list(string)` | `[]` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the DNS zone | `map(string)` | `{}` | no |
 | <a name="input_peering_network"></a> [peering\_network](#input\_peering\_network) | The target VPC network for a peering zone (required when type is 'peering') | `string` | `""` | no |
@@ -135,3 +136,7 @@ The following resources are created:
 | <a name="output_zone"></a> [zone](#output\_zone) | The created DNS managed zone resource |
 | <a name="output_zone_name"></a> [zone\_name](#output\_zone\_name) | The name of the DNS zone |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

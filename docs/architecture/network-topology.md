@@ -15,9 +15,13 @@ graph TB
             hub_vpc["Hub VPC\n10.0.0.0/16"]
             shared_vpc["Shared VPC Host"]
             cloud_nat["Cloud NAT\n(egress)"]
-            dns_zone["Private DNS Zone\n*.internal.example.com"]
             vpn["HA-VPN\n(optional)"]
             interconnect["Interconnect\n(optional)"]
+        end
+
+        subgraph dns_proj["DNS Project (gcp-network-hub)"]
+            dns_vpc["DNS VPC\ndns-vpc-core"]
+            dns_zone["Private DNS Zone\n*.<internal_domain>"]
         end
 
         subgraph spoke_dev["Spoke Project — dev"]
@@ -40,7 +44,9 @@ graph TB
         hub_vpc -->|"VPC Peering"| spoke_dev
         hub_vpc -->|"VPC Peering"| spoke_staging
         hub_vpc --> cloud_nat
-        hub_vpc --> dns_zone
+        dns_vpc --> dns_zone
+        hub_vpc -.->|"zone also bound"| dns_zone
+        spoke_dev -.->|"DNS peering zone to hub VPC"| hub_vpc
         hub_vpc -.->|"optional"| vpn
         hub_vpc -.->|"optional"| interconnect
     end
@@ -73,12 +79,13 @@ graph TB
 
 ## VPC Service Controls Boundary
 
-When `vpc_service_controls.enabled = true`, a VPC-SC perimeter wraps the spoke project. Services listed in `restricted_services` (e.g., BigQuery, Cloud Storage, Secret Manager) cannot be called from outside the perimeter without an explicit ingress policy.
+When the environment has an access policy, a VPC-SC perimeter wraps the spoke (Shared VPC host) project and every service-team project of the environment. Google requires a Shared VPC host and its service projects in the same perimeter. Services listed in `restricted_services` (e.g., BigQuery, Cloud Storage, Secret Manager) cannot be called from outside the perimeter without an explicit ingress policy.
 
 ```mermaid
 graph LR
     subgraph perimeter["VPC-SC Perimeter — prod_perimeter"]
         spoke["Spoke Project\n(protected)"]
+        teams["Service-team projects\n(protected)"]
         bq["BigQuery"]
         gcs["Cloud Storage"]
         sm["Secret Manager"]
@@ -95,7 +102,7 @@ graph LR
 
 The perimeter starts in **dry-run mode** (`enable_dry_run = true`) — violations are logged to Cloud Audit Logs but not blocked. Flip to enforcement after validating that all legitimate callers have ingress policies.
 
-Each environment host project sits in its **own** perimeter. The hub perimeter (`hub_data_perimeter`, `stages/network-hub`) protects only the hub and DNS projects: a project can belong to only one regular perimeter of an access policy, and one shared perimeter around every environment would let prod and non-prod exchange data freely once enforced. This holds in both modes: with one org-wide access policy the hub and environment perimeters hold disjoint projects, and with per-environment scoped policies the environment perimeters live in their own policies. VPC peering between a spoke and the hub carries IP traffic only; it does not merge perimeters.
+Each environment's host and service-team projects sit in their **own** perimeter. The hub perimeter (`hub_data_perimeter`, `stages/network-hub`) protects only the hub and DNS projects: a project can belong to only one regular perimeter of an access policy, and one shared perimeter around every environment would let prod and non-prod exchange data freely once enforced. This holds in both modes: with one org-wide access policy the hub and environment perimeters hold disjoint projects, and with per-environment scoped policies the environment perimeters live in their own policies. VPC peering between a spoke and the hub carries IP traffic only; it does not merge perimeters.
 
 ---
 
@@ -119,6 +126,7 @@ graph LR
 
 - Hub: `secure_web_proxy` on `stages/network-hub` / `net-hub` (`modules/gcp/network/secure-web-proxy`). `psc_nat_subnet_cidr` publishes it; consumers default to the environment host projects.
 - Spoke: `egress_proxy` on `stages/net-spoke` creates the PSC endpoint and drops the private tier from Cloud NAT (so the proxy is the only path). `nat.include_private_subnets = true` keeps NAT during a migration.
+- Production gate: a production `gcp-workload-<env>` (`is_production`) fails the plan unless `egress_proxy` is on or the workspace sets `production_egress_proxy_waiver = { reason, expires }`, which stops working after `expires` (UTC). A standalone environment (no hub) cannot use the proxy, so in production it needs the waiver.
 - Why PSC and not routes: next-hop routing to the proxy works only inside the proxy's VPC and region, and a peered spoke has no supported route to it. PSC is the multi-VPC model Google documents. Through PSC the proxy sees a NAT address, so rules match on host, not client IP. Without TLS inspection rules match the host, not HTTPS paths.
 
 ## Data-Plane Alerts
@@ -169,7 +177,7 @@ Each spoke environment gets two subnets within the configured VPC CIDR:
 | `{prefix}-private` | Application workloads | `10.128.0.0/20` |
 | `{prefix}-database` | Cloud SQL, Memorystore | `10.128.16.0/20` |
 
-Secondary IP ranges for GKE pods and services are allocated within the private subnet when `enable_gke = true`.
+Secondary IP ranges for GKE Pods and Services are set on the private subnet through `secondary_ranges`. The IP plan proposes `100.64.0.0/10` for Pods and `100.127.0.0/16` for Services; see [cidr-plan.md](cidr-plan.md#gke-secondary-ranges) for what is confirmed.
 
 All subnets have VPC Flow Logs enabled and export to BigQuery via the Cloud Audit Logs sink.
 
@@ -179,18 +187,24 @@ All subnets have VPC Flow Logs enabled and export to BigQuery via the Cloud Audi
 
 ```mermaid
 graph LR
-    vm["VM in Spoke\n(resolves *.internal.example.com)"]
-    private_dns["Private DNS Zone\n(hub project)"]
-    peering["DNS Peering\n(hub → spoke)"]
-    cloud_dns["Cloud DNS\nResolver 169.254.169.254"]
+    vm["VM in spoke VPC\n(resolves *.<internal_domain>)"]
+    cloud_dns["Cloud DNS in the spoke VPC\n(metadata server 169.254.169.254)"]
+    peering["internal-peering zone\n(gcp-workload-&lt;env&gt;)\ntarget: hub VPC"]
+    root_zone["internal-root private zone\n(DNS project, gcp-network-hub)\nbound to dns-vpc-core and hub-vpc-core"]
 
     vm --> cloud_dns
     cloud_dns --> peering
-    peering --> private_dns
-    private_dns -->|"A record"| vm
+    peering -->|"resolved in the hub VPC"| root_zone
+    root_zone -->|"A record"| vm
 ```
 
-Spoke projects use DNS peering to resolve records from the hub's private zone. No split-horizon or on-premises DNS forwarder configuration is included by default; add forwarding targets to `var.forwarding_targets` in the dns module if needed.
+Each `gcp-workload-<env>` creates a private DNS peering zone, `internal-peering`, for the internal domain (`gcp.network.internal_domain`, default `internal.local`; the hub publishes it as `hub_network.dns_domain`, so the peering zone follows it). Its target is the hub VPC (`hub_network.vpc_self_link` from `gcp-network-hub`). A peering zone answers from the name resolution order of its target network, so the hub VPC must see the zone that holds the records. `gcp-network-hub` therefore binds the `internal-root` zone in the DNS project to two networks: the DNS anchor VPC (`dns-vpc-core`), which owns the zone, and the hub VPC (`hub-vpc-core`), which every spoke peering zone targets.
+
+Creating a peering zone needs `dns.networks.targetWithPeeringZone` on the project of the target network. `gcp-projects` grants `roles/dns.peer`, which holds only that permission, to each workload apply SA on the shared folder. The hub project is in that folder. The plan SAs get no role there.
+
+A workload with `enable_network_hub = false` has no hub and no peering zone. If you supply the `network_hub` contract for a hub that `gcp-network-hub` does not manage, bind the zone to that hub VPC and grant `roles/dns.peer` on its project yourself.
+
+No split-horizon or on-premises DNS forwarder configuration is included by default; add forwarding targets to `var.forwarding_targets` in the dns module if needed.
 
 ---
 

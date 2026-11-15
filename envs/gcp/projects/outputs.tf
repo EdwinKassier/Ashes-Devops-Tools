@@ -13,21 +13,37 @@ locals {
     project_numbers = module.projects.project_numbers
     environment_config = {
       for env_key, env in local.environments : env_key => {
-        folder_id           = try(local.org.folders[env_key].id, null)
+        # The bare folder number, whichever id form the organization contract carried.
+        folder_id           = try(trimprefix(local.org.folders[env_key].id, "folders/"), null)
         folder_name         = try(local.org.folders[env_key].display_name, null)
         host_project_id     = module.projects.project_ids["${env_key}-host"]
         host_project_number = module.projects.project_numbers["${env_key}-host"]
         region              = env.region
         cidr_block          = env.cidr_block
-        labels              = env.labels
+        # The spoke VPC name, derived here only: gcp-workload-<env> creates the
+        # network under this name and gcp-network-hub peers the hub with it.
+        spoke_network_name = "${local.project_prefix}-${env_key}-vpc"
+        labels             = env.labels
         tag_value_ids = {
           environment = try(local.org.tag_values["environment-${env_key}"], null)
+          # The data-classification tag value bound to the host project.
+          data_classification = try(local.org.tag_values["data-classification-${env.data_classification}"], null)
         }
         # Explicit production marker for the workload guardrail checks.
         is_production = env.is_production
+        # standard or regulated (re-audit 6 CMP-4).
+        compliance_class = try(env.compliance_class, "standard")
         # This environment's folder-scoped VPC-SC access policy (gcp-organization);
         # null when scoped policies are disabled or the org state predates them.
         vpc_sc_access_policy_id = try(local.org.scoped_access_policy_ids[env_key], null)
+        # This environment's own Terraform plan and apply SAs (gcp-bootstrap
+        # workload_service_accounts), as serviceAccount:<email>. gcp-workload
+        # passes them to the environment stage, whose perimeter admits them.
+        # Empty when the bootstrap state has no workload SAs.
+        automation_identities = [for sa in compact([
+          try(local.bootstrap.workload_service_accounts[env_key].plan, ""),
+          try(local.bootstrap.workload_service_accounts[env_key].apply, ""),
+        ]) : "serviceAccount:${sa}"]
       }
     }
     automation_folder_grants = module.projects.automation_folder_grants
@@ -59,9 +75,12 @@ output "contract" {
       region                  = string
       cidr_block              = string
       labels                  = map(string)
-      tag_value_ids           = object({ environment = string })
+      tag_value_ids           = object({ environment = string, data_classification = string })
       is_production           = bool
       vpc_sc_access_policy_id = string
+      automation_identities   = list(string)
+      spoke_network_name      = string
+      compliance_class        = string
     }))
     automation_folder_grants = map(object({ folder = string, role = string }))
   })
@@ -87,7 +106,7 @@ output "project_numbers" {
 # org folders/tag values (remote state) with this root's project IDs/numbers and
 # the environment definitions. gcp-workload reads this.
 output "environment_config" {
-  description = "Deprecated: read contract.environment_config (removed in v1.0). Per-environment config: folder, host project, region, CIDR, labels, environment tag value, is_production, and the environment's folder-scoped VPC-SC access policy ID."
+  description = "Deprecated: read contract.environment_config (removed in v1.0). Per-environment config: folder, host project, region, CIDR, labels, environment and data-classification tag values, is_production, the environment's folder-scoped VPC-SC access policy ID, and its own plan/apply automation identities."
   value       = local.contract.environment_config
 }
 

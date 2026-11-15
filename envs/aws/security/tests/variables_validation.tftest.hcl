@@ -24,6 +24,8 @@ variables {
   aws_overrides = {
     log_archive_bucket_name = "acme-org-log-archive"
     enable_security_lake    = false
+    # CMP-6: a production plan needs a real security contact.
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
   }
 }
 
@@ -54,7 +56,7 @@ run "accepts_valid_values" {
       config_role_arn           = "arn:aws:iam::222222222222:role/aws-config-recorder"
       aggregator_role_arn       = "arn:aws:iam::222222222222:role/aws-config-aggregator"
       break_glass_role_arn      = "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
-      notification_subscribers  = { soc = { protocol = "https", endpoint = "https://soc.example.com/hook" } }
+      notification_subscribers  = { soc = { protocol = "https", endpoint = "https://soc.acme-corp.io/hook" } }
       enabled_security_services = ["macie", "inspector", "detective", "resource-explorer"]
       cloudtrail_s3_data_events = "all"
     })
@@ -239,4 +241,255 @@ run "rejects_empty_default_tag_value" {
   }
 
   expect_failures = [var.default_tags]
+}
+
+# -----------------------------------------------------------------------------
+# CMP-2: log-archive retention and lock mode against compliance.frameworks
+# -----------------------------------------------------------------------------
+
+# hipaa sets a 2190-day floor.
+run "log_archive_retention_below_floor_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { log_archive_retention_days = 365, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+run "log_archive_governance_with_frameworks_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { log_archive_object_lock_mode = "GOVERNANCE", notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+# Without frameworks GOVERNANCE stays possible, and any retention of 1 day or more.
+run "log_archive_governance_without_frameworks_plans" {
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, {
+      log_archive_retention_days   = 30
+      log_archive_object_lock_mode = "GOVERNANCE"
+    })
+  }
+
+  assert {
+    condition     = module.aws_security.log_archive_retention_days == 30
+    error_message = "without compliance.frameworks a short GOVERNANCE retention must plan."
+  }
+}
+
+# Regulated floor: any aws.workload_environments entry with
+# compliance_class: regulated needs at least 365 days of log-archive retention,
+# because the VPC flow logs of every account land in that bucket.
+run "regulated_estate_rejects_short_config_retention" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+run "regulated_estate_rejects_short_override_retention" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { log_archive_retention_days = 364, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+run "regulated_estate_accepts_365_days" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    organization_contract    = null
+    aws_overrides            = { log_archive_retention_days = 365, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  assert {
+    condition     = module.aws_security.log_archive_retention_days == 365
+    error_message = "a regulated estate must plan with 365 days of log-archive retention."
+  }
+}
+
+run "log_archive_retention_zero_fails" {
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, { log_archive_retention_days = 0 })
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+run "log_archive_unknown_lock_mode_fails" {
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, { log_archive_object_lock_mode = "LEGAL_HOLD" })
+  }
+
+  expect_failures = [var.aws_overrides]
+}
+
+# CMP-6: production security notifications must reach a real address.
+run "production_without_security_contact_fails" {
+  command = plan
+
+  variables {
+    aws_overrides = {
+      log_archive_bucket_name = "acme-org-log-archive"
+      enable_security_lake    = false
+    }
+  }
+
+  expect_failures = [terraform_data.security_contact_guard, check.security_contact_set]
+}
+
+run "placeholder_domain_rejected_in_production" {
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, {
+      notification_subscribers = {
+        secops = { protocol = "email", endpoint = "secops@example.com" }
+        oncall = { protocol = "email", endpoint = "oncall@acme-corp.io" }
+      }
+    })
+  }
+
+  expect_failures = [terraform_data.security_contact_guard, check.security_contact_set]
+}
+
+run "test_domain_rejected_in_production" {
+  # RFC 2606 reserves .test: mail to it is never delivered.
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, {
+      notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme.test" } }
+    })
+  }
+
+  expect_failures = [terraform_data.security_contact_guard, check.security_contact_set]
+}
+
+run "placeholder_url_rejected_in_production" {
+  command = plan
+
+  variables {
+    aws_overrides = merge(var.aws_overrides, {
+      notification_subscribers = { soc = { protocol = "https", endpoint = "https://soc.my-org.example.com/hook" } }
+    })
+  }
+
+  expect_failures = [terraform_data.security_contact_guard, check.security_contact_set]
+}
+
+run "production_workload_makes_starter_strict" {
+  # org.profile = starter, but an aws.workload_environments entry is production.
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-prod-workload.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+    aws_overrides = {
+      log_archive_bucket_name = "acme-org-log-archive"
+      enable_security_lake    = false
+    }
+  }
+
+  expect_failures = [terraform_data.security_contact_guard, check.security_contact_set]
+}
+
+run "starter_profile_only_warns" {
+  command = plan
+
+  variables {
+    profile = "starter"
+    aws_overrides = {
+      log_archive_bucket_name = "acme-org-log-archive"
+      enable_security_lake    = false
+    }
+  }
+
+  assert {
+    condition     = length(local.notification_subscribers) == 0
+    error_message = "starter with no contact must plan with no subscriber (a check block warns)."
+  }
+
+  expect_failures = [check.security_contact_set]
+}
+
+run "starter_placeholder_only_warns" {
+  command = plan
+
+  variables {
+    profile = "starter"
+    aws_overrides = merge(var.aws_overrides, {
+      notification_subscribers = { secops = { protocol = "email", endpoint = "secops@example.com" } }
+    })
+  }
+
+  assert {
+    condition     = local.placeholder_subscribers == tolist(["secops"])
+    error_message = "a starter plan must flag the placeholder subscriber and only warn."
+  }
+
+  expect_failures = [check.security_contact_set]
+}
+
+run "production_with_real_contact_plans" {
+  command = plan
+
+  assert {
+    condition     = keys(local.notification_subscribers) == tolist(["secops"]) && length(local.placeholder_subscribers) == 0
+    error_message = "a production plan with a real subscriber must pass the security contact guard."
+  }
+}
+
+# Re-audit 7 CMP-2: a regulated AWS estate keeps the log archive in
+# COMPLIANCE mode even with no compliance.frameworks.
+run "regulated_estate_refuses_governance_lock" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    aws_overrides = {
+      log_archive_object_lock_mode = "GOVERNANCE"
+      log_archive_retention_days   = 365
+    }
+  }
+
+  expect_failures = [var.aws_overrides]
 }

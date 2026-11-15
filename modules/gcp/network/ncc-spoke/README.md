@@ -122,3 +122,7 @@ The following resources are created:
 | <a name="output_producer_spoke_ids"></a> [producer\_spoke\_ids](#output\_producer\_spoke\_ids) | Producer VPC spoke IDs, keyed by producer\_vpc\_networks key. |
 | <a name="output_state"></a> [state](#output\_state) | The spoke state (ACTIVE once accepted; a spoke in another project than the hub stays PENDING until the hub admin accepts it). |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

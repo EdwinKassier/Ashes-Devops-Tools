@@ -113,7 +113,7 @@ variable "backup_start_time" {
 }
 
 variable "backup_location" {
-  description = "Location of the automated backups: a region (e.g. europe-west2) or a multi-region (eu, us, asia). Pick a region other than the instance's to survive a regional outage. Null (default) = Cloud SQL's default, the multi-region nearest the instance."
+  description = "Location of the automated backups: a region (e.g. europe-west2) or a multi-region (eu, us, asia). Pick a region other than the instance's to survive a regional outage. Null (default) = the instance region, so backups stay where gcp.resourceLocations allows. Cloud SQL's own default (the multi-region nearest the instance) is used only if you set that multi-region here."
   type        = string
   default     = null
 
@@ -124,13 +124,21 @@ variable "backup_location" {
 }
 
 variable "transaction_log_retention_days" {
-  description = "Number of days of transaction (WAL) logs to retain for point-in-time recovery"
+  description = "Number of days of transaction (WAL) logs to retain for point-in-time recovery: 1 to 7 on the Enterprise edition, 1 to 35 on Enterprise Plus. Null = 7."
   type        = number
   default     = 7
+  nullable    = false
 
   validation {
     condition     = var.transaction_log_retention_days >= 1 && var.transaction_log_retention_days <= 35
     error_message = "transaction_log_retention_days must be between 1 and 35."
+  }
+
+  # Google (configure-pitr): "from 1-35 for Cloud SQL Enterprise Plus edition,
+  # or 1-7 for Cloud SQL Enterprise edition".
+  validation {
+    condition     = var.edition != "ENTERPRISE" || var.transaction_log_retention_days <= 7
+    error_message = "transaction_log_retention_days must be at most 7 on edition = ENTERPRISE. Google's configure-pitr limit: \"from 1-35 for Cloud SQL Enterprise Plus edition, or 1-7 for Cloud SQL Enterprise edition\". Set edition = ENTERPRISE_PLUS (with a db-perf-optimized-* tier) for a longer window."
   }
 }
 
@@ -145,9 +153,16 @@ variable "enable_iam_authentication" {
 }
 
 variable "encryption_key_name" {
-  description = "Optional CMEK: the self_link of a Cloud KMS CryptoKey used to encrypt the instance. Leave null to use Google-managed encryption."
+  description = "Optional CMEK: the self_link of a Cloud KMS CryptoKey used to encrypt the instance. Leave null to use Google-managed encryption. Changing it on an existing instance replaces the instance (the provider marks it ForceNew); enable_deletion_protection makes that plan fail instead."
   type        = string
   default     = null
+}
+
+variable "require_cmek" {
+  description = "Fail the plan unless encryption_key_name is set and enable_deletion_protection is true. Set it for regulated environments. The key cannot be added to an existing instance in place: adding one replaces the instance, so an existing instance without a key keeps failing the plan until you migrate it (see UPGRADING.md)."
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 # -----------------------------------------------------------------------------

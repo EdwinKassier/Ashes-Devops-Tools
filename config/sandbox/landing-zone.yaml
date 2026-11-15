@@ -83,7 +83,7 @@ aws:
   enabled_regions:
     - eu-west-2
   terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
-  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass
+  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/OrganizationBreakGlass
   log_archive_bucket_name: my-sandbox-org-log-archive
   accounts:
     log_archive: {email: aws+sbx-log-archive@example.com, ou: Security}
@@ -97,17 +97,22 @@ aws:
     workload_dev: {email: aws+sbx-workload-dev@example.com, ou: Workloads}
   workload_environments:
     dev:
+      is_production: false
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
   network:
+    # No .amazonaws.com (it admits every S3 bucket): only the regional AWS
+    # APIs without an endpoint that the app golden path calls.
     egress_domain_allowlist:
-      - .amazonaws.com
+      - api.ecr.eu-west-2.amazonaws.com
+      - .dkr.ecr.eu-west-2.amazonaws.com
+      - secretsmanager.eu-west-2.amazonaws.com
       - .github.com
       - .githubusercontent.com
       - .terraform.io
     stateful_default_actions:
-      - aws:drop_established
-      - aws:alert_established
+      - aws:drop_established_app_layer_to_server
+      - aws:alert_established_app_layer_to_server
   workload: {}
 
 saas:

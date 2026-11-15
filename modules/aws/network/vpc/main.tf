@@ -19,9 +19,13 @@
 #   unknown at plan time, so cidrsubnet() on it would fail under mock_provider.
 #   To keep subnet math deterministic and testable, local.vpc_cidr is ALWAYS
 #   var.cidr_block. The caller therefore passes the intended CIDR (the same value
-#   IPAM will allocate) even when ipam_pool_id drives the VPC allocation;
-#   with ipam_allocation = "explicit_cidr" the VPC requests exactly that
-#   cidr_block from the pool. cidr_block is always required for the subnet layout.
+#   IPAM will allocate) even when ipam_pool_id drives the VPC allocation.
+#   With ipam_allocation = "explicit_cidr" (the default) the VPC requests exactly
+#   that cidr_block from the pool, so the allocation and the subnet math agree.
+#   The legacy "netmask" shape lets IPAM pick any block of netmask_length, which
+#   need not match cidr_block; the ipam_allocation_matches_subnet_math check
+#   reports that mismatch after apply. cidr_block is always required for the
+#   subnet layout.
 
 locals {
   vpc_cidr = var.cidr_block
@@ -80,13 +84,12 @@ locals {
 
 resource "aws_vpc" "this" {
   # Three shapes:
-  #   * static (no pool)                 — cidr_block only.
-  #   * IPAM, ipam_allocation = "netmask" (default, legacy) — pool +
-  #     ipv4_netmask_length, cidr_block null. Existing IPAM VPCs keep this shape;
-  #     changing the netmask attribute forces VPC replacement.
-  #   * IPAM, ipam_allocation = "explicit_cidr" — pool + cidr_block, so the pool
-  #     allocates exactly the block the subnet math assumes (provider rejects a
-  #     netmask length alongside a CIDR). Opt-in for NEW VPCs only.
+  #   * static (no pool) - cidr_block only.
+  #   * IPAM, ipam_allocation = "explicit_cidr" (default) - pool + cidr_block, so
+  #     the pool allocates exactly the block the subnet math assumes (the
+  #     provider rejects a netmask length alongside a CIDR).
+  #   * IPAM, ipam_allocation = "netmask" (legacy) - pool + ipv4_netmask_length,
+  #     cidr_block left for IPAM to fill.
   ipv4_ipam_pool_id   = var.ipam_pool_id != "" ? var.ipam_pool_id : null
   ipv4_netmask_length = var.ipam_pool_id != "" && var.ipam_allocation == "netmask" ? var.netmask_length : null
   cidr_block          = var.ipam_pool_id == "" || var.ipam_allocation == "explicit_cidr" ? var.cidr_block : null
@@ -96,6 +99,32 @@ resource "aws_vpc" "this" {
   enable_dns_hostnames             = true
 
   tags = merge(var.tags, { Name = var.name })
+
+  lifecycle {
+    # ipv4_netmask_length is ForceNew and only used at create. Ignoring it lets
+    # an existing netmask-shape VPC move to explicit_cidr without replacement:
+    # its state cidr_block already holds the allocated block, so the planned
+    # cidr_block matches and only this create-time argument would differ. It
+    # also means a later netmask_length change does not replace the VPC.
+    ignore_changes = [ipv4_netmask_length]
+
+    # A zone from another region fails every subnet at apply with
+    # InvalidParameterValue. Fail the plan instead.
+    precondition {
+      condition     = alltrue([for az in local.azs : startswith(az, var.region)])
+      error_message = "availability_zones ${jsonencode(local.azs)} are not all in region ${var.region}. Pass the region's zones (envs/aws/network and envs/aws/workload resolve them from aws.network.availability_zone_ids or the region)."
+    }
+  }
+}
+
+# Post-apply guard: an IPAM block that differs from cidr_block means the subnets
+# are cut from the wrong block. In netmask mode the block is unknown at
+# plan, so this reports after apply or on the next plan.
+check "ipam_allocation_matches_subnet_math" {
+  assert {
+    condition     = var.ipam_pool_id == "" || aws_vpc.this.cidr_block == var.cidr_block
+    error_message = "VPC ${var.name} holds ${aws_vpc.this.cidr_block} from IPAM, but its subnets are cut from cidr_block ${var.cidr_block}. Set cidr_block (vpc_cidr) to the allocated block; see UPGRADING.md, \"Spoke VPCs request their CIDR explicitly from IPAM (aws-workload)\"."
+  }
 }
 
 resource "aws_subnet" "this" {
@@ -134,13 +163,34 @@ resource "aws_flow_log" "this" {
   tags = merge(var.tags, { Name = "${var.name}-flow-log" })
 }
 
-# Gateway endpoints (S3, DynamoDB) keep that traffic on the AWS backbone.
+# AWS's default endpoint policy, as DescribeVpcEndpoints returns it for a
+# gateway endpoint created without one (AWS CLI reference, describe-vpc-endpoints
+# and create-vpc-endpoint examples: Version 2008-10-17, one Allow on "*";
+# the PrivateLink guide "Default endpoint policy" shows the same statement;
+# checked 2026-11-12). The provider compares policies with
+# awspolicyequivalence (Version must match exactly) and keeps the configured
+# string when the remote one is equivalent, so an endpoint that never had a
+# policy shows no diff.
+locals {
+  gateway_endpoint_default_policy = jsonencode({
+    Version   = "2008-10-17"
+    Statement = [{ Effect = "Allow", Principal = "*", Action = "*", Resource = "*" }]
+  })
+}
+
+# Gateway endpoints (S3, DynamoDB) keep that traffic on the AWS backbone. They
+# bypass the hub egress firewall, so a caller that enforces egress passes an
+# endpoint policy per service (gateway_endpoint_policies).
 resource "aws_vpc_endpoint" "gateway" {
   for_each = toset(var.gateway_endpoints)
 
   vpc_id            = aws_vpc.this.id
   service_name      = "com.amazonaws.${var.region}.${each.value}"
   vpc_endpoint_type = "Gateway"
+  # A service without an entry gets AWS's default full-access document, sent
+  # explicitly: the provider's policy argument is Optional+Computed, so null
+  # would keep a restrictive policy from an earlier apply in place.
+  policy = lookup(var.gateway_endpoint_policies, each.value, local.gateway_endpoint_default_policy)
 
   tags = merge(var.tags, { Name = "${var.name}-${each.value}" })
 }

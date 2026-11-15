@@ -10,13 +10,19 @@
 # route_table_ids. That makes the for_each keys known and lets us assert the
 # OUTPUT WIRING (input <- output edges) concretely under `command = apply`.
 
-mock_provider "aws" {}
+# The alarm actions validate the topic ARN, which a mock would generate as random text.
+mock_provider "aws" {
+  mock_resource "aws_sns_topic" {
+    defaults = { arn = "arn:aws:sns:eu-west-2:111111111111:network-hub-alarms" }
+  }
+}
 
 variables {
   org_id                   = "o-abc1234567"
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 # Feed known vpc ids + subnet tiers so downstream for_each keys are plan-known.
@@ -85,13 +91,17 @@ override_module {
 }
 
 override_module {
-  target  = module.vpc_endpoints
-  outputs = { phz_id = "Z0000000000000000000" }
+  target = module.vpc_endpoints
+  outputs = {
+    phz_id               = "Z0000000000000000000"
+    shared_dns_zone_arns = { ssm = "arn:aws:route53:::hostedzone/Z0000000000000000001" }
+  }
 }
 
 override_module {
   target = module.network_firewall
   outputs = {
+    firewall_name         = "inspection-firewall"
     firewall_arn          = "arn:aws:network-firewall:eu-west-2:111111111111:firewall/inspection"
     firewall_endpoint_ids = ["vpce-fw-a", "vpce-fw-b"]
     firewall_endpoint_ids_by_az = {
@@ -117,7 +127,7 @@ run "production_allowlist_without_drop_fails" {
 
   variables {
     enforce_egress_allowlist                 = true
-    network_firewall_egress_domain_allowlist = [".amazonaws.com"]
+    network_firewall_egress_domain_allowlist = [".github.com"]
   }
 
   expect_failures = [terraform_data.production_egress_enforced]
@@ -140,8 +150,21 @@ run "production_profile_with_seeded_allowlist_plans" {
   variables {
     enforce_egress_allowlist                  = true
     network_firewall_stateful_default_actions = ["aws:drop_established", "aws:alert_established"]
-    network_firewall_egress_domain_allowlist  = [".amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]
+    network_firewall_egress_domain_allowlist  = ["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]
   }
+}
+
+# ARC-2: ".amazonaws.com" admits every S3 bucket and AWS API in any account.
+run "allowlist_with_all_of_amazonaws_warns" {
+  command = plan
+
+  variables {
+    enforce_egress_allowlist                  = true
+    network_firewall_stateful_default_actions = ["aws:drop_established", "aws:alert_established"]
+    network_firewall_egress_domain_allowlist  = [".amazonaws.com", ".github.com"]
+  }
+
+  expect_failures = [check.egress_allowlist_not_all_of_aws]
 }
 
 run "starter_profile_unaffected" {
@@ -158,5 +181,22 @@ run "waiver_plans" {
   variables {
     enforce_egress_allowlist = true
     egress_alert_only_waived = true
+  }
+}
+
+# Re-audit 6 ARC-1: the app-layer drop action (which lets the allowlist see a
+# split TLS ClientHello) satisfies the production gate.
+run "production_app_layer_drop_passes" {
+  command = plan
+
+  variables {
+    enforce_egress_allowlist                  = true
+    network_firewall_stateful_default_actions = ["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"]
+    network_firewall_egress_domain_allowlist  = ["api.ecr.eu-west-2.amazonaws.com"]
+  }
+
+  assert {
+    condition     = terraform_data.production_egress_enforced.input == true
+    error_message = "aws:drop_established_app_layer_to_server must satisfy the production egress gate."
   }
 }

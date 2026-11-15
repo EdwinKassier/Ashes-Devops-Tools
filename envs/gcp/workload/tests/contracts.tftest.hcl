@@ -25,9 +25,10 @@ variables {
   projects_contract = {
     environment_config = {
       dev = {
-        folder_id           = "folders/111"
+        folder_id           = "111"
         host_project_id     = "acme-dev-host-abcd"
         host_project_number = "222222222222"
+        is_production       = false
         region              = "europe-west1"
         cidr_block          = "10.10.0.0/16"
       }
@@ -39,6 +40,7 @@ override_module {
   target = module.environment.module.host
   outputs = {
     dns_zones            = {}
+    egress_proxy_address = "10.10.16.50"
     nat_ip               = "34.1.2.3"
     network_id           = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
     network_name         = "acme-dev-vpc"
@@ -78,6 +80,53 @@ run "contracts_replace_remote_state" {
       local.hub_dns_zones["internal-peering"].dns_name == "hub.internal."
     )
     error_message = "contract values must flow into the host project lookup and the hub peering / DNS peering inputs"
+  }
+}
+
+# gcp-network-hub names its internal zone from gcp.network.internal_domain and
+# publishes it as hub_network.dns_domain; the spoke peering zone must carry
+# that value, not a built-in.
+run "peering_zone_follows_the_hub_internal_domain" {
+  command = plan
+
+  variables {
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "corp.example.com."
+    }
+  }
+
+  assert {
+    condition     = local.hub_dns_zones["internal-peering"].dns_name == "corp.example.com." && local.hub_dns_zones["internal-peering"].peering_network == "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+    error_message = "the internal-peering zone must take its dns_name from the network_hub contract dns_domain"
+  }
+}
+
+# A supplied projects_contract carries the pipeline identities too.
+run "projects_contract_carries_pipeline_identities" {
+  command = plan
+
+  variables {
+    enable_network_hub = false
+    projects_contract = {
+      environment_config = {
+        dev = {
+          folder_id               = "111"
+          host_project_id         = "acme-dev-host-abcd"
+          host_project_number     = "222222222222"
+          is_production           = false
+          region                  = "europe-west1"
+          cidr_block              = "10.10.0.0/16"
+          vpc_sc_access_policy_id = "555555555"
+          automation_identities   = ["serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com"]
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = module.environment.components.vpc_sc_pipeline_identities == tolist(["serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com"])
+    error_message = "projects_contract.environment_config.<env>.automation_identities must reach the environment perimeter."
   }
 }
 
@@ -142,10 +191,11 @@ run "contracts_from_config_file" {
       length(data.terraform_remote_state.projects) == 0 &&
       length(data.terraform_remote_state.network_hub) == 0 &&
       output.host_project_id == "cfgco-dev-host" &&
-      local.billing_account == "billingAccounts/000000-111111-222222" &&
-      local.hub_network.dns_domain == "hub.internal."
+      local.billing_account == "000000-111111-222222" &&
+      local.hub_network.dns_domain == "hub.internal." &&
+      module.environment.components.vpc_sc_pipeline_identities == tolist(["serviceAccount:cfgco-wl-dev-apply@cfgco-admin.iam.gserviceaccount.com"])
     )
-    error_message = "gcp.contracts.<layer> in the config file must replace the remote-state reads"
+    error_message = "gcp.contracts.<layer> in the config file must replace the remote-state reads, automation_identities included"
   }
 }
 
@@ -291,6 +341,24 @@ run "additional_regions_per_environment_from_config_file" {
   }
 }
 
+# ARC-1: gcp.environments.<env>.private_service_connect reaches the spoke.
+run "psc_overrides_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+    project_prefix           = null
+    tfc_organization         = null
+    organization_contract    = null
+    projects_contract        = null
+  }
+
+  assert {
+    condition     = local.private_service_connect_name == "devapis" && local.private_service_connect_address == "10.10.200.10"
+    error_message = "gcp.environments.dev.private_service_connect must reach the environment stage from the config file."
+  }
+}
+
 run "no_additional_regions_by_default" {
   command = plan
 
@@ -363,13 +431,39 @@ run "egress_proxy_targets_hub_service_attachment" {
     network_hub_contract = {
       vpc_self_link                   = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
       dns_domain                      = "hub.internal."
-      egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west2/serviceAttachments/swp"
+      egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
+      egress_proxy_port               = 8443
     }
   }
 
   assert {
-    condition     = local.enable_egress_proxy && local.hub_network.egress_proxy_service_attachment == "projects/acme-hub/regions/europe-west2/serviceAttachments/swp"
+    condition     = local.enable_egress_proxy && local.hub_network.egress_proxy_service_attachment == "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
     error_message = "the egress proxy endpoint must target the hub's published service attachment."
+  }
+
+  assert {
+    condition     = local.egress_proxy_port == 8443
+    error_message = "the hub contract's egress_proxy_port must reach the app services."
+  }
+}
+
+# A hub contract without egress_proxy_port (applied before the key existed)
+# falls back to 443, the hub Secure Web Proxy default.
+run "egress_proxy_port_defaults_to_443" {
+  command = plan
+
+  variables {
+    enable_egress_proxy = true
+    network_hub_contract = {
+      vpc_self_link                   = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain                      = "hub.internal."
+      egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
+    }
+  }
+
+  assert {
+    condition     = local.egress_proxy_port == 443
+    error_message = "without egress_proxy_port in the contract, the proxy port must be 443."
   }
 }
 
@@ -385,4 +479,66 @@ run "egress_proxy_without_hub_proxy_fails" {
   }
 
   expect_failures = [terraform_data.egress_proxy_guard]
+}
+
+# The spoke side of the hub peering stays INACTIVE until gcp-network-hub runs
+# again and creates hub-to-<env>. The check warns and names the runbook step
+# (ARC-5); it does not fail the plan.
+run "inactive_hub_peering_warns" {
+  command = plan
+
+  variables {
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "hub.internal."
+    }
+  }
+
+  override_module {
+    target = module.environment.module.host
+    outputs = {
+      dns_zones            = {}
+      nat_ip               = "34.1.2.3"
+      network_id           = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      network_name         = "acme-dev-vpc"
+      network_self_link    = "https://www.googleapis.com/compute/v1/projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      security_policy_id   = null
+      subnets              = {}
+      vpc_peerings         = { "hub-peering" = { peering_state = "INACTIVE" } }
+      vpc_service_controls = {}
+    }
+  }
+
+  expect_failures = [check.hub_peering_active]
+}
+
+run "active_hub_peering_passes_the_check" {
+  command = plan
+
+  variables {
+    network_hub_contract = {
+      vpc_self_link = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+      dns_domain    = "hub.internal."
+    }
+  }
+
+  override_module {
+    target = module.environment.module.host
+    outputs = {
+      dns_zones            = {}
+      nat_ip               = "34.1.2.3"
+      network_id           = "projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      network_name         = "acme-dev-vpc"
+      network_self_link    = "https://www.googleapis.com/compute/v1/projects/acme-dev-host-abcd/global/networks/acme-dev-vpc"
+      security_policy_id   = null
+      subnets              = {}
+      vpc_peerings         = { "hub-peering" = { peering_state = "ACTIVE" } }
+      vpc_service_controls = {}
+    }
+  }
+
+  assert {
+    condition     = output.hub_peering_state == "ACTIVE"
+    error_message = "An ACTIVE hub peering must pass the hub_peering_active check."
+  }
 }

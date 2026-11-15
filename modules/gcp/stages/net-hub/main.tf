@@ -17,6 +17,9 @@
  */
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, false)
+
   # Explicit zones win; otherwise fall back to the zones GCP returns.
   zones = length(var.network.explicit_zones) > 0 ? var.network.explicit_zones : data.google_compute_zones.available.names
 }
@@ -41,17 +44,17 @@ data "google_compute_zones" "available" {
 module "network" {
   source = "../../network/tiered-vpc"
 
-  project_id          = var.project_id
-  name                = var.network.name
-  region              = var.region
-  cidr_block          = var.network.cidr_block
-  zones               = local.zones
-  subnet_cidrs        = var.network.subnet_cidrs
-  secondary_ranges    = var.network.secondary_ranges
-  shared_vpc_host     = var.network.shared_vpc_host
-  deletion_protection = var.deletion_protection
-  flow_logs           = var.network.flow_logs
-  additional_regions  = var.additional_regions
+  project_id                 = var.project_id
+  name                       = var.network.name
+  region                     = var.region
+  cidr_block                 = var.network.cidr_block
+  zones                      = local.zones
+  subnet_cidrs               = var.network.subnet_cidrs
+  secondary_ranges           = var.network.secondary_ranges
+  shared_vpc_host            = var.network.shared_vpc_host
+  enable_deletion_protection = local.enable_deletion_protection
+  flow_logs                  = var.network.flow_logs
+  additional_regions         = var.additional_regions
 
   # Cloud NAT needs a route to the default internet gateway (tiered-vpc deletes it).
   enable_internet_egress_route = var.nat.enabled
@@ -170,12 +173,36 @@ module "private_service_access" {
   prefix_length = var.private_service_access.prefix_length
 }
 
+# Google's endpoint name rule for Google APIs: 1-20 characters, lower-case
+# letters and numbers only, starting with a letter. Network names start with a
+# letter, so the derived name does too. The endpoint needs an explicit IP: the
+# default is the second-to-last address of the VPC block, outside the
+# tiered-vpc subnet layout (subnets at /24 offsets 0-47 of a /16). Google:
+# endpoints are not reachable from peered VPC networks, and the IP must be
+# outside every subnet range of this VPC and of the networks peered with it.
+# The output private_service_connect fails the plan when it is inside a subnet
+# of this VPC, including the Secure Web Proxy proxy-only and PSC NAT subnets
+# when the proxy is enabled; peered networks use other blocks of the CIDR plan.
+locals {
+  psc_name = coalesce(var.private_service_connect.name, "${substr(replace(lower(var.network.name), "/[^a-z0-9]/", ""), 0, 17)}psc")
+  # The try() fallback keeps a degenerate /31 or /32 block, which has no host
+  # -2, from erroring during static evaluation: the gcp-network-hub root uses
+  # the 0.0.0.0/32 sentinel for an unset hub CIDR, and its validations reject
+  # that sentinel before any real plan. The CIDR plan's blocks are /16.
+  psc_address = coalesce(var.private_service_connect.address, try(cidrhost(var.network.cidr_block, -2), cidrhost(var.network.cidr_block, 0)))
+  psc_checked_ranges = concat(
+    module.network.subnet_ip_ranges,
+    var.secure_web_proxy.enabled ? compact([var.secure_web_proxy.proxy_only_subnet_cidr, var.secure_web_proxy.psc_nat_subnet_cidr]) : [],
+  )
+}
+
 module "private_service_connect" {
   source = "../../network/private-service-connect"
   count  = var.private_service_connect.enabled ? 1 : 0
 
   project_id = var.project_id
-  name       = "${var.network.name}-psc"
+  name       = local.psc_name
+  address    = local.psc_address
   network    = module.network.network_id
   target     = var.private_service_connect.target
 }
@@ -202,6 +229,7 @@ module "vpn" {
   local_ip_addresses        = var.vpn.local_ips
   peer_ip_addresses         = var.vpn.peer_ips
   advertised_ip_ranges      = var.vpn.advertised_ip_ranges
+  advertised_groups         = var.vpn.advertised_groups
   labels                    = var.labels
 }
 

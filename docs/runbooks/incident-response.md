@@ -183,7 +183,7 @@ Only after forensic copies are confirmed:
 
 ## Step 6 — Post-incident review
 
-Within 24 hours, document the timeline, root cause, blast radius, and remediation. Confirm the quarantine firewall rules, VPC-SC change, snapshots, and log exports are all accounted for and that no evidence was destroyed. If break-glass access was used during the response, cross-check every action taken with it per [`break-glass.md`](break-glass.md).
+Within 24 hours, document the timeline, root cause, blast radius, and remediation. Confirm the quarantine firewall rules, VPC-SC change, snapshots, and log exports are all accounted for and that no evidence was destroyed. If break-glass access was used during the response, cross-check every action taken with it per [`break-glass.md`](break-glass.md). If personal data, health data, card data or a regulated service was affected, a legal notification clock may already be running: follow [`regulatory-notification.md`](regulatory-notification.md).
 
 ---
 
@@ -197,6 +197,7 @@ Within 24 hours, document the timeline, root cause, blast radius, and remediatio
 
 ## See also
 
+- [Regulatory incident and breach notification](regulatory-notification.md) — GDPR, DORA, NIS2, HIPAA, PCI and SEC deadlines and who decides.
 - [AWS Incident Response](aws-incident-response.md) — the automated (Lambda-based) counterpart this mirrors.
 - [Break-Glass Emergency Access](break-glass.md) — emergency GCP access when WIF/CI is the compromised path.
 - [GCP Landing Zone](../architecture/gcp-landing-zone.md#security-services) — where SCC, audit logging, org policy, and VPC-SC sit in the design.

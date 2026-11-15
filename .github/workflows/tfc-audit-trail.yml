@@ -1,0 +1,291 @@
+name: HCP Terraform Audit Trail Export
+
+# Exports the HCP Terraform organization audit trail (who ran, approved and
+# changed workspaces, variables, teams and policies) to the same write-once
+# buckets as state-backup.yml, under the tfc-audit/ prefix. HCP Terraform keeps
+# only 14 days of audit trail; this copy keeps it for the bucket's retention.
+# Evidence for SOC 2 CC8.1, ISO A.8.15, NIST AU-9(2) and PCI DSS 10.3.3.
+# Setup and queries: docs/runbooks/state-backup.md#audit-trail-export.
+#
+# Source:
+#   - secrets.TFC_TOKEN_AUDIT_TRAIL  the organization's audit trail token
+#          (POST /organizations/<org>/authentication-token?token=audit-trails,
+#          owners only). The API refuses user and team tokens. An audit trail
+#          token is narrower than an organization token, so do not use an
+#          organization token here. It lives only in the `tfc-audit-trail`
+#          GitHub environment, restricted to the default branch.
+#   - vars.TFC_ORGANIZATION
+#   - The organization needs HCP Terraform Standard or Premium (audit trails).
+# Targets: the STATE_BACKUP_* repository variables (see state-backup.yml). The
+#   AWS role trust and the GCP WIF condition must also accept
+#   `environment:tfc-audit-trail`, and the AWS role must allow the tfc-audit/
+#   prefix.
+#
+# Off until the secret is set: with no TFC_TOKEN_AUDIT_TRAIL a scheduled run
+# skips with a warning (a manual dispatch fails). Once the secret is set, the
+# run fails closed: no complete target, an API error or an unexpected response
+# shape fails it, and nothing is written.
+#
+# Window: events since <lookback> hours ago (default 26, so daily runs
+# overlap). Each run writes one new object,
+#   tfc-audit/<org>/<yyyy>/<mm>/<dd>/<since>_<until>_run-<id>-<attempt>.ndjson
+# (one JSON event per line), and never overwrites an existing object. Readers
+# de-duplicate by the event `id`.
+#
+# Limiting the token's exposure: the job checks out no repository code and
+# runs no action after the token enters a step. Only the "Fetch audit trail"
+# step receives the token, and it runs curl and jq only. The cloud actions run
+# before it and the upload step after it, without the token.
+
+on:
+  schedule:
+    - cron: '45 5 * * *'  # Daily at 05:45 UTC
+  workflow_dispatch:
+    inputs:
+      lookback_hours:
+        description: >
+          Export events from this many hours ago until now (1-336). HCP
+          Terraform keeps 14 days (336 hours). Use a larger value to catch up
+          after failed runs.
+        required: false
+        default: '26'
+
+permissions: {}
+
+concurrency:
+  group: tfc-audit-trail
+  cancel-in-progress: false
+
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  export:
+    name: Export HCP Terraform audit trail
+    runs-on: ubuntu-latest
+    environment: tfc-audit-trail
+    timeout-minutes: 30
+    permissions:
+      id-token: write  # GitHub OIDC to AWS / GCP; no repository access needed
+    env:
+      # gcloud makes no background update check or usage report, so it calls
+      # only the Google APIs below.
+      CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK: "true"
+      CLOUDSDK_CORE_DISABLE_USAGE_REPORTING: "true"
+    steps:
+      # This job holds TFC_TOKEN_AUDIT_TRAIL and an OIDC token. Every endpoint
+      # it calls, from its steps:
+      # - app.terraform.io: the audit trail API (curl).
+      # - *.amazonaws.com: STS for configure-aws-credentials, then the S3
+      #   bucket (aws s3api). A bucket in a China region (amazonaws.com.cn)
+      #   needs that domain added here.
+      # - *.googleapis.com: sts, iamcredentials and oauth2 for the WIF
+      #   credentials, storage for gcloud storage.
+      # The GitHub OIDC token endpoint (*.actions.githubusercontent.com) is
+      # allowed by harden-runner itself.
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            app.terraform.io:443
+            *.amazonaws.com:443
+            *.googleapis.com:443
+
+      - name: Check export configuration
+        id: cfg
+        env:
+          TFC_TOKEN_SET: ${{ secrets.TFC_TOKEN_AUDIT_TRAIL != '' }}
+          TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
+          S3_BUCKET: ${{ vars.STATE_BACKUP_S3_BUCKET }}
+          AWS_ROLE_ARN: ${{ vars.STATE_BACKUP_AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.STATE_BACKUP_AWS_REGION }}
+          GCS_BUCKET: ${{ vars.STATE_BACKUP_GCS_BUCKET }}
+          GCP_WIF_PROVIDER: ${{ vars.STATE_BACKUP_GCP_WIF_PROVIDER }}
+          GCP_SA: ${{ vars.STATE_BACKUP_GCP_SA }}
+          LOOKBACK_HOURS: ${{ inputs.lookback_hours || '26' }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$TFC_TOKEN_SET" != "true" ]; then
+            if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+              echo "::error::Secret TFC_TOKEN_AUDIT_TRAIL is not set in the tfc-audit-trail environment."
+              exit 1
+            fi
+            echo "::warning::HCP Terraform audit trail export is off: secret TFC_TOKEN_AUDIT_TRAIL" \
+              "is not set. HCP Terraform keeps only 14 days of audit trail" \
+              "(docs/runbooks/state-backup.md#audit-trail-export)."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          errors=()
+          [ -n "$TFC_ORGANIZATION" ] || errors+=("variable TFC_ORGANIZATION is not set")
+          case "$TFC_ORGANIZATION" in
+            *[!A-Za-z0-9_-]*) errors+=("variable TFC_ORGANIZATION is not an organization name") ;;
+          esac
+          case "$LOOKBACK_HOURS" in
+            '' | *[!0-9]*) errors+=("lookback_hours must be a whole number from 1 to 336") ;;
+            *) if [ "$LOOKBACK_HOURS" -lt 1 ] || [ "$LOOKBACK_HOURS" -gt 336 ]; then
+                 errors+=("lookback_hours must be a whole number from 1 to 336")
+               fi ;;
+          esac
+          s3=false
+          gcs=false
+          if [ -n "$S3_BUCKET$AWS_ROLE_ARN$AWS_REGION" ]; then
+            if [ -n "$S3_BUCKET" ] && [ -n "$AWS_ROLE_ARN" ] && [ -n "$AWS_REGION" ]; then
+              s3=true
+            else
+              errors+=("S3 target is incomplete: set STATE_BACKUP_S3_BUCKET, _AWS_ROLE_ARN and _AWS_REGION")
+            fi
+          fi
+          if [ -n "$GCS_BUCKET$GCP_WIF_PROVIDER$GCP_SA" ]; then
+            if [ -n "$GCS_BUCKET" ] && [ -n "$GCP_WIF_PROVIDER" ] && [ -n "$GCP_SA" ]; then
+              gcs=true
+            else
+              errors+=("GCS target is incomplete: set STATE_BACKUP_GCS_BUCKET, _GCP_WIF_PROVIDER and _GCP_SA")
+            fi
+          fi
+          if [ "$s3" = false ] && [ "$gcs" = false ]; then
+            errors+=("no write-once target is configured (S3 and/or GCS)")
+          fi
+          if [ "${#errors[@]}" -gt 0 ]; then
+            for e in "${errors[@]}"; do echo "::error::Audit trail export: ${e}."; done
+            exit 1
+          fi
+          {
+            echo "configured=true"
+            echo "s3=${s3}"
+            echo "gcs=${gcs}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to AWS (GitHub OIDC)
+        if: steps.cfg.outputs.configured == 'true' && steps.cfg.outputs.s3 == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
+        with:
+          role-to-assume: ${{ vars.STATE_BACKUP_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.STATE_BACKUP_AWS_REGION }}
+          role-session-name: tfc-audit-trail-${{ github.run_id }}-${{ github.run_attempt }}
+          role-duration-seconds: 3600
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        if: steps.cfg.outputs.configured == 'true' && steps.cfg.outputs.gcs == 'true'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.STATE_BACKUP_GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.STATE_BACKUP_GCP_SA }}
+
+      # The only step that sees the token. curl and jq only.
+      - name: Fetch audit trail
+        id: fetch
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN_AUDIT_TRAIL }}
+          LOOKBACK_HOURS: ${{ inputs.lookback_hours || '26' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          work="${RUNNER_TEMP}/tfc-audit-trail"
+          mkdir -p "$work"
+          until_ts="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          since_ts="$(date -u -d "${LOOKBACK_HOURS} hours ago" +%Y-%m-%dT%H:%M:%S.000Z)"
+          url="https://app.terraform.io/api/v2/organization/audit-trail"
+          : > "$work/events.ndjson"
+          page=1
+          pages=0
+          while :; do
+            code=$(curl --silent --show-error --max-time 60 --connect-timeout 10 \
+              --output "$work/page.json" --write-out '%{http_code}' \
+              --header "Authorization: Bearer ${TFC_TOKEN}" \
+              --header "Content-Type: application/vnd.api+json" \
+              "${url}?since=${since_ts}&page%5Bnumber%5D=${page}&page%5Bsize%5D=1000") \
+              || { echo "::error::The audit trail request failed (network)."; exit 1; }
+            case "$code" in
+              200) ;;
+              401 | 403 | 404)
+                echo "::error::The audit trail API returned HTTP ${code}. Check that TFC_TOKEN_AUDIT_TRAIL" \
+                  "is the organization's current audit trail token (user and team tokens are refused," \
+                  "and a new audit trail token replaces the old one) and that the organization is on" \
+                  "HCP Terraform Standard or Premium."
+                exit 1 ;;
+              *) echo "::error::The audit trail API returned HTTP ${code}."; exit 1 ;;
+            esac
+            # Fail on an unexpected shape rather than write an empty file.
+            if ! jq -e '(.data | type == "array") and (.pagination | type == "object")
+                and (.pagination | has("next_page"))' "$work/page.json" >/dev/null; then
+              echo "::error::Unexpected audit trail response shape on page ${page}" \
+                "(expected .data[] and .pagination.next_page)."
+              exit 1
+            fi
+            jq -c '.data[]' "$work/page.json" >> "$work/events.ndjson"
+            pages=$((pages + 1))
+            next=$(jq -r '.pagination.next_page // empty' "$work/page.json")
+            [ -n "$next" ] || break
+            if ! [ "$next" -gt "$page" ] 2>/dev/null || [ "$pages" -ge 500 ]; then
+              echo "::error::Audit trail pagination did not advance (page ${page}, next ${next})."
+              exit 1
+            fi
+            page="$next"
+          done
+          rm -f "$work/page.json"
+          {
+            echo "file=${work}/events.ndjson"
+            echo "count=$(wc -l < "$work/events.ndjson" | tr -d ' ')"
+            echo "pages=${pages}"
+            echo "since=${since_ts}"
+            echo "until=${until_ts}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write to write-once targets
+        if: steps.cfg.outputs.configured == 'true'
+        env:
+          FILE: ${{ steps.fetch.outputs.file }}
+          COUNT: ${{ steps.fetch.outputs.count }}
+          PAGES: ${{ steps.fetch.outputs.pages }}
+          SINCE: ${{ steps.fetch.outputs.since }}
+          UNTIL: ${{ steps.fetch.outputs.until }}
+          TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          S3_ENABLED: ${{ steps.cfg.outputs.s3 }}
+          S3_BUCKET: ${{ vars.STATE_BACKUP_S3_BUCKET }}
+          GCS_ENABLED: ${{ steps.cfg.outputs.gcs }}
+          GCS_BUCKET: ${{ vars.STATE_BACKUP_GCS_BUCKET }}
+        run: |
+          set -uo pipefail
+          trap 'rm -rf "$(dirname "$FILE")"' EXIT
+          day="${UNTIL:0:4}/${UNTIL:5:2}/${UNTIL:8:2}"
+          name="$(echo "${SINCE}_${UNTIL}" | tr -d ':')_run-${RUN_ID}-${RUN_ATTEMPT}.ndjson"
+          key="tfc-audit/${TFC_ORGANIZATION}/${day}/${name}"
+          failed=0
+          if [ "$S3_ENABLED" = "true" ]; then
+            if aws s3api head-object --bucket "$S3_BUCKET" --key "$key" >/dev/null 2>&1; then
+              echo "::error::s3://${S3_BUCKET}/${key} already exists; not overwritten."
+              failed=1
+            elif ! aws s3api put-object --bucket "$S3_BUCKET" --key "$key" --body "$FILE" \
+                --checksum-algorithm SHA256 --content-type application/x-ndjson >/dev/null; then
+              echo "::error::Upload to s3://${S3_BUCKET}/${key} failed."
+              failed=1
+            fi
+          fi
+          if [ "$GCS_ENABLED" = "true" ]; then
+            if ! gcloud storage cp --no-clobber --content-type=application/x-ndjson --quiet \
+                "$FILE" "gs://${GCS_BUCKET}/${key}" >/dev/null; then
+              echo "::error::Upload to gs://${GCS_BUCKET}/${key} failed."
+              failed=1
+            fi
+          fi
+          {
+            echo "## HCP Terraform audit trail export"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Window (UTC) | ${SINCE} to ${UNTIL} |"
+            echo "| Events | ${COUNT} (${PAGES} page(s)) |"
+            echo "| Object | \`${key}\` |"
+            echo "| Targets | S3 ${S3_ENABLED}, GCS ${GCS_ENABLED} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$failed" -eq 0 ] || exit 1
+          echo "Exported ${COUNT} event(s) to ${key}."

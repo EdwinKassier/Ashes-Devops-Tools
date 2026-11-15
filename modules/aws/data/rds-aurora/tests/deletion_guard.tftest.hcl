@@ -52,7 +52,7 @@ run "unprotected_cluster_is_created_without_guard" {
   command   = apply
 
   variables {
-    deletion_protection = false
+    enable_deletion_protection = false
   }
 
   assert {
@@ -66,7 +66,7 @@ run "unprotected_cluster_can_be_replaced" {
   command   = plan
 
   variables {
-    deletion_protection = false
+    enable_deletion_protection = false
   }
 
   plan_options {

@@ -247,12 +247,13 @@ run "accepts_known_app_service_keys" {
   variables {
     app_services = {
       api = {
-        image         = "europe-docker.pkg.dev/acme/app/api:1"
-        min_instances = 1
-        secrets       = { DB_URL = { secret = "db-url", version = "2" } }
-        database      = { tier = "db-custom-2-7680", databases = ["app"] }
-        alerts        = { p99_latency_ms = 1500 }
-        slo           = { goal = 0.995 }
+        image             = "europe-docker.pkg.dev/acme/app/api:1"
+        min_instances     = 1
+        health_check_path = "/healthz"
+        secrets           = { DB_URL = { secret = "db-url", version = "2" } }
+        database          = { tier = "db-custom-2-7680", databases = ["app"] }
+        alerts            = { p99_latency_ms = 1500 }
+        slo               = { goal = 0.995 }
       }
     }
   }
@@ -275,6 +276,18 @@ run "rejects_wif_pool_as_ingress_source" {
   }
 
   expect_failures = [var.vpc_service_controls]
+}
+
+# The pipeline ingress rule takes service accounts only, never a user, group
+# or domain.
+run "rejects_non_service_account_automation_identity" {
+  command = plan
+
+  variables {
+    automation_identities = ["user:someone@example.com"]
+  }
+
+  expect_failures = [var.automation_identities]
 }
 
 # VPC-SC: any identity to any project is the exfiltration path.
@@ -317,4 +330,25 @@ run "rejects_host_project_service_when_disabled" {
   }
 
   expect_failures = [var.enable_host_project_workloads]
+}
+
+# IAC-1: pinned zones must belong to the host project's region, once each.
+run "rejects_explicit_zones_outside_the_region" {
+  command = plan
+
+  variables {
+    network = { explicit_zones = ["europe-west1-b", "europe-west2-a"] }
+  }
+
+  expect_failures = [var.network]
+}
+
+run "rejects_duplicate_explicit_zones" {
+  command = plan
+
+  variables {
+    network = { explicit_zones = ["europe-west1-b", "europe-west1-b"] }
+  }
+
+  expect_failures = [var.network]
 }

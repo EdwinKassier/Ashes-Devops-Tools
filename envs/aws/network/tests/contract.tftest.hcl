@@ -7,10 +7,19 @@
 # plus the other config-file fallbacks the root shares with aws-security
 # (log_archive_bucket_name, aws.enabled_regions, org.profile).
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 
 variables {
   landing_zone_config_path = ""
+  alarm_subscriber_emails  = ["netops@acme.io"]
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "acme-org-log-archive"
 }
@@ -117,6 +126,8 @@ run "variable_contract_beats_config_contract" {
     landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
     profile                  = "production"
     aws_enabled_regions      = ["eu-west-2"]
+    # The fixture's org.regions.aws is eu-west-1.
+    availability_zones = ["eu-west-1a", "eu-west-1b"]
     organization_contract = {
       organization_id       = "o-varsvarsva"
       management_account_id = "999999999999"
@@ -133,4 +144,18 @@ run "variable_contract_beats_config_contract" {
     condition     = local.profile == "production" && local.enable_network_firewall == true && join(",", local.aws_enabled_regions) == "eu-west-2" && local.log_archive_bucket_name == "acme-org-log-archive"
     error_message = "explicit variables must win over the config file."
   }
+}
+
+# Production is the is_production flag alone: an aws.workload_environments
+# entry without it fails the plan, naming the entry. A key named prod is not
+# read.
+run "config_workload_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+    log_archive_bucket_name  = null
+  }
+
+  expect_failures = [var.enforce_egress_allowlist]
 }

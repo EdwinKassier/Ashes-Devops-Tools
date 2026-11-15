@@ -17,7 +17,6 @@ variable "project_id" {
 variable "region" {
   description = "The primary GCP region of the network (e.g., 'us-central1', 'europe-west1')."
   type        = string
-  default     = "us-central1"
 
   validation {
     condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.region))
@@ -31,10 +30,17 @@ variable "labels" {
   default     = {}
 }
 
-variable "deletion_protection" {
-  description = "Guard the VPC and subnet stack with a prevent_destroy terraform_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard."
+variable "enable_deletion_protection" {
+  description = "Guard the VPC and subnet stack with a prevent_destroy terraform_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard. Null (default) uses the deprecated deletion_protection input, else false."
   type        = bool
-  default     = false
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 variable "network" {
@@ -68,7 +74,7 @@ variable "network" {
     error_message = "network.cidr_block must be valid CIDR notation without host bits set (e.g. \"10.0.0.0/16\")."
   }
   validation {
-    condition     = alltrue([for z in var.network.explicit_zones : can(regex("^[a-z]+-[a-z]+[0-9]-[a-z]$", z))])
+    condition     = alltrue([for z in var.network.explicit_zones : can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))])
     error_message = "Each entry in network.explicit_zones must be a valid GCP zone name (e.g. 'us-central1-a')."
   }
 }

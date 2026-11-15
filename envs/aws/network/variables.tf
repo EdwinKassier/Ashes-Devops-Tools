@@ -3,9 +3,27 @@
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "tfc_organization" {
@@ -53,7 +71,7 @@ variable "aws_region" {
   default     = null
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
     error_message = "aws_region (or org.regions.aws in config/landing-zone.yaml) must be a valid AWS region name, e.g. eu-west-2."
   }
 }
@@ -95,6 +113,28 @@ variable "regional_cidrs" {
   }
 }
 
+variable "regional_additional_cidrs" {
+  description = "Map of region to extra CIDRs provisioned into that region's IPAM pool next to regional_cidrs (capacity growth when the first CIDR is full). Each CIDR must sit inside top_cidr and overlap no other pool CIDR. Null = aws.network.regional_additional_cidrs from config/landing-zone.yaml, else none."
+  type        = map(list(string))
+  default     = null
+
+  validation {
+    condition     = var.regional_additional_cidrs == null || alltrue(flatten([for r, cs in coalesce(var.regional_additional_cidrs, {}) : [for c in cs : can(cidrhost(c, 0))]]))
+    error_message = "Every value in regional_additional_cidrs must be a valid IPv4 CIDR block."
+  }
+}
+
+variable "ipam_share_ou_keys" {
+  description = "Keys of the organization contract's ou_ids (OU name => OU ID) whose accounts may allocate from the regional IPAM pools. Null = aws.network.ipam_share_ou_keys from config/landing-zone.yaml, else the whole organization (today's scope). Every account that allocates from a pool must sit in a listed OU (child OUs included), or it loses access to the pool."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.ipam_share_ou_keys == null || length(coalesce(var.ipam_share_ou_keys, ["x"])) > 0
+    error_message = "ipam_share_ou_keys must be null (share with the whole organization) or a non-empty list of OU keys."
+  }
+}
+
 variable "inspection_cidr" {
   description = "IPv4 CIDR of the inspection VPC that hosts the Network Firewall endpoints and its transit-gateway attachment. Null = aws.network.inspection_cidr from config/landing-zone.yaml, else 10.64.0.0/16."
   type        = string
@@ -118,13 +158,24 @@ variable "egress_cidr" {
 }
 
 variable "availability_zones" {
-  description = "Availability zones to spread each subnet tier across. Only the first az_count entries are used."
+  description = "Availability zone NAMES for the hub VPCs, valid in this account only (a name can map to a different physical zone in another account). Null (default) resolves them from availability_zone_ids, else aws.network.availability_zone_ids from config/landing-zone.yaml, else the region's first three available zones. Only the first az_count entries are used."
   type        = list(string)
-  default     = ["eu-west-2a", "eu-west-2b"]
+  default     = null
 
   validation {
-    condition     = length(var.availability_zones) > 0
+    condition     = var.availability_zones == null ? true : length(var.availability_zones) > 0
     error_message = "availability_zones must contain at least one zone."
+  }
+}
+
+variable "availability_zone_ids" {
+  description = "Availability zone IDs (for example euw2-az2), the same physical zones in every account. Ignored when availability_zones is set. Null = aws.network.availability_zone_ids from config/landing-zone.yaml, else the region's first three available zones. Changing the resolved zone names of an existing estate replaces its subnets: see UPGRADING.md."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.availability_zone_ids == null ? true : length(var.availability_zone_ids) > 0 && alltrue([for id in var.availability_zone_ids : can(regex("^[a-z]+[0-9]+-az[0-9]+$", id))])
+    error_message = "availability_zone_ids must be a non-empty list of AZ IDs such as euw2-az2 or use1-az4."
   }
 }
 
@@ -138,8 +189,10 @@ variable "az_count" {
     error_message = "az_count must be between 2 and 3 (the Route 53 Resolver endpoints need subnets in at least two AZs)."
   }
 
+  # Resolved zones (IDs or the region) are checked by the
+  # aws_availability_zones postcondition in azs.tf.
   validation {
-    condition     = var.az_count <= length(var.availability_zones)
+    condition     = var.availability_zones == null ? true : var.az_count <= length(var.availability_zones)
     error_message = "az_count must not exceed the number of availability_zones provided."
   }
 }
@@ -166,9 +219,14 @@ variable "private_hosted_zone_name" {
 }
 
 variable "enable_network_firewall" {
-  description = "Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed. Null (default) follows profile: on for production, off for starter."
+  description = "Whether to deploy the Network Firewall in the inspection VPC. COST TOGGLE: bills per endpoint-hour plus per-GB processed. Null (default) follows profile: on for production, off for starter; on for any profile when an aws.workload_environments entry is compliance_class: regulated (false then fails the plan)."
   type        = bool
   default     = null
+
+  validation {
+    condition     = var.enable_network_firewall != false || length(local.cfg.workload_regulated) == 0
+    error_message = "enable_network_firewall = false is not allowed: ${join(", ", local.cfg.workload_regulated)} ${length(local.cfg.workload_regulated) == 1 ? "is" : "are"} regulated (aws.workload_environments.<env>.compliance_class: regulated in config/landing-zone.yaml), and regulated egress must be inspected and fail closed."
+  }
 }
 
 variable "enable_network_access_analyzer" {
@@ -264,9 +322,33 @@ variable "profile" {
 }
 
 variable "enforce_egress_allowlist" {
-  description = "Fail the plan unless the firewall drops unmatched egress and carries a domain allowlist (or the waiver is set). Null = on when the profile is production and an aws.workload_environments entry is_production (unset = keys prod / production)."
+  description = "Fail the plan unless the firewall drops unmatched egress and carries a domain allowlist (or the waiver is set). Null = on when the profile is production and an aws.workload_environments entry is_production (required on every entry; the environment name is not read), or when any aws.workload_environments entry is compliance_class: regulated (false then fails the plan)."
   type        = bool
   default     = null
+
+  validation {
+    condition     = var.enforce_egress_allowlist != null || length(local.cfg.workload_missing_is_production) == 0
+    error_message = "Every aws.workload_environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.workload_missing_is_production)}."
+  }
+
+  validation {
+    condition     = var.enforce_egress_allowlist != false || length(local.cfg.workload_regulated) == 0
+    error_message = "enforce_egress_allowlist = false is not allowed: ${join(", ", local.cfg.workload_regulated)} ${length(local.cfg.workload_regulated) == 1 ? "is" : "are"} regulated (aws.workload_environments.<env>.compliance_class: regulated in config/landing-zone.yaml), and regulated egress must fail closed."
+  }
+
+  validation {
+    # Hosted here: a validation on landing_zone_config_path would cycle. The
+    # var reference is a no-op.
+    condition     = (var.enforce_egress_allowlist == null || var.enforce_egress_allowlist != null) && length(local.cfg.workload_invalid_compliance_class) == 0
+    error_message = "aws.workload_environments.<env>.compliance_class must be standard or regulated. Invalid: ${join(", ", local.cfg.workload_invalid_compliance_class)}."
+  }
+
+  validation {
+    # CMP-1: a regulated environment gets every production control. The var
+    # reference is a no-op (see above).
+    condition     = (var.enforce_egress_allowlist == null || var.enforce_egress_allowlist != null) && length(local.cfg.workload_regulated_not_production) == 0
+    error_message = "A regulated AWS workload environment must set is_production: true, so it gets every production control (CMP-1). Set is_production: true on aws.workload_environments.${join(", aws.workload_environments.", local.cfg.workload_regulated_not_production)} in config/landing-zone.yaml, or set compliance_class: standard."
+  }
 }
 
 variable "network_firewall_egress_domain_allowlist" {
@@ -275,20 +357,59 @@ variable "network_firewall_egress_domain_allowlist" {
   default     = null
 }
 
+variable "network_firewall_suricata_rules" {
+  description = "Custom Suricata rules (STRICT_ORDER) evaluated after the AWS-managed threat groups and before the internal pass group and the egress allowlist. Null = aws.network.suricata_rules from config, else none."
+  type        = string
+  default     = null
+}
+
+variable "network_firewall_internal_pass_cidrs" {
+  description = "Extra internal ranges outside top_cidr that the firewall passes in both directions (for example on-premises prefixes over Direct Connect). The VPN on-premises prefixes are added automatically. Null = aws.network.internal_pass_cidrs from config, else none."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.network_firewall_internal_pass_cidrs == null || alltrue([for c in coalesce(var.network_firewall_internal_pass_cidrs, []) : can(cidrnetmask(c))])
+    error_message = "network_firewall_internal_pass_cidrs entries must be IPv4 CIDR blocks."
+  }
+}
+
 variable "network_firewall_stateful_default_actions" {
-  description = "STRICT_ORDER default actions for unmatched traffic. Null = aws.network.stateful_default_actions from config, else [\"aws:alert_established\"] (log-but-pass). Production needs aws:drop_established."
+  description = "STRICT_ORDER default actions for unmatched traffic. Null = aws.network.stateful_default_actions from config, else [\"aws:alert_established\"] (log-but-pass). Production needs a drop action (aws:drop_established_app_layer_to_server recommended)."
   type        = list(string)
   default     = null
 }
 
 variable "egress_alert_only_waived" {
-  description = "Explicitly waive the production fail-closed egress gate (alert-only inspection). Null = aws.network.egress_alert_only_waived from config, else false."
+  description = "Explicitly waive the production fail-closed egress gate (alert-only inspection). Null = aws.network.egress_alert_only_waived from config, else false. Refused (the plan fails) when any aws.workload_environments entry is compliance_class: regulated."
+  type        = bool
+  default     = null
+
+  validation {
+    condition     = !(coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false) && length(local.cfg.workload_regulated) > 0)
+    error_message = "The alert-only egress waiver (egress_alert_only_waived / aws.network.egress_alert_only_waived) is not allowed: ${join(", ", local.cfg.workload_regulated)} ${length(local.cfg.workload_regulated) == 1 ? "is" : "are"} regulated (aws.workload_environments.<env>.compliance_class: regulated in config/landing-zone.yaml). Set aws.network.stateful_default_actions to include a drop action (aws:drop_established_app_layer_to_server recommended) and list the allowed domains in aws.network.egress_domain_allowlist."
+  }
+}
+
+variable "vpc_endpoint_policy_mode" {
+  description = "Policy of the central interface endpoints. org_principals: the caller must be in the organization (aws:PrincipalOrgID). org_principals_and_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on services whose resources are AWS-owned. PREVIEW: not yet proven in a sandbox, so a regulated estate does not turn it on by itself (docs/known-gaps.md). Null = aws.network.vpc_endpoint_policy_mode from config/landing-zone.yaml, else org_principals."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.vpc_endpoint_policy_mode == null || contains(["org_principals", "org_principals_and_resources"], coalesce(var.vpc_endpoint_policy_mode, "org_principals"))
+    error_message = "vpc_endpoint_policy_mode must be org_principals or org_principals_and_resources."
+  }
+}
+
+variable "enable_vpn" {
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway. Null = aws.network.vpn.enabled from config/landing-zone.yaml, else false. Needs vpn.customer_gateway_ip and the Network Firewall (profile production or enable_network_firewall = true): the plan fails without it."
   type        = bool
   default     = null
 }
 
-variable "enable_vpn" {
-  description = "Attach an on-premises Site-to-Site VPN to the transit gateway. Null = aws.network.vpn.enabled from config/landing-zone.yaml, else false. Needs vpn.customer_gateway_ip."
+variable "enable_resolver_endpoints" {
+  description = "Create the Route 53 Resolver inbound and outbound endpoints in the egress VPC (about USD 365 per month). Null = aws.network.resolver_endpoints.enabled from config/landing-zone.yaml, else on only when the VPN is on."
   type        = bool
   default     = null
 }
@@ -304,17 +425,30 @@ variable "vpn" {
   default = null
 
   validation {
-    condition     = length([for k in keys(coalesce(var.vpn, {})) : k if !contains(["customer_gateway_ip", "customer_gateway_bgp_asn", "static_routes_only", "onprem_cidrs", "tunnel_inside_cidrs", "enable_acceleration", "preshared_key_storage"], k)]) == 0
-    error_message = "vpn has keys the network-hub stage does not accept: ${join(", ", [for k in keys(coalesce(var.vpn, {})) : k if !contains(["customer_gateway_ip", "customer_gateway_bgp_asn", "static_routes_only", "onprem_cidrs", "tunnel_inside_cidrs", "enable_acceleration", "preshared_key_storage"], k)])}."
+    condition     = length([for k in try(keys(var.vpn), []) : k if !contains(local.allowed_keys.vpn.self, k)]) == 0
+    error_message = "vpn has keys the network-hub stage does not accept: ${join(", ", [for k in try(keys(var.vpn), []) : k if !contains(local.allowed_keys.vpn.self, k)])}."
   }
 }
 
 variable "spoke_attachments" {
-  description = "Workload spoke attachments the hub accepts, associates with their segment table (prod or nonprod) and propagates into the inspection table: map of name to {attachment_id, segment, accept (default true)}. attachment_id is the aws-workload-<env> output tgw_attachment_id. Null = aws.network.spoke_attachments from config/landing-zone.yaml, else none. See docs/architecture/aws-landing-zone.md."
+  description = "Workload spoke attachments the hub accepts, associates with their segment table (prod or nonprod) and propagates into the inspection table (without the Network Firewall, the starter profile: the shared table, and egress is NAT only, not inspected): map of name to {attachment_id, segment, accept (default true), cidr}. attachment_id is the aws-workload-<env> output tgw_attachment_id. cidr (default aws.workload_environments.<key>.vpc_cidr) is blackholed in the other segment's table, so prod and nonprod spokes cannot reach each other. Null = aws.network.spoke_attachments from config/landing-zone.yaml, else none. See docs/architecture/aws-landing-zone.md."
   type = map(object({
     attachment_id = string
     segment       = string
     accept        = optional(bool, true)
+    cidr          = optional(string)
   }))
   default = null
+}
+
+variable "alarm_sns_topic_arn" {
+  description = "Existing SNS topic that receives the hub network alarms (transit gateway blackhole drops, NAT port exhaustion, VPN tunnel state). Null = the hub creates a topic in the network account and subscribes alarm_subscriber_emails. It must allow cloudwatch.amazonaws.com to publish; the security-notifications topic is in another account and does not."
+  type        = string
+  default     = null
+}
+
+variable "alarm_subscriber_emails" {
+  description = "Email addresses subscribed to the hub network alarm topic (each must confirm). Null = notifications.emails from config/landing-zone.yaml. A production estate (profile production, or an aws.workload_environments entry with is_production: true) fails its plan with no real address here and no alarm_sns_topic_arn; example, .invalid, .localhost and .test domains are rejected."
+  type        = list(string)
+  default     = null
 }

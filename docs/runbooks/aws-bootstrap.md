@@ -17,7 +17,7 @@ The AWS landing zone is a **two-phase bootstrap**:
 
 > **Credential model.** Management-account credentials are used only by `aws-organization` and by the management-account *default* provider of `aws-security` and `aws-backup`. Those two roots own org-level resources: the org CloudTrail, delegated-admin registrations and the org backup policy. No other workspace receives a management-account principal. A speculative PR plan runs with the read-only `tfc-plan` role of its own member account.
 
-But phase-1 itself cannot bootstrap the very things it needs to run: an AWS org to operate in, a TFC workspace to hold its state, and a run identity to authenticate with. Those are **phase-0** — created out-of-band, by hand, exactly once.
+But phase-1 itself cannot bootstrap the very things it needs to run: a management account to operate in, a TFC workspace to hold its state, and a run identity to authenticate with. Those are **phase-0**: created out-of-band, by hand, exactly once. The organization itself is not phase-0. Phase-1 creates it, or imports an existing one (see Step 1).
 
 > **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Cross-layer ordering is enforced entirely by **apply order** (this runbook) plus the fact that each downstream root reads the org remote state and will fail at plan time with a "no outputs" / "workspace has no state" error if `aws-organization` has not been applied yet.
 
@@ -28,8 +28,17 @@ But phase-1 itself cannot bootstrap the very things it needs to run: an AWS org 
 These three things must exist before you touch Terraform. None of them can be created by this repo:
 
 - [ ] **An AWS management (payer) account** — either a brand-new account, or an existing standalone account you are willing to promote into the organization management account. This account becomes the org root; treat it as high-value and never run workloads in it.
-- [ ] **A human/SSO administrator** with full access to that management account (root user for the very first steps, then an IAM admin or IAM Identity Center admin). AWS requires a human to accept the organization creation and to enable Identity Center — these are console actions, not API-only.
+- [ ] **A human/SSO administrator** with full access to that management account (root user for the very first steps, then an IAM admin or IAM Identity Center admin). Enabling IAM Identity Center is a console action that this repo does not automate ([gate](#full-first-time-stand-up-order), step 3).
 - [ ] **Terraform Cloud organization access** — an account in a TFC organization with permission to create workspaces and set workspace variables. You will need the TFC org name (it is supplied to every root as `var.tfc_organization` / the `cloud` backend `organization`).
+
+One more check applies once the management account exists:
+
+- [ ] **Account quota.** `aws-organization` creates every account in `aws.accounts` and
+  `aws.workload_accounts` in one apply, and a new organization's default account quota is
+  10, including the management account. After Step 1, run `make aws-preflight` with
+  management-account credentials; request an increase (it can take days) if it fails or
+  warns. For the smallest estate see
+  [minimum AWS footprint](../architecture/provider-selection.md#minimum-aws-footprint).
 
 ---
 
@@ -42,7 +51,9 @@ Either:
 - **Create a new AWS account** to be the management account (recommended for a clean landing zone), or
 - **Use an existing standalone account** that will become the org management account. If it already has resources, understand that the region-restriction SCP and other guardrails will apply org-wide once phase-1 runs.
 
-Sign in as the account root user (or an admin) and confirm you can reach the AWS Organizations console. Do **not** create the organization by hand — `envs/aws/organization` does that. You only need the account to exist.
+Sign in as the account root user (or an admin) and confirm you can reach the AWS Organizations console. Do **not** create the organization by hand: `envs/aws/organization` does that. You only need the account to exist.
+
+**Existing organization (brownfield).** If the account already manages an organization, do not create a new one. Declare it, and any existing OUs and accounts, under `aws.adopt` in `config/landing-zone.yaml`. The first `aws-organization` plan then imports them ([`envs/aws/organization/adopt.tf`](../../envs/aws/organization/adopt.tf); [AWS brownfield adoption](aws-brownfield-adoption.md)).
 
 ### Step 2 — Create a bootstrap identity for run #1
 
@@ -61,10 +72,10 @@ aws cloudformation deploy --stack-name ashes-phase0 \
 aws cloudformation describe-stacks --stack-name ashes-phase0 --query 'Stacks[0].Outputs'
 ```
 
-After aws-organization has created the dedicated `aws-security` / `aws-backup` roles, update the stack with `TrustSecurityAndBackup=false`. Keep `aws_overrides.create_break_glass` unset (false) in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
+The stack starts with `TrustSecurityAndBackup=false`: the admin role `tfc-mgmt-apply` trusts only `aws-organization`. Apply `aws-organization` and bind the dedicated `tfc-mgmt-aws-security-*` and `tfc-mgmt-aws-backup-*` roles in tfc-admin before the first `aws-security` or `aws-backup` run. Pass `TrustSecurityAndBackup=true` only when those roles cannot exist (`enable_tfc_management_roles = false`) or for a recovery run, and set it back afterwards. The plan role `tfc-mgmt-plan` has `ReadOnlyAccess` plus an inline `data-read-deny` policy. It denies the same data-plane and secret-bearing reads (object contents, secret values, parameters, decrypt, table items, log events, API key values and more) as the member-account `tfc-plan` role, so a speculative plan cannot read data. Both roles also carry an inline `deny-self-tampering` policy. It denies editing the trust, policies, boundary or tags of `tfc-mgmt-plan`, `tfc-mgmt-apply` and `OrganizationBreakGlass`, and assuming `OrganizationAccountAccessRole` in a member account. These are the same actions that the dedicated `tfc-mgmt-<workspace>-*` roles are denied. Change the three phase-0 roles only with a stack update as a human administrator. Keep `aws_overrides.create_break_glass` unset (false) in aws-security: the break-glass role belongs to this phase-0 stack, and the aws-security management role is deliberately denied access to it. To create the resources by hand instead, in the **management account** create:
 
 1. An IAM OIDC identity provider for `https://app.terraform.io` with audience `aws.workload.identity`.
-2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess`, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Each trusts only the management-account workspaces, for its own run phase:
+2. A **plan** role, e.g. `tfc-mgmt-plan`, with `ReadOnlyAccess` and the `data-read-deny` inline policy from the template, and an **apply** role, e.g. `tfc-mgmt-apply`, with an admin-scoped policy. Give both the template's `deny-self-tampering` inline policy. Each trusts only the management-account workspaces, for its own run phase:
 
 ```json
 {
@@ -101,7 +112,7 @@ The two management-account ARNs `aws-organization` requires are both phase-0 inp
 | `aws-organization` input | What to pass |
 |---|---|
 | `terraform_run_role_arn` | The **apply** role above, e.g. `arn:aws:iam::<mgmt-account-id>:role/tfc-mgmt-apply`. Also set it as tfc-admin `aws_management_apply_role_arn` (and the plan role as `aws_management_plan_role_arn`). |
-| `break_glass_role_arn` | Either a break-glass role you hand-create now (MFA-required trust, no standing permissions), **or** the ARN the role will have when `aws-security` creates it with `create_break_glass = true`: `arn:aws:iam::<mgmt-account-id>:role/OrganizationBreakGlass` (`break_glass_role_name`). An SCP carve-out may name a role that does not exist yet. |
+| `break_glass_role_arn` | The phase-0 stack output `BreakGlassRoleArn`: `arn:aws:iam::<mgmt-account-id>:role/OrganizationBreakGlass` (Option B). With Option A, a break-glass role you create by hand now (MFA-required trust, no standing permissions). The scaffolder and `config/landing-zone.example.yaml` write the `OrganizationBreakGlass` name; replace the value if your role has another name. An SCP carve-out may name a role that does not exist yet. |
 
 Every other operator role is created in code (no hand-made role ARN needed):
 
@@ -120,13 +131,15 @@ With Option A, retire the static key after run #1 and move the workspace to Opti
 
 Do not hand-create workspaces. [`envs/tfc-admin`](../../envs/tfc-admin/README.md) declares every AWS workspace (`aws-organization`, `aws-security`, `aws-network`, `aws-identity`, `aws-shared-services`, `aws-backup`, one `aws-workload-<env>` per `aws.workload_environments` key) with VCS wiring, working directories, trigger patterns, remote-state sharing and dynamic-credential env vars. Hand-create only the `tfc-admin` workspace itself (working directory `envs/tfc-admin`, a `TFE_TOKEN` sensitive env var).
 
-The cloud flag, the workload environments and their account keys come from the committed `config/landing-zone.yaml` (`scripts/init-landing-zone.sh --clouds aws ...`, or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml)):
+A production estate (`org.profile: production`, or an `aws.workload_environments` entry with `is_production: true`) needs a real, staffed address in `notifications.emails`: `aws-security` uses it as the security contact and `aws-network` as the hub alarm subscribers, and both plans fail without it. Pass it to the scaffolder with `--notification-emails` (comma-separated); without the flag the scaffolder lists the key as still required.
+
+The cloud flag, the workload environments and their account keys come from the committed `config/landing-zone.yaml` (`scripts/init-landing-zone.sh --clouds aws --notification-emails secops@acme.com ...`, or copy [`config/landing-zone.example.yaml`](../../config/landing-zone.example.yaml)):
 
 ```yaml
 aws:
   enabled: true                 # tfc-admin enable_aws
   workload_environments:
-    dev: {account_key: workload_dev}   # aws-workload-dev + its workload_account_key
+    dev: {account_key: workload_dev, is_production: false}   # aws-workload-dev + its workload_account_key
 ```
 
 Then apply tfc-admin with only the inputs the file does not hold:
@@ -143,7 +156,12 @@ Pass 1 sets `TFC_AWS_PROVIDER_AUTH` / `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_R
 
 **VCS-driven runs get no local tfvars.** Every AWS root reads the committed `config/landing-zone.yaml`: `landing_zone_name` (`org.name`), `owner`, `cost_center`, `aws_region` (`org.regions.aws`), `tfc_organization`, `management_account_id`, `log_archive_bucket_name`, the region lists, the account map and the two role ARNs. An explicit variable still wins. Put any remaining per-workspace inputs in a committed `config/tfc-workspaces.yaml` (copy [`config/tfc-workspaces.example.yaml`](../../config/tfc-workspaces.example.yaml)); tfc-admin sets them as workspace variables (`workspace_variables_file`). Secrets are rejected there: pass them through tfc-admin `workspace_variables` (written write-only). Org-wide values not in the config file belong in `common_workspace_variables`.
 
-**Run #1 state note (the chicken-and-egg).** With Option B the first `aws-organization` run executes remotely in TFC. With Option A (or no TFC credentials yet) set tfc-admin `workspace_execution_modes = { "aws-organization" = "local" }`: the run then executes on your machine with the credentials in your shell while state still lands in the TFC workspace. Switch it back (remove the entry, re-apply tfc-admin) once the Option B roles exist. The `-backend=false` local-state-then-migrate route also works, but is rarely needed now that tfc-admin creates the workspace up front.
+**Run #1: where it executes.** tfc-admin creates `aws-organization` connected to VCS in **remote** execution mode. HCP Terraform does not allow remote applies from the CLI on a workspace linked to a VCS repository, so `terraform apply` from your shell fails there. Pick one path:
+
+- **Option B roles (recommended):** start a run for the `aws-organization` workspace in HCP Terraform, review the plan and confirm the apply. The run reads the committed config from the connected VCS branch, so merge your `config/landing-zone.yaml` changes there first. It uses the `TFC_AWS_*` variables that tfc-admin set in pass 1.
+- **Option A static key, or no TFC credentials yet:** set tfc-admin `workspace_execution_modes = { "gcp-bootstrap" = "local", "aws-organization" = "local" }` and re-apply tfc-admin. Keep the `gcp-bootstrap` entry if GCP is enabled, because this map replaces the default and does not merge with it. The run then executes on your machine with the credentials in your shell, while state stays in the TFC workspace. HCP Terraform does not use workspace variables in local mode, so the credentials must be in your shell. Expect a `tfc_admin_guard` override on that tfc-admin apply (security team), because it moves `aws-organization` to `local` mode once the policy sets exist. After run #1, remove the `aws-organization` entry and re-apply tfc-admin so every later run is remote and policy-checked.
+
+The `-backend=false` local-state-then-migrate route also works, but is rarely needed now that tfc-admin creates the workspace up front.
 
 Supply the TFC org the same way every root does: `export TF_CLOUD_ORGANIZATION=<your-tfc-org>` before `terraform init` (see `envs/aws/organization/backend.tf`). The `cloud` block accepts no `-backend-config`.
 
@@ -241,7 +259,7 @@ TFC_AWS_APPLY_ROLE_ARN_<alias> = tfc_apply_role_arns["<alias>"]
 > - **Single-account roots:** set the Terraform variable `assume_role_arn = account_role_arns["<key>"]` (OrganizationAccountAccessRole).
 > - **`aws-security` / `aws-backup`:** leave `tfc_aws_dynamic_credentials` unset; their aliases then assume `account_role_arns[...]`.
 >
-> This brings back management-rooted credentials for member-account work. Use it only for break-glass or local debugging.
+> This brings back management-rooted credentials for member-account work. Use it only for break-glass or local debugging. Start from break-glass or a human administrator: the phase-0 roles `tfc-mgmt-plan` and `tfc-mgmt-apply` are denied `sts:AssumeRole` on `OrganizationAccountAccessRole`.
 
 ## Full first-time stand-up order
 
@@ -251,31 +269,43 @@ Follow this order top to bottom. **Manual gates** are inline and must be complet
 
 2. **Apply `aws-organization`.** Its inputs come from the committed `config/landing-zone.yaml`: `org.name`, real unique root emails for every account in `aws.accounts` / `aws.workload_accounts`, `aws.terraform_run_role_arn` and `aws.break_glass_role_arn` (see Step 2), and `aws.log_archive_bucket_name`. The workload bindings are derived from `aws.workload_environments`. Explicit variables (`config/tfc-workspaces.yaml`, or `terraform.tfvars` for a local run) override them. Then apply:
 
-   ```bash
-   terraform -chdir=envs/aws/organization apply
-   ```
+   - Remote (Option B): start a run on `aws-organization` in HCP Terraform and confirm the apply.
+   - Local execution mode (Option A, see Step 3): `terraform -chdir=envs/aws/organization apply`. This works only while tfc-admin holds `aws-organization` in `local` mode.
 
    `tfc_organization` comes from `org.tfc.organization`. `tfc_project` defaults to the tfc-admin AWS project (`landing-zone-aws`, or `org.tfc.aws_project`), which must match the workspace project literally. The apply creates the org, the OU tree, the foundational accounts, the guardrails and the **TFC OIDC baseline StackSet**. It publishes `account_ids`, `account_role_arns`, `tfc_plan_role_arns` and `tfc_apply_role_arns`.
 
    > **StackSets trusted access.** The organization module enables `member.org.stacksets.cloudformation.amazonaws.com` trusted access. If the StackSet create fails with an organizations-access error, run `aws cloudformation activate-organizations-access` once in the management account and re-apply. It is idempotent, and it is the AWS-recommended way to enable StackSets trusted access.
 
-3. **MANUAL GATE — IAM Identity Center.** In the **management account**, enable IAM Identity Center (console action — cannot be created by Terraform here), then **delegate administration to the Shared Services account**. The `aws-identity` root manages permission sets and assignments *after* this delegation exists; it cannot enable Identity Center for you.
+3. **MANUAL GATE — enable IAM Identity Center.** The step 2 apply already did two things for Identity Center. It enabled trusted access for `sso.amazonaws.com` (`aws_service_access_principals` in `modules/aws/governance/organization`). It also registered the `shared_services` account as the Identity Center delegated administrator ([`identity_center_delegation.tf`](../../modules/aws/stages/organization/identity_center_delegation.tf)). Do **not** register the delegated administrator by hand: a second registration fails. What is left is a console action that Terraform here does not do: in the **management account**, open the IAM Identity Center console in your home Region and choose **Enable** to create the organization instance. Then open **Settings → Management** and check that the Shared Services account is the delegated administrator. The `aws-identity` root manages permission sets and assignments in that instance from the Shared Services account. It cannot enable Identity Center for you.
 
-4. **tfc-admin pass 2 — downstream credentials.** The workspaces already exist (Step 3). Set `aws_organization_outputs_from_tfc = true` on tfc-admin and re-apply it. It reads `tfc_plan_role_arns` / `tfc_apply_role_arns` / `tfc_workspace_bindings` from `aws-organization` and writes `TFC_AWS_PROVIDER_AUTH` / `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` on every single-account workspace, plus the management default and the `TFC_AWS_*_<alias>` sets on `aws-security` / `aws-backup` (see [Member-account credentials](#member-account-credentials-tfc-oidc-baseline)). The role trust is already in place from step 2, provided the workspace name is in `tfc_workspace_bindings` and `tfc_project` matches the workspace project.
+   **Why this order.** AWS Organizations accepts a delegated administrator registration only after trusted access for the service is enabled. `RegisterDelegatedAdministrator` otherwise fails with `SERVICE_ACCESS_NOT_ENABLED` ("You attempted to register a delegated administrator before you enabled service access", [API reference](https://docs.aws.amazon.com/organizations/latest/APIReference/API_RegisterDelegatedAdministrator.html), checked 2026-11-12). The `aws-organization` apply enables trusted access before it registers, so it meets this rule. Only the management account can register ([IAM Identity Center user guide](https://docs.aws.amazon.com/singlesignon/latest/userguide/delegated-admin-how-to-register.html)), which is why `aws-organization` owns this step. On a greenfield estate the organization does not exist before step 2, so Identity Center cannot be enabled first. AWS recommends that you enable trusted access from the Identity Center console so it can create the resources it needs ([Organizations user guide](https://docs.aws.amazon.com/organizations/latest/userguide/services-that-can-integrate-sso.html)). Enabling Identity Center in step 3, after the registration, is not yet proven on a real organization: see [known gaps](../known-gaps.md). If an organization already has Identity Center enabled (brownfield), enable nothing: step 2 only registers the delegated administrator. If that organization already has an Identity Center delegated administrator registered, step 2 fails unless you first add the import block described in [known gaps](../known-gaps.md#open--validate-before-relying-on) (IAM Identity Center delegation entry).
+
+4. **tfc-admin pass 2 — downstream credentials.** The workspaces already exist (Step 3). Set `aws_organization_outputs_from_tfc = true` on tfc-admin and re-apply it. It reads `tfc_plan_role_arns` / `tfc_apply_role_arns` / `tfc_workspace_bindings` from `aws-organization` and writes `TFC_AWS_PROVIDER_AUTH` / `TFC_AWS_PLAN_ROLE_ARN` / `TFC_AWS_APPLY_ROLE_ARN` on every single-account workspace, plus the management default and the `TFC_AWS_*_<alias>` sets on `aws-security` / `aws-backup` (see [Member-account credentials](#member-account-credentials-tfc-oidc-baseline)). The role trust is already in place from step 2, provided the workspace name is in `tfc_workspace_bindings` and `tfc_project` matches the workspace project. Expect a `tfc_admin_guard` override on this apply (security team): it writes the `TFC_AWS_*` env vars.
 
 5. **Phase-0.5 — default-VPC-deletion StackSet.** Deploy the org-wide StackSet now that the accounts exist (see phase-0.5 section). Leave auto-deployment on.
 
 6. **Apply `aws-security`.** Security tooling, log archive, org CloudTrail, GuardDuty, Security Hub, Config aggregator — the second half of the minimum governed baseline.
 
-7. **Apply `aws-network`.** Shared networking (TGW, resolver, shared VPC constructs) in the network account.
+7. **Apply `aws-network`** (skip if `network` is not in `aws.layers`). Shared networking (TGW, resolver, shared VPC constructs) in the network account.
 
-8. **Apply `aws-identity`.** Permission sets and account assignments, now that Identity Center is delegated (gate in step 3).
+8. **Apply `aws-identity`** (skip if `identity` is not in `aws.layers`). Permission sets and account assignments, now that Identity Center is enabled (gate in step 3) and delegated (step 2).
 
-9. **Apply `aws-shared-services`** *(optional / gated).* Shared platform services; apply only if you need them.
+9. **Apply `aws-shared-services`** *(optional / gated; skip if `shared-services` is not in `aws.layers`).* Shared platform services; apply only if you need them.
 
-10. **Apply `aws-backup`.** Centralized AWS Backup vaults and plans.
+10. **Apply `aws-backup`** (skip if `backup` is not in `aws.layers`). Centralized AWS Backup vaults and plans. A production scaffold turns on the locked central copy. Its Compliance-mode Vault Lock becomes irreversible after `changeable_for_days` (default 3). Read [UPGRADING.md](../../UPGRADING.md#central-backup-copy-to-a-locked-vault-opt-in-irreversible-lock-aws-backup) before you apply.
 
-11. **Apply `aws-workload-<env>`** *(per environment).* Select the env with `TF_WORKSPACE=aws-workload-<env>`. Each apply stands up that env's spoke VPC, workload roles, and per-account baseline. Repeat per environment.
+11. **Apply `aws-workload-<env>`** *(per environment).* Select the env with `TF_WORKSPACE=aws-workload-<env>`. Each apply stands up that env's spoke VPC, workload roles and per-account baseline. It also creates a Transit Gateway attachment that waits in `pendingAcceptance`. Repeat per environment.
+
+    **MANUAL HAND-OFF: wire each spoke into the hub.** Until this step the spoke has **no routing**. Only the network account (the Transit Gateway owner) can accept the attachment. Copy each workspace's `tgw_attachment_id` output into `config/landing-zone.yaml`, commit it, and apply `aws-network` again:
+
+    ```yaml
+    aws:
+      network:
+        spoke_attachments:
+          dev: {attachment_id: tgw-attach-0123456789abcdef0, segment: nonprod}   # segment: prod | nonprod
+    ```
+
+    Use the environment name (the `aws.workload_environments` key) as the key. aws-network then copies that environment's `vpc_cidr` as the spoke `cidr`, so prod and nonprod spokes cannot reach each other. aws-network accepts the attachment, associates it with the `prod` or `nonprod` route table and propagates the spoke CIDR into the inspection table (the shared table in the `starter` profile, which has no firewall). See [add an account, Step 4](aws-add-account.md#step-4--apply-the-layer). Verify in the network account: `aws ec2 describe-transit-gateway-attachments --filters Name=state,Values=available` lists the spoke.
 
 12. **Apply `saas`** *(optional).* Supabase and/or Vercel only, gated by `enable_supabase` / `enable_vercel`. Configures no AWS provider.
 

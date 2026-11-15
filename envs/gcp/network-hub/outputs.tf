@@ -20,6 +20,9 @@ locals {
       # Opt-in hub Secure Web Proxy: the PSC service attachment an environment's
       # egress proxy endpoint targets; null while the proxy is off.
       egress_proxy_service_attachment = try(module.network_hub.secure_web_proxy.service_attachment_id, null)
+      # The proxy's first listening port: the port environments put in
+      # HTTPS_PROXY. Null while the proxy is off.
+      egress_proxy_port = try(module.network_hub.secure_web_proxy.ports[0], null)
     }
   }
 }
@@ -38,6 +41,7 @@ output "contract" {
       ncc_hub_id                      = string
       ncc_spoke_group                 = string
       egress_proxy_service_attachment = string
+      egress_proxy_port               = number
     })
   })
   value = local.contract

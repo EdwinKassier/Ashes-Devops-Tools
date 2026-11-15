@@ -55,6 +55,16 @@ role-name patterns (`arn:aws:iam::*:role/<name>`), not account-qualified ARNs:
     (`stackset_managed_policy_names`, default `tfc-apply-boundary` and
     `tfc-plan-data-read-deny`) from create, new versions, default-version
     changes, deletion and tagging; same exemptions as the roles.
+  - `DenyStackSetStackTampering` protects the stacks that StackSets create in
+    member accounts (`arn:<partition>:cloudformation:*:*:stack/StackSet-*`)
+    from create, update, delete, rollback, change sets, stack refactors,
+    stack policies, termination protection and rollback control; same
+    exemptions as the roles, plus `stackset_stack_writer_role_names`.
+    CloudFormation does not report a direct update of such a stack as StackSet
+    drift. AWS Control Tower (`AWSControlTowerExecution`), a self-managed
+    StackSet or AWS Quick Setup writes its stacks as its own role: list that
+    role in `stackset_stack_writer_role_names`, which exempts it from this
+    statement only.
 
 ### Region-restriction SCP
 
@@ -62,10 +72,18 @@ The only exemption is the member-account break-glass role-name pattern
 (`arn:aws:iam::*:role/<break_glass_role_names>`), as in deny-tamper. The
 Terraform run role is not exempt: global services are in `NotAction`.
 
-The rendered SCP is minified and tested to stay under the 10,240-character quota.
+The rendered SCP is tested to stay within the 10,240-character quota.
 A role with the break-glass name must exist in member accounts for break-glass
 to work there: the aws-organization stage deploys it to every member account
 (`modules/aws/iam/tfc-oidc-baseline`, `enable_member_break_glass_role`).
+
+### Policy size quotas
+
+Every policy fails the plan when its rendered content is longer than the AWS
+Organizations quota for its type: SCP 10,240 characters, RCP 5,120, AI services
+opt-out 2,500, other types 10,000. AWS counts whitespace for policies saved
+through the API, so the module measures the string it sends. Tests render every
+policy with long role names and every option that adds statements turned on.
 
 <!-- BEGIN_TF_DOCS -->
 
@@ -106,8 +124,8 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L291)
-- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L299)
+- resource.aws_organizations_policy.policy (modules/aws/governance/organization-policy/main.tf#L354)
+- resource.aws_organizations_policy_attachment.attach (modules/aws/governance/organization-policy/main.tf#L371)
 
 
 ## Inputs
@@ -130,15 +148,17 @@ The following resources are created:
 | <a name="input_ec2_allowed_images"></a> [ec2\_allowed\_images](#input\_ec2\_allowed\_images) | Declarative EC2 Allowed AMIs setting, in the root-attached baseline declarative policy (every account, every region). state: audit\_mode (default; records non-compliant AMIs, blocks nothing), enabled (blocks launches from other AMIs), disabled, or unmanaged (the policy carries no allowed-images setting). allowed\_image\_providers: amazon, aws\_marketplace, aws\_backup\_vault or 12-digit account IDs. Move to enabled only after reviewing the audit-mode findings. | <pre>object({<br/>    state                   = optional(string, "audit_mode")<br/>    allowed_image_providers = optional(list(string), ["amazon"])<br/>  })</pre> | `{}` | no |
 | <a name="input_enable_config_recorder_scp"></a> [enable\_config\_recorder\_scp](#input\_enable\_config\_recorder\_scp) | Move the Config recorder actions (Put/Delete/StopConfigurationRecorder, DeleteDeliveryChannel) from DenyWeakenSecurityServices, where every pipeline role is exempt, to DenyConfigRecorderChanges (which also denies PutDeliveryChannel, so delivery cannot be redirected), whose only exemptions are the StackSet execution role, break-glass and config\_recorder\_pipeline\_role\_arns. Default false. Turn it on only after the org-wide recorder StackSet has replaced the Terraform-managed member recorders (docs/runbooks/aws-config-recorder-migration.md). | `bool` | `false` | no |
 | <a name="input_federation_tenant_pins"></a> [federation\_tenant\_pins](#input\_federation\_tenant\_pins) | Pin OIDC web-identity federation to YOUR tenants on shared issuers (RCP, every account). With tfc\_organization set, sts:AssumeRoleWithWebIdentity with a <tfc\_hostname> token is denied unless sub starts organization:<tfc\_organization>:. With github\_owners set, a GitHub Actions token is denied unless sub is repo:<owner>/*. This stops a pipeline from creating a role that trusts another TFC org or GitHub owner on the same issuer. Tokens from other issuers are unaffected (Null guard). | <pre>object({<br/>    tfc_hostname     = optional(string, "app.terraform.io")<br/>    tfc_organization = optional(string)<br/>    github_owners    = optional(list(string), [])<br/>    # Immutable owner IDs, for deploy roles that use GitHub's customised<br/>    # repository_owner_id:<id>:repository_id:<id>:... subject.<br/>    github_owner_ids = optional(list(string), [])<br/>    # Built-in web-identity providers (no IAM provider resource needed) that<br/>    # roles may trust: any of cognito-identity.amazonaws.com,<br/>    # accounts.google.com, graph.facebook.com, www.amazon.com. Default none.<br/>    allowed_builtin_providers = optional(list(string), [])<br/>  })</pre> | `{}` | no |
-| <a name="input_kms_protection_tag_key"></a> [kms\_protection\_tag\_key](#input\_kms\_protection\_tag\_key) | Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = "true" cannot be scheduled for deletion, disabled, have rotation disabled or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection\_tag\_key). | `string` | `"protected"` | no |
+| <a name="input_kms_protection_tag_key"></a> [kms\_protection\_tag\_key](#input\_kms\_protection\_tag\_key) | Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = "true" cannot be scheduled for deletion, disabled, have rotation disabled, have an alias retargeted or deleted, or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection\_tag\_key). | `string` | `"protected"` | no |
 | <a name="input_partition"></a> [partition](#input\_partition) | AWS partition the policies are rendered for: aws, aws-us-gov or aws-cn. Every ARN in the SCPs / backup policy uses it. | `string` | `"aws"` | no |
 | <a name="input_pipeline_role_names"></a> [pipeline\_role\_names](#input\_pipeline\_role\_names) | Names or name patterns (optionally path-prefixed, e.g. "automation/tfc-apply" or "stacksets-exec-*") of the member-account Terraform pipeline roles. Rendered as arn:aws:iam::*:role/<name> and exempted from the deny-tamper reconfiguration statements (Config recorders, GuardDuty/CloudTrail settings, flow logs, log-archive Object Lock). These roles are also protected from IAM modification, and are NEVER exempt from that protection (see stackset\_managed\_role\_names). NOT exempt from the destructive statements (break-glass only). | `list(string)` | <pre>[<br/>  "tfc-apply",<br/>  "OrganizationAccountAccessRole",<br/>  "stacksets-exec-*"<br/>]</pre> | no |
 | <a name="input_policies"></a> [policies](#input\_policies) | Override map of policies to create, keyed by policy name. When empty (default), the module computes the built-in guardrail set from the templated JSON files. Content is a raw Organizations policy JSON string. | <pre>map(object({<br/>    type    = string<br/>    content = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_policy_overrides"></a> [policy\_overrides](#input\_policy\_overrides) | Policies merged OVER the built-in set, keyed by policy name: an existing key (e.g. scp-region-restriction) replaces that policy's content, a new key adds a policy. Attach additions through attachments. Content is raw Organizations policy JSON. | <pre>map(object({<br/>    type    = string<br/>    content = string<br/>  }))</pre> | `{}` | no |
 | <a name="input_sandbox_allowed_instance_types"></a> [sandbox\_allowed\_instance\_types](#input\_sandbox\_allowed\_instance\_types) | ec2:InstanceType patterns (StringNotLike) the Sandbox OU may launch; ec2:RunInstances for any other type is denied by scp-sandbox-guard (break-glass exempt). | `list(string)` | <pre>[<br/>  "t3.micro",<br/>  "t3.small",<br/>  "t3.medium",<br/>  "t3.large",<br/>  "t4g.micro",<br/>  "t4g.small",<br/>  "t4g.medium",<br/>  "t4g.large"<br/>]</pre> | no |
-| <a name="input_stackset_execution_role_names"></a> [stackset\_execution\_role\_names](#input\_stackset\_execution\_role\_names) | Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles); themselves protected break-glass-only by DenyPrivilegedRoleTampering. | `list(string)` | <pre>[<br/>  "stacksets-exec-*"<br/>]</pre> | no |
+| <a name="input_stackset_execution_role_names"></a> [stackset\_execution\_role\_names](#input\_stackset\_execution\_role\_names) | Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering, DenyStackSetPolicyTampering and DenyStackSetStackTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles, the StackSet policies and the StackSet stacks); themselves protected break-glass-only by DenyPrivilegedRoleTampering. A role that only writes StackSet stacks (AWS Control Tower, a self-managed StackSet, Quick Setup) belongs in stackset\_stack\_writer\_role\_names instead. | `list(string)` | <pre>[<br/>  "stacksets-exec-*"<br/>]</pre> | no |
 | <a name="input_stackset_managed_policy_names"></a> [stackset\_managed\_policy\_names](#input\_stackset\_managed\_policy\_names) | Member-account customer-managed policy names (optionally path-prefixed) that a service-managed StackSet owns, by default the tfc-oidc-baseline tfc-apply permissions boundary and the tfc-plan read-deny policy. DenyStackSetPolicyTampering stops everyone except break-glass and stackset\_execution\_role\_names from creating, versioning, deleting or tagging them. Empty omits the statement. | `list(string)` | <pre>[<br/>  "tfc-apply-boundary",<br/>  "tfc-plan-data-read-deny"<br/>]</pre> | no |
 | <a name="input_stackset_managed_role_names"></a> [stackset\_managed\_role\_names](#input\_stackset\_managed\_role\_names) | Member-account role names (optionally path-prefixed) that a service-managed StackSet owns — by default the tfc-oidc-baseline tfc-plan / tfc-apply roles. Together with the break-glass role name they are protected by DenyStackSetRoleTampering, whose only exemptions are break-glass and stackset\_execution\_role\_names. Every other pipeline\_role\_names entry (OrganizationAccountAccessRole, stacksets-exec-*) is protected break-glass-only. The pipeline roles are never exempt from either statement. | `list(string)` | <pre>[<br/>  "tfc-plan",<br/>  "tfc-apply"<br/>]</pre> | no |
+| <a name="input_stackset_stack_writer_role_names"></a> [stackset\_stack\_writer\_role\_names](#input\_stackset\_stack\_writer\_role\_names) | Member-account role names (or name patterns) that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own. Exempt from DenyStackSetStackTampering ONLY: not exempt from any other statement and not added to the break-glass-only role protection. An AWS Control Tower estate adds AWSControlTowerExecution (it writes StackSet-AWSControlTowerBP-* stacks); a self-managed StackSet adds its execution role (for example AWSCloudFormationStackSetExecutionRole); AWS Quick Setup adds its local execution role. Default empty. | `list(string)` | `[]` | no |
+| <a name="input_tag_policy_required_resource_types"></a> [tag\_policy\_required\_resource\_types](#input\_tag\_policy\_required\_resource\_types) | Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL\_SUPPORTED) for which the tag policy reports CostCenter, Environment, Owner and DataClassification as required (report\_required\_tag\_for). Empty (default) = no key is required. The AWS provider fails or warns at plan on a listed resource that lacks a key when the workspace sets TF\_AWS\_TAG\_POLICY\_COMPLIANCE to error or warning; the plan role then needs tag:ListRequiredTags. | `list(string)` | `[]` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags applied to every taggable resource this module creates (merged after provider default\_tags; resource-specific tags such as Name win). | `map(string)` | `{}` | no |
 
 ## Outputs

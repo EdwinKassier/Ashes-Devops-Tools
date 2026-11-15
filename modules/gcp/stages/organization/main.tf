@@ -21,15 +21,25 @@ locals {
   ))
 
   production_environment_keys = sort([for k, e in var.environments : k if e.is_production])
+
+  # This stage grants no organizationAdmin (see module "organization").
+  organization_module_admin_members = []
 }
 
+# The standing organizationAdmin of local.org_admin_members is granted by
+# gcp-bootstrap (organization_admin_members), not here: organization-apply's
+# org iam.securityAdmin is role-conditioned and may not grant
+# organizationAdmin, which would restore unconditional setIamPolicy on the org
+# node. local.org_admin_members stays the source for PAM and the containment
+# checks, and for the plan-time check against the gcp-bootstrap list
+# (organization_admin_grants.tf).
 module "organization" {
   source = "../../iam/organization"
 
   domain     = var.domain
   project_id = var.admin_project_id
 
-  org_admin_members     = local.org_admin_members
+  org_admin_members     = local.organization_module_admin_members
   billing_admin_members = local.billing_admin_members
 
   # Organizational Units (excluding projects, they are created later)
@@ -77,14 +87,18 @@ locals {
   audit_project_number     = local.separate_logging_project ? coalesce(var.gcp.logging_project_number, "0") : var.admin_project_number
 
   # CMEK keys for the audit store, granted to the GCS / BigQuery service agents
-  # of the project that actually holds the bucket and dataset.
+  # of the project that actually holds the bucket and dataset. The protection
+  # level (CMP-12) is ForceNew: the KMS module's prevent_destroy turns a change on
+  # existing keys into a plan error, never a lost key.
   audit_cmek_keys = {
     "audit-logs" = {
+      protection_level = var.gcp.audit_key_protection_level
       encrypter_decrypters = [
         "serviceAccount:service-${local.audit_project_number}@gs-project-accounts.iam.gserviceaccount.com",
       ]
     }
     "audit-analytics" = {
+      protection_level = var.gcp.audit_key_protection_level
       encrypter_decrypters = [
         "serviceAccount:bq-${local.audit_project_number}@bigquery-encryption.iam.gserviceaccount.com",
       ]
@@ -155,6 +169,11 @@ module "audit_logs" {
   # linked BigQuery dataset (Google's current recommendation).
   enable_log_analytics         = var.gcp.enable_log_analytics
   log_analytics_retention_days = var.gcp.log_analytics_retention_days
+
+  # CMP-02: firewall, Cloud NAT and load balancer request (Cloud Armor) logs
+  # into the same audit bucket, with its retention.
+  enable_network_log_export  = var.gcp.enable_network_log_export
+  network_log_writer_granted = var.gcp.network_log_writer_granted
 
   # Enable BigQuery Analytics for improved security investigation
   enable_bigquery_analytics = true
@@ -429,6 +448,16 @@ locals {
       constraint     = "run.allowedIngress"
       allowed_values = ["internal", "internal-and-cloud-load-balancing"]
       denied_values  = null
+      allow_all      = null
+      deny_all       = null
+    }] : [],
+    # TLS 1.2 minimum on Google Cloud resource APIs (Google Front End). Clients
+    # that only speak TLS 1.0 or 1.1 are refused. Reference:
+    # https://docs.cloud.google.com/assured-workloads/docs/restrict-tls-versions
+    var.gcp.restrict_tls_versions ? [{
+      constraint     = "gcp.restrictTLSVersion"
+      allowed_values = null
+      denied_values  = ["TLS_VERSION_1", "TLS_VERSION_1_1"]
       allow_all      = null
       deny_all       = null
   }] : [])

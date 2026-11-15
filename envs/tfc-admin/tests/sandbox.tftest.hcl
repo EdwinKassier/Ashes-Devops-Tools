@@ -10,7 +10,7 @@ mock_provider "tfe" {}
 variables {
   tfc_organization = "acme"
   environments = {
-    dev = {}
+    dev = { is_production = false }
   }
   enable_gcp      = true
   enable_aws      = true

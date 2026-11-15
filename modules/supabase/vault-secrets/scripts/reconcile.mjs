@@ -149,9 +149,8 @@ const isLocal = hostname === "127.0.0.1" || hostname === "localhost";
 //   - Remote with SUPABASE_SSL_CERT set: validate against the supplied
 //     CA bundle (full verification, preferred when the cert is available).
 //   - Supabase pooler (*.pooler.supabase.com) without SUPABASE_SSL_CERT:
-//     fail fast — the CA bundle MUST be supplied for pooler connections.
-//     ensureSupabaseSslCert() fetches it automatically and fails fast in
-//     CI if it cannot reach the pooler endpoint.
+//     fail fast — the CA bundle MUST be supplied for pooler connections
+//     (var.supabase_ssl_cert).
 //   - Other remote without SUPABASE_SSL_CERT: validate against the system
 //     trust store (rejectUnauthorized: true).
 //   - Break-glass: PGSSL_INSECURE_NO_VERIFY=1 disables verification for
@@ -177,10 +176,10 @@ const isSupabasePooler =
 if (!isLocal && isSupabasePooler && !sslCert && !allowInsecureTls) {
   console.error(
     "[vault-secrets/reconcile] SUPABASE_SSL_CERT is required for pooler " +
-      "connections but is not set. ensureSupabaseSslCert() should have fetched " +
-      "it automatically — check that TF_VAR_region is correct and the pooler " +
-      "endpoint is reachable from CI. Set PGSSL_INSECURE_NO_VERIFY=1 only for " +
-      "break-glass recovery.",
+      "connections but is not set. Pass the project's base64-encoded CA " +
+      "certificate (Supabase dashboard: Database settings, SSL configuration) " +
+      "as the supabase_ssl_cert variable. Set PGSSL_INSECURE_NO_VERIFY=1 only " +
+      "for break-glass recovery.",
   );
   process.exit(1);
 }

@@ -146,10 +146,17 @@ variable "shared_vpc_host" {
   default     = false
 }
 
-variable "deletion_protection" {
-  description = "Create a prevent_destroy guard that blocks any plan destroying the VPC and subnet stack, and enable VPC deletion protection."
+variable "enable_deletion_protection" {
+  description = "Create a prevent_destroy guard that blocks any plan destroying the VPC and subnet stack, and enable VPC deletion protection. Null (default) uses the deprecated deletion_protection input, else false."
   type        = bool
-  default     = false
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 variable "flow_logs" {

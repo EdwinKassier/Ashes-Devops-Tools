@@ -8,6 +8,11 @@ output "log_archive_bucket_name" {
   value       = module.log_archive_bucket.bucket_name
 }
 
+output "log_archive_retention_days" {
+  description = "Days the log-archive bucket keeps new objects: its planned Object Lock default retention (also the lifecycle expiry)."
+  value       = module.log_archive_bucket.retention_days
+}
+
 output "log_cmk_arn" {
   description = "ARN of the log-archive customer-managed KMS key."
   value       = module.log_cmk.key_arn
@@ -76,4 +81,9 @@ output "config_role_arn" {
 output "config_aggregator_role_arn" {
   description = "IAM role the Config organization aggregator assumes (created by the stage unless aggregator_role_arn was set)."
   value       = module.config.aggregator_role_arn
+}
+
+output "patch_install_targets" {
+  description = "Targets of the weekly patch install association (key and values): InstanceIds * for every managed instance, or tag:<key> when patch_install_target_tag is set. Null when the install is off."
+  value       = module.systems_manager.patch_install_targets
 }

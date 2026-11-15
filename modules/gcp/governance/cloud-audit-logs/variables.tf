@@ -82,6 +82,20 @@ variable "org_id" {
   }
 }
 
+variable "enable_network_log_export" {
+  description = "With org_id set, add an aggregated org sink that copies firewall rule logs, Cloud NAT logs, Application Load Balancer request logs (with the Cloud Armor verdict), Secure Web Proxy request logs and Cloud NGFW threat logs from every project into the audit bucket, under the same retention, lifecycle and lock as the audit logs. It adds no IAM grant: it shares the org Logging service account that org-audit-sink already granted objectCreator, and a postcondition fails the apply when org-audit-sink has a legacy (pre-2023-05-22) dedicated identity. Default false. Volume, and so storage cost, grows with traffic and with how many firewall rules and NAT gateways have logging on."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "network_log_writer_granted" {
+  description = "Set true only after a break-glass grant of roles/storage.objectCreator on the audit bucket to the network log sink's writer identity. Needed only when org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated identity: the sink's postcondition then accepts writer identities that differ. Default false."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 # =============================================================================
 # BIGQUERY LOG ANALYTICS (Optional)
 # =============================================================================

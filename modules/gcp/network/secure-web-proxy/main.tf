@@ -1,9 +1,7 @@
 /**
  * Copyright 2026 Ashes
  *
- * # Secure Web Proxy (preview, opt-in)
- *
- * A regional Secure Web Proxy (Cloud Secure Web Proxy, an Envoy-based egress
+ * A regional Secure Web Proxy (preview, opt-in; Cloud Secure Web Proxy, an Envoy-based egress
  * proxy) with a gateway security policy that allows an FQDN allowlist and
  * denies everything else. Optionally creates the proxy-only subnet it needs
  * and publishes the gateway through a Private Service Connect service
@@ -113,6 +111,8 @@ resource "google_network_services_gateway" "this" {
 # Private Service Connect publishing (opt-in): spokes create an endpoint in
 # their own VPC instead of routing to the hub over peering.
 resource "google_compute_subnetwork" "psc_nat" {
+  # checkov:skip=CKV_GCP_26:This purpose = PRIVATE_SERVICE_CONNECT subnet only supplies NAT addresses for the service attachment and hosts no VMs or workloads; it is a producer-side NAT range, so subnet flow logs are not enabled.
+  # checkov:skip=CKV_GCP_74:This purpose = PRIVATE_SERVICE_CONNECT subnet hosts no VMs, so there is nothing that needs Private Google Access to reach Google APIs.
   count = var.create_service_attachment ? 1 : 0
 
   project       = var.project_id

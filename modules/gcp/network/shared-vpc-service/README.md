@@ -201,3 +201,7 @@ The following resources are created:
 | <a name="output_service_project_number"></a> [service\_project\_number](#output\_service\_project\_number) | The service project number |
 | <a name="output_subnet_iam_members"></a> [subnet\_iam\_members](#output\_subnet\_iam\_members) | The subnet IAM member bindings |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

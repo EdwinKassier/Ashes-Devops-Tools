@@ -163,3 +163,13 @@ output "phase0_admin_impersonation_members" {
   description = "Human principals that may impersonate the terraform-admin SA (empty once enable_phase0_admin_impersonation = false)."
   value       = local.phase0_admin_impersonation_members
 }
+
+output "organization_apply_grantable_roles" {
+  description = "Roles organization-apply may add or remove through its role-conditioned org iam.securityAdmin. gcp-organization checks every grant it makes that way against this list at plan time."
+  value       = local.organization_apply_grantable_roles
+}
+
+output "organization_admin_members" {
+  description = "Members granted the standing roles/resourcemanager.organizationAdmin by this stage. gcp-organization checks at plan time that it expects no other member."
+  value       = sort(var.organization_admin_members)
+}

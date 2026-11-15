@@ -25,7 +25,11 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    project_prefix    = try(tostring(local.lz.org.prefix), null)
+    project_prefix = try(tostring(local.lz.org.prefix), null)
+    # org.cost_center / org.owner: the cost-center and owner provider default
+    # labels (providers.tf), the same keys as the AWS roots' default_tags.
+    cost_center       = try(tostring(local.lz.org.cost_center), null)
+    owner             = try(tostring(local.lz.org.owner), null)
     domain            = try(tostring(local.lz.org.domain), null)
     break_glass_group = try(tostring(local.lz.gcp.break_glass_group), null)
     admin_containment = try(tobool(local.lz.gcp.admin_containment), null)
@@ -37,6 +41,12 @@ locals {
         is_production = tobool(try(e.is_production, false))
       }
     }
+    # Environment keys whose is_production is missing or not a boolean. The
+    # schema requires it; the environments validation names them.
+    environments_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
   }
 
   # Effective values. Required ones fall back to an inert sentinel only so

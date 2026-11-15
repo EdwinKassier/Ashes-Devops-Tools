@@ -500,7 +500,7 @@ checked 2026-11). In-flight requests fail and are retried with the same keys.
 | CMEK on the DB | Workload CMK, set by app-services | Cloud SQL CMEK, **creation time only** | Cloud SQL cannot add or change CMEK on an existing instance, and the key ring must be in the instance's region ([Google Cloud docs](https://docs.cloud.google.com/sql/docs/postgres/cmek), checked 2026-11). |
 | Raw zone (settlement files) | S3 with Object Lock | Cloud Storage with a locked retention policy | S3 compliance mode stops even the root user deleting a locked version, and needs versioning ([AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html), checked 2026-11). A locked GCS policy can never be removed or shortened, up to 100 years ([Google Cloud docs](https://docs.cloud.google.com/storage/docs/bucket-lock), checked 2026-11). |
 | Public webhook ingress | CloudFront VPC origin to the internal ALB, with WAF | External Application Load Balancer per exposed service, with Cloud Armor | AWS exposes the **shared** ALB; GCP exposes **one service**. See Build it here. |
-| Egress to the PSP | TGW → Network Firewall → central NAT, domain allowlist | Per-environment Cloud NAT, not inspected | AWS can allowlist the PSP's hostname; GCP needs an addition such as Cloud NGFW or Secure Web Proxy for that. |
+| Egress to the PSP | TGW → Network Firewall → central NAT, domain allowlist | Hub Secure Web Proxy with an FQDN allowlist (`egress_proxy`, preview); otherwise per-environment Cloud NAT, not inspected | Both can allowlist the PSP's hostname. The GCP proxy serves only environments in the hub region; a production environment without it needs a time-boxed `production_egress_proxy_waiver`. |
 | Reconciliation runtime | ECS service with a daily loop under an advisory lock | Cloud Run job | GCP has a job runtime in app-services; AWS app-services has none. |
 
 ## Build it here
@@ -512,7 +512,7 @@ checked 2026-11). In-flight requests fail and are retried with the same keys.
 | payments, ledger, recon | `aws-workload-prod` (`envs/aws/workload`) through [`modules/aws/stages/app-services`](../../modules/aws/stages/app-services/) | `gcp-workload-prod` (`envs/gcp/workload`) through [`modules/gcp/stages/app-services`](../../modules/gcp/stages/app-services/) in the environment stage |
 | Databases | Aurora per service via [`modules/aws/data/rds-aurora`](../../modules/aws/data/rds-aurora/), isolated tier, workload CMK | Cloud SQL per service via [`modules/gcp/data/cloud-sql`](../../modules/gcp/data/cloud-sql/), Private Service Access, `workload_cmek` |
 | Settlement raw zone | Raw S3 bucket in `envs/aws/workload` | Raw Cloud Storage bucket in `envs/gcp/workload` |
-| Egress allowlist | `aws-network` (`envs/aws/network`) | None: Cloud NAT |
+| Egress allowlist | `aws-network` (`envs/aws/network`) | `secure_web_proxy.allowed_fqdns` on `gcp-network-hub` (`envs/gcp/network-hub`), used when `egress_proxy` is on |
 | Apply order | `aws-organization` → `aws-security` → `aws-network` → … → `aws-workload-prod` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-prod` (twice; see below) |
 
 Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)).
@@ -531,9 +531,11 @@ aws:
   workload:
     app_ingress_mode: cloudfront_vpc_origin # public HTTPS for PSP webhooks; see the gap below
   network:
-    stateful_default_actions: ["aws:drop_established", "aws:alert_established"] # fail closed, log drops
+    stateful_default_actions: ["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"] # fail closed, log drops
     egress_domain_allowlist: # org-wide: append to the existing list, never replace it
-      - .amazonaws.com
+      - api.ecr.<region>.amazonaws.com # image pulls (no interface endpoint)
+      - .dkr.ecr.<region>.amazonaws.com
+      - secretsmanager.<region>.amazonaws.com
       - api.stripe.com # the PSP API
   workload_environments:
     prod:
@@ -571,7 +573,7 @@ gcp:
       region: europe-west2
       services:
         payments:
-          vpc_egress: ALL_TRAFFIC # PSP calls leave through Cloud NAT
+          vpc_egress: ALL_TRAFFIC # PSP calls enter the VPC: the hub proxy, or Cloud NAT if waived
           min_instances: 2
           secrets:
             PSP_API_KEY: { secret: psp-api-key }

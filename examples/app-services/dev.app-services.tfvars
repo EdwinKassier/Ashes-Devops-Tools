@@ -5,10 +5,14 @@
 #     -var-file=terraform.tfvars -var-file=../../../examples/app-services/dev.app-services.tfvars
 #
 # What it creates in the dev host project (modules/gcp/stages/app-services):
-#   - Artifact Registry docker repo  europe-west1-docker.pkg.dev/<host>/orders-api
+#   - Artifact Registry docker repo  <region>-docker.pkg.dev/<host>/orders-api
+#     (<region> = the environment region)
 #   - runtime SA  orders-api-run@<host>.iam.gserviceaccount.com (no project roles)
 #   - Cloud Run v2 service  orders-api  (INTERNAL ingress, Direct VPC egress to the
-#     env VPC's first private subnet, min 0 instances, secrets from Secret Manager)
+#     env VPC's first private subnet, min 0 instances, secrets from Secret Manager).
+#     With the environment egress proxy on (gcp.environments.dev.egress_proxy:
+#     true), egress defaults to ALL_TRAFFIC and the service gets HTTPS_PROXY,
+#     HTTP_PROXY and NO_PROXY for the hub Secure Web Proxy (PREVIEW).
 #   - Cloud SQL Postgres  orders-api-db  (private IP via the host VPC's PSA,
 #     IAM auth; the runtime SA is the IAM database user)
 #   - deploy SA  orders-api-deploy@<host>.iam.gserviceaccount.com, impersonable
@@ -31,7 +35,7 @@ app_services = {
     # afterwards (Terraform ignores later image changes). Unset = the root's
     # app_bootstrap_image (gcp.workload.bootstrap_image), else the public
     # us-docker.pkg.dev/cloudrun/container/hello sample.
-    # image = "europe-west2-docker.pkg.dev/<host>/mirror/hello:bootstrap"
+    # image = "<region>-docker.pkg.dev/<host>/mirror/hello:bootstrap"
 
     # ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY"        # default
     # Public: list the service in public_ingress_services (or

@@ -5,6 +5,15 @@
 
 mock_provider "aws" {}
 
+# CMP-6: a production estate needs a real security contact. The other fixtures
+# have no notifications.emails, so the suite passes one here. The scaffold runs
+# clear it (aws_overrides = {}): the scaffolder writes notifications.emails.
+variables {
+  aws_overrides = {
+    notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } }
+  }
+}
+
 mock_provider "aws" { alias = "security_tooling" }
 
 mock_provider "aws" { alias = "log_archive" }
@@ -46,6 +55,14 @@ run "scaffold_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+    aws_overrides            = {}
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied contact.
+  assert {
+    condition     = [for s in values(local.notification_subscribers) : s.endpoint] == ["secops@acme-corp.io"]
+    error_message = "the scaffold's notifications.emails must be the aws-security security contact."
   }
 }
 
@@ -54,6 +71,14 @@ run "scaffold_gcp_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+    aws_overrides            = {}
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied contact.
+  assert {
+    condition     = [for s in values(local.notification_subscribers) : s.endpoint] == ["secops@acme-corp.io"]
+    error_message = "the scaffold's notifications.emails must be the aws-security security contact."
   }
 }
 
@@ -62,5 +87,56 @@ run "scaffold_gcp_aws_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    aws_overrides            = {}
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied contact.
+  assert {
+    condition     = [for s in values(local.notification_subscribers) : s.endpoint] == ["secops@acme-corp.io"]
+    error_message = "the scaffold's notifications.emails must be the aws-security security contact."
+  }
+}
+
+# CMP-2: compliance.audit_log_retention_days feeds the log archive. The stage
+# output reads the planned Object Lock default retention.
+run "compliance_retention_feeds_log_archive" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.aws.log_archive_retention_days == 2190 && module.aws_security.log_archive_retention_days == 2190
+    error_message = "compliance.audit_log_retention_days must feed aws.log_archive_retention_days and the bucket."
+  }
+}
+
+run "override_retention_beats_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    aws_overrides            = { log_archive_retention_days = 2555, notification_subscribers = { secops = { protocol = "email", endpoint = "secops@acme-corp.io" } } }
+  }
+
+  assert {
+    condition     = module.aws_security.log_archive_retention_days == 2555
+    error_message = "aws_overrides.log_archive_retention_days must win over compliance.audit_log_retention_days."
+  }
+}
+
+# No compliance section: the archive keeps 365 days.
+run "log_archive_retention_default_unchanged" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+  }
+
+  assert {
+    condition     = module.aws_security.log_archive_retention_days == 365
+    error_message = "without a compliance section the log archive must keep 365 days."
   }
 }

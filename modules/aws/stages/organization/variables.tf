@@ -79,7 +79,7 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
     error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -89,7 +89,7 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
     error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -110,6 +110,13 @@ variable "data_perimeter_trusted_account_ids" {
   description = "Optional 12-digit account IDs outside the organization trusted by the RCP data perimeter (aws:PrincipalAccount / aws:SourceAccount). Empty (default) trusts only the organization."
   type        = list(string)
   default     = []
+}
+
+variable "stackset_stack_writer_role_names" {
+  description = "Member-account role names that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own, exempt from the deny-tamper SCP statement DenyStackSetStackTampering only. An AWS Control Tower estate sets [\"AWSControlTowerExecution\"]; a self-managed StackSet or AWS Quick Setup adds its execution role. Default empty."
+  type        = list(string)
+  default     = []
+  nullable    = false
 }
 
 variable "allow_vpc_bpa_exclusions" {
@@ -295,7 +302,7 @@ variable "tfc_apply_role_policy_arns" {
 }
 
 variable "tfc_enable_apply_permissions_boundary" {
-  description = "Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc_apply_permissions_boundary_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, creating IAM users/access keys, and (tfc_enable_apply_boundary_propagation) creating or granting to roles without the same boundary."
+  description = "Cap every member-account tfc-apply role with a permissions boundary (default true). With tfc_apply_permissions_boundary_arn = null the StackSet embeds tfc-apply-boundary: allow-all except leaving the org, stopping/deleting CloudTrail/GuardDuty/Config, modifying the TFC roles/OIDC provider/boundary, creating IAM users/access keys, IAM group and user policies, foreign policy versions, protected-key alias changes, (tfc_enable_apply_trust_update_lock) role trust updates, and (tfc_enable_apply_boundary_propagation) creating or granting to roles without the same boundary."
   type        = bool
   default     = true
 }
@@ -308,6 +315,12 @@ variable "tfc_apply_permissions_boundary_arn" {
 
 variable "tfc_enable_apply_boundary_propagation" {
   description = "Make the embedded tfc-apply boundary self-propagating (default true): tfc-apply can only create / grant to roles carrying the same boundary and can never remove a boundary, closing the create-unbounded-role escape. Every aws_iam_role created by tfc-apply in a member account must then set permissions_boundary to the tfc-apply-boundary ARN."
+  type        = bool
+  default     = true
+}
+
+variable "tfc_enable_apply_trust_update_lock" {
+  description = "Deny iam:UpdateAssumeRolePolicy to every member-account tfc-apply role on every role, in the embedded tfc-apply-boundary (default true). Without it the pipeline could re-trust a pre-existing unbounded role to itself and assume it. New roles are unaffected; a trust change on an existing role needs break-glass or a replacement of the role."
   type        = bool
   default     = true
 }
@@ -433,6 +446,45 @@ variable "member_backup_vault_name" {
   validation {
     condition     = can(regex("^[a-zA-Z0-9_-]{2,50}$", var.member_backup_vault_name))
     error_message = "member_backup_vault_name must be 2-50 characters of letters, digits, hyphens and underscores."
+  }
+}
+
+variable "member_backup_vault_encryption" {
+  description = "Key for the member-account backup vault. aws_managed (default): one vault on the AWS managed aws/backup key. cmk: the StackSet also creates a rotating customer managed key (tagged protected = true, so only break-glass can change its key policy, disable it or schedule its deletion) and a second vault, <member_backup_vault_name>-cmk, encrypted with it. The key policy lets the backup account use the key for copy jobs. Cross-account copy to the backup account needs the cmk vault. The original vault is kept: its recovery points cannot be moved. Needs create_backup_service_role and create_member_backup_vault."
+  type        = string
+  default     = "aws_managed"
+  nullable    = false
+
+  validation {
+    condition     = contains(["aws_managed", "cmk"], var.member_backup_vault_encryption)
+    error_message = "member_backup_vault_encryption must be aws_managed or cmk."
+  }
+
+  validation {
+    condition     = var.member_backup_vault_encryption != "cmk" || (var.backup_copy_account_id == null ? contains(keys(merge(var.accounts, var.workload_accounts)), "backup") : can(regex("^[0-9]{12}$", var.backup_copy_account_id)))
+    error_message = "member_backup_vault_encryption = cmk needs the backup account: an accounts[\"backup\"] entry, or a 12-digit backup_copy_account_id."
+  }
+
+  validation {
+    condition     = var.member_backup_vault_encryption != "cmk" || (var.create_backup_service_role && var.create_member_backup_vault)
+    error_message = "member_backup_vault_encryption = cmk needs create_backup_service_role = true and create_member_backup_vault = true: the StackSet that creates the member vault also creates the key and the cmk vault."
+  }
+}
+
+variable "backup_copy_account_id" {
+  description = "12-digit ID of the backup account that may use the member backup key for cross-account copy jobs. Null derives it from the accounts[\"backup\"] (or workload_accounts[\"backup\"]) entry. Used only when member_backup_vault_encryption = cmk."
+  type        = string
+  default     = null
+}
+
+variable "member_backup_dr_region" {
+  description = "Optional second region for a member-account DR vault: a second service-managed StackSet creates the same customer managed key and <member_backup_vault_name>-cmk vault there in every Workloads-OU account (no IAM: the roles are global). It is the target for cross-region copy (aws-backup compliance.backup.dr_region). Needs member_backup_vault_encryption = cmk, must be in allowed_regions (the region SCP blocks AWS Backup elsewhere) and must differ from backup_service_role_region. Null (default) creates nothing."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.member_backup_dr_region == null || (var.member_backup_vault_encryption == "cmk" && contains(var.allowed_regions, coalesce(var.member_backup_dr_region, "-")) && var.member_backup_dr_region != var.backup_service_role_region)
+    error_message = "member_backup_dr_region needs member_backup_vault_encryption = cmk, must be one of allowed_regions and must differ from backup_service_role_region (the home vault region)."
   }
 }
 
@@ -603,4 +655,11 @@ variable "enable_config_recorder_scp" {
     condition     = !var.enable_config_recorder_scp || contains(keys(merge(var.accounts, var.workload_accounts)), "security_tooling")
     error_message = "enable_config_recorder_scp needs a security_tooling account (accounts / workload_accounts): its tfc-apply keeps managing the aggregator recorder."
   }
+}
+
+variable "tag_policy_required_resource_types" {
+  description = "Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL_SUPPORTED) for which the root tag policy reports CostCenter, Environment, Owner and DataClassification as required (report_required_tag_for). Empty = no key is required. The AWS provider fails or warns at plan on a listed resource that lacks a key when the workspace sets TF_AWS_TAG_POLICY_COMPLIANCE to error or warning; the plan role then needs tag:ListRequiredTags."
+  type        = list(string)
+  default     = []
+  nullable    = false
 }

@@ -58,13 +58,13 @@ module "example" {
 The following resources are created:
 
 
-- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L414)
-- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L455)
-- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L447)
-- resource.aws_iam_role_policy.security_teardown (modules/aws/iam/tfc-management-roles/main.tf#L465)
-- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L438)
-- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L412)
-- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L410)
+- resource.aws_iam_role.this (modules/aws/iam/tfc-management-roles/main.tf#L422)
+- resource.aws_iam_role_policy.apply (modules/aws/iam/tfc-management-roles/main.tf#L463)
+- resource.aws_iam_role_policy.plan_guard (modules/aws/iam/tfc-management-roles/main.tf#L455)
+- resource.aws_iam_role_policy.security_teardown (modules/aws/iam/tfc-management-roles/main.tf#L473)
+- resource.aws_iam_role_policy_attachment.read_only (modules/aws/iam/tfc-management-roles/main.tf#L446)
+- data source.aws_caller_identity.current (modules/aws/iam/tfc-management-roles/main.tf#L420)
+- data source.aws_partition.current (modules/aws/iam/tfc-management-roles/main.tf#L418)
 
 
 ## Inputs
@@ -98,3 +98,7 @@ The following resources are created:
 | <a name="output_plan_role_arns"></a> [plan\_role\_arns](#output\_plan\_role\_arns) | Workspace name => management-account PLAN role ARN (TFC\_AWS\_PLAN\_ROLE\_ARN). |
 | <a name="output_security_teardown_policy"></a> [security\_teardown\_policy](#output\_security\_teardown\_policy) | Rendered aws-security teardown inline policy JSON, attached only while enable\_security\_service\_teardown is true (null otherwise). |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -15,7 +15,7 @@ gcp:
     projects:
       environment_config:
         dev:
-          folder_id: folders/111
+          folder_id: "111"
           host_project_id: cfgco-dev-host
           host_project_number: "222222222222"
           region: europe-west1
@@ -29,6 +29,10 @@ gcp:
       ncc_spoke_group: edge
   environments:
     dev:
+      is_production: false
+      private_service_connect:
+        name: devapis
+        address: 10.10.200.10
       additional_regions:
         europe-west4:
           subnet_cidrs:

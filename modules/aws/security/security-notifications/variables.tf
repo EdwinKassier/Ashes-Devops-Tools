@@ -16,7 +16,7 @@ variable "kms_key_id" {
 }
 
 variable "notification_subscribers" {
-  description = "Map of subscribers to attach to the SNS topic, keyed by an arbitrary name. A subscriber is required when the module is enabled — otherwise findings fire into a void."
+  description = "Map of subscribers to attach to the SNS topic, keyed by an arbitrary name. Empty (default) creates the topic and rules with no subscriber, so findings notify nobody until one is added; the aws-security root requires a real subscriber in production."
   type = map(object({
     protocol = string # one of: email, https, sms, sqs, lambda, etc.
     endpoint = string # e.g. an email address or HTTPS URL
@@ -24,10 +24,8 @@ variable "notification_subscribers" {
   default = {}
 
   validation {
-    # When enabled, at least one subscriber is required so notifications have
-    # somewhere to go. Empty is only tolerated while the module is disabled.
-    condition     = !var.enable_security_notifications || length(var.notification_subscribers) > 0
-    error_message = "notification_subscribers must contain at least one subscriber when enable_security_notifications is true."
+    condition     = alltrue([for s in values(var.notification_subscribers) : contains(["email", "email-json", "https", "sqs", "lambda", "sms", "firehose"], s.protocol)])
+    error_message = "notification_subscribers protocol must be one of: email, email-json, https, sqs, lambda, sms, firehose."
   }
 }
 

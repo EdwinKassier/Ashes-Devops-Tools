@@ -7,26 +7,24 @@
 #   - SUPABASE_ACCESS_TOKEN env var should be set in CI for the Management
 #     API path (bypasses the Supavisor pooler, avoiding "Tenant or user not
 #     found" on GitHub Actions runners).
-#   - SUPABASE_SSL_CERT (base64 CA bundle) is required for pooler connections;
-#     fetch it from the Supabase dashboard or use the collects ensureSupabaseSslCert helper.
+#   - Pooler connections (*.pooler.supabase.com) need the project's CA
+#     certificate: download it from the Supabase dashboard (Database settings,
+#     SSL configuration) and pass it base64-encoded as supabase_ssl_cert. The
+#     scripts fail fast without it.
 #
-# In a real deployment, postgres_url comes from the supabase/environment
-# module output and secrets come from CI environment variables.
-
-locals {
-  # Session-mode pooler URL (port 5432, NOT transaction-mode 6543).
-  postgres_url = "postgresql://postgres.abcdefghijklmnopqrst:password@aws-0-eu-west-2.pooler.supabase.com:5432/postgres"
-}
+# The connection URL, the certificate and the secret values are sensitive
+# variables: set them with TF_VAR_* or sensitive Terraform Cloud variables,
+# never in code. In a real deployment postgres_url is the session-mode pooler
+# URL of the project from supabase/environment.
 
 module "vault_secrets" {
   source = "../../"
 
-  postgres_url      = local.postgres_url
-  supabase_ssl_cert = "" # supply base64-encoded CA bundle for pooler connections
+  postgres_url      = var.postgres_url
+  supabase_ssl_cert = var.supabase_ssl_cert
 
   secrets = {
-    XERO_CLIENT_ID     = "my-client-id"
-    XERO_CLIENT_SECRET = "my-client-secret"
-    OPENAI_API_KEY     = "sk-proj-replace-with-real-key"
+    XERO_CLIENT_ID     = var.xero_client_id
+    XERO_CLIENT_SECRET = var.xero_client_secret
   }
 }

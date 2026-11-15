@@ -1,5 +1,5 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values. Its directory also sets the estate's trigger patterns (config/ = production, any other dir = <dir>/**), so a relative path must stay inside the repository."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values. Its directory also sets the estate's trigger patterns (config/ = production, any other dir = <dir>/**), so a relative path must stay inside the repository."
   type        = string
   default     = null
 
@@ -9,7 +9,25 @@ variable "landing_zone_config_path" {
       dirname("./${coalesce(var.landing_zone_config_path, "x")}/_") == ".." || dirname("./${coalesce(var.landing_zone_config_path, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../../../") ||
       (startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../") && !startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../../"))
     )
-    error_message = "landing_zone_config_path is relative but leaves the repository (e.g. ../../../x). Use ../../<dir>/<file> (repo-relative from envs/tfc-admin), a path below envs/tfc-admin, or an absolute path."
+    error_message = "landing_zone_config_path is relative but leaves the repository (e.g. ../../../x). Use ../../<dir>/<file> (repo-relative from envs/tfc-admin) or a path below envs/tfc-admin."
+  }
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 2
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 2 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../config/landing-zone.yaml or ../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
   }
 }
 
@@ -30,7 +48,7 @@ variable "tfc_organization" {
 }
 
 variable "environments" {
-  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Null (default) derives them from config/landing-zone.yaml instead: gcp.environments keys for gcp-workload-<env> and aws.workload_environments (with account_key) for aws-workload-<env>, so the environment list is written once. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc. Optional is_production (else gcp.environments[*].is_production / aws.workload_environments[*].is_production; unset = true only for the keys prod / production) marks a production workload: see disable_speculative_on_production."
+  description = "Application environments to create per-env workload workspaces for (gcp-workload-<env> when enable_gcp, aws-workload-<env> when enable_aws). Null (default) derives them from config/landing-zone.yaml instead: gcp.environments keys for gcp-workload-<env> and aws.workload_environments (with account_key) for aws-workload-<env>, so the environment list is written once. Optional aws_account_key names the aws-organization account key (accounts / workload_accounts, e.g. workload_dev) the aws-workload-<env> workspace deploys into: it is set as that workspace's workload_account_key variable and selects the tfc-plan/tfc-apply roles read via aws_organization_outputs_from_tfc. is_production (required on every entry here, and on every gcp.environments / aws.workload_environments entry when the config file supplies them) marks a production workload: see disable_speculative_on_production. A name such as prod is not read."
   type = map(object({
     aws_account_key = optional(string)
     is_production   = optional(bool)
@@ -40,6 +58,31 @@ variable "environments" {
   validation {
     condition     = alltrue([for k in concat(keys(coalesce(var.environments, {})), local.cfg.gcp_environment_keys, keys(local.cfg.aws_environments)) : can(regex("^[a-z][a-z0-9_-]*$", k))])
     error_message = "environments keys must be lowercase alphanumeric with hyphens/underscores (they become workspace names)."
+  }
+
+  validation {
+    condition = (var.environments != null
+      ? alltrue([for e in values(var.environments) : e.is_production != null])
+    : length(local.cfg.missing_is_production) == 0)
+    error_message = "is_production must be true or false on every environment (environments[*].is_production, or gcp.environments / aws.workload_environments in config/landing-zone.yaml); a name such as prod is not read. Missing: ${var.environments != null ? join(", ", [for k, e in var.environments : k if e.is_production == null]) : join(", ", local.cfg.missing_is_production)}."
+  }
+
+  validation {
+    # CMP-1: the production gates (egress, identity binding, containment,
+    # endpoint policies) key on is_production, so a regulated environment that
+    # is not production would miss them. Checked on the config file, which is
+    # where compliance_class lives. The var reference is a no-op.
+    condition     = (var.environments == null || var.environments != null) && length(local.cfg.regulated_not_production) == 0
+    error_message = "A regulated environment must set is_production: true, so it gets every production control (CMP-1). Set is_production: true on: ${join(", ", local.cfg.regulated_not_production)} (config/landing-zone.yaml), or set compliance_class: standard."
+  }
+
+  validation {
+    # Re-audit 5 CMP-3: an explicit environments map (a TFC variable no review
+    # sees) must not mark a regulated environment non-production either.
+    condition = var.environments == null || alltrue([
+      for k in local.cfg.regulated_keys : try(var.environments[k].is_production, true) == true
+    ])
+    error_message = "environments sets is_production = false on a regulated environment (compliance_class: regulated in config/landing-zone.yaml): ${join(", ", [for k in local.cfg.regulated_keys : k if try(var.environments[k].is_production, true) != true])}. A regulated environment must be production."
   }
 }
 
@@ -62,6 +105,20 @@ variable "enable_aws" {
   description = "Declare the AWS control-plane and aws-workload-<env> workspaces. Null = aws.enabled from config/landing-zone.yaml, else false; set true for an AWS or multi-cloud estate."
   type        = bool
   default     = null
+}
+
+variable "aws_layers" {
+  description = "Optional AWS layer workspaces to create besides aws-organization and aws-security (always created when enable_aws): any of network, identity, shared-services, backup. aws-workload-<env> follows aws.workload_environments. Without network, tfc-admin sets enable_network_hub = false on every aws-workload-<env> (standalone VPC) unless aws.contracts.network supplies the hub contract. Null = aws.layers from config/landing-zone.yaml, else all four."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition = alltrue([
+      for l in(var.aws_layers != null ? var.aws_layers : (local.cfg.aws_layers != null ? local.cfg.aws_layers : [])) :
+      contains(["network", "identity", "shared-services", "backup"], l)
+    ])
+    error_message = "aws_layers (else aws.layers in config/landing-zone.yaml) entries must be network, identity, shared-services or backup."
+  }
 }
 
 variable "enable_saas" {
@@ -165,7 +222,7 @@ variable "disable_speculative_on_saas" {
 }
 
 variable "disable_speculative_on_production" {
-  description = "Disable automatic speculative PR plans on production workload workspaces (gcp-workload-<env> / aws-workload-<env> whose environment is_production, or whose key is prod / production when is_production is unset). A speculative plan runs the PR's code with the workspace's plan identity, so on a production workspace any PR author could read production through it. Default true; non-production workloads keep speculative plans."
+  description = "Disable automatic speculative PR plans on production workload workspaces (gcp-workload-<env> / aws-workload-<env> whose environment is_production; is_production (required) marks a production workload). A speculative plan runs the PR's code with the workspace's plan identity, so on a production workspace any PR author could read production through it. Default true; non-production workloads keep speculative plans."
   type        = bool
   default     = true
 }
@@ -337,7 +394,7 @@ variable "aws_workspace_account_keys" {
 }
 
 variable "workspace_variables" {
-  description = "Per-workspace variables, workspace name => {key => {value, category (terraform|env, default terraform), hcl?, sensitive?, description?, version?}}. Overrides derived values (e.g. environment) and dynamic-credential env vars. Sensitive values are written write-only; increment `version` to rotate."
+  description = "Per-workspace variables, workspace name => {key => {value, category (terraform|env, default terraform), hcl?, sensitive?, description?, version?}}. Overrides derived values (e.g. environment) and dynamic-credential env vars. Sensitive values are written write-only; increment `version` to rotate. Env vars that make the run execute other code are refused: TERRAFORM_CONFIG, TF_CLI_CONFIG_FILE, LD_*, DYLD_*, NODE_OPTIONS, NODE_PATH, GIT_*, BASH_ENV, BASH_FUNC_*, ENV, SHELLOPTS, PS4, PYTHON*, PERL5OPT, PERL5LIB, RUBYOPT, RUBYLIB, JAVA_TOOL_OPTIONS, _JAVA_OPTIONS, GCONV_PATH, SSH_ASKPASS* and PATH."
   type = map(map(object({
     value       = string
     category    = optional(string, "terraform")
@@ -357,7 +414,7 @@ variable "workspace_variables" {
 variable "workspace_variables_file" {
   description = <<-EOT
     Committed per-workspace Terraform variables for VCS-driven runs (which get no
-    local tfvars). Path relative to this root (or absolute); read only if the file
+    local tfvars). Path relative to this root (a .yaml or .yml file inside the repository; no absolute); read only if the file
     exists, so the default is a no-op until you create it. YAML shape (see
     config/tfc-workspaces.example.yaml):
       workspaces:
@@ -379,7 +436,14 @@ variable "workspace_variables_file" {
       dirname("./${coalesce(var.workspace_variables_file, "x")}/_") == ".." || dirname("./${coalesce(var.workspace_variables_file, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../../../") ||
       (startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../") && !startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../../"))
     )
-    error_message = "workspace_variables_file is relative but leaves the repository (e.g. ../../../x): it must stay inside the repo so it can be a trigger pattern. Use ../../<dir>/<file>, a path below envs/tfc-admin, or an absolute path."
+    error_message = "workspace_variables_file is relative but leaves the repository (e.g. ../../../x): it must stay inside the repo so it can be a trigger pattern. Use ../../<dir>/<file> or a path below envs/tfc-admin."
+  }
+
+  # SEC-1: file() reads this path, so it must be a relative .yaml/.yml file
+  # (an absolute path could read a file on the runner).
+  validation {
+    condition     = var.workspace_variables_file == null || (can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.workspace_variables_file, "x"))) && !startswith(coalesce(var.workspace_variables_file, "x"), "/"))
+    error_message = "workspace_variables_file must be a relative path to a .yaml or .yml file (no leading /): an absolute path could read a file on the runner."
   }
 }
 
@@ -398,7 +462,7 @@ variable "project_name_prefix" {
 }
 
 variable "platform_team_id" {
-  description = "TFC team ID (team-...) of the broad platform team: fixed WRITE on non-production gcp/aws workload workspaces, custom plan-level access (variables read-only) on control-plane workspaces and on production gcp/aws workload workspaces (see platform_team_control_plane_runs and control_plane_approvers_team_id), and runs = read on the secret-bearing saas and tfc-admin projects. Null = no grant."
+  description = "TFC team ID (team-...) of the broad platform team: fixed WRITE on non-production gcp/aws workload workspaces, custom plan-level access (variables read-only) on control-plane workspaces and on production gcp/aws workload workspaces (see platform_team_control_plane_runs and control_plane_approvers_team_id), and runs = read on secret-bearing projects (tfc-admin, saas, and every project holding a workspace with a static secret or the SaaS bridge; see platform_team_control_plane_runs). Null = no grant."
   type        = string
   default     = null
 
@@ -409,7 +473,7 @@ variable "platform_team_id" {
 }
 
 variable "control_plane_approvers_team_id" {
-  description = "TFC team ID (team-...) of the small approvers team: custom access with runs = apply (confirm/discard applies) and variables/state read-only on every project holding control-plane workspaces, on the saas project and on every project holding a production gcp/aws workload. It is the only team this root lets apply the control plane and production workloads, so a platform-team member who edits code or queues a run cannot also approve the apply. Must differ from platform_team_id. Null = no approvers grant (only organization owners can apply them)."
+  description = "TFC team ID (team-...) of the small approvers team: custom access with runs = apply (confirm/discard applies) and variables/state read-only on every project holding control-plane workspaces, on the saas project, on every project holding a production gcp/aws workload and on every other secret-bearing project except the self-managed tfc-admin project. It is the only team this root lets apply the control plane and production workloads, so a platform-team member who edits code or queues a run cannot also approve the apply. Must differ from platform_team_id. Null = no approvers grant (only organization owners can apply them)."
   type        = string
   default     = null
 
@@ -430,8 +494,19 @@ variable "security_team_id" {
   }
 }
 
+variable "guardrails_release_reader_team_id" {
+  description = "TFC team ID (team-...) whose hand-created team token is the GitHub secret TFC_TOKEN_GUARDRAILS, which terraform-apply.yml uses to verify gcp-guardrails runs for `gcp-guardrails/v*` release tags: custom access with runs = read on the guardrails project, no state, no variables, no locking. Keep it a dedicated team: it must differ from every other team input. An organization owner creates the token by hand, with an expiry, so it never enters state. Null = no grant (`gcp-guardrails/v*` tags then fail verification)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.guardrails_release_reader_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.guardrails_release_reader_team_id))
+    error_message = "guardrails_release_reader_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "platform_team_control_plane_runs" {
-  description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). The same level applies to production gcp/aws workload workspaces; non-production workload workspaces keep fixed write access. On projects that hold static secrets (the self-managed tfc-admin project and the saas project) the platform team always gets runs = read whatever this is set to: queuing a plan, including a CLI speculative plan, runs code that can read the workspace's environment variables."
+  description = "Runs permission of platform_team_id on projects holding control-plane workspaces (custom access; variables read-only, no locking, workspace create/delete/move, run tasks or policy overrides). plan (default) = queue plans only, applies are confirmed by control_plane_approvers_team_id; read = view runs only; apply = may also confirm applies (variables stay read-only). The same level applies to production gcp/aws workload workspaces; non-production workload workspaces keep fixed write access. On secret-bearing projects (the self-managed tfc-admin project, the saas project, and every project holding a workspace with a sensitive or secret-named workspace variable or enable_saas_secret_bridge = true, or every shared project when common_workspace_variables carries one) the platform team always gets runs = read whatever this is set to: queuing a plan, including a CLI speculative plan, runs code that can read the workspace's variables."
   type        = string
   default     = "plan"
 
@@ -439,6 +514,12 @@ variable "platform_team_control_plane_runs" {
     condition     = contains(["read", "plan", "apply"], var.platform_team_control_plane_runs)
     error_message = "platform_team_control_plane_runs must be read, plan or apply."
   }
+}
+
+variable "enable_speculative_on_secret_bearing" {
+  description = "Keep speculative (PR) plans on secret-bearing workspaces: every workspace with a sensitive or secret-named (token, secret, secret key, service-role key, password, passwd, passphrase, private key, API or access key, credentials) workspace variable or an enable_saas_secret_bridge value other than an explicit false (false, 0 or empty), every shared workspace when common_workspace_variables carries such a value, and the self-managed tfc-admin workspace. saas-* workspaces follow disable_speculative_on_saas instead. Marking a secret sensitive = true is the contract; the name pattern is defence in depth for a secret that was not marked. Default false: a speculative plan runs the PR's code with the workspace's variables, so it can read the secret. true only stops this rule from turning them off; speculative_disabled_workspaces, disable_speculative_on_production and disable_speculative_on_saas still apply, and the platform team stays at runs = read on those projects."
+  type        = bool
+  default     = false
 }
 
 variable "split_workload_projects" {
@@ -483,7 +564,7 @@ variable "saas_outputs_reader_team_id" {
 }
 
 variable "state_backup_team_id" {
-  description = "TFC team ID (team-...) whose team token the scheduled state export (.github/workflows/state-backup.yml, docs/runbooks/state-backup.md) uses: custom access with state_versions = read, runs = read and variables = none on every project except the security-only guardrails project. The token can read every state file, including sensitive values, so it must be a dedicated team kept in a branch-restricted GitHub environment. Null = no grant."
+  description = "TFC team ID (team-...) whose team token the scheduled state export (.github/workflows/state-backup.yml, docs/runbooks/state-backup.md) uses: custom access with state_versions = read, runs = read and variables = none on every project except the security-only guardrails project and (unless enable_saas_state_backup = true) the saas project. The token can read every state file it is granted, including sensitive values, so it must be a dedicated team kept in a branch-restricted GitHub environment. Null = no grant."
   type        = string
   default     = null
 
@@ -493,8 +574,36 @@ variable "state_backup_team_id" {
   }
 }
 
+variable "drift_team_id" {
+  description = "TFC team ID (team-...) whose team token is TFC_TOKEN_DRIFT (.github/workflows/drift-detection.yml): custom access with runs = plan, state_versions = read and variables = none on every project except the security-only guardrails project and the secret-bearing projects (tfc-admin, saas, and any project that holds a workspace with a static secret). A plan there could read the static tokens; HCP health assessments (enable_health_assessments, on tiers that offer them) are their only drift check. The output drift_workspaces lists the workspaces the team can plan. An organization owner creates the team and its token by hand, with an expiry, so the token never enters state. Null = no grant."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.drift_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.drift_team_id))
+    error_message = "drift_team_id must be a TFC team ID (team-...)."
+  }
+}
+
+variable "enable_saas_state_backup" {
+  description = "Grant state_backup_team_id state read on the saas project too. Default false: saas-* state holds the Supabase database password and service-role key (a provider limitation), and a backup copy outside HCP Terraform would hold them as well. HCP Terraform keeps every state version, so a restore stays possible without the backup."
+  type        = bool
+  default     = false
+}
+
+variable "saas_approvers_team_id" {
+  description = "TFC team ID (team-...) that confirms saas-* applies (custom runs = apply) instead of control_plane_approvers_team_id. A team that may confirm an apply may also queue a plan, and a plan can read the account-wide SUPABASE_ACCESS_TOKEN and VERCEL_API_TOKEN, so keep this team small and dedicated. Null = control_plane_approvers_team_id confirms saas applies, and a check warns."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.saas_approvers_team_id == null || can(regex("^team-[A-Za-z0-9]+$", var.saas_approvers_team_id))
+    error_message = "saas_approvers_team_id must be a TFC team ID (team-...)."
+  }
+}
+
 variable "viewer_team_ids" {
-  description = "TFC team IDs (team-...) granted READ on every landing-zone project."
+  description = "TFC team IDs (team-...) granted fixed READ on every landing-zone project except guardrails. On the saas project they get custom access instead (runs and variables read, state_versions = none): saas-* state holds the Supabase database password and service-role key, and fixed read includes the full state file."
   type        = list(string)
   default     = []
 
@@ -505,7 +614,7 @@ variable "viewer_team_ids" {
 }
 
 variable "enable_policy_sets" {
-  description = "Create the two OPA policy sets, both sourced from the VCS repo and attached to every managed workspace: <prefix>opa-guardrails from policies/opa (mixed mandatory/advisory, not overridable unless policy_set_overridable = true) and <prefix>destructive-change-guard from policies/opa-destructive (the mandatory destroy_guard, overridable by a user with Manage Policy Overrides). Null = on when vcs_repo is set and tfc_plan (org.tfc.plan) is standard or premium, else off (a check then warns that destructive changes are unguarded)."
+  description = "Create the two OPA policy sets, both sourced from the VCS repo and attached to every managed workspace: <prefix>opa-guardrails from policies/opa (mixed mandatory/advisory, not overridable unless policy_set_overridable = true) and <prefix>destructive-change-guard from policies/opa-destructive (the mandatory destroy_guard, tfc_admin_guard and tfc_vcs_run_only, overridable by a user with Manage Policy Overrides). Null = on when vcs_repo is set and tfc_plan (org.tfc.plan) is standard or premium, else off (a check then warns that destructive changes are unguarded). Off with a production environment (gcp.environments or aws.workload_environments is_production) fails the plan unless policy_sets_waiver is set."
   type        = bool
   default     = null
 }
@@ -524,6 +633,25 @@ variable "tfc_plan" {
   validation {
     condition     = contains(["free", "essentials", "standard", "premium"], coalesce(var.tfc_plan, local.cfg.tfc_plan, "free"))
     error_message = "tfc_plan (or org.tfc.plan in config/landing-zone.yaml) must be free, essentials, standard or premium."
+  }
+}
+
+variable "policy_sets_waiver" {
+  description = "Explicit, time-boxed waiver: let an estate with a production environment (any gcp.environments or aws.workload_environments entry with is_production true) plan while the OPA policy sets are off (enable_policy_sets false, no vcs_repo, or a tfc_plan without VCS policy sets). reason says why; expires (YYYY-MM-DD, UTC; the midnight form YYYY-MM-DDT00:00:00Z is read as that day) is the last day it waives. Null = org.tfc.policy_sets_waiver from config/landing-zone.yaml, else none: such a plan fails, because no destroy_guard or guardrail policy then checks a production run."
+  type = object({
+    reason  = string
+    expires = string
+  })
+  default = null
+
+  validation {
+    condition     = var.policy_sets_waiver == null || try(length(trimspace(var.policy_sets_waiver.reason)) > 0, false)
+    error_message = "policy_sets_waiver.reason must not be empty: say why the production estate runs without policy sets."
+  }
+
+  validation {
+    condition     = var.policy_sets_waiver == null || try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", var.policy_sets_waiver.expires)) && can(formatdate("YYYY", "${substr(var.policy_sets_waiver.expires, 0, 10)}T00:00:00Z")), false)
+    error_message = "policy_sets_waiver.expires must be a real calendar date, YYYY-MM-DD (UTC). The midnight form YYYY-MM-DDT00:00:00Z, which yamldecode makes of an unquoted YAML date, is accepted."
   }
 }
 
@@ -634,7 +762,7 @@ variable "auto_apply_on_merge" {
 }
 
 variable "enable_nonprod_workload_auto_apply" {
-  description = "Workload workspaces whose environment sets is_production = false EXPLICITLY get auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation) and queue_all_runs. The run queue_all_runs starts at creation is expected to fail (the workspace's identity and variables do not exist yet); the setting exists so later VCS and run-trigger runs queue without a manual first run. An omitted is_production, production workloads and every shared workspace keep manual confirmation. Null (default) = on only while the policy sets (and so the mandatory destroy_guard) are attached, so an unguarded estate never auto-applies; true forces it on, false confirms every run."
+  description = "Workload workspaces whose environment sets is_production = false get auto_apply_run_trigger (a run queued by a confirmed upstream apply applies without a second confirmation) and queue_all_runs. The run queue_all_runs starts at creation is expected to fail (the workspace's identity and variables do not exist yet); the setting exists so later VCS and run-trigger runs queue without a manual first run. Production workloads and every shared workspace keep manual confirmation. Null (default) = on only while the policy sets (and so the mandatory destroy_guard) are attached, so an unguarded estate never auto-applies; true forces it on, false confirms every run."
   type        = bool
   default     = null
 }

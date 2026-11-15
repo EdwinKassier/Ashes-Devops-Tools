@@ -1,0 +1,14 @@
+# YAML twin of regulated-gcp-workload.tfvars. envs/gcp/workload applies it to an
+# environment whose gcp.environments.<env>.compliance_class is regulated; you
+# do not list it in `presets`. Keep `values` identical to the .tfvars
+# (envs/gcp/workload/tests/presets.tftest.hcl fails otherwise).
+# Precedence: explicit variable > preset > config file > default. The regulated
+# guards in envs/gcp/workload/main.tf fail the plan when a variable weakens
+# these values. See docs/architecture/regulated-environments.md.
+root: envs/gcp/workload
+values:
+  vpc_sc_enable_dry_run: false
+  enable_cloud_armor: true
+  enable_owasp_rules: true
+  log_config_flow_sampling: 1
+  vpc_flow_logs_retention_days: 365

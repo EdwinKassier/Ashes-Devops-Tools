@@ -5,7 +5,22 @@
 # Each run also asserts that config-file values (which differ from the built-in
 # defaults) resolve into the root's locals and its remote-state read.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
+
+variables {
+  # A production estate needs a real alarm contact. The other fixtures have no
+  # notifications.emails, so the suite passes one here. The scaffold runs clear
+  # it (null): the scaffolder writes notifications.emails.
+  alarm_subscriber_emails = ["netops@acme-corp.io"]
+}
 
 override_data {
   target = data.terraform_remote_state.aws_organization
@@ -28,6 +43,14 @@ run "scaffold_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+    alarm_subscriber_emails  = null
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied alarm subscriber.
+  assert {
+    condition     = local.alarm_subscriber_emails == tolist(["secops@acme-corp.io"])
+    error_message = "the scaffold's notifications.emails must be the hub network alarm subscriber."
   }
 
   assert {
@@ -46,7 +69,7 @@ run "scaffold_aws_plans" {
   }
 
   assert {
-    condition     = local.network_firewall_egress_domain_allowlist == tolist([".amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established", "aws:alert_established"])
+    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"])
     error_message = "aws.network egress settings from the config file must reach the network-hub stage inputs."
   }
 }
@@ -56,6 +79,14 @@ run "scaffold_gcp_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+    alarm_subscriber_emails  = null
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied alarm subscriber.
+  assert {
+    condition     = local.alarm_subscriber_emails == tolist(["secops@acme-corp.io"])
+    error_message = "the scaffold's notifications.emails must be the hub network alarm subscriber."
   }
 
   assert {
@@ -74,7 +105,7 @@ run "scaffold_gcp_aws_plans" {
   }
 
   assert {
-    condition     = local.network_firewall_egress_domain_allowlist == tolist([".amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established", "aws:alert_established"])
+    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"])
     error_message = "aws.network egress settings from the config file must reach the network-hub stage inputs."
   }
 }
@@ -84,6 +115,14 @@ run "scaffold_gcp_aws_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    alarm_subscriber_emails  = null
+  }
+
+  # ADO-21: the scaffolder writes notifications.emails (--notification-emails),
+  # so the production scaffold plans with no test-supplied alarm subscriber.
+  assert {
+    condition     = local.alarm_subscriber_emails == tolist(["secops@acme-corp.io"])
+    error_message = "the scaffold's notifications.emails must be the hub network alarm subscriber."
   }
 
   assert {
@@ -102,7 +141,7 @@ run "scaffold_gcp_aws_saas_plans" {
   }
 
   assert {
-    condition     = local.network_firewall_egress_domain_allowlist == tolist([".amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established", "aws:alert_established"])
+    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"])
     error_message = "aws.network egress settings from the config file must reach the network-hub stage inputs."
   }
 }

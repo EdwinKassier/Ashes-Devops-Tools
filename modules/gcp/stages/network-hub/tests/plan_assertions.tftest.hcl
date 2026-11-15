@@ -23,7 +23,7 @@ variables {
   internal_domain        = "internal.example.com"
   folders = {
     shared = {
-      id           = "folders/111111111"
+      id           = "111111111"
       name         = "folders/111111111"
       display_name = "Shared"
     }
@@ -66,11 +66,13 @@ run "dns_zone_binds_to_dns_anchor_network_self_link" {
   }
 
   assert {
-    condition = length(module.dns_anchor.dns_zones["internal-root"].zone.private_visibility_config[0].networks) == 1 && alltrue([
-      for n in module.dns_anchor.dns_zones["internal-root"].zone.private_visibility_config[0].networks :
-      n.network_url == "projects/mock-dns-project/global/networks/dns-vpc-core"
+    condition = toset([
+      for n in module.dns_anchor.dns_zones["internal-root"].zone.private_visibility_config[0].networks : n.network_url
+      ]) == toset([
+      "projects/mock-dns-project/global/networks/dns-vpc-core",
+      "projects/mock-hub-project/global/networks/hub-vpc-core",
     ])
-    error_message = "The private DNS zone must bind to the DNS anchor's own VPC self_link, not the shared-vpc hub network."
+    error_message = "internal-root must be visible to the DNS anchor VPC and to the hub VPC: spoke peering zones target the hub VPC, and a peering zone answers from the zones bound to its target network (ARC-2)."
   }
 
   assert {
@@ -128,9 +130,9 @@ run "ssh_rdp_deny_associated_with_every_folder" {
 
   variables {
     folders = {
-      shared = { id = "folders/111111111", name = "folders/111111111", display_name = "Shared" }
-      dev    = { id = "folders/222222222", name = "folders/222222222", display_name = "Development" }
-      prod   = { id = "folders/333333333", name = "folders/333333333", display_name = "Production" }
+      shared = { id = "111111111", name = "folders/111111111", display_name = "Shared" }
+      dev    = { id = "222222222", name = "folders/222222222", display_name = "Development" }
+      prod   = { id = "333333333", name = "folders/333333333", display_name = "Production" }
     }
   }
 
@@ -192,5 +194,57 @@ run "no_spoke_peerings_by_default" {
   assert {
     condition     = length(google_compute_network_peering.hub_to_spoke) == 0
     error_message = "without spoke_peerings the hub creates no peering."
+  }
+}
+
+# internal_domain names the internal-root zone, and a hub without it keeps the
+# built-in internal.local, so an existing estate's zone does not change.
+run "internal_root_zone_defaults_to_internal_local" {
+  command = plan
+
+  variables {
+    internal_domain = "internal.local"
+  }
+
+  assert {
+    condition     = module.dns_anchor.dns_zones["internal-root"].zone.dns_name == "internal.local." && output.hub_dns_domain == "internal.local."
+    error_message = "internal_domain internal.local must plan the internal-root zone as internal.local. and the contract domain with it."
+  }
+}
+
+run "internal_root_zone_follows_internal_domain" {
+  command = plan
+
+  variables {
+    internal_domain = "corp.example.com"
+  }
+
+  assert {
+    condition     = module.dns_anchor.dns_zones["internal-root"].zone.dns_name == "corp.example.com." && output.hub_dns_domain == "corp.example.com."
+    error_message = "internal_domain must name the internal-root zone (with the trailing dot) and the hub_dns_domain output."
+  }
+}
+
+# IAC-1: hub_zones pins the DNS anchor VPC's zones (the zone lookup above
+# returns us-central1-a only).
+run "hub_zones_pin_the_dns_anchor_zones" {
+  command = plan
+
+  variables {
+    hub_zones = ["us-central1-b", "us-central1-c"]
+  }
+
+  assert {
+    condition     = join(",", module.dns_anchor.zones) == "us-central1-b,us-central1-c"
+    error_message = "hub_zones must reach the DNS anchor VPC in the given order."
+  }
+}
+
+run "hub_zones_default_to_discovery" {
+  command = plan
+
+  assert {
+    condition     = join(",", module.dns_anchor.zones) == "us-central1-a"
+    error_message = "Without hub_zones the DNS anchor keeps the discovered zones."
   }
 }

@@ -160,9 +160,38 @@ run "edition_defaults_to_enterprise" {
   }
 }
 
-# Backups default to Cloud SQL's own location; backup_location moves them to
-# another region (or multi-region) so they survive a regional outage.
-run "backup_location_default_and_cross_region" {
+# Backups stay in the instance region unless backup_location says otherwise
+# (CMP-8). Cloud SQL's own default is the multi-region nearest the instance,
+# which can be outside gcp.resourceLocations.
+run "backups_stay_in_instance_region" {
+  command = plan
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].location == "europe-west1" && output.backup_location == "europe-west1"
+    error_message = "with no backup_location, backups must stay in the instance region (gcp.resourceLocations), not Cloud SQL's multi-region default."
+  }
+
+  assert {
+    condition     = output.availability_type == "ZONAL"
+    error_message = "By default the instance is zonal."
+  }
+}
+
+# An explicit region (to survive a regional outage) or multi-region wins.
+run "explicit_backup_location_kept" {
+  command = plan
+
+  variables {
+    backup_location = "eu"
+  }
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].location == "eu" && output.backup_location == "eu"
+    error_message = "an explicit backup_location must win."
+  }
+}
+
+run "backup_location_cross_region" {
   command = plan
 
   variables {
@@ -175,11 +204,32 @@ run "backup_location_default_and_cross_region" {
   }
 }
 
-run "backup_location_unset_by_default" {
+# PITR log retention: 7 days by default, and a caller that forwards null (an
+# app service without database.transaction_log_retention_days) keeps it.
+run "transaction_log_retention_default_and_null" {
   command = plan
 
+  variables {
+    transaction_log_retention_days = null
+  }
+
   assert {
-    condition     = output.backup_location == null && output.availability_type == "ZONAL"
-    error_message = "By default the backups use Cloud SQL's location and the instance is zonal."
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].transaction_log_retention_days == 7 && output.transaction_log_retention_days == 7
+    error_message = "null transaction_log_retention_days must keep the 7-day default."
+  }
+}
+
+run "transaction_log_retention_explicit" {
+  command = plan
+
+  variables {
+    edition                        = "ENTERPRISE_PLUS"
+    tier                           = "db-perf-optimized-N-2"
+    transaction_log_retention_days = 14
+  }
+
+  assert {
+    condition     = google_sql_database_instance.this.settings[0].backup_configuration[0].transaction_log_retention_days == 14 && output.transaction_log_retention_days == 14
+    error_message = "an explicit transaction_log_retention_days must reach the instance."
   }
 }

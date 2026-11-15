@@ -35,6 +35,8 @@ locals {
     guardrails_service_account          = module.bootstrap.guardrails_service_account
     guardrails_plan_service_account     = module.bootstrap.guardrails_plan_service_account
     guardrails_workspace_bound_by_id    = module.bootstrap.guardrails_workspace_bound_by_id
+    organization_apply_grantable_roles  = module.bootstrap.organization_apply_grantable_roles
+    organization_admin_members          = module.bootstrap.organization_admin_members
   }
 }
 
@@ -70,6 +72,8 @@ output "contract" {
     guardrails_service_account          = string
     guardrails_plan_service_account     = string
     guardrails_workspace_bound_by_id    = bool
+    organization_apply_grantable_roles  = list(string)
+    organization_admin_members          = list(string)
   })
   value = local.contract
 }

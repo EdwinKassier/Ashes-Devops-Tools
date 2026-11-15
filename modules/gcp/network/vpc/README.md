@@ -129,3 +129,7 @@ The following resources are created:
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Deprecated alias for the VPC self link |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the VPC |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

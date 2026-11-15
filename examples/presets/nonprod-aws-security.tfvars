@@ -5,6 +5,10 @@
 # Every key below sits in the root's aws_overrides object. A tfvars file sets
 # the WHOLE object, so a second -var-file replaces (does not merge with) your own
 # aws_overrides: copy these keys into your own aws_overrides instead.
+# Replacing the object also drops your aws_overrides.notification_subscribers.
+# Under the production profile (org.profile: production, the default) the plan
+# still needs a real subscriber: notifications.emails in
+# config/landing-zone.yaml, or notification_subscribers in this object.
 aws_overrides = {
   enable_security_lake                    = false
   enabled_security_services               = []

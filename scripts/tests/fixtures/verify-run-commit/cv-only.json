@@ -1,0 +1,39 @@
+{
+  "data": [
+    {
+      "id": "run-CZcmD7eagjhyX0vN",
+      "type": "runs",
+      "attributes": {
+        "status": "applied",
+        "source": "tfe-configuration-version"
+      },
+      "relationships": {
+        "configuration-version": {
+          "data": {
+            "id": "cv-ntv3HbhJqvFzamy7",
+            "type": "configuration-versions"
+          }
+        }
+      }
+    }
+  ],
+  "included": [
+    {
+      "id": "cv-ntv3HbhJqvFzamy7",
+      "type": "configuration-versions",
+      "attributes": {
+        "source": "github",
+        "speculative": false,
+        "status": "uploaded"
+      },
+      "relationships": {
+        "ingress-attributes": {
+          "data": {
+            "id": "ia-i4MrTxmQXYxH2nYD",
+            "type": "ingress-attributes"
+          }
+        }
+      }
+    }
+  ]
+}

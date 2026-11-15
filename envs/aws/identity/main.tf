@@ -59,6 +59,33 @@ locals {
   assignments = merge(var.assignments, local.group_assignments)
 }
 
+# Production guard: broad write permission sets (production_restricted_permission_sets,
+# default Developer) are refused in production workload accounts. An
+# assignment names its account by key (group-derived and explicit) or by ID
+# (explicit only); both forms are checked.
+locals {
+  production_account_keys = var.production_account_keys != null ? var.production_account_keys : local.cfg.production_account_keys
+  production_account_ids  = compact([for k in local.production_account_keys : lookup(local.org.account_ids, k, "")])
+  restricted_production_assignments = sort([
+    for key, a in local.assignments : key
+    if contains(var.production_restricted_permission_sets, a.permission_set) && (
+      contains(local.production_account_keys, coalesce(try(a.account_key, null), "-")) ||
+      contains(local.production_account_ids, coalesce(try(a.account_id, null), "-"))
+    )
+  ])
+}
+
+resource "terraform_data" "production_assignment_guard" {
+  input = local.restricted_production_assignments
+
+  lifecycle {
+    precondition {
+      condition     = length(local.restricted_production_assignments) == 0
+      error_message = "These assignments give a restricted permission set (${join(", ", var.production_restricted_permission_sets)}) in a production account: ${join(", ", local.restricted_production_assignments)}. Use a read-only or scoped set there, with time-boxed elevation through the identity provider (docs/adr/0011-temporary-elevated-access.md), or change production_restricted_permission_sets and record the reason."
+    }
+  }
+}
+
 module "iam_identity_center" {
   source = "../../../modules/aws/iam/iam-identity-center"
 

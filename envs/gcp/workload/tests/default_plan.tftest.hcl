@@ -6,7 +6,17 @@
 # the real environment stage against mocks so a broken default plan cannot hide
 # again.
 
-mock_provider "google" {}
+# A planned peering's state is unknown, which leaves check.hub_peering_active
+# unknown, and terraform test fails a plan run on an unknown check (a real plan
+# only warns). ACTIVE is what a peered environment reports.
+mock_provider "google" {
+  mock_resource "google_compute_network_peering" {
+    override_during = plan
+    defaults = {
+      state = "ACTIVE"
+    }
+  }
+}
 mock_provider "google-beta" {}
 # tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
 # no run contacts HCP Terraform.
@@ -19,6 +29,15 @@ variables {
   environment              = "dev"
   tfc_organization         = "acme-tfc"
   monthly_budget_limit     = 0 # disable the budget module for this contract test
+  # Production needs pinned zones (IAC-1); the runs below that test the
+  # requirement unset it.
+  zones = ["europe-west1-b", "europe-west1-c", "europe-west1-d"]
+  # Production also needs the hub egress proxy or a waiver (ARC-4); the runs
+  # that test that requirement unset it.
+  production_egress_proxy_waiver = {
+    reason  = "Test suite: the egress proxy runs are separate."
+    expires = "2099-12-31"
+  }
 }
 
 override_data {
@@ -42,10 +61,11 @@ override_data {
       contract = {
         environment_config = {
           dev = {
-            folder_id           = "folders/111"
+            folder_id           = "111"
             folder_name         = "Development"
             host_project_id     = "acme-dev-host-abcd"
             host_project_number = "222222222222"
+            is_production       = false
             region              = "europe-west1"
             cidr_block          = "10.10.0.0/16"
             labels              = {}
@@ -126,9 +146,9 @@ run "enforced_perimeter_stages_dry_run_delta" {
   }
 }
 
-# SOTA M: a production-like environment in dry-run (or with no perimeter) must
-# raise the vpc_sc_enforced_in_prod check warning.
-run "prod_without_enforced_perimeter_warns" {
+# SEC-8: a production environment in dry-run (or with no perimeter) fails the
+# plan unless production_vpc_sc_dry_run_waiver names a reason and a future expiry.
+run "prod_without_enforced_perimeter_fails" {
   command = plan
 
   variables {
@@ -142,10 +162,11 @@ run "prod_without_enforced_perimeter_warns" {
         contract = {
           environment_config = {
             prod = {
-              folder_id           = "folders/333"
+              folder_id           = "333"
               folder_name         = "Production"
               host_project_id     = "acme-prod-host-abcd"
               host_project_number = "333333333333"
+              is_production       = true
               region              = "europe-west1"
               cidr_block          = "10.30.0.0/16"
               labels              = {}
@@ -157,7 +178,557 @@ run "prod_without_enforced_perimeter_warns" {
     }
   }
 
-  expect_failures = [check.vpc_sc_enforced_in_prod]
+  expect_failures = [terraform_data.production_vpc_sc_enforced]
+}
+
+# A waiver with a reason and a future expiry lets a first production rollout
+# plan in dry-run. The guard resource still exists.
+run "prod_dry_run_waiver_allows_plan" {
+  command = plan
+
+  variables {
+    environment = "prod"
+    production_vpc_sc_dry_run_waiver = {
+      reason  = "First rollout: reading the dry-run violation logs before enforcing."
+      expires = "2099-12-31"
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(terraform_data.production_vpc_sc_enforced) == 1
+    error_message = "the waiver lets the plan through; the precondition resource still exists."
+  }
+}
+
+# A waiver past its expiry date no longer waives: the plan fails again.
+run "prod_expired_waiver_fails" {
+  command = plan
+
+  variables {
+    environment = "prod"
+    production_vpc_sc_dry_run_waiver = {
+      reason  = "First rollout: reading the dry-run violation logs before enforcing."
+      expires = "2020-01-31"
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_vpc_sc_enforced]
+}
+
+# An enforced production perimeter needs no waiver.
+run "prod_enforced_perimeter_plans" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = length(terraform_data.production_vpc_sc_enforced) == 1
+    error_message = "an enforced production perimeter must plan without a waiver."
+  }
+}
+
+# A non-production environment has no guard at all.
+run "non_production_has_no_perimeter_guard" {
+  command = plan
+
+  assert {
+    condition     = length(terraform_data.production_vpc_sc_enforced) == 0
+    error_message = "the production perimeter guard must not exist for a non-production environment."
+  }
+}
+
+# IAC-1: a production environment must pin its zones, or a change in the zones
+# GCP returns would re-derive the subnet CIDRs and replace in-use subnets.
+run "prod_without_pinned_zones_fails" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    zones                     = null
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_network_guard]
+}
+
+# gcp.environments.<env>.zones pins the spoke's zones in the given order.
+run "prod_zones_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path  = "tests/fixtures/landing-zone-zones.yaml"
+    environment               = "prod"
+    zones                     = null
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = join(",", local.zones) == "europe-west1-d,europe-west1-b" && length(terraform_data.production_network_guard) == 1
+    error_message = "gcp.environments.prod.zones must set the spoke's zones, in order, and satisfy the production guard."
+  }
+
+  assert {
+    condition     = module.environment.subnets.private["europe-west1-d"].ip_cidr_range == "10.30.16.0/24" && module.environment.subnets.private["europe-west1-b"].ip_cidr_range == "10.30.17.0/24" && length(module.environment.subnets.private) == 2
+    error_message = "The first pinned zone must take the first private CIDR, and no discovered zone may add a subnet."
+  }
+}
+
+# An explicit zones variable wins over the config file.
+run "zones_variable_beats_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-zones.yaml"
+    zones                    = ["europe-west1-c"]
+  }
+
+  assert {
+    condition     = join(",", local.zones) == "europe-west1-c"
+    error_message = "The zones variable must win over gcp.environments.<env>.zones."
+  }
+}
+
+run "rejects_malformed_zone" {
+  command = plan
+
+  variables {
+    zones = ["europe-west1"]
+  }
+
+  expect_failures = [var.zones]
+}
+
+# ARC-4: production egress must go through the hub Secure Web Proxy, or a
+# time-boxed waiver (same shape as production_vpc_sc_dry_run_waiver) must say
+# why not. Without either, private-tier egress leaves through Cloud NAT
+# with no allowlist.
+run "prod_without_egress_proxy_fails" {
+  command = plan
+
+  variables {
+    environment                    = "prod"
+    vpc_sc_access_policy_name      = "1234567890"
+    vpc_sc_enable_dry_run          = false
+    production_egress_proxy_waiver = null
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_network_guard]
+}
+
+run "prod_with_egress_proxy_plans" {
+  command = plan
+
+  variables {
+    environment                    = "prod"
+    vpc_sc_access_policy_name      = "1234567890"
+    vpc_sc_enable_dry_run          = false
+    production_egress_proxy_waiver = null
+    enable_egress_proxy            = true
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+  override_data {
+    target = data.terraform_remote_state.network_hub
+    values = {
+      outputs = {
+        contract = {
+          hub_network = {
+            vpc_self_link                   = "https://www.googleapis.com/compute/v1/projects/acme-hub/global/networks/hub-vpc"
+            vpc_name                        = "hub-vpc"
+            dns_zone_name                   = "hub-dns"
+            dns_domain                      = "hub.internal."
+            egress_proxy_service_attachment = "projects/acme-hub/regions/europe-west1/serviceAttachments/swp"
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.enable_egress_proxy && length(terraform_data.production_network_guard) == 1
+    error_message = "A production environment with the hub egress proxy must plan without a waiver."
+  }
+}
+
+run "prod_egress_waiver_allows_plan" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = !local.enable_egress_proxy && length(terraform_data.production_network_guard) == 1
+    error_message = "A waiver with a reason and a future expiry lets production plan without the egress proxy."
+  }
+}
+
+# yamldecode turns an unquoted YAML date into its midnight timestamp
+# (2099-12-31T00:00:00Z). Both waivers accept that form and still waive
+# through the whole day.
+run "prod_waivers_accept_the_yaml_midnight_form" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = true
+    production_vpc_sc_dry_run_waiver = {
+      reason  = "First rollout: reading the dry-run violation logs."
+      expires = "2099-12-31T00:00:00Z"
+    }
+    production_egress_proxy_waiver = {
+      reason  = "Hub egress proxy not yet proven."
+      expires = "2099-12-31T00:00:00Z"
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.vpc_sc_waiver_until == "2099-12-31T23:59:59Z" && local.egress_waiver_until == "2099-12-31T23:59:59Z" && length(terraform_data.production_network_guard) == 1 && length(terraform_data.production_vpc_sc_enforced) == 1
+    error_message = "Both waivers must take the first 10 characters of a midnight timestamp and waive through that UTC day."
+  }
+}
+
+# Standalone production (no hub) cannot use the egress proxy: turning it on
+# changes nothing, so without a waiver the plan fails.
+run "prod_standalone_egress_proxy_without_waiver_fails" {
+  command = plan
+
+  variables {
+    environment                    = "prod"
+    vpc_sc_access_policy_name      = "1234567890"
+    vpc_sc_enable_dry_run          = false
+    enable_network_hub             = false
+    enable_egress_proxy            = true
+    production_egress_proxy_waiver = null
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_network_guard]
+}
+
+run "prod_expired_egress_waiver_fails" {
+  command = plan
+
+  variables {
+    environment               = "prod"
+    vpc_sc_access_policy_name = "1234567890"
+    vpc_sc_enable_dry_run     = false
+    production_egress_proxy_waiver = {
+      reason  = "First rollout: the hub proxy is not applied yet."
+      expires = "2020-01-31"
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            prod = {
+              folder_id           = "333"
+              folder_name         = "Production"
+              host_project_id     = "acme-prod-host-abcd"
+              host_project_number = "333333333333"
+              is_production       = true
+              region              = "europe-west1"
+              cidr_block          = "10.30.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/3" }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.production_network_guard]
+}
+
+run "rejects_egress_waiver_without_reason" {
+  command = plan
+
+  variables {
+    production_egress_proxy_waiver = { reason = " ", expires = "2099-12-31" }
+  }
+
+  expect_failures = [var.production_egress_proxy_waiver]
+}
+
+run "rejects_egress_waiver_with_non_midnight_time" {
+  command = plan
+
+  variables {
+    production_egress_proxy_waiver = { reason = "First rollout.", expires = "2099-12-31T12:00:00Z" }
+  }
+
+  expect_failures = [var.production_egress_proxy_waiver]
+}
+
+run "rejects_egress_waiver_with_malformed_expiry" {
+  command = plan
+
+  variables {
+    production_egress_proxy_waiver = { reason = "First rollout.", expires = "2099-13-01" }
+  }
+
+  expect_failures = [var.production_egress_proxy_waiver]
+}
+
+run "rejects_waiver_without_reason" {
+  command = plan
+
+  variables {
+    production_vpc_sc_dry_run_waiver = { reason = " ", expires = "2099-12-31" }
+  }
+
+  expect_failures = [var.production_vpc_sc_dry_run_waiver]
+}
+
+run "rejects_waiver_with_malformed_expiry" {
+  command = plan
+
+  variables {
+    production_vpc_sc_dry_run_waiver = { reason = "First rollout.", expires = "2099-02-30" }
+  }
+
+  expect_failures = [var.production_vpc_sc_dry_run_waiver]
 }
 
 # Application golden path against the REAL environment stage: the app service
@@ -185,5 +756,50 @@ run "app_service_on_real_host_stage" {
   assert {
     condition     = output.app_services["api"].database_iam_user == "api-run@acme-dev-host-abcd.iam"
     error_message = "the runtime SA must be the Cloud SQL IAM database user."
+  }
+}
+
+# The spoke VPC takes the name gcp-projects publishes (the name gcp-network-hub
+# peers with), not a second derivation in this root (ARC-5).
+run "spoke_network_name_from_projects_contract" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            dev = {
+              folder_id           = "111"
+              folder_name         = "Development"
+              host_project_id     = "acme-dev-host-abcd"
+              host_project_number = "222222222222"
+              is_production       = false
+              region              = "europe-west1"
+              cidr_block          = "10.10.0.0/16"
+              labels              = {}
+              tag_value_ids       = { environment = "tagValues/1" }
+              spoke_network_name  = "acme-dev-custom-vpc"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = output.network_name == "acme-dev-custom-vpc"
+    error_message = "The spoke VPC must use environment_config.<env>.spoke_network_name from the gcp-projects contract."
+  }
+}
+
+# A gcp-projects state from before spoke_network_name keeps the old name.
+run "spoke_network_name_falls_back_without_contract_key" {
+  command = plan
+
+  assert {
+    condition     = output.network_name == "acme-dev-vpc"
+    error_message = "Without spoke_network_name the spoke VPC stays <project_prefix>-<environment>-vpc."
   }
 }

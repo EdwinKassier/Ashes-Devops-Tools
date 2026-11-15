@@ -66,11 +66,12 @@ override_data {
       contract = {
         billing_account = "000000-111111-222222"
         folders = {
-          shared = { id = "folders/100", name = "folders/100", display_name = "Shared" }
-          dev    = { id = "folders/111", name = "folders/111", display_name = "Development" }
+          shared = { id = "100", name = "folders/100", display_name = "Shared" }
+          dev    = { id = "111", name = "folders/111", display_name = "Development" }
         }
         tag_values = {
-          "environment-dev" = "tagValues/123"
+          "environment-dev"              = "tagValues/123"
+          "data-classification-internal" = "tagValues/902"
         }
       }
     }
@@ -88,8 +89,19 @@ run "workload_and_network_sas_get_folder_scoped_roles" {
       "network|apply|roles/compute.networkAdmin"               = { folder = "folders/100", role = "roles/compute.networkAdmin" }
       "network-env|dev|plan"                                   = { folder = "folders/111", role = "roles/compute.viewer" }
       "network-env|dev|apply"                                  = { folder = "folders/111", role = "roles/compute.viewer" }
+      "workload-dns-peer|dev"                                  = { folder = "folders/100", role = "roles/dns.peer" }
     }
-    error_message = "Workload SAs must be granted only on their own env folder, network-hub SAs their network roles only on the shared folder plus compute.viewer on each env folder; stale envs ignored."
+    error_message = "Workload SAs must be granted only on their own env folder, network-hub SAs their network roles only on the shared folder plus compute.viewer on each env folder, and each workload apply SA roles/dns.peer on the shared folder; stale envs ignored."
+  }
+
+  # ARC-13: the environment's own plan/apply SAs reach gcp-workload through
+  # environment_config, so its enforced perimeter can admit them.
+  assert {
+    condition = output.contract.environment_config["dev"].automation_identities == tolist([
+      "serviceAccount:acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com",
+      "serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com",
+    ])
+    error_message = "environment_config.<env>.automation_identities must carry that environment's own plan and apply SAs (serviceAccount:<email>) from gcp-bootstrap, and no other environment's."
   }
 }
 
@@ -111,6 +123,11 @@ run "pre_c2_bootstrap_state_plans_without_grants" {
   assert {
     condition     = output.automation_folder_grants == {}
     error_message = "A bootstrap state without the C2 outputs must plan cleanly with no automation grants."
+  }
+
+  assert {
+    condition     = length(output.contract.environment_config["dev"].automation_identities) == 0
+    error_message = "A bootstrap state without workload SAs must give an empty automation_identities (no perimeter rule)."
   }
 }
 

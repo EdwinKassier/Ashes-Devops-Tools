@@ -538,7 +538,9 @@ Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](1
 compute in `private`, Aurora in `isolated`, Cloud SQL on Private Service
 Access. Targets are internal, so no internet egress is needed. On GCP, workers
 use `ALL_TRAFFIC` VPC egress so they can reach internal-ingress Cloud Run
-targets; GCP egress is per-environment Cloud NAT, not inspected through the hub.
+targets. GCP internet egress, if any, is per-environment Cloud NAT, not
+inspected (egress proxy off or waived), or the hub Secure Web Proxy with
+`egress_proxy` on.
 
 ### Config
 

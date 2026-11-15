@@ -43,6 +43,38 @@ locals {
     "cloudfunctions.googleapis.com",
     "run.googleapis.com"
   ], var.vpc_sc_additional_restricted_services))
+
+  # ── Hybrid routes and DNS (ARC-12) ──────────────────────────────────────
+  hybrid_enabled = var.vpn.enabled || length(var.interconnects) > 0
+
+  # DEFAULT BGP mode announces the hub VPC's own subnets only, never the
+  # peered environment ranges, so on-premises cannot reach the environments
+  # (https://docs.cloud.google.com/network-connectivity/docs/router/concepts/advertised-routes).
+  # With no explicit ranges the routers move to CUSTOM mode with the
+  # ALL_SUBNETS group (every hub subnet: what DEFAULT announced, including the
+  # inbound DNS entry points, which are hub subnet addresses) plus every
+  # environment CIDR. Forward zones add 35.199.192.0/19, the source range of
+  # Cloud DNS forwarded queries, which on-premises must route back over the
+  # VPN/Interconnect
+  # (https://docs.cloud.google.com/dns/docs/zones/forwarding-zones).
+  hybrid_derived_ranges = [
+    for r in concat(
+      var.hybrid_advertised_ranges,
+      length(var.hybrid_dns.forward_zones) > 0 ? [{ range = "35.199.192.0/19", description = "Cloud DNS forwarding source" }] : [],
+    ) : { range = r.range, description = r.description }
+  ]
+  vpn_explicit_ranges = length(var.vpn.advertised_ip_ranges) > 0
+  vpn_effective = merge(var.vpn, {
+    advertised_groups    = local.vpn_explicit_ranges ? var.vpn.advertised_groups : ["ALL_SUBNETS"]
+    advertised_ip_ranges = local.vpn_explicit_ranges ? var.vpn.advertised_ip_ranges : local.hybrid_derived_ranges
+  })
+  # The interconnect router keeps ALL_SUBNETS in CUSTOM mode by itself
+  # (network/interconnect advertised_groups default).
+  interconnects_effective = {
+    for k, ic in var.interconnects : k => merge(ic, {
+      advertised_ip_ranges = length(ic.advertised_ip_ranges) > 0 ? [for r in ic.advertised_ip_ranges : { range = r.range, description = r.description }] : local.hybrid_derived_ranges
+    })
+  }
 }
 
 # Hub network (the "pipes"): net-hub composition on the 'net-hub' project
@@ -51,15 +83,17 @@ locals {
 module "hub" {
   source = "../net-hub"
 
-  project_id          = var.hub_project_id
-  project_prefix      = var.project_prefix
-  region              = var.default_region
-  deletion_protection = var.enable_deletion_protection
-  additional_regions  = var.hub_additional_regions
+  project_id                 = var.hub_project_id
+  project_prefix             = var.project_prefix
+  region                     = var.default_region
+  enable_deletion_protection = var.enable_deletion_protection
+  additional_regions         = var.hub_additional_regions
 
   network = {
-    name            = "hub-vpc-core"
-    cidr_block      = var.hub_vpc_cidr_block
+    name       = "hub-vpc-core"
+    cidr_block = var.hub_vpc_cidr_block
+    # Pinned zones (IAC-1). Empty = the zones GCP returns for the region.
+    explicit_zones  = var.hub_zones
     shared_vpc_host = true
     # Observability: subnet flow logs for audit.
     flow_logs = {
@@ -79,12 +113,19 @@ module "hub" {
     vpn_site_to_site_data_transfer = var.vpn.site_to_site_data_transfer
   }
 
+  # Private Service Connect endpoint for Google APIs (on by default). Name and
+  # address default in net-hub; gcp.network.private_service_connect overrides.
+  private_service_connect = {
+    name    = var.hub_private_service_connect.name
+    address = var.hub_private_service_connect.address
+  }
+
   # Opt-in hybrid connectivity: HA VPN (write-only pre-shared key) and Cloud
   # Interconnect attachments. Both off by default.
-  vpn                          = var.vpn
+  vpn                          = local.vpn_effective
   vpn_shared_secret_wo         = var.vpn_shared_secret_wo
   vpn_shared_secret_wo_version = var.vpn_shared_secret_wo_version
-  interconnects                = var.interconnects
+  interconnects                = local.interconnects_effective
 
   # Opt-in central egress (Secure Web Proxy) and the data-plane alerts.
   secure_web_proxy = local.secure_web_proxy
@@ -143,6 +184,23 @@ module "hub" {
   } : {}
 }
 
+# Peering quota guard. The PEERINGS_PER_NETWORK quota caps the peerings of one
+# VPC network (25 by default; https://docs.cloud.google.com/vpc/docs/quota).
+# The hub VPC also carries its Private Service Access connection, which is a
+# VPC Network Peering connection to the service producer network
+# (https://docs.cloud.google.com/vpc/docs/configure-private-services-access),
+# so the default limit is 24 environments. Fail the plan, not the apply.
+resource "terraform_data" "hub_peering_limit" {
+  input = length(var.spoke_peerings)
+
+  lifecycle {
+    precondition {
+      condition     = length(var.spoke_peerings) <= var.hub_peering_limit
+      error_message = "${length(var.spoke_peerings)} environment peerings exceed hub_peering_limit (${var.hub_peering_limit}). Move environments to NCC (gcp.network.connectivity: ncc, docs/runbooks/gcp-peering-to-ncc-migration.md) or raise the peering quota first."
+    }
+  }
+}
+
 # Hub side of each environment's VPC peering. The hub owns its half: each
 # gcp-workload-<env> root creates only the spoke side, so no workload state
 # holds a resource in the hub project and the workload apply SA needs no right
@@ -179,19 +237,21 @@ module "hub_cloud_armor" {
 }
 
 # DNS hub (name resolution): dns-anchor composition on the 'dns-hub' project.
-# A workload-free VPC anchoring the organization's root private zone; spokes
-# resolve it through DNS peering. Formerly module.dns_hub_network (stages/host)
-# plus module.dns_hub_zone; see moved.tf.
+# A workload-free VPC anchoring the organization's root private zone. The zone
+# is also bound to the hub VPC, which each spoke's DNS peering zone targets.
+# Formerly module.dns_hub_network (stages/host) plus module.dns_hub_zone; see
+# moved.tf.
 module "dns_anchor" {
   source = "../dns-anchor"
 
-  project_id          = var.dns_project_id
-  region              = var.default_region
-  deletion_protection = var.enable_deletion_protection
+  project_id                 = var.dns_project_id
+  region                     = var.default_region
+  enable_deletion_protection = var.enable_deletion_protection
 
   network = {
-    name       = "dns-vpc-core"
-    cidr_block = var.dns_hub_vpc_cidr_block
+    name           = "dns-vpc-core"
+    cidr_block     = var.dns_hub_vpc_cidr_block
+    explicit_zones = var.hub_zones
   }
 
   dns_zones = {
@@ -199,8 +259,54 @@ module "dns_anchor" {
       dns_name       = "${var.internal_domain}."
       description    = "Root Internal Zone for Organization"
       dnssec_enabled = true
+      # Each spoke peering zone (gcp-workload-<env> internal-peering) targets
+      # the hub VPC, and a peering zone answers from the zones bound to its
+      # target network. The hub VPC must therefore see this zone, or every
+      # spoke lookup returns NXDOMAIN (ARC-2). The anchor VPC stays bound.
+      # Adding a network updates the zone in place.
+      additional_visibility_networks = [module.hub.network_self_link]
     }
   }
+}
+
+# Inbound DNS on the hub VPC, the network the VPN and Interconnects land in.
+# Cloud DNS takes an entry-point address from every hub subnet; on-premises
+# resolvers forward the internal domain to them, and the hub VPC sees the
+# internal-root zone (dns_anchor above). Entry points are not reachable across
+# VPC peering, so the policy belongs on the hub, not on the anchor VPC
+# (https://docs.cloud.google.com/dns/docs/server-policies-overview). A VPC takes
+# one DNS server policy, and nothing else attaches one to the hub VPC.
+resource "google_dns_policy" "hub_inbound" {
+  count = local.hybrid_enabled && var.hybrid_dns.enable_inbound_forwarding ? 1 : 0
+
+  project                   = var.hub_project_id
+  name                      = "${var.project_prefix}-hub-inbound"
+  description               = "Inbound forwarding for on-premises resolvers (hybrid DNS)."
+  enable_inbound_forwarding = true
+  enable_logging            = true
+
+  networks {
+    network_url = module.hub.network_self_link
+  }
+}
+
+# On-premises domains, forwarded from the hub VPC to the on-premises
+# resolvers over the VPN/Interconnect (private path). Their names may not
+# overlap the internal zone (variable validation); a parent domain of it is
+# fine, since Cloud DNS answers from the longest matching suffix. Query
+# logging comes from the DNS policy above (zone logging is public zones only).
+module "hybrid_forward_zones" {
+  source   = "../../network/dns"
+  for_each = local.hybrid_enabled ? var.hybrid_dns.forward_zones : {}
+
+  project_id                  = var.hub_project_id
+  zone_name                   = "fwd-${each.key}"
+  dns_name                    = each.value.dns_name
+  description                 = "Forward ${each.value.dns_name} to on-premises resolvers."
+  visibility                  = "private"
+  private_visibility_networks = [module.hub.network_self_link]
+  forwarding_targets          = each.value.target_ips
+  forwarding_path             = "private"
 }
 
 # Hierarchical rules are evaluated before VPC rules, and a match stops

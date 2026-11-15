@@ -31,10 +31,15 @@ override_data {
       contract = {
         billing_account = "billingAccounts/000000-111111-222222"
         folders = {
-          dev  = { id = "folders/111", display_name = "dev" }
-          prod = { id = "folders/222", display_name = "Production" }
+          dev  = { id = "111", name = "folders/111", display_name = "dev" }
+          prod = { id = "222", name = "folders/222", display_name = "Production" }
         }
-        tag_values = { "environment-dev" = "tagValues/1", "environment-prod" = "tagValues/2" }
+        tag_values = {
+          "environment-dev"                = "tagValues/1"
+          "environment-prod"               = "tagValues/2"
+          "data-classification-internal"   = "tagValues/902"
+          "data-classification-restricted" = "tagValues/900000000004"
+        }
       }
     }
   }
@@ -102,7 +107,7 @@ run "missing_config_and_variables_fails" {
   command = plan
 
   variables {
-    landing_zone_config_path = "tests/fixtures/does-not-exist.yaml"
+    landing_zone_config_path = ""
   }
 
   expect_failures = [var.project_prefix, var.environments]
@@ -177,4 +182,75 @@ run "ncc_api_off_without_ncc_config" {
     condition     = !local.enable_network_connectivity_center && length(local.ncc_project_services) == 0
     error_message = "Without any NCC key in the config the NCC API must stay off."
   }
+}
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+  }
+
+  expect_failures = [var.environments]
+}
+
+# gcp.environments.<env>.data_classification and org.cost_center / org.owner
+# from the config file (CMP-10, ARC-17).
+run "data_classification_and_cost_labels_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.classified.yaml"
+  }
+
+  assert {
+    condition = (
+      output.contract.environment_config["prod"].tag_value_ids.data_classification == "tagValues/900000000004" &&
+      local.project_environments["prod"].projects.host.tag_bindings == { data_classification = "tagValues/900000000004" } &&
+      output.contract.environment_config["dev"].tag_value_ids.data_classification == "tagValues/902"
+    )
+    error_message = "each environment's host project must be bound to its data-classification tag value (prod restricted, dev the internal default)."
+  }
+
+  assert {
+    condition     = local.gcp_default_labels["cost-center"] == "fin-42" && local.gcp_default_labels["owner"] == "data-team"
+    error_message = "org.cost_center / org.owner must reach the provider default labels in label form (lowercase, other characters as '-')."
+  }
+}
+
+# Re-audit 6 CMP-4: the contract publishes the class, and an environments
+# variable cannot drop it.
+run "contract_publishes_the_regulated_class" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated.yaml"
+  }
+
+  assert {
+    condition     = output.contract.environment_config["prod"].compliance_class == "regulated" && output.contract.environment_config["dev"].compliance_class == "standard"
+    error_message = "environment_config must carry each environment's compliance_class."
+  }
+}
+
+run "environments_override_cannot_unmark_regulated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated.yaml"
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west2"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 1000
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+  }
+
+  expect_failures = [var.environments]
 }

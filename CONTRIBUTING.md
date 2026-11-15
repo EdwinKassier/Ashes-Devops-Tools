@@ -19,11 +19,18 @@ make pre-commit-install
 
 `make install` manages repo tooling. Terraform itself must already be installed separately.
 
+`make consistency` (and so `make ci`) needs `python-hcl2`, hash-locked like the CI Python tools.
+`make install` installs it; by hand:
+`python3 -m pip install --user --no-deps --require-hashes -r .github/requirements/hcl2.txt`
+(inside a virtualenv if your Python is externally managed). Without it the plan-time execution
+check (`scripts/check-plan-time-exec.py`) exits 2 and `make consistency` fails.
+
 ### Scanner versions: `.tool-versions` must be active before running pre-commit
 
-`.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_trivy`, `terraform_checkov`, and
-`terraform_docs` hooks (from `antonbabenko/pre-commit-terraform`) are implemented as
-`language: script` hooks — thin wrapper scripts that shell out to whatever `tflint`/`trivy`/
+`.pre-commit-config.yaml`'s `terraform_tflint`, `terraform_trivy` and `terraform_checkov` hooks
+(from `antonbabenko/pre-commit-terraform`) and its local `terraform_docs` hook
+(`scripts/precommit-terraform-docs.sh`, which regenerates the same READMEs as `make docs`) are
+implemented as `language: script` hooks — thin wrapper scripts that shell out to whatever `tflint`/`trivy`/
 `checkov`/`terraform-docs` binary is first on your `PATH`. Unlike pre-commit's Python/Node/Go
 hook backends, `language: script` hooks have no `additional_dependencies` mechanism, so
 pre-commit itself **cannot** pin or sandbox these tool versions.
@@ -238,6 +245,20 @@ Keep generated README sections current with:
 make docs
 ```
 
+A module that ships `examples/basic/` links it from an `## Examples` section after
+`<!-- END_TF_DOCS -->` (see `templates/aws/module/README.md`); `make consistency` fails
+otherwise.
+
+Every `modules/**/examples/basic/` must **plan**, not only validate. `make examples-plan`
+(CI: the `Examples Plan (shard N)` jobs, gated by `Validation Summary`) runs
+`scripts/plan-module-examples.sh`: it copies each example to a hidden sibling directory, mocks
+every provider and provider alias the example declares, and runs `terraform test` with one
+`command = plan` run, so no credentials are needed. Limit it with
+`make examples-plan EXAMPLES="modules/<path>/examples/basic"`. A required example variable
+(a secret the reader passes with `TF_VAR_*`) gets a mock value by name or type; if a module
+validates its format, add the name to `known_value()` in the script. `terraform test` fails a
+run on a failed `check` block, so set the example inputs that keep its checks quiet.
+
 ## Planning Changes
 
 ### Control Plane
@@ -249,7 +270,7 @@ make plan-gcp-organization
 ### App Environment
 
 ```bash
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
+make plan-gcp-workload APP_ENV=dev
 ```
 
 ## Pull Requests
@@ -266,6 +287,7 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 - [ ] New modules have non-empty `outputs.tf`
 - [ ] New validation blocks have a corresponding test (both accept and reject cases)
 - [ ] No hardcoded project IDs, org IDs, or personal email addresses
+- [ ] Every user-facing commit adds a CHANGELOG Unreleased line by hand; release-please only tags and bumps versions
 
 Additional guidelines:
 
@@ -294,9 +316,9 @@ Versions are repo-wide SemVer tags (`vX.Y.Z`, cut by release-please); there are 
   }
   ```
 
-Three examples (`modules/gcp/stages/organization`, `modules/aws/stages/security`, `modules/saas/stages/saas-workload`, each under `examples/basic/`) use this form with an `# x-release-please-version` marker; the `extra-files` list in `release-please-config.json` bumps their `ref` on every release. CI validates them against the published tag, not the PR's module code, so a stage interface change must land and be released before the example's `ref` is bumped.
+Three examples (`modules/gcp/stages/organization`, `modules/aws/stages/security`, `modules/saas/stages/saas-workload`, each under `examples/basic/`) use this form with an `# x-release-please-version` marker; the `extra-files` list in `release-please-config.json` bumps their `ref` on every release. `make validate-all` validates them against the published tag, so a stage interface change must land and be released before the example's `ref` is bumped. `make examples-plan` rewrites the git source to the local module path and plans them against the PR's module code.
 
-The first release, `v0.1.0`, was cut on 2026-11-08 by hand (release-please could not run without `RELEASE_PLEASE_TOKEN`), and the one-time `release-as` override was removed afterwards. Later releases come from release-please once that secret is set (see `docs/guides/CI_SECRETS.md`).
+The first release, `v0.1.0`, was cut on 2026-11-08 by hand (release-please could not run without a release token), and the one-time `release-as` override was removed afterwards. Later releases come from release-please once the release GitHub App is set up (see `docs/guides/CI_SECRETS.md#release_app`).
 
 ### Release gate: sandbox convergence
 

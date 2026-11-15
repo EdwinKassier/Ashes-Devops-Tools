@@ -28,7 +28,7 @@ override_data {
     outputs = {
       contract = {
         org_id  = "123456789012"
-        folders = { dev = { id = "folders/111", display_name = "Development" } }
+        folders = { dev = { id = "111", name = "folders/111", display_name = "Development" } }
       }
     }
   }
@@ -130,6 +130,81 @@ run "hub_additional_regions_from_config" {
   }
 }
 
+# IAC-1: gcp.network.zones pins the hub and DNS anchor zones; a variable wins.
+run "hub_zones_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+  }
+
+  assert {
+    condition     = join(",", local.hub_zones) == "europe-west1-c,europe-west1-b"
+    error_message = "gcp.network.zones must reach the stage from the config file, in order."
+  }
+}
+
+run "hub_zones_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+    hub_zones                = ["europe-west1-d"]
+  }
+
+  assert {
+    condition     = join(",", local.hub_zones) == "europe-west1-d"
+    error_message = "An explicit hub_zones variable must win over gcp.network.zones."
+  }
+}
+
+run "hub_zones_empty_without_config" {
+  command = plan
+
+  assert {
+    condition     = length(local.hub_zones) == 0
+    error_message = "Without config or variable the hub zones stay empty (discovered by net-hub)."
+  }
+}
+
+# ARC-1: gcp.network.private_service_connect reaches the stage; a variable wins.
+run "hub_psc_overrides_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regions.yaml"
+  }
+
+  assert {
+    condition     = local.hub_private_service_connect.name == "hubapis" && local.hub_private_service_connect.address == "10.0.200.10"
+    error_message = "gcp.network.private_service_connect must reach the stage from the config file."
+  }
+}
+
+run "hub_psc_variables_win" {
+  command = plan
+
+  variables {
+    landing_zone_config_path            = "tests/fixtures/landing-zone-regions.yaml"
+    hub_private_service_connect_name    = "hubpsc"
+    hub_private_service_connect_address = "10.0.201.10"
+  }
+
+  assert {
+    condition     = local.hub_private_service_connect.name == "hubpsc" && local.hub_private_service_connect.address == "10.0.201.10"
+    error_message = "Explicit hub_private_service_connect_* variables must win over the config file."
+  }
+}
+
+run "hub_psc_defaults_without_config" {
+  command = plan
+
+  assert {
+    condition     = local.hub_private_service_connect.name == null && local.hub_private_service_connect.address == null
+    error_message = "Without config or variables the hub PSC overrides must be null (the net-hub defaults apply)."
+  }
+}
+
 run "hub_additional_regions_variable_wins" {
   command = plan
 
@@ -141,5 +216,141 @@ run "hub_additional_regions_variable_wins" {
   assert {
     condition     = length(local.hub_additional_regions) == 0
     error_message = "An explicit hub_additional_regions variable must win over the config file."
+  }
+}
+
+# Production is the is_production flag alone: a config environment without it
+# fails the plan, naming the entry, instead of silently counting as non-prod.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+    environments             = null
+  }
+
+  expect_failures = [var.environments]
+}
+
+# Routes announced on-premises and hybrid DNS (ARC-12): the root derives the
+# environment CIDRs from the environments map and reads gcp.network.hybrid_dns.
+run "environment_ranges_and_hybrid_dns_reach_the_stage" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-hybrid.yaml"
+  }
+
+  assert {
+    condition     = jsonencode(local.hybrid_advertised_ranges) == jsonencode([{ description = "environment dev", range = "10.10.0.0/16" }])
+    error_message = "Every environment CIDR must reach the stage as a hybrid advertised range."
+  }
+
+  assert {
+    condition     = local.hybrid_dns.enable_inbound_forwarding == true && local.hybrid_dns.forward_zones.corp.dns_name == "corp.example.com." && length(local.hybrid_dns.forward_zones.corp.target_ips) == 2
+    error_message = "gcp.network.hybrid_dns must reach the stage from the config file."
+  }
+}
+
+run "no_hybrid_dns_config_is_empty" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+  }
+
+  assert {
+    condition     = length(local.hybrid_dns) == 0
+    error_message = "Without config or variable, hybrid_dns is {} (the stage defaults: inbound forwarding only, used only with VPN or Interconnect)."
+  }
+}
+
+run "hybrid_dns_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-hybrid.yaml"
+    hybrid_dns               = { enable_inbound_forwarding = false }
+  }
+
+  assert {
+    condition     = local.hybrid_dns.enable_inbound_forwarding == false && length(local.hybrid_dns.forward_zones) == 0
+    error_message = "An explicit hybrid_dns variable must win over the config file."
+  }
+}
+
+# The vpn, interconnects and hub_additional_regions inputs are untyped (so a
+# misspelled key stays visible), and a validation rejects every key outside
+# allowed_keys.tf: the stage's object types would drop it silently. The
+# variable runs use nested typos; config_unknown_keys_fail uses top-level ones.
+run "vpn_unknown_key_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    vpn                      = { enabled = true, tunnel_count = 2, advertised_ip_ranges = [{ range = "10.0.0.0/16", desc = "hub" }] }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "interconnects_unknown_key_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    interconnects            = { "hub-partner-1" = { region = "europe-west1", router_name = "hub-ic-router", advertised_ip_ranges = [{ range = "10.0.0.0/16", descripton = "hub" }] } }
+  }
+
+  expect_failures = [var.interconnects]
+}
+
+run "hub_additional_regions_unknown_key_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    hub_additional_regions = {
+      "europe-west4" = {
+        subnet_cidrs     = { public = "10.2.0.0/24", privat = "10.2.16.0/24", database = "10.2.32.0/24" }
+        secondary_ranges = [{ range_name = "pods", ip_cidr_rang = "10.3.0.0/20" }]
+      }
+    }
+  }
+
+  expect_failures = [var.hub_additional_regions]
+}
+
+# The same check covers the config file (gcp.network.vpn, interconnect and
+# additional_regions), not only the variables.
+run "config_unknown_keys_fail" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../config/tests/gcp_network_unknown_keys.yaml"
+  }
+
+  expect_failures = [var.vpn, var.interconnects, var.hub_additional_regions]
+}
+
+run "known_keys_pass" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    vpn                      = { enabled = false, tunnel_count = 2, advertised_ip_ranges = [{ range = "10.0.0.0/16", description = "hub" }] }
+    interconnects            = { "hub-partner-1" = { region = "europe-west1", router_name = "hub-ic-router", vlan_tag = 100 } }
+    hub_additional_regions = {
+      "europe-west4" = {
+        subnet_cidrs     = { public = "10.2.0.0/24", private = "10.2.16.0/24", database = "10.2.32.0/24" }
+        secondary_ranges = [{ range_name = "pods", ip_cidr_range = "10.3.0.0/20" }]
+        nat              = false
+      }
+    }
+  }
+
+  assert {
+    condition     = local.interconnects["hub-partner-1"].vlan_tag == 100 && local.hub_additional_regions["europe-west4"].nat == false
+    error_message = "Inputs that use only the stage's keys must plan."
   }
 }

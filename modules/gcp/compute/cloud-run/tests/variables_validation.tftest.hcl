@@ -123,3 +123,13 @@ run "allows_acknowledged_public_run_url" {
     allow_public_run_url   = true
   }
 }
+
+run "rejects_health_check_path_without_leading_slash" {
+  command = plan
+
+  variables {
+    health_check_path = "healthz"
+  }
+
+  expect_failures = [var.health_check_path]
+}

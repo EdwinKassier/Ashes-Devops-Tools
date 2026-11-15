@@ -2,15 +2,22 @@
 # file (the stage's own suite asserts the accept/associate/propagate wiring), and
 # no spoke is wired when it is absent.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 
 variables {
   landing_zone_config_path = ""
+  alarm_subscriber_emails  = ["netops@acme.io"]
   landing_zone_name        = "acme"
   log_archive_bucket_name  = "ashes-org-log-archive"
   default_tags             = { CostCenter = "networking" }
-  # Spokes need the inspection firewall (the stage rejects spokes without it).
-  enable_network_firewall = true
 }
 
 override_data {
@@ -56,6 +63,13 @@ run "spokes_reach_network_hub_from_config" {
     condition     = local.spoke_attachments.dev.segment == "nonprod" && local.spoke_attachments.prod.accept == false
     error_message = "segment and accept must pass through from the config file."
   }
+
+  # The fixture is a starter estate (no Network Firewall): its spokes egress
+  # through NAT, not through the inspection VPC (ARC-10).
+  assert {
+    condition     = !local.enable_network_firewall && module.aws_network_hub.tgw_inspection_routes["nonprod:default"].attachment == "egress"
+    error_message = "A starter estate must plan its spokes with the segment defaults on the egress attachment."
+  }
 }
 
 run "explicit_variable_beats_config" {
@@ -73,5 +87,49 @@ run "explicit_variable_beats_config" {
   assert {
     condition     = length(module.aws_network_hub.spoke_attachment_route_tables) == 0
     error_message = "An explicit spoke_attachments variable must win over the config file."
+  }
+}
+
+# A spoke's cidr defaults to aws.workload_environments.<key>.vpc_cidr, so the
+# other segment's table can blackhole it (ARC-11).
+run "spoke_cidr_comes_from_the_workload_vpc_cidr" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-spokes.yaml"
+    landing_zone_name        = null
+    log_archive_bucket_name  = null
+    availability_zones       = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs           = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+  }
+
+  assert {
+    condition     = local.spoke_attachments["dev"].cidr == "10.72.0.0/16" && local.spoke_attachments["prod"].cidr == "10.73.0.0/16"
+    error_message = "spoke_attachments.<key>.cidr must default to aws.workload_environments.<key>.vpc_cidr."
+  }
+
+  assert {
+    condition     = module.aws_network_hub.segment_isolation_routes["prod|dev"].cidr == "10.72.0.0/16" && module.aws_network_hub.segment_isolation_routes["nonprod|prod"].cidr == "10.73.0.0/16"
+    error_message = "The workload CIDRs must reach the stage as segment blackholes."
+  }
+}
+
+run "explicit_spoke_cidr_beats_the_workload_vpc_cidr" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-spokes.yaml"
+    landing_zone_name        = null
+    log_archive_bucket_name  = null
+    availability_zones       = ["eu-west-1a", "eu-west-1b"]
+    regional_cidrs           = { eu-west-1 = "10.0.0.0/12", eu-west-2 = "10.16.0.0/12" }
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "nonprod", cidr = "10.80.0.0/16" }
+    }
+  }
+
+  assert {
+    condition     = local.spoke_attachments["dev"].cidr == "10.80.0.0/16" && local.spoke_attachments["dev"].accept
+    error_message = "An explicit spoke cidr must win over aws.workload_environments.<key>.vpc_cidr."
   }
 }

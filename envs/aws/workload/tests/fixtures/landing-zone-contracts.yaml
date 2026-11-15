@@ -8,12 +8,13 @@ org:
     organization: cfg-tfc
 aws:
   workload_environments:
-    dev: {account_key: workload_dev}
+    dev: {is_production: false, account_key: workload_dev}
   contracts:
     organization:
       account_ids: {workload_dev: "222222222222"}
     network:
       tgw_id: tgw-0000000000000cfg
       ipam_pool_ids: {eu-west-2: ipam-pool-cfg}
+      resolver_profile_id: rp-0000000000000cfg
     security:
       log_archive_bucket_name: cfgco-org-log-archive

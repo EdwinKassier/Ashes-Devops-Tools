@@ -40,7 +40,7 @@ variable "object_lock_mode" {
 }
 
 variable "retention_days" {
-  description = "Default Object Lock retention period, in days. Also drives lifecycle expiration."
+  description = "Default Object Lock retention period, in days. Also drives lifecycle expiration. It applies to new objects only: an object already written keeps its retain-until date, and in COMPLIANCE mode nobody can shorten it."
   type        = number
   default     = 365
 

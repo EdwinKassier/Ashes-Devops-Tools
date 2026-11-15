@@ -539,7 +539,7 @@ Two differences change the design:
 |---|---|---|
 | Services, databases | `aws-workload-<env>` (`envs/aws/workload`) through `modules/aws/stages/app-services` | `gcp-workload-<env>` (`envs/gcp/workload`) through `modules/gcp/stages/app-services` in the environment stage |
 | Event fan-out | Raw SNS topic and SQS queues in `envs/aws/workload` | Module topic per producer; raw subscriptions in `envs/gcp/workload` |
-| Egress to broker APIs | TGW and inspection in `aws-network` (`envs/aws/network`) | Private Google Access from `private`; not inspected |
+| Egress to broker APIs | TGW and inspection in `aws-network` (`envs/aws/network`) | Private Google Access from `private`; other internet calls take Cloud NAT, not inspected (egress proxy off or waived), or the hub Secure Web Proxy with `egress_proxy` on |
 | Apply order | `aws-organization` → … → `aws-network` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
 Placement follows [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)):
@@ -549,8 +549,10 @@ default to `ec2`, `ssm`, `ssmmessages`, `ec2messages`, `kms`, `logs` and `sts`
 ([`modules/aws/network/vpc-endpoints/variables.tf`](../../modules/aws/network/vpc-endpoints/variables.tf)),
 with no SNS or SQS. Broker calls therefore leave through central inspection,
 and a fail-closed production firewall must allow them. The example
-`aws.network.egress_domain_allowlist` entry `.amazonaws.com` does; a narrowed
-list must keep the Regional `sns.` and `sqs.` hostnames.
+`aws.network.egress_domain_allowlist` names only the ECR and Secrets Manager
+hostnames, so add the Regional `sns.<region>.amazonaws.com` and
+`sqs.<region>.amazonaws.com` hostnames. Do not add `.amazonaws.com`: it admits
+every S3 bucket and AWS API in any account, and aws-network warns on it.
 
 ### Config
 

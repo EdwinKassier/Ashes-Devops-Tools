@@ -44,3 +44,8 @@ output "shared_vpc_host_project_id" {
   description = "The Shared VPC host project this project is attached to (null when not attached)."
   value       = one(google_compute_shared_vpc_service_project.this[*].host_project)
 }
+
+output "tag_bindings" {
+  description = "Resource-manager tag bindings on the project: the tag_bindings input, key => tag value ID (tagValues/<n>)."
+  value       = { for k, b in google_tags_tag_binding.this : k => b.tag_value }
+}

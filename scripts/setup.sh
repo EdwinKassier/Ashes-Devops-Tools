@@ -37,6 +37,12 @@ install_package() {
   fi
 }
 
+# The plan-time scanner runs as `python3 -P` (Python 3.11+).
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
+  echo "python3 is $(python3 --version 2>&1); the repo scripts need Python 3.11 or newer (python3 -P)." >&2
+  exit 1
+fi
+
 install_pip_package() { python3 -m pip install --user "$1==$2"; }
 
 # Returns the installed version of a binary, or empty string if not installed.
@@ -110,6 +116,19 @@ else
   echo "trivy $trivy_installed OK"
 fi
 
+# OPA — runs the policy unit tests behind `make opa-test` (CI `opa` job). The target
+# refuses any version other than .tool-versions, so report a mismatch here.
+REQUIRED_OPA_VERSION="$(_tool_version opa 1.22.2)"
+opa_installed=$(installed_version opa version)
+if [[ -z "$opa_installed" ]]; then
+  echo "opa not found. Install $REQUIRED_OPA_VERSION: 'mise install opa@$REQUIRED_OPA_VERSION' or 'brew install opa'"
+  echo "or see https://www.openpolicyagent.org/docs/latest/#running-opa"
+elif [[ "$opa_installed" != "$REQUIRED_OPA_VERSION" ]]; then
+  echo "WARNING: opa $opa_installed is installed but $REQUIRED_OPA_VERSION is required (make opa-test will refuse)."
+else
+  echo "opa $opa_installed OK"
+fi
+
 # terraform-docs
 tfdocs_installed=$(installed_version terraform-docs)
 if [[ -z "$tfdocs_installed" ]]; then
@@ -130,6 +149,17 @@ else
   echo "pre-commit $(installed_version pre-commit) OK"
 fi
 
+# python-hcl2 for scripts/check-plan-time-exec.py (make consistency). Hash-locked,
+# the same file CI installs. On an externally managed Python (PEP 668), run
+# this inside a virtualenv instead.
+hcl2_lock="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.github/requirements/hcl2.txt"
+if ! python3 -c 'import hcl2' >/dev/null 2>&1; then
+  echo "Installing python-hcl2 (hash-locked) ..."
+  python3 -m pip install --user --no-deps --require-hashes -r "$hcl2_lock"
+else
+  echo "python-hcl2 OK"
+fi
+
 # Checkov
 checkov_installed=$(installed_version checkov -V 2>/dev/null || installed_version checkov --version 2>/dev/null || echo "")
 if [[ -z "$checkov_installed" ]]; then
@@ -139,6 +169,20 @@ elif [[ "$checkov_installed" != "$REQUIRED_CHECKOV_VERSION" ]]; then
   echo "WARNING: checkov $checkov_installed is installed but $REQUIRED_CHECKOV_VERSION is required."
 else
   echo "checkov $checkov_installed OK"
+fi
+
+# check-jsonschema (make config-check, make scaffold-fixtures-check, pre-commit).
+# The version is single-sourced from the CI pin in terraform-plan.yml.
+REQUIRED_CHECK_JSONSCHEMA_VERSION="$(grep -oE 'check-jsonschema==[0-9.]+' \
+  "$(dirname "${_TOOL_VERSIONS_FILE}")/.github/workflows/terraform-plan.yml" | head -1 | cut -d= -f3)"
+cj_installed=$(installed_version check-jsonschema)
+if [[ -z "$cj_installed" ]]; then
+  echo "Installing check-jsonschema $REQUIRED_CHECK_JSONSCHEMA_VERSION ..."
+  install_pip_package check-jsonschema "$REQUIRED_CHECK_JSONSCHEMA_VERSION"
+elif [[ "$cj_installed" != "$REQUIRED_CHECK_JSONSCHEMA_VERSION" ]]; then
+  echo "WARNING: check-jsonschema $cj_installed is installed but $REQUIRED_CHECK_JSONSCHEMA_VERSION is required."
+else
+  echo "check-jsonschema $cj_installed OK"
 fi
 
 echo ""

@@ -15,13 +15,16 @@ gcp:
     projects:
       environment_config:
         dev:
-          folder_id: folders/111
+          folder_id: "111"
           host_project_id: cfgco-dev-host
           host_project_number: "222222222222"
           region: europe-west1
           cidr_block: 10.10.0.0/16
           labels: {tier: non-production}
           is_production: false
+          vpc_sc_access_policy_id: "555555555"
+          automation_identities:
+            - serviceAccount:cfgco-wl-dev-apply@cfgco-admin.iam.gserviceaccount.com
     network_hub:
       vpc_self_link: https://www.googleapis.com/compute/v1/projects/cfgco-hub/global/networks/hub-vpc
       dns_domain: hub.internal.

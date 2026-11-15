@@ -1,7 +1,25 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 2
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 2 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../config/landing-zone.yaml or ../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 # ── Terraform Cloud / cross-cloud wiring ────────────────
@@ -90,7 +108,7 @@ variable "supabase_database_password" {
 }
 
 variable "supabase_region" {
-  description = "Supabase deployment region slug (e.g. 'eu-west-2'). Null = saas.stacks.<stack>.supabase.region, else saas.defaults.supabase.region, else eu-west-2."
+  description = "Supabase deployment region slug, an AWS region name (e.g. 'eu-west-2'). Null = saas.stacks.<stack>.supabase.region, else saas.defaults.supabase.region, else eu-west-2. Must be in saas.allowed_regions (else aws.allowed_regions) when either is set."
   type        = string
   default     = null
 }
@@ -209,7 +227,7 @@ variable "vercel_framework" {
 }
 
 variable "vercel_serverless_region" {
-  description = "Vercel serverless function region code."
+  description = "Vercel serverless function region code (https://vercel.com/docs/regions). When saas.allowed_regions (else aws.allowed_regions) is set, the AWS region behind the code must be in it; an unknown code fails the plan."
   type        = string
   default     = "lhr1"
 }

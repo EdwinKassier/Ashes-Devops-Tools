@@ -20,6 +20,9 @@
  */
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, false)
+
   # Explicit zones win; otherwise fall back to the zones GCP returns.
   zones = length(var.network.explicit_zones) > 0 ? var.network.explicit_zones : data.google_compute_zones.available.names
 
@@ -28,6 +31,10 @@ locals {
   nat_private  = coalesce(var.nat.include_private_subnets, !var.egress_proxy.enabled)
   nat_database = var.nat.include_database_subnets
   create_nat   = var.nat.enabled && (local.nat_private || local.nat_database)
+
+  # Flow-log export locations follow the spoke's region unless pinned.
+  flow_logs_bigquery_location = coalesce(var.flow_logs_export.bigquery_location, var.region)
+  flow_logs_storage_location  = coalesce(var.flow_logs_export.storage_location, var.region)
 }
 
 # Auto-discover available zones (used only when network.explicit_zones is empty).
@@ -50,17 +57,17 @@ data "google_compute_zones" "available" {
 module "network" {
   source = "../../network/tiered-vpc"
 
-  project_id          = var.project_id
-  name                = var.network.name
-  region              = var.region
-  cidr_block          = var.network.cidr_block
-  zones               = local.zones
-  subnet_cidrs        = var.network.subnet_cidrs
-  secondary_ranges    = var.network.secondary_ranges
-  shared_vpc_host     = var.network.shared_vpc_host
-  deletion_protection = var.deletion_protection
-  flow_logs           = var.network.flow_logs
-  additional_regions  = var.additional_regions
+  project_id                 = var.project_id
+  name                       = var.network.name
+  region                     = var.region
+  cidr_block                 = var.network.cidr_block
+  zones                      = local.zones
+  subnet_cidrs               = var.network.subnet_cidrs
+  secondary_ranges           = var.network.secondary_ranges
+  shared_vpc_host            = var.network.shared_vpc_host
+  enable_deletion_protection = local.enable_deletion_protection
+  flow_logs                  = var.network.flow_logs
+  additional_regions         = var.additional_regions
 
   # Cloud NAT needs a route to the default internet gateway (tiered-vpc deletes it).
   enable_internet_egress_route = var.nat.enabled
@@ -181,6 +188,16 @@ resource "google_compute_forwarding_rule" "egress_proxy" {
   load_balancing_scheme   = ""
   allow_psc_global_access = var.egress_proxy.global_access
   labels                  = var.labels
+
+  lifecycle {
+    # Google: "Private Service Connect endpoints must be created in the same
+    # region as the published service". global_access only lets clients in
+    # other regions reach the endpoint; it does not lift this rule.
+    precondition {
+      condition     = try(regex("/regions/([^/]+)/", var.egress_proxy.service_attachment)[0], "") == var.region
+      error_message = "egress_proxy.service_attachment is in region '${try(regex("/regions/([^/]+)/", var.egress_proxy.service_attachment)[0], "")}' but this spoke is in '${var.region}'. Google requires a Private Service Connect endpoint in the same region as the published service, so an environment outside the hub Secure Web Proxy region cannot use the hub proxy. Keep egress_proxy off for this environment (production then needs production_egress_proxy_waiver) or move the environment to the hub region. See docs/known-gaps.md."
+    }
+  }
 }
 
 module "private_service_access" {
@@ -193,12 +210,30 @@ module "private_service_access" {
   prefix_length = var.private_service_access.prefix_length
 }
 
+# Google's endpoint name rule for Google APIs: 1-20 characters, lower-case
+# letters and numbers only, starting with a letter. Network names start with a
+# letter, so the derived name does too. The endpoint needs an explicit IP: the
+# default is the second-to-last address of the VPC block, outside the
+# tiered-vpc subnet layout (subnets at /24 offsets 0-47 of a /16). Google:
+# endpoints are not reachable from peered VPC networks, and the IP must be
+# outside every subnet range of this VPC and of the networks peered with it.
+# The output private_service_connect fails the plan when it is inside a subnet
+# of this VPC; peered networks use other blocks of the CIDR plan.
+locals {
+  psc_name = coalesce(var.private_service_connect.name, "${substr(replace(lower(var.network.name), "/[^a-z0-9]/", ""), 0, 17)}psc")
+  # The try() fallback keeps a degenerate /31 or /32 block, which has no host
+  # -2, from erroring during static evaluation, as in net-hub; callers pass
+  # the CIDR plan's /16 blocks.
+  psc_address = coalesce(var.private_service_connect.address, try(cidrhost(var.network.cidr_block, -2), cidrhost(var.network.cidr_block, 0)))
+}
+
 module "private_service_connect" {
   source = "../../network/private-service-connect"
   count  = var.private_service_connect.enabled ? 1 : 0
 
   project_id = var.project_id
-  name       = "${var.network.name}-psc"
+  name       = local.psc_name
+  address    = local.psc_address
   network    = module.network.network_id
   target     = var.private_service_connect.target
 }
@@ -336,13 +371,13 @@ module "vpc_flow_logs" {
 
   create_bigquery_dataset            = var.flow_logs_export.create_bigquery_dataset
   bigquery_dataset_id                = var.flow_logs_export.bigquery_dataset_id
-  bigquery_location                  = var.flow_logs_export.bigquery_location
+  bigquery_location                  = local.flow_logs_bigquery_location
   bigquery_partition_expiration_days = var.flow_logs_export.retention_days
   bigquery_kms_key_name              = module.flow_logs_kms[0].key_names["vpc-flow-logs"]
 
   create_storage_bucket  = var.flow_logs_export.create_storage_bucket
   storage_bucket_name    = var.flow_logs_export.storage_bucket_name
-  storage_location       = var.flow_logs_export.storage_location
+  storage_location       = local.flow_logs_storage_location
   storage_retention_days = var.flow_logs_export.retention_days
   storage_kms_key_name   = module.flow_logs_kms[0].key_names["vpc-flow-logs"]
 

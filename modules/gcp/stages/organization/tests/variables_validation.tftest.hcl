@@ -54,7 +54,7 @@ run "accepts_positive_budget" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
 
   variables {
@@ -72,7 +72,7 @@ run "accepts_zero_budget" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     monthly_budget_amount = 0
@@ -88,7 +88,7 @@ run "rejects_negative_budget" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     monthly_budget_amount = -100
@@ -104,7 +104,7 @@ run "rejects_lowercase_currency" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -122,7 +122,7 @@ run "rejects_invalid_currency_length" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -140,7 +140,7 @@ run "rejects_empty_environments" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     environments = {}
@@ -156,7 +156,7 @@ run "rejects_empty_allowed_regions" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -174,7 +174,7 @@ run "rejects_invalid_security_email" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -194,7 +194,7 @@ run "rejects_unset_admin_email" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -212,7 +212,7 @@ run "rejects_invalid_billing_email" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -229,7 +229,7 @@ run "rejects_os_login_exemption_of_strict_folder" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -247,7 +247,7 @@ run "rejects_prefixed_org_admin_group" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -265,7 +265,7 @@ run "rejects_empty_org_admin_groups_without_escape" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -283,7 +283,7 @@ run "rejects_admin_user_listed_as_group" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -301,7 +301,7 @@ run "rejects_pam_without_approvers" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -320,7 +320,7 @@ run "rejects_pam_self_approval" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -340,7 +340,7 @@ run "rejects_owner_in_delegated_folder_roles" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     delegated_workload_folder_roles = ["roles/owner"]
@@ -357,7 +357,7 @@ run "rejects_unknown_guardrail_owner_mode" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -375,7 +375,7 @@ run "rejects_short_log_analytics_retention" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -393,7 +393,7 @@ run "rejects_malformed_logging_settings_kms_key" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
   variables {
     gcp = merge(var.gcp, {
@@ -418,7 +418,27 @@ run "override_key_with_prefix_rejected" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
+  }
+}
+
+run "audit_key_protection_level_rejects_unknown" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      audit_key_protection_level = "EXTERNAL"
+    })
+  }
+
+  expect_failures = [var.gcp]
+  override_module {
+    target  = module.cmek
+    outputs = { keyring_id = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek", keyring_name = "my-org-org-cmek", key_ids = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" }, key_names = { "audit-logs" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-logs", "audit-analytics" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/audit-analytics", "billing-alerts" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-alerts", "scc-notifications" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/scc-notifications", "billing-export" = "projects/mock-admin-project/locations/europe-west1/keyRings/my-org-org-cmek/cryptoKeys/billing-export" } }
+  }
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
 }
 
@@ -438,6 +458,6 @@ run "non_https_issuer_rejected" {
   }
   override_module {
     target  = module.organization
-    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "example.com", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
   }
 }

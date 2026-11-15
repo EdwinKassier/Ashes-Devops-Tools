@@ -1,7 +1,25 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "project_prefix" {
@@ -63,6 +81,11 @@ variable "environments" {
     condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.cidr_block] : [for e in values(local.cfg.environments) : e.cidr_block]) : can(cidrnetmask(c))])
     error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16."
   }
+
+  validation {
+    condition     = var.environments != null || length(local.cfg.environments_missing_is_production) == 0
+    error_message = "Every gcp.environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.environments_missing_is_production)}."
+  }
 }
 
 variable "hub_vpc_cidr_block" {
@@ -87,6 +110,20 @@ variable "dns_hub_vpc_cidr_block" {
   }
 }
 
+variable "internal_domain" {
+  description = "Name of the organization's private root DNS zone (internal-root, served from the DNS project and bound to the hub VPC), for example 'corp.example.com': lowercase letters, digits and hyphens, at least two labels, no trailing dot. Every environment's internal-peering zone follows it through the hub_network.dns_domain contract output. Null = gcp.network.internal_domain from config/landing-zone.yaml, else internal.local. Changing it on an existing estate replaces the zone (dns_name is immutable), which drops every record in it: it needs a destroy_guard override and the records created again; see UPGRADING.md."
+  type        = string
+  default     = null
+
+  validation {
+    condition = (
+      can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", coalesce(var.internal_domain, local.cfg.internal_domain, "internal.local"))) &&
+      length(coalesce(var.internal_domain, local.cfg.internal_domain, "internal.local")) <= 253
+    )
+    error_message = "internal_domain (or gcp.network.internal_domain in config/landing-zone.yaml) must be a lowercase DNS name of at least two labels without a trailing dot, for example corp.example.com."
+  }
+}
+
 variable "enable_ncc_hub" {
   description = "Create a Network Connectivity Center hub (hub VPC as its center spoke) that environment VPCs can join instead of peering (gcp-workload network_connectivity = ncc). Null = gcp.network.ncc_hub.enabled from config/landing-zone.yaml, else false. See docs/runbooks/gcp-peering-to-ncc-migration.md."
   type        = bool
@@ -105,9 +142,25 @@ variable "ncc_preset_topology" {
 }
 
 variable "vpn" {
-  description = "HA VPN from the hub VPC to an on-premises or other-cloud gateway, off by default. Same shape as the net-hub vpn input: enabled, tunnel_count (1 or 2), router_asn, peer_asn, peer_gateway_ips, local_ips, peer_ips, advertised_ip_ranges, site_to_site_data_transfer. With enable_ncc_hub the tunnels also join the NCC hub as a hybrid spoke. Null = gcp.network.vpn from config/landing-zone.yaml, else off. The pre-shared key is never config: set vpn_shared_secret_wo."
-  type        = any
-  default     = null
+  description = "HA VPN from the hub VPC to an on-premises or other-cloud gateway, off by default. Same shape as the net-hub vpn input: enabled, tunnel_count (1 or 2), router_asn, peer_asn, peer_gateway_ips, local_ips, peer_ips, advertised_ip_ranges, advertised_groups, site_to_site_data_transfer. Empty advertised_ip_ranges = the Cloud Router announces every hub subnet (ALL_SUBNETS) plus every environment CIDR (and 35.199.192.0/19 with hybrid_dns forward zones); set advertised_ip_ranges to announce exactly your own list. With enable_ncc_hub the tunnels also join the NCC hub as a hybrid spoke. Null = gcp.network.vpn from config/landing-zone.yaml, else off. The pre-shared key is never config: set vpn_shared_secret_wo."
+  # Untyped so this variable and the config-file value (JSON text) share one
+  # decode path, and so a misspelled key stays visible: an object type
+  # constraint would drop it silently. The validation rejects keys outside
+  # allowed_keys.tf in the effective value (this variable or the config file,
+  # decoded as in config.tf); the network-hub stage types and validates the values.
+  type    = any
+  default = null
+
+  validation {
+    condition = length(concat(
+      [for k in try(keys(jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))), []) : k if !contains(local.allowed_keys.vpn.self, k)],
+      flatten([for i, r in try(jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}")).advertised_ip_ranges, []) : [for k in try(keys(r), []) : "advertised_ip_ranges[${i}].${k}" if !contains(local.allowed_keys.vpn.advertised_ip_ranges, k)]]),
+    )) == 0
+    error_message = "vpn (or gcp.network.vpn in config/landing-zone.yaml) has keys the network-hub stage does not accept: ${join(", ", concat(
+      [for k in try(keys(jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))), []) : k if !contains(local.allowed_keys.vpn.self, k)],
+      flatten([for i, r in try(jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}")).advertised_ip_ranges, []) : [for k in try(keys(r), []) : "advertised_ip_ranges[${i}].${k}" if !contains(local.allowed_keys.vpn.advertised_ip_ranges, k)]]),
+    ))}."
+  }
 }
 
 variable "vpn_shared_secret_wo" {
@@ -125,16 +178,93 @@ variable "vpn_shared_secret_wo_version" {
   nullable    = false
 }
 
+variable "hybrid_dns" {
+  description = "Hybrid DNS on the hub VPC, used only when the VPN or an Interconnect is on: enable_inbound_forwarding (default true) adds an inbound DNS server policy, so on-premises resolvers can forward the internal domain to its entry-point addresses; forward_zones (key => dns_name ending with a dot, target_ips) forwards on-premises domains to the on-premises resolvers. Null = gcp.network.hybrid_dns from config/landing-zone.yaml, else inbound forwarding only."
+  type = object({
+    enable_inbound_forwarding = optional(bool, true)
+    forward_zones = optional(map(object({
+      dns_name   = string
+      target_ips = list(string)
+    })), {})
+  })
+  default = null
+}
+
 variable "interconnects" {
   description = "Cloud Interconnect VLAN attachments on the hub VPC, keyed by attachment name (same shape as the net-hub interconnects input; region and router_name required). Null = gcp.network.interconnect from config/landing-zone.yaml, else none."
-  type        = any
+  # Untyped so this variable and the config-file value (JSON text) share one
+  # decode path, and so a misspelled key stays visible: an object type
+  # constraint would drop it silently. The validation rejects keys outside
+  # allowed_keys.tf in the effective value (this variable or the config file,
+  # decoded as in config.tf); the network-hub stage types and validates the values.
+  type    = any
+  default = null
+
+  validation {
+    condition = length(flatten([
+      for name, ic in try(jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}")), {}) : concat(
+        [for k in try(keys(ic), []) : "${name}.${k}" if !contains(local.allowed_keys.interconnects.self, k)],
+        flatten([for i, r in try(ic.advertised_ip_ranges, []) : [for k in try(keys(r), []) : "${name}.advertised_ip_ranges[${i}].${k}" if !contains(local.allowed_keys.interconnects.advertised_ip_ranges, k)]]),
+      )
+    ])) == 0
+    error_message = "interconnects (or gcp.network.interconnect in config/landing-zone.yaml) has keys the network-hub stage does not accept: ${join(", ", flatten([
+      for name, ic in try(jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}")), {}) : concat(
+        [for k in try(keys(ic), []) : "${name}.${k}" if !contains(local.allowed_keys.interconnects.self, k)],
+        flatten([for i, r in try(ic.advertised_ip_ranges, []) : [for k in try(keys(r), []) : "${name}.advertised_ip_ranges[${i}].${k}" if !contains(local.allowed_keys.interconnects.advertised_ip_ranges, k)]]),
+      )
+    ]))}."
+  }
+}
+
+variable "hub_zones" {
+  description = "Zones of the hub VPC and the DNS anchor VPC (both in default_region), in subnet order: subnet i of each tier takes the i-th CIDR, so the order fixes the subnet CIDRs. Null = gcp.network.zones from config/landing-zone.yaml, else the zones GCP returns for the region (which can change and then replaces subnets). Required when any environment is_production."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.hub_zones == null || alltrue([for z in coalesce(var.hub_zones, []) : can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))])
+    error_message = "hub_zones must be GCP zone names, such as europe-west2-a."
+  }
+}
+
+variable "hub_private_service_connect_name" {
+  description = "Name of the hub VPC's Private Service Connect endpoint for Google APIs: 1-20 lower-case letters and numbers, starting with a letter (Google's rule). Null = gcp.network.private_service_connect.name from config/landing-zone.yaml, else hubvpccorepsc."
+  type        = string
+  default     = null
+}
+
+variable "hub_private_service_connect_address" {
+  description = "Internal IPv4 address of the hub VPC's Private Service Connect endpoint. It must be outside every hub subnet range (including the Secure Web Proxy proxy-only and PSC NAT subnets) and every subnet range of the peered environment VPCs. Null = gcp.network.private_service_connect.address from config/landing-zone.yaml, else the second-to-last address of the hub CIDR (10.0.255.254 for 10.0.0.0/16)."
+  type        = string
   default     = null
 }
 
 variable "hub_additional_regions" {
   description = "Opt-in extra regions of the hub VPC, keyed by region name (same shape as the network-hub stage hub_additional_regions input): subnet_cidrs (public, private, database), optional secondary_ranges and nat (default true: a Cloud Router and Cloud NAT in the region). CIDRs must not overlap the primary hub subnets or each other. Null = gcp.network.additional_regions from config/landing-zone.yaml, else none (single-region hub)."
-  type        = any
-  default     = null
+  # Untyped so this variable and the config-file value (JSON text) share one
+  # decode path, and so a misspelled key stays visible: an object type
+  # constraint would drop it silently. The validation rejects keys outside
+  # allowed_keys.tf in the effective value (this variable or the config file,
+  # decoded as in config.tf); the network-hub stage types and validates the values.
+  type    = any
+  default = null
+
+  validation {
+    condition = length(flatten([
+      for region, r in try(jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}")), {}) : concat(
+        [for k in try(keys(r), []) : "${region}.${k}" if !contains(local.allowed_keys.hub_additional_regions.self, k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(local.allowed_keys.hub_additional_regions.subnet_cidrs, k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(local.allowed_keys.hub_additional_regions.secondary_ranges, k)]]),
+      )
+    ])) == 0
+    error_message = "hub_additional_regions (or gcp.network.additional_regions in config/landing-zone.yaml) has keys the network-hub stage does not accept: ${join(", ", flatten([
+      for region, r in try(jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}")), {}) : concat(
+        [for k in try(keys(r), []) : "${region}.${k}" if !contains(local.allowed_keys.hub_additional_regions.self, k)],
+        [for k in try(keys(r.subnet_cidrs), []) : "${region}.subnet_cidrs.${k}" if !contains(local.allowed_keys.hub_additional_regions.subnet_cidrs, k)],
+        flatten([for i, sr in try(r.secondary_ranges, []) : [for k in try(keys(sr), []) : "${region}.secondary_ranges[${i}].${k}" if !contains(local.allowed_keys.hub_additional_regions.secondary_ranges, k)]]),
+      )
+    ]))}."
+  }
 }
 
 variable "vpc_sc_access_policy_name" {
@@ -204,7 +334,7 @@ variable "projects_workspace_name" {
 # Stage contract overrides (FAST-style): when set (here or as gcp.contracts.<layer>
 # in config/landing-zone.yaml) the matching remote-state read is skipped.
 variable "organization_contract" {
-  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (billingAccounts/XXXXXX-XXXXXX-XXXXXX or bare ID), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, folders. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
+  description = "gcp-organization stage contract, the same type in every gcp root: org_id (numeric), billing_account (the bare ID XXXXXX-XXXXXX-XXXXXX that gcp-organization emits, or billingAccounts/XXXXXX-XXXXXX-XXXXXX), admin_project_number, folders (key => {id, name, display_name}), tag_values (key => tag value ID) and scoped_access_policy_ids (env => policy ID). This root needs: org_id, folders. Null = gcp.contracts.organization from config/landing-zone.yaml, else the contract output of the gcp-organization workspace."
   type = object({
     org_id               = optional(string)
     billing_account      = optional(string)
@@ -226,7 +356,7 @@ variable "organization_contract" {
 }
 
 variable "projects_contract" {
-  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id). This root needs: project_ids and project_numbers (shared-hub, shared-dns and every <env>-host). Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
+  description = "gcp-projects stage contract, the same type in every gcp root: project_ids and project_numbers (project key => value, e.g. shared-hub, shared-dns, <env>-host) and environment_config (environment => folder_id, host_project_id, host_project_number, region, cidr_block, labels, is_production, vpc_sc_access_policy_id, automation_identities, spoke_network_name). This root needs: project_ids and project_numbers (shared-hub, shared-dns and every <env>-host). Null = gcp.contracts.projects from config/landing-zone.yaml, else the contract output of the gcp-projects workspace."
   type = object({
     project_ids     = optional(map(string), {})
     project_numbers = optional(map(string), {})
@@ -239,6 +369,9 @@ variable "projects_contract" {
       labels                  = optional(map(string), {})
       is_production           = optional(bool)
       vpc_sc_access_policy_id = optional(string)
+      automation_identities   = optional(list(string), [])
+      spoke_network_name      = optional(string)
+      compliance_class        = optional(string)
     })), {})
   })
   default = null
@@ -290,4 +423,11 @@ variable "network_alerting" {
   })
   default  = {}
   nullable = false
+}
+
+variable "hub_peering_limit" {
+  description = "Most environment peerings the hub VPC may carry (the plan fails above it). Default 24: the PEERINGS_PER_NETWORK quota is 25 by default and the hub's Private Service Access connection is one peering. Raise it only after the quota is raised; beyond that, move environments to NCC."
+  type        = number
+  default     = 24
+  nullable    = false
 }

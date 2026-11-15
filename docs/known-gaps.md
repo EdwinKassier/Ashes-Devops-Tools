@@ -9,19 +9,342 @@ Status legend: **OPEN** (a real gap to fix) · **PREVIEW** (code shipped, opt-in
 default-off, not yet validated against a real apply) · **BLOCKED** (waiting on an
 upstream/provider capability) · **DECISION** (needs a human call before action).
 
+## OPEN — follow-ups from the eighth re-audit (2026-11-15)
+
+The [eighth due-diligence re-audit](audit/2026-11-15-due-diligence-reaudit-8.md)
+of commit `4479cabc` found the items below. They are not fixed on this branch:
+each is a follow-up. The report gives evidence, failure scenarios and fixes; its
+appendix lists the Medium and Low items not repeated here.
+
+High (fix before relying on the control):
+
+- **ARC-1. The regulated central backup copy cannot copy Aurora or EBS.**
+  `envs/aws/workload/kms.tf` has no key-policy statement for the backup
+  account or `backup.amazonaws.com`, which AWS Backup needs to copy recovery
+  points encrypted with that key. Do not enable
+  `compliance.backup.copy_to_central_vault` on a regulated estate until the
+  workload key grants it, and turn on `copy_vault_notification_topic_arn`.
+- **CMP-1 to CMP-3, IAC-2. The AWS regulated class can still be dropped.** A
+  supplied `organization_contract` (a workspace variable or
+  `aws.contracts.organization`) turns the aws-organization remote-state read off,
+  so `regulated_account_keys` is empty. Where the contract applies, aws-network's
+  refusals (`enable_network_firewall`, `enforce_egress_allowlist`,
+  `egress_alert_only_waived`) and aws-security's 365-day retention floor still
+  read only the root's config file.
+- **CICD-1 / SEC-2. The plan-time scanner can be disarmed in CI.** In the
+  meta-lint job, the platform-owned `scripts/check-module-api.sh` runs before the
+  scanner and can set `PLAN_EXEC_TEST` and `PLAN_EXEC_ROOT` through
+  `$GITHUB_ENV`, shadow `python3`, rewrite the scanner or pre-install a fake
+  `hcl2`. Run the scanner in its own job from a fresh checkout, refuse
+  `PLAN_EXEC_TEST` when `CI=true` and fail when 0 files are parsed.
+- **SEC-1. `azurerm` is allowlisted but unchecked.** It is on
+  `allowed_provider_sources` for a commented example only; none of its
+  credential, endpoint or upload arguments is checked. Remove it from the
+  allowlist until a fork reviews it.
+- **IAC-1. Mutation survivors in detective controls and secret exposure.**
+  Security Hub `service_enabled`, Config recorder `is_enabled`,
+  `tfe_variable.sensitive`, the Vercel production targets and the aws-security
+  `regulated_log_archive_lock` precondition are not asserted by any test.
+- **CMP-4. Waiver governance.** Only the GCP egress waiver has a maximum
+  lifetime; no waiver carries an approver or ticket, and there is no waiver
+  register.
+
+Documentation (Medium):
+
+- **ADO-1.** `docs/architecture/regulated-environments.md` says "No change" for
+  AWS backups and the audit store, and its AWS column omits aws-backup.
+- **ADO-5.** The `_to_server` firewall actions also drop external UDP and
+  returning ICMP; the caveat is in the module and UPGRADING.md but not in
+  `config/landing-zone.example.yaml` or the regulated page.
+
+Process: the report recommends the breaking-change freeze, one sandbox apply
+per cloud (it settles ARC-1 and the firewall behaviour) and an isolated scanner
+job or HCP pre-plan run task before another round of code fixes.
+
 ## OPEN — validate before relying on
 
+- **destroy_guard's deletion-protection rule is proven by OPA unit tests
+  only (CICD-8).** It reads `change.before` and `change.after` of each
+  update from the plan JSON that HCP Terraform passes as `input.plan`. The
+  attribute names come from the hashicorp/aws 6.x and hashicorp/google 8.x
+  schemas. No real HCP Terraform run has exercised it yet. Run one update
+  that sets a `deletion_protection` to `false` in the sandbox and confirm
+  the policy check stops it. Reversed switches, where `true` removes the
+  protection (`disable_api_termination` on `aws_instance`, `force_destroy`
+  on buckets and other resources), are not checked. Owner: platform team.
+- **tfc_admin_guard's variable set walk needs `input.plan.configuration`.**
+  The rule that passes an attachment of a set created in the same plan reads
+  the plan JSON `configuration`. The HCP Terraform OPA input documentation
+  describes `input.plan` as the JSON plan, but no real run has confirmed that
+  `configuration` is present. If it is absent, the rule fails closed: every
+  such attachment is denied until the security team overrides it. Run one
+  tfc-admin plan in the sandbox that creates and attaches a variable set and
+  confirm the policy check passes. Owner: platform team.
+- **Single-region estate; recovery objectives are design targets.** Both clouds
+  deploy to one primary region by default. There is no warm standby, no
+  multi-region failover, no Aurora Global Database and no Cloud SQL
+  cross-region replica. Cross-account and cross-region backup copies are
+  opt-in (`compliance.backup`) and the GCP Backup and DR vault is opt-in
+  outside regulated environments. The RPO and RTO in
+  [`disaster-recovery.md`](runbooks/disaster-recovery.md) come from the backup
+  schedules in the code. No restore has measured them. Run a restore drill in a
+  sandbox and replace the targets with measurements. The `dr_region` input is
+  documented to differ from the home region and to be in `aws.allowed_regions`,
+  but no plan check enforces that.
+- **Tag enforcement is mock-tested only (CMP-10, ARC-17).** Mock plans and
+  the OPA unit tests prove the tag policy content, the data-classification
+  binding inputs and the `require_labels` rule. Two permission paths are not
+  proven. (1) The `gcp-projects` binding of the `data-classification` tag to
+  each host project relies on the `roles/resourcemanager.tagUser` grants that
+  `gcp-organization` gives `projects-apply` on the tag key and on each
+  environment folder. Confirm in the sandbox that the binding applies. (2) The
+  AWS provider check `TF_AWS_TAG_POLICY_COMPLIANCE` calls
+  `tag:ListRequiredTags`. Confirm in the sandbox that the `tfc-plan` and
+  `tfc-apply` roles may call it before a workspace sets the variable to
+  `error`. The AWS tag policy itself never blocks an untagged resource.
+- **AWS automated incident response is a scaffold (CMP-01, DET-05).** The
+  GuardDuty to EventBridge to `ir-isolate` Lambda trigger is deployed, but the
+  shipped handler (`modules/aws/security/incident-response/files/isolate.py`)
+  only logs the finding. It attaches no quarantine security group, takes no
+  snapshot and has no cross-account access to the workload account that holds
+  the instance. Do not claim automated isolation to an auditor until you write
+  and test that handler. Until then, isolate by hand with
+  [`aws-incident-response.md`](runbooks/aws-incident-response.md).
+- **IAM Identity Center delegation before enablement is unproven (ADO-08).**
+  On a greenfield estate the first `aws-organization` apply enables trusted
+  access for `sso.amazonaws.com` and registers the `shared_services` account
+  as the Identity Center delegated administrator before anyone has enabled
+  the Identity Center instance. AWS Organizations accepts that order (trusted
+  access first, then the registration), and AWS recommends enabling trusted
+  access from the Identity Center console. No real organization has run it.
+  Confirm in the sandbox that enabling Identity Center afterwards keeps the
+  registration and that `aws-identity` then plans from Shared Services. An
+  organization that already has an Identity Center delegated administrator
+  has no `aws.adopt` key for it: the first apply fails with
+  `AccountAlreadyRegisteredException` (same account) or
+  `DELEGATED_ADMINISTRATOR_EXISTS_FOR_THIS_SERVICE` (another account). Add an
+  `import` block for
+  `module.aws_organization.aws_organizations_delegated_administrator.identity_center[0]`
+  with the ID `<account-id>/sso.amazonaws.com` before that apply. If the
+  greenfield order fails in a real organization, recover by hand in the
+  management account: run `aws organizations deregister-delegated-administrator
+  --account-id <shared-services-id> --service-principal sso.amazonaws.com`,
+  enable Identity Center in the console, then re-apply `aws-organization` so it
+  registers the account again. The root cannot skip the registration:
+  `identity_center_admin_account_key` is a `modules/aws/stages/organization`
+  input that `envs/aws/organization` does not expose.
+- **PREVIEW: `tfc_vcs_run_only` relies on `run.commit_sha` (SEC-1).** The
+  mandatory rule in the overridable `policies/opa-destructive` set denies a
+  run that can
+  apply (not speculative) on a VCS-connected workspace tagged
+  `layer:control-plane`, `layer:bootstrap` or `tier:production` when the run
+  has no commit SHA, which is the case for an API-uploaded configuration
+  version. HCP Terraform documents `run.commit_sha` as "The checksum hash
+  (SHA) that identifies the commit", but does not say what it holds for an
+  uploaded version. The rule therefore assumes it is empty or absent there.
+  Only the OPA unit tests prove the rule. Run one VCS run, one UI-queued run
+  and one API-upload run on a sandbox control-plane workspace and read
+  `run.commit_sha` in the policy evaluation input. Once the VCS and UI-queued
+  runs show a non-empty `run.commit_sha`, promote the rule to the hard-gate
+  `policies/opa` set. Until then it is overridable, so an approver and a
+  security-team member together can still apply uploaded code. On
+  `gcp-guardrails` the security team itself holds `runs = apply`
+  (`envs/tfc-admin`, `security_custom_access`) and also overrides policies,
+  so one security engineer can upload code, override the rule and apply it
+  alone. If a VCS run
+  carries no SHA, the rule stops every control-plane and production apply.
+  Recover with a security-team override on each run; as break-glass, an
+  organization owner can change the policy set in the HCP Terraform UI; and
+  a fix merged to the main branch takes effect when the policy set re-ingests
+  it (the VCS webhook). Limits: it does
+  not cover non-production workloads (an approver there can still apply an
+  uploaded version); it trusts the workspace tags, so a hand-created
+  `tfc-admin` workspace (`manage_tfc_admin_workspace = false`) is covered only
+  if it carries `layer:control-plane`; and a run on an older VCS
+  configuration version (`configuration-version-id` on the API) carries that
+  commit's SHA and passes.
+- **PREVIEW: an enforced environment perimeter with service-team projects
+  needs the sandbox proof (ARC-C1).** The `<env>_perimeter` perimeter
+  (`modules/gcp/stages/environment`) protects the Shared VPC host project and
+  every `service_teams` project. Google requires this: "Ensure that the Shared
+  VPC network host is in the same service perimeter as the projects connected
+  to the network" (VPC Service Controls troubleshooting). Mock plans prove the
+  membership only. No real apply has run app services behind an enforced
+  perimeter that holds team projects. Calls between the host and the team
+  projects are inside the perimeter. Cloud Run image pulls from the team
+  project's own Artifact Registry repository stay inside it. The
+  environment's plan and apply service accounts keep the default ingress rule.
+  Organization-level log sinks are not blocked: Google says VPC Service
+  Controls "doesn't protect against Cloud Logging log exports on a folder or
+  organization level". The flow-log export writes to a dataset in the host
+  project, inside the perimeter. Traffic to the hub egress proxy and the PSC
+  endpoints is network traffic, not a Google API call, so the perimeter does
+  not check it. These flows can still be blocked and need a rule or a proof:
+  a CMEK key in a project outside the perimeter (`database.encryption_key_name`,
+  `app_platform.artifact_registry_kms_key_name`; Google says a Cloud SQL key
+  must be "in the same perimeter as the resource, or in a perimeter connected
+  through a perimeter bridge"); an image in a registry outside the perimeter;
+  an app-deploy WIF identity (`docs/guides/deploying-a-service.md`); and any
+  caller outside Google Cloud. Before you enforce, run the perimeter in
+  dry-run with the team projects in it and read the violation logs
+  (`docs/runbooks/production-hardening.md`).
+- **GCP Private Service Connect endpoint for Google APIs is mock-tested only
+  (ARC-1).** `net-hub` and `net-spoke` name the endpoint by Google's rule
+  (1-20 lower-case letters and numbers, starting with a letter) and reserve an
+  explicit IPv4 address (default: the second-to-last address of the VPC
+  block). Mock plans prove the name, the address and the subnet-range check.
+  No real apply has created the endpoint. Confirm in the sandbox that the hub
+  and one environment endpoint apply, and that a VM resolves
+  `storage.googleapis.com` to the endpoint address. The plan does not check
+  the address against subnets of peered VPC networks or against a Private
+  Service Access range that Google allocated automatically; the CIDR plan keeps
+  them apart only when every VPC uses its own block.
 - **GCP Cloud NAT egress route is mock-tested only.** `net-hub` / `net-spoke`
   now add a `0.0.0.0/0` route to the default internet gateway when NAT is on
   (`tiered-vpc` deletes the default route at creation). Confirm in the sandbox
   that a VM with no external IP in the private tier reaches the internet through
   Cloud NAT, and that the database tier still cannot.
+- **The AWS Route 53 Profile and Resolver endpoints are mock-tested only
+  (ARC-6, ARC-21).** Mock plans prove the profile resources (the DNS Firewall
+  rule group with priority 101, the forward rules, the private hosted zones),
+  the endpoint gate and the endpoint security group, not DNS behaviour. Confirm
+  in the sandbox: the RAM share of the profile reaches a workload account; the
+  profile shows the rule group, the rules and the zones; and with
+  `aws.network.resolver_endpoints.enabled: true`, `aws-network` creates both
+  endpoints with the module-owned security group.
+- **The central AWS interface endpoints are mock-tested only (ARC-6).** Mock
+  plans prove the endpoint security group (HTTPS from `top_cidr`), the private
+  DNS switch, one private hosted zone per service with an alias record, and the
+  zones in the Route 53 Profile. Confirm in the sandbox: from a hub-attached
+  spoke, `dig ssm.<region>.amazonaws.com` answers with the egress VPC endpoint
+  IPs, and `aws ssm describe-instance-information` and `aws sts
+  get-caller-identity` succeed through them. The alias target is the first
+  `dns_entry` of each endpoint (the regional name).
+- **The spoke Route 53 Profile association is mock-tested only (ARC-6).**
+  Confirm in the sandbox that `aws-workload-<env>` (its `tfc-apply` role in the
+  workload account) creates the association against the RAM-shared profile,
+  that the association reaches `COMPLETE`, and that a blocked domain answers
+  `NXDOMAIN` from the spoke. A spoke VPC can hold two profile associations; the
+  provider (v6.72.0) has no `priority` argument, so this one takes the default
+  priority 100.
+- **On-premises DNS through the AWS Resolver endpoints is mock-tested only.**
+  Mock plans prove the routes: each `vpn.onprem_cidrs` prefix from the egress
+  VPC `private` route tables to the transit gateway, `shared <prefix> →
+  inspection`, and the egress attachment propagated into the `inspection`
+  table. Confirm in the sandbox with the VPN up: from an on-premises host,
+  `dig @<inbound endpoint IP> ssm.<region>.amazonaws.com` (the IPs are the
+  aws-network output `resolver_inbound_endpoint_ips`) answers; a forward rule
+  to an on-premises resolver answers from a spoke; and the Network Firewall
+  flow logs show both directions of each query on the same firewall endpoint.
+  With BGP, only the prefixes listed in `vpn.onprem_cidrs` are routed from the
+  egress VPC.
 - **IAP through the hub hierarchical policy is mock-tested only.** Confirm in
   the sandbox that `gcloud compute ssh --tunnel-through-iap` reaches a
   private-tier VM, and that SSH from any other source is still denied.
 - **Member-account backup vault first apply is unproven.** Confirm that the
   updated Backup service-role StackSet creates `org-backup-vault` in a
   Workloads-OU account, and that the next daily BACKUP_POLICY job completes.
+- **The customer managed key member backup vault is mock-tested only.** Mock
+  tests prove the StackSet templates, not AWS Backup or KMS behaviour. With
+  `member_backup_vault_encryption = "cmk"` (or `compliance.backup`), confirm
+  in the sandbox that the StackSet execution role creates the key tagged
+  `protected = true` under the deny-tamper SCP, that `org-backup-vault-cmk` is
+  encrypted with it, that the DR StackSet does the same in
+  `member_backup_dr_region`, and that a copy job from that vault to the backup
+  account succeeds with the `BackupAccountCopy` key-policy grant.
+- **The central backup copy is mock-tested only (CMP-1, ARC-8).** Mock tests
+  prove the BACKUP_POLICY document, the copy vault, its key policy and the
+  wiring, not AWS Backup behaviour. With
+  `compliance.backup.copy_to_central_vault: true` (and `dr_region`), confirm in
+  the sandbox: the `aws-backup` management apply role sets
+  `isCrossAccountBackupEnabled`; the backup account's `tfc-apply` role creates
+  the `backup-copy-vault` key (tagged `protected = true`, break-glass as the
+  only `kms:PutKeyPolicy` holder) and `org-backup-copy-vault` with it; a daily
+  job writes to `org-backup-vault-cmk` and the copy jobs to the copy vault and
+  to the DR vault succeed for each resource type (EBS on a customer managed key,
+  EC2, RDS, Aurora, S3, DynamoDB, EFS); the copy vault key grants are enough
+  for copy-in and for restores (the key admits backup-account principals only
+  through Backup, EC2, RDS, S3, DynamoDB and EFS); and the restore-testing
+  plan restores RDS and Aurora without restore metadata overrides. With
+  `copy_vault_notification_topic_arn` set, also confirm which failure events
+  reach the topic: that a failed restore-testing restore arrives as
+  `RESTORE_JOB_FAILED`, and whether a failed copy does (copy jobs into the copy
+  vault start in the member account, so it may be reported on the source vault
+  only). Do this in a
+  throwaway vault first or within `changeable_for_days`: the lock cannot be
+  removed after that window.
+- **The pipeline can still overwrite the copy vault's lock and access policy
+  during `changeable_for_days`.** The tfc-apply boundary
+  (`tfc-oidc-baseline` `protected_backup_vault_names`, statement
+  `DenyProtectedBackupVaultUnlock`) denies `DeleteBackupVaultLockConfiguration`,
+  `DeleteBackupVaultAccessPolicy` and `DeleteBackupVault` on
+  `org-backup-copy-vault`, so only break-glass can remove them. It cannot deny
+  `PutBackupVaultLockConfiguration` or `PutBackupVaultAccessPolicy`: the
+  aws-backup apply that creates the vault calls both, and IAM has no condition
+  key that tells the first call from a later overwrite. Until the window ends, a
+  compromised tfc-apply could lower `min_retention_days` or replace the access
+  policy so that copies stop arriving. After the window, AWS rejects every lock
+  change. Three more limits: the boundary caps only `tfc-apply`, so a run that
+  assumes `OrganizationAccountAccessRole` (the aws-backup legacy path without
+  TFC dynamic credentials) or a local administrator is not covered; the
+  deny-tamper SCP does not carry the same deny, so no SCP covers those
+  principals; and the protection exists only after aws-organization
+  applies the updated StackSet. Mitigation: keep `changeable_for_days` short
+  and watch `PutBackupVaultLockConfiguration` and `PutBackupVaultAccessPolicy`
+  in CloudTrail for the backup account during the window. Confirm in the
+  sandbox that tfc-apply gets AccessDenied on the three Delete calls and that
+  the first aws-backup apply still creates the lock and the policy.
+
+- **Organization policy size quotas are checked on the rendered string only
+  (ARC-18).** `modules/aws/governance/organization-policy` fails the plan when
+  a policy is longer than the AWS Organizations quota for its type: SCP 10,240
+  characters, RCP 5,120, AI services opt-out 2,500, other types 10,000 (AWS
+  documentation checked on 2026-11-12). With every option that adds statements
+  turned on and long names, mock tests measure `scp-deny-tamper` at 6,485
+  characters and `rcp-data-perimeter` at 2,811. AWS counts whitespace when a
+  policy is saved through the API, and the module sends the content as
+  rendered. A real `CreatePolicy` and `UpdatePolicy` in the sandbox is still
+  the proof that AWS counts the same way.
+
+- **The explicit-CIDR IPAM default for spoke VPCs needs the sandbox proof (ARC-1).**
+  `modules/aws/network/vpc` requests `cidr_block` from the IPAM pool by default.
+  Mock tests prove the planned shape only. A real `hashicorp/aws` 6.72.0 plan
+  with a hand-made state and no API calls showed no change for an existing
+  netmask-shape VPC (`ignore_changes = [ipv4_netmask_length]`). Still to
+  confirm: a plan of `aws-workload-dev` against its real state after the
+  upgrade shows no VPC change, and an e2e apply allocates the requested block
+  from a real IPAM pool and creates a subnet inside it.
+
+- **The hub VPC IPAM reservations need the sandbox proof (ARC-1).**
+  `modules/aws/stages/network-hub` reserves each static hub VPC range in the
+  regional IPAM pool (`aws_vpc_ipam_pool_cidr_allocation.hub_static`). Mock
+  tests prove the planned reservations only. Still to confirm: an aws-network
+  apply creates both reservations in a real pool, IPAM then refuses a spoke
+  that requests a hub range, and the hub VPCs are unaffected. The aws-network
+  plan cannot detect a spoke that already holds a hub range, because no
+  `hashicorp/aws` 6.72.0 data source lists pool allocations; that conflict
+  fails the apply of the reservation (recovery in `UPGRADING.md`).
+
+- **AWS deployment outside eu-west-2 needs the sandbox proof (ARC-3).**
+  aws-network and aws-workload resolve availability zones from
+  `availability_zone_ids` (variable or config) or the region, and
+  `modules/aws/network/vpc` fails the plan on a zone from another region. Mock
+  tests prove the resolution order, the ID-to-name mapping and the plan
+  failures only. Still to confirm: with `org.regions.aws` set to a region other
+  than eu-west-2 (for example us-east-1) and no zone input, aws-network and one
+  aws-workload apply with every subnet in that region; and with
+  `aws.network.availability_zone_ids` set, the hub and spoke subnets report the
+  same `AvailabilityZoneId` in both accounts.
+
+- **Spoke resolution of the internal zone needs the sandbox proof (ARC-2).**
+  `gcp-network-hub` binds the `internal-root` zone to the hub VPC as well as
+  `dns-vpc-core`, and `gcp-projects` grants each workload apply SA
+  `roles/dns.peer` on the shared folder. Mock tests prove the planned binding
+  and grants only; they cannot prove resolution. Still to confirm: the
+  `gcp-workload-dev` apply creates `internal-peering` without a permission
+  error, and a VM in the dev spoke resolves a record in `internal-root` (for
+  example `dig +short <name>.<internal domain>` returns its A record, not
+  NXDOMAIN).
 
 - **Vercel `resource_config` first apply is unproven.** `modules/vercel/project` now sets
   `resource_config.function_default_regions` instead of the deprecated
@@ -30,7 +353,7 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   `function_default_timeout` on an existing project.
 - **Upstream applies auto-apply non-prod workloads.** Workload
   `gcp-workload-<env>` / `aws-workload-<env>` workspaces whose environment sets
-  `is_production: false` explicitly (an omitted flag never qualifies) get
+  `is_production: false` (the flag is required on every environment) get
   `auto_apply_run_trigger` and `queue_all_runs`
   (`enable_nonprod_workload_auto_apply`; the null default turns it on only while
   the policy sets, and so `destroy_guard`, are attached). The trust change: a
@@ -69,19 +392,28 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
     `tgw_attachment_id` into the config and apply aws-network. A spoke not
     listed has no routing (no run trigger or discovery closes the loop; the TGW
     owner cannot read tags the workload account set on its attachment);
-  - **with `enable_network_firewall = false` (the `starter` profile) wired
-    spokes still have no egress:** prod/nonprod default to the inspection
-    attachment, and without the firewall the inspection VPC's tgw tier has no
-    forwarding route. Route those segments to egress (or keep the firewall) is a
-    design decision not yet made;
-  - prod↔nonprod flows are routable *through* inspection (the inspection
-    table knows every spoke); only the Network Firewall policy separates the
-    segments. Alert-only mode passes them. Separate per-segment inspection
-    tables would enforce it at the routing layer;
+  - **with `enable_network_firewall = false` (the `starter` profile) spoke
+    egress is not inspected (D4, accepted).** The segment tables route
+    `0.0.0.0/0` straight to the egress attachment and spokes propagate into the
+    `shared` table, so starter spokes reach the internet through NAT only. Use
+    the `production` profile when egress must be inspected;
+  - prod↔nonprod isolation is a blackhole route per spoke CIDR in the other
+    segment's table (`spoke_attachments.<key>.cidr`, default
+    `aws.workload_environments.<key>.vpc_cidr`). A spoke whose CIDR is not
+    known (no `vpc_cidr`, or a key that differs from the environment name) is
+    not blackholed; when both segments are attached the plan fails
+    (re-audit 5). A secondary VPC CIDR added to a spoke
+    ([CIDR expansion](runbooks/aws-cidr-expansion.md)) propagates but is not
+    blackholed and is in no firewall segment rule, so under a fail-closed
+    policy its traffic to other spokes is dropped until the CIDR is added to
+    the spoke's `cidr`;
   - **validate in the sandbox:** the accepter on a `pendingAcceptance`
     attachment, the association of a cross-account attachment, end-to-end
-    egress and reply through the firewall (appliance mode), and on-premises →
-    spoke over the VPN.
+    egress and reply through the firewall (appliance mode), on-premises →
+    spoke over the VPN, and on a starter estate `curl -sI https://aws.amazon.com`
+    from a spoke with VPC flow logs showing the NAT gateway as the path, and
+    a connection from a prod spoke to a nonprod spoke times out with
+    `aws ec2 search-transit-gateway-routes` showing the blackhole route.
 
 - **Org-wide Config recorders are mock-tested only.** The
   `org-config-recorders` StackSet (`modules/aws/security/config-recorder-stackset`)
@@ -119,16 +451,55 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   This is inherent to StackSets. The control is who can apply
   `aws-organization` (phase-0 role, policy sets, workspace access), not an SCP.
 
+- **The phase-0 apply role is still an administrator (SEC-4).**
+  `tfc-mgmt-apply` keeps `AdministratorAccess` in the management account, where
+  no SCP applies. Its inline `deny-self-tampering` policy stops it from
+  rewriting the trust, policies or boundary of `tfc-mgmt-plan`,
+  `tfc-mgmt-apply` and `OrganizationBreakGlass`, and from assuming
+  `OrganizationAccountAccessRole`. It can still create a new role, give that
+  role administrator rights and assume it, or run a CloudFormation stack with
+  a service role. The deny raises the cost of self-promotion; it does not make
+  the role least-privilege. The control is who can apply `aws-organization`.
+  The deny is checked against `tfc-management-roles` by
+  `scripts/tests/test-phase0-template.sh`, not on a real stack.
+
+- **Resources-under-management count unknown.** HCP Terraform bills paid
+  tiers per resource under management. Measure the count on the first sandbox
+  apply and publish per-root counts in
+  [QUICK_START](guides/QUICK_START.md#hcp-terraform-tier-and-cost).
+
 - **Essentials-plan support for VCS policy sets is unverified.** tfc-admin
   turns the policy sets on by default only for `org.tfc.plan` `standard` or
   `premium` (`envs/tfc-admin/config.tf`, `local.enable_policy_sets`). Whether
   HCP Terraform Essentials allows VCS-sourced OPA policy sets, and how many
-  policies it allows per set, has not been checked against the current HCP
-  pricing and limits. **Validate:** on an Essentials organization, create both
+  policies it allows per set, is not confirmed on a real organization. The
+  HCP Terraform plan overview (checked 2026-11-12) lists policy enforcement as
+  not available on Free and Essentials, but another HashiCorp page mentions a
+  Free policy set, so the two sources disagree. **Validate:** on an Essentials organization, create both
   sets; if they work, add `essentials` to the default list. Until then an
   Essentials estate sets `enable_policy_sets = true` itself, or runs without
-  the destroy guard (the `destructive_changes_guarded` check warns).
+  the destroy guard (the `destructive_changes_guarded` check warns). With a
+  production environment, running without the policy sets also needs an
+  unexpired `org.tfc.policy_sets_waiver`, or the tfc-admin plan fails.
 
+- **StackSet stack deny is mock-tested only (SEC-2).** The deny-tamper SCP
+  (`DenyStackSetStackTampering`) and the `tfc-apply` boundary deny writes to
+  `stack/StackSet-*` in member accounts. The name pattern comes from AWS
+  examples (the StackSets drift-detection guide, the managed policy
+  `AWSQuickSetupSSMDeploymentRolePolicy`, and the Control Tower stack
+  `StackSet-AWSControlTowerBP-BASELINE-ROLES` in the Control Tower guide,
+  checked 2026-11-12), not from a stated naming rule. `CreateStackRefactor`
+  and `ExecuteStackRefactor` take the `stack` resource type, so a refactor
+  that names a `StackSet-*` stack is denied too. A Control Tower estate needs
+  `stackset_stack_writer_role_names = ["AWSControlTowerExecution"]`; that
+  Control Tower writes its stacks as this role is inferred from the Control
+  Tower guide and its mandatory controls, not stated. **Validate in the sandbox:** (1) the service-managed
+  stack in a member account is named `StackSet-<stack set name>-<id>`; (2) an
+  `aws-organization` apply that changes the `tfc-oidc-baseline` template
+  still updates every stack instance (the caller there is `stacksets-exec-*`);
+  (3) `tfc-apply` gets `AccessDenied` on `UpdateStack` for that stack. It is
+  not proven whether a direct `UpdateStack` without a role ARN would reuse a
+  service-managed stack's execution role; the deny makes that question moot.
 - **Region SCP no longer exempts the run role.** `scp-region-restriction`
   now exempts break-glass only; global-endpoint services stay in `NotAction`
   (plus `networkmanager:*` and `notifications:*`). Mock-tested only.
@@ -228,13 +599,25 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   (notably `logging.configWriter` vs `logging.admin`,
   `securitycenter.notificationConfigEditor`, `monitoring.metricsScopesAdmin`,
   that the metadata-only plan role set (predefined viewers + the
-  `landingZonePlanViewer` custom role) is enough for every stage's plan, and that
+  `landingZonePlanViewer` custom role) is enough for every stage's plan,
+  that the `landingZoneLoggingConfigViewer` custom role (organization-plan's
+  logging configuration reads in place of `roles/logging.viewer`, SEC-2) is
+  enough for a gcp-organization refresh of the org sinks, org logging settings,
+  log buckets and their tag bindings, linked datasets and log-based metrics, and that
   bootstrap-apply's org `iam.securityAdmin` covers billing-account IAM);
-  (3) the projects-apply `modifiedGrantsByRole` delegated-grant condition is
-  accepted for the full role list on each folder binding; (4) brownfield
+  (3) the projects-apply `modifiedGrantsByRole` delegated grant works on a
+  real folder. IAM accepts at most 10 roles in one `hasOnly()` list, so
+  gcp-organization (and the legacy org-level binding in gcp-bootstrap) binds
+  one condition per 10 roles: the default lists give 3 bindings on each
+  environment folder (27 roles) and 2 on the shared folder (13 roles).
+  gcp-projects turns off google provider batching so that each folder IAM
+  change is its own `setIamPolicy` call and matches one chunk. Still open:
+  a real gcp-organization apply that IAM accepts, and a real gcp-projects
+  apply that grants roles from every chunk; (4) brownfield
   projects created by `terraform-admin` may need a one-off owner grant to
-  projects-apply. Residual: bootstrap-apply and organization-apply still hold org
-  `iam.securityAdmin` (inherent to managing org IAM); network-hub-apply's org
+  projects-apply. Residual: bootstrap-apply still holds an unconditional org
+  `iam.securityAdmin` (inherent to managing org IAM), and organization-apply a
+  role-conditioned one (see the SEC-3 items in the WS3 section); network-hub-apply's org
   `accesscontextmanager.policyAdmin` inherits onto the per-environment scoped
   policies; `envs/gcp/organization` still grants `terraform-admin` env-folder
   roles (`terraform_admin_folder_roles`) when the legacy flag is on.
@@ -278,16 +661,18 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   accepts the `resource.matchTagId('tagKeys/<n>', 'tagValues/<n>')` condition.
   The PAM-gated `guardrail_owner_members` path (gcloud with
   `deny_policy_specs`) stays for emergencies. Moving an existing policy into the
-  new root needs a `terraform import` (UPGRADING.md). Residuals:
-  `iam.securityAdmin` on the organization apply SA can still grant itself
-  `denyAdmin`; alert-only (`guardrail_role_grant`,
-  `guardrail_identity_change`). And **tfc-admin can still repoint
+  new root needs a `terraform import` (UPGRADING.md). The organization apply
+  SA can no longer grant itself `denyAdmin`: its org `iam.securityAdmin` is
+  role-conditioned and it holds no `folderAdmin` (remaining paths: the SEC-3
+  items in the WS3 section; `guardrail_role_grant` and
+  `guardrail_identity_change` alert as defence in depth). And **tfc-admin can still repoint
   `gcp-guardrails`** (working directory, VCS branch, team access, variables):
   whoever can apply tfc-admin can undo the security-team-only boundary, so the
-  separation of duties also rests on CODEOWNERS for `envs/tfc-admin/**` and
-  `config/tfc-workspaces.yaml` (both security co-owned; the committed file
-  cannot set `gcp-guardrails` variables) and on keeping tfc-admin's own
-  approvers apart from the platform team;
+  separation of duties also rests on review of `envs/tfc-admin/**` and
+  `config/tfc-workspaces.yaml` (the committed file cannot set `gcp-guardrails`
+  variables) and on keeping tfc-admin's own approvers apart from the platform
+  team. Both CODEOWNERS lines list the platform and the security team, so a
+  platform approval alone satisfies them (CICD-2 residual in the WS3 section);
   (2) **containment additions** (all on the deny-supported list, re-verified
   2026-11): `accessLevels.update/delete/replaceAll`,
   `authorizedOrgsDescs.create/update/delete`, `policies.update/setIamPolicy`
@@ -343,7 +728,7 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   domain-list groups; `AttackInfrastructureStrictOrder`); confirm regional
   availability with `aws network-firewall list-rule-groups --scope MANAGED` and
   check the active-threat-defense pricing. (2) The default stateful action is
-  log-but-pass (`aws:alert_established`). Move to `aws:drop_established` +
+  log-but-pass (`aws:alert_established`). Move to `aws:drop_established_app_layer_to_server` +
   `aws:alert_established` once egress allow rules exist. (3) Run a full
   security, workload and backup apply under the `tfc-apply-boundary` boundary,
   including a destroy/replace of Config and GuardDuty resources, which the
@@ -355,12 +740,23 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   on roles carrying `tfc-apply-boundary`, and can never delete a boundary. Every
   `aws_iam_role` created by `tfc-apply` in a member account must therefore set
   `permissions_boundary = arn:aws:iam::<account>:policy/tfc-apply-boundary`.
-  `modules/aws/iam/iam-role` supports this; `modules/aws/security/cloudtrail-org`,
-  `modules/aws/security/incident-response` and `modules/aws/stages/app-services`
-  do **not yet** expose a `permissions_boundary` input, so their role creation in
-  member accounts fails until they do (or disable propagation). Residual:
-  `iam:UpdateAssumeRolePolicy` on pre-existing unbounded roles that the
-  deny-tamper SCP does not protect. (2) **Plan-role data-plane deny**
+  The security, backup, workload and app-services stages derive that ARN from
+  `tfc_apply_boundary_policy_name` (default `tfc-apply-boundary`) and set it on
+  the roles they create. Pre-existing unbounded roles, groups and users are
+  closed in the boundary too: `DenyTrustPolicyUpdates`
+  (`enable_apply_trust_update_lock`, default on) denies
+  `iam:UpdateAssumeRolePolicy` on every role, because IAM does not evaluate
+  `iam:PermissionsBoundary` for that action. `DenyForeignPolicyVersioning`
+  denies new versions of customer-managed policies outside the `/tfc-managed/`
+  path. `DenyGroupUserAndLoginProfileEscalation` denies group and user
+  policies, group membership and console password changes. Consequence: a
+  trust change on an existing role (for example a new GitHub ref or
+  environment on an app-services deploy role, a new `trust_policy` in
+  `modules/aws/iam/iam-role`, or a new forensics account on the
+  incident-response snapshot role) fails as `tfc-apply`. Apply it as
+  break-glass, or replace the role (`-replace=<address>`; CreateRole sets the
+  new trust). **Validate** these statements in a sandbox account. (2)
+  **Plan-role data-plane deny**
   (`enable_plan_role_data_read_deny`, default on): plans that refresh data-reading
   resources fail as `tfc-plan`. In-repo this is `envs/aws/workload`'s
   `aws_secretsmanager_secret_version.saas_bridge` (opt-in,
@@ -371,7 +767,12 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   destroying it), but any later key-policy change on a key tagged
   `protected = true` must be applied by break-glass. With `key_policy_admin_arns`
   set, the CreateKey lockout safety check is bypassed, and every listed role
-  must already exist in that account. (4) **`dp:*` tags are break-glass only**
+  must already exist in that account. Retargeting or deleting the alias of a
+  protected key is break-glass only as well (`kms:UpdateAlias`/`kms:DeleteAlias`
+  in the boundary and the deny-tamper SCP). KMS authorizes an alias change on
+  the alias and on the current and the target key, so the tag condition matches
+  through the key. **Validate** that in a sandbox account. (4) **`dp:*` tags
+  are break-glass only**
   (baseline SCP): opting a resource out of the RCP data perimeter, and
   re-applying a full S3 tag set on a bucket that carries a `dp:*` tag, need
   break-glass. **Validate** that `aws:TagKeys` is populated on
@@ -424,6 +825,12 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
 
 [The audit](audit/2026-11-11-expert-audit.md) has the findings. These parts are not closed:
 
+**Phases 1 and 2 complete (2026-11-12).** Phases 1 and 2 of [the remediation plan](moai/plans/2026-11-11-dd-score-max/README.md) are done in code. Phase 3 (codified GitHub governance) is next; it needs owner decisions O1 and O3. The mock-tested items below still need the sandbox.
+
+**Phase 2b complete (2026-11-13).** The Phase 2b gap tasks are done in code; the [re-audit status section](audit/2026-11-12-due-diligence-reaudit.md#status-after-phase-2b-2026-11-13) lists each finding, its evidence commits and what still needs the sandbox. Phase 3 needs owner decisions O1 and O3.
+
+**Re-audit 2 code wave complete (2026-11-13).** ARC-C1, SEC-1, SEC-2, ARC-H1, ARC-H2, ADO-20, ADO-21 and CICD-3 are done in code; the [re-audit 2 status section](audit/2026-11-13-due-diligence-reaudit-2.md#status-after-the-code-wave-2026-11-13) lists each one, its evidence commits and what still needs the sandbox.
+
 - **Validate in the sandbox (mock-tested only):**
   - GCP rejects a peering to a network that does not exist yet. The hub-side
     `hub-to-<env>` peering design relies on it, and on the `google_compute_networks`
@@ -434,17 +841,89 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   - Server access logs arrive in the companion `<archive>-access-logs` bucket.
   - A no-op folder IAM write passes the `modifiedGrantsByRole` delegation condition.
   - The hub Secure Web Proxy (preview): the PSC endpoint, the FQDN allowlist,
-    and a spoke private tier with no Cloud NAT.
-- **gcp-projects delegation still admits data-plane admin roles.** projects-apply
-  can grant itself `storage.admin`, `secretmanager.admin`, `run.admin` and similar
-  on environment folders. The IAM-controlling roles moved to gcp-organization.
-  Moving every workload folder grant there would close this.
-- **No default VPC-SC ingress rule for the TFC workload identities.** Add one
-  before you enforce an environment perimeter (`examples/vpc-sc`).
+    and a spoke private tier with no Cloud NAT. A production gcp-workload now
+    needs the proxy or `production_egress_proxy_waiver` (ARC-4), so until the
+    proxy is proven every production environment runs on a waiver that must be
+    renewed when it expires. A regulated environment accepts that waiver too
+    (unlike the VPC-SC waiver). Revisit this once the proxy is proven: then
+    refuse the egress waiver for `compliance_class: regulated`.
+  - Cloud Run behind the hub proxy (ARC-H1, mock-tested only). With the
+    environment egress proxy on, every app-services Cloud Run service and job
+    defaults to `ALL_TRAFFIC` Direct VPC egress and gets `HTTPS_PROXY`,
+    `HTTP_PROXY` and `NO_PROXY` (both cases) for `http://<PSC endpoint>:<port>`.
+    Prove in the sandbox that a revision reaches an allowlisted FQDN through
+    the proxy, is denied for any other FQDN, still reaches Google APIs (Private
+    Google Access and the PSC endpoint, both in `NO_PROXY`) and the metadata
+    server, and still calls another service's `run.app` URL with internal
+    ingress. Google documents Secure Web Proxy explicit mode for clients that
+    "point directly to the proxy server"; it does not name Cloud Run as a
+    client (checked 2026-11-13). `NO_PROXY` holds the RFC 1918 ranges as CIDRs,
+    and whether a client honours CIDR entries depends on its HTTP library;
+    host names are honoured more widely. Node.js matches IP ranges only in
+    first-last form, so those forms are listed too. Clients that ignore the
+    proxy variables have no internet path from Cloud Run when the proxy is on.
+    The stage injects `NODE_USE_ENV_PROXY=1`, which Node.js reads from v24.0.0
+    and v22.21.0 (Node.js CLI docs, checked 2026-11-13); older Node.js ignores
+    the proxy variables. The JVM ignores them too: it needs
+    `-Dhttps.proxyHost`, `-Dhttps.proxyPort` and `-Dhttp.nonProxyHosts`, which
+    the stage does not set (`UPGRADING.md` shows how).
+  - The injected proxy URL is `http://<endpoint>:<port>`, so the hub
+    `secure_web_proxy.certificate_urls` must stay empty. With certificates,
+    the gateway presents TLS on connections to the proxy itself, and a client
+    that speaks plain HTTP to the proxy fails.
+  - GKE Autopilot behind the hub proxy. GKE nodes sit in the private tier, so
+    with the egress proxy on they have no Cloud NAT and no bypass: their
+    internet egress fails unless the pods set the proxy variables themselves.
+    The app-services stage injects the proxy settings into Cloud Run only, not
+    into GKE workloads.
+- **The hub egress proxy serves only environments in the hub region
+  (ARC-H2).** Google: "Private Service Connect endpoints must be created in
+  the same region as the published service" (Private Service Connect
+  endpoints for published services, checked 2026-11-13). Global access only
+  lets clients in other regions of the spoke VPC reach the endpoint. So the
+  net-spoke plan fails when `egress_proxy` is on and the spoke region differs
+  from the region of the hub proxy's service attachment. An environment in
+  another region keeps `egress_proxy` off; production then needs
+  `production_egress_proxy_waiver`. There is no regional proxy per extra
+  region yet.
+- **An enforced environment perimeter admits the environment's own plan and
+  apply SAs (ARC-13).** Mock-tested only. gcp-projects publishes them in
+  `environment_config.<env>.automation_identities`, and the environment stage
+  adds one ingress rule for them: any source, every resource in the perimeter,
+  the restricted services only (enforced plus staged dry-run). Prove it in the
+  sandbox: enforce the dev perimeter and run a plan and an apply. Other callers
+  (CI, app deploy SAs, cross-project readers) still need rules of their own
+  (`examples/vpc-sc`).
 - **GKE Autopilot still runs in the Shared VPC host project** in production.
+- **An autoscaled ECS service that Terraform deploys itself resets its task count.**
+  A service without a GitHub deploy role has `enable_external_deployments` false, so
+  its `desired_count` is not ignored and every apply sets it back to `desired_count`.
+  Production services autoscale by default (ARC-16). Services with a deploy role
+  ignore `desired_count`.
 - **The Secure Web Proxy has no TLS inspection.** Rules match on host name only.
-- **AWS data-plane alarms are not implemented:** TGW `PacketDropCountBlackhole` /
-  `NoRoute`, Network Firewall `DroppedPackets`, Site-to-Site VPN `TunnelState`.
+- **AWS hub network alarms: the firewall drop alarm needs sandbox proof.** The
+  aws-network hub alarms on transit gateway `PacketDropCountBlackhole`, NAT
+  gateway `ErrorPortAllocation` (one alarm per gateway), with the VPN on
+  Site-to-Site VPN `TunnelState` (below 1 means at least one tunnel is not up),
+  and with the firewall on Network Firewall `DroppedPackets` (one alarm per AZ,
+  ARC-11). Prod and nonprod isolation uses blackhole routes on purpose, so the
+  transit gateway alarm fires only after three 5-minute periods of drops. A
+  fail-closed firewall drops non-allowlisted egress on purpose, so its alarm
+  fires only above `network_firewall_drop_alarm_threshold` (default 1000
+  packets per 5 minutes) for three periods: it catches a broken allowlist or
+  internal pass rule, not single drops. The alarm uses the dimension set
+  `FirewallName`, `AvailabilityZone`, `Engine = Stateful` (Classic policy).
+  The AWS documentation lists the dimensions but not the set per metric, and
+  an alarm on the wrong set stays in INSUFFICIENT_DATA. Confirm the set on a
+  deployed firewall (`aws cloudwatch list-metrics --namespace
+  AWS/NetworkFirewall --metric-name DroppedPackets`). `OtherDroppedPackets`
+  (burst throttling) and `InvalidDroppedPackets` are not alarmed yet for the
+  same reason. The alarms publish to a topic in the network account, not to
+  `security-notifications` (another account); a production plan needs
+  `notifications.emails` or `alarm_sns_topic_arn`. TGW
+  `PacketDropCountNoRoute` is not alarmed: spokes without a matching route also
+  drop there, and the sandbox has not shown a threshold that stays quiet in
+  normal use.
 - **The tfc-plan API-key deny cannot use `plan_role_data_read_exempt_arns`.** A
   stack that plans REST API keys must turn the deny off.
 - **The deny-tamper SCP does not cover an external apply boundary** set through
@@ -455,6 +934,15 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   same plan creates a workspace (`workspace_ids` is unknown).
 - **gcp-guardrails state is backed up only** if the security team grants the
   state-backup team access by hand.
+- **Secret-bearing workspaces have no drift check on HCP Terraform tiers
+  without health assessments.** `drift_team_id` gets no grant on the
+  secret-bearing projects (`saas-*`, tfc-admin, and any project that holds a
+  workload with a static secret), because a refresh-only plan runs with the
+  workspace's variables. There, HCP health assessments
+  (`enable_health_assessments`) are the only drift check. On a tier without
+  them, an organization owner can queue a refresh-only, plan-only run on each
+  such workspace by hand on a schedule, or the estate can move to a tier that
+  has health assessments.
 - **One `config/landing-zone.yaml` edit still queues a plan on every workspace.**
   Trigger patterns are now scoped to each root's modules, but the file itself is
   shared. Splitting it per layer and environment is open.
@@ -467,14 +955,83 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   stage has a real-apply e2e test.
 - **Root config suites without assertions:** aws/security, gcp/bootstrap,
   gcp/guardrails, gcp/network-hub, gcp/organization.
-- **gcp-network-hub has three untyped (`any`) inputs** without unknown-key checks.
-  An object type drops undeclared keys silently, so map inputs here use `any`
-  plus key validation instead.
 - **CI hardening:** `check-jsonschema` is still installed without hashes
-  (`terraform-plan.yml`). harden-runner is still in audit mode for docs-bot,
-  e2e-sandbox and state-backup.
-- **Release:** one SemVer for all 125 modules, no signed tags or build provenance.
+  (`terraform-plan.yml`).
+- **The egress allow-lists are traced from the steps, not from a run (CICD-12).**
+  Every job that holds a secret or an OIDC token runs harden-runner with
+  `egress-policy: block` (`scripts/check-github-governance.sh` enforces it).
+  Each list comes from the job's steps and the source of its actions, and
+  harden-runner itself allows the GitHub Actions hosts (OIDC token, cache,
+  artifacts). Run documentation, state-backup, tfc-audit-trail, sandbox-e2e,
+  the Secret Scanning job and a deployment tag once each; a denied host shows as
+  a "DNS resolution ... was blocked" annotation, and then belongs in that job's
+  list. The cloud jobs allow `*.amazonaws.com` and `*.googleapis.com` because
+  the bucket and regional endpoints come from repository variables; a job can
+  still reach any bucket in those domains. A China-region target
+  (`amazonaws.com.cn`) needs that domain added.
+- **Release:** one SemVer for all modules by policy
+  (`docs/policies/versioning-and-compatibility.md`); release tags are not signed
+  and releases carry no build provenance. The module API guard
+  (`scripts/check-module-api.sh`) catches removed module inputs and outputs, not
+  changed types, defaults, validations, root inputs or config keys.
+- **Application image provenance is not enforced at admission (CICD-17).** The
+  delivery examples in `examples/app-delivery/` deploy by image digest and attest
+  build provenance (`actions/attest-build-provenance`), and
+  `docs/guides/deploying-a-service.md` shows `gh attestation verify`. No Binary
+  Authorization policy (Cloud Run, GKE) or ECS image signature check rejects an
+  unattested image yet.
 - **Bus factor:** one maintainer. Code cannot fix this; see the operator items below.
+- **Release tags are mutable.** Published examples pin `?ref=vX.Y.Z` tags
+  (release-please bumps them) and Checkov CKV_TF_1 is skipped on them. Release
+  tags are not yet protected as immutable. Fix: add a tag ruleset (WS5 Task 8).
+- **Plain HTTP load-balancer listener.** `modules/aws/network/load-balancer`
+  accepts a plain HTTP listener with forward or fixed-response. Enforcing
+  `redirect-https` on application load balancers is a breaking change planned
+  outside Phase 0.
+- **Real-cloud checks fail on schedule until the sandbox is funded (2026-11-11).**
+  Drift detection and sandbox e2e fail on schedule while their credentials and
+  variables are unset (plan decision D10). The owner can opt out with the
+  repository variable `REAL_CLOUD_CHECKS_OPT_OUT=true`; the variable is not set yet.
+  Once set, scheduled runs end without failing and show warnings that the checks
+  did not run: drift detection reports "did NOT run" and a summary that says drift
+  is unmonitored, and sandbox e2e reports "E2E NOT run". Manual and `e2e`-label
+  e2e runs still fail when unconfigured. Remove the variable once the sandbox is
+  funded (WS5 Task 30).
+- **CMP-20: the org stage `allowed_regions` default mixes EU and US.** The default in
+  `modules/gcp/stages/organization/variables.tf` allows `europe-west1`, `europe-west2` and
+  `us-central1`. Narrowing it is a breaking change (the location policy would deny the
+  dropped regions for callers that rely on the default), so it is still deferred after Phase 2.
+  The deployable root reads `gcp.allowed_regions` from `config/landing-zone.yaml`.
+- **IAC-8 covered deletion-protection names only.** The ten deletion-protection
+  inputs now follow the `enable_` rule. Other boolean inputs whose names start
+  with neither `enable_` nor `create_` remain (for example `auto_apply` and
+  `speculative_enabled` in `modules/tfc/workspace`).
+- **The AWS stage defaults for `availability_zones` still name `eu-west-2`.**
+  The `availability_zones` defaults in `modules/aws/network/vpc`,
+  `modules/aws/stages/network-hub` and `modules/aws/stages/workload` are
+  `eu-west-2a` and `eu-west-2b` (the VPC module also has `eu-west-2c`). The
+  deployable roots always pass resolved zones. A direct stage or module caller
+  in another region must set `availability_zones`, or the plan fails at the VPC
+  precondition (`availability_zones` must start with the VPC region).
+- **GKE secondary ranges are documented, not provisioned.** An environment that enables GKE
+  must set `secondary_ranges` by hand. [`cidr-plan.md`](architecture/cidr-plan.md#gke-secondary-ranges)
+  proposes `100.64.0.0/10` for Pods and `100.127.0.0/16` for Services. Google documents
+  `100.64.0.0/10` as a valid subnet range, but its GKE pages do not confirm it for Autopilot Pods.
+  Test one cluster in the sandbox first. Overlap validation does not cover `secondary_ranges`.
+- **GovCloud and the AWS European Sovereign Cloud pass input validation only.**
+  The strict ARN checks accept the `aws`, `aws-cn`, `aws-us-gov` and `aws-eusc`
+  partitions, and the canonical AWS region regex
+  (`^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$`, enforced by
+  `scripts/check-consistency.sh`) accepts `us-gov-west-1` and `eusc-de-east-1`.
+  Nothing is tested in those partitions. Service availability differs (for
+  example Security Lake, Macie and some GuardDuty features may be missing),
+  service and endpoint names may differ (the VPC module builds gateway endpoint
+  names as `com.amazonaws.<region>.<service>`), and FIPS endpoints are not
+  configured (`use_fips_endpoint` is not set on any provider). The AWS ISO
+  partitions (`aws-iso`, `aws-iso-b`) are not accepted: their public
+  documentation does not give region names to check against. Refs:
+  <https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/using-govcloud-arns.html>,
+  <https://docs.aws.eu/general/latest/gr/arns.html>
 
 ## OPEN — operator actions and items carried from archived audits
 
@@ -488,7 +1045,10 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   - Enable required code-owner review and `enforce_admins` on the default branch,
     and make `Validation Summary` a required check (`docs/guides/BRANCH_PROTECTION.md`;
     `make required-checks-live` diffs the live settings).
-  - Set `RELEASE_PLEASE_TOKEN` (`release.yml` requires it) and cut the first release.
+  - Create the release GitHub App, set the variable `RELEASE_APP_ID` and the secret
+    `RELEASE_APP_PRIVATE_KEY` in the `release` environment
+    (`docs/guides/CI_SECRETS.md#release_app`; `release.yml` requires them), so later
+    releases come from release-please.
 - **No IAM policy-simulation harness.** SCP, RCP and boundary conditions are
   asserted against rendered JSON only; nothing in `scripts/` or CI runs
   `SimulatePrincipalPolicy`. Real-cloud proof comes from the sandbox (ADR 0006).
@@ -508,15 +1068,17 @@ architectural change and is documented here rather than rushed.
 
 AWS:
 
-- **A5 — single-region backups, no cross-region / air-gapped copy** (MEDIUM,
-  BEHAVIOR-CHANGING). `modules/aws/backup/backup-org-policy` writes recovery
-  points to one region; there is no `copy_actions` stanza or Logically
-  Air-Gapped destination vault. Latest AWS Backup guidance makes cross-region /
-  cross-account copy the resilience baseline. Add a `copy_actions` destination +
-  second-region vault (needs a real apply). Member-account vaults now exist
-  (aws-organization `create_member_backup_vault`), but they use the AWS managed
-  key and nothing copies their recovery points to the backup account's locked
-  vault, so backups still share the workload account's blast radius. Ref:
+- **A5 — cross-account and cross-region backup copy is opt-in and unproven**
+  (MEDIUM, PREVIEW). By default `modules/aws/backup/backup-org-policy` writes
+  recovery points to one vault in one region of each member account, on the
+  AWS managed key, so backups share the workload account's blast radius.
+  `compliance.backup.copy_to_central_vault: true` (aws-organization, then
+  aws-backup) adds `copy_actions` to a CMK-encrypted, Compliance-locked copy
+  vault in the backup account, and `compliance.backup.dr_region` adds a copy to
+  a member vault in a second region. Still to validate: copy job success for
+  each resource type, restore testing metadata for RDS and Aurora, and the
+  fact that EBS volumes on the AWS managed `aws/ebs` key cannot be copied across
+  accounts. No Logically Air-Gapped vault is offered. Ref:
   <https://aws.amazon.com/blogs/storage/aws-backup-2025-year-in-review-advancing-recovery-resilience/>
 - **A6 — log-analytics primary lags the June-2026 SRA** (MEDIUM, SAFE-DOC done /
   re-plumb BEHAVIOR-CHANGING). The June-2026 SRA names **CloudWatch Unified Data
@@ -587,6 +1149,12 @@ GCP:
   definition could be added as opt-in scaffolding once a tier exists. Target
   **Premium** — the Enterprise tier sunsets 2027-05-21. Ref:
   <https://docs.cloud.google.com/security-command-center/docs/service-tiers>
+  The tier itself has no Terraform resource: activation is a manual console or
+  billing step, listed as control matrix row DET-07 and as step 1 of
+  [Production Hardening section 4](runbooks/production-hardening.md#4-manual-identity-and-posture-steps).
+  Related manual or customer rows: DET-06 (no file integrity monitoring; PCI DSS
+  11.5.2 needs a host agent you deploy) and IAM-16 (Identity Center MFA mode and
+  Google 2-Step Verification have no Terraform API).
 - **G11 — VPC-SC dry-run-first default** — ✅ **SHIPPED**. Flipped the default
   of `vpc_sc_enable_dry_run` (hub, via `envs/gcp/organization` + `network-hub`)
   and the per-perimeter `enable_dry_run` (host stage) and the workload perimeter
@@ -601,6 +1169,11 @@ GCP:
   `dry_run_ingress_policies` / `dry_run_egress_policies`), and the workload and
   network-hub roots warn (check blocks) when a prod-like environment has no
   perimeter or a dry-run one.
+  **SEC-8:** a production gcp-workload environment with no perimeter or a
+  dry-run one now **fails the plan** unless `production_vpc_sc_dry_run_waiver`
+  names a reason and an expiry date (`YYYY-MM-DD`, UTC) that has not passed.
+  An expired waiver fails the plan again. The hub keeps its check-block
+  warning.
 - **G12 — CIS GCP Foundations gaps (2026-11-05)** — ✅ **SHIPPED**, mock-tested
   only. Validate on a non-prod org before you cite these to an auditor.
   (a) CIS 2.4–2.11 log-based metrics and alerts (`cis_log_metrics` in
@@ -624,8 +1197,10 @@ GCP:
   gcp-bootstrap `workload_folder_roles`.
 - **KMS Autokey / HSM-for-sensitive** (LOW, SAFE-CONFIG, future). No Cloud KMS
   Autokey; CMEK defaults to `SOFTWARE` protection (HSM is per-key selectable).
-  Autokey (GA 2024, dedicated-project storage GA 2026) and HSM-by-default for
-  audit/SCC keys are maturity improvements, not deficiencies.
+  `gcp.audit_key_protection_level: HSM` sets HSM on the two audit keys
+  (audit logs and audit analytics); the billing and SCC keys stay `SOFTWARE`.
+  Autokey (GA 2024, dedicated-project storage GA 2026) and HSM by default are
+  maturity improvements, not deficiencies.
 - **Flat folder tree** (LOW, BEHAVIOR-CHANGING, documented divergence). Folders
   are parented directly at the org (one per env + shared), not under a
   prod/nonprod grouping layer. Deliberate simplification for a smaller org;
@@ -634,6 +1209,109 @@ GCP:
 ## PREVIEW — opt-in, default-off, not yet validated (mock-tested only, no on-path coverage)
 
 Enable only after validating in a real/test org. Each defaults to prior behaviour.
+
+- **GCP network and edge log export** (LOG-06, CMP-02,
+  `modules/gcp/governance/cloud-audit-logs` `enable_network_log_export`; on in
+  `gcp-organization` for a regulated or framework estate, else
+  `gcp.enable_network_log_export`). Mock-tested only. Prove in a sandbox:
+  - The sink filter matches. It uses `log_id()` with the log IDs from Google's
+    docs, checked 2026-11-13: `compute.googleapis.com/firewall` (firewall rules
+    and firewall policy rules), `compute.googleapis.com/nat_flows` (Cloud NAT),
+    `networkservices.googleapis.com/gateway_requests` (Secure Web Proxy),
+    `networksecurity.googleapis.com/firewall_threat` (Cloud NGFW threats), and
+    the load balancer request IDs `requests`,
+    `loadbalancing.googleapis.com/requests` and
+    `loadbalancing.googleapis.com/external_regional_requests`, scoped to the
+    resource types `http_load_balancer`, `internal_http_lb_rule` and
+    `http_external_regional_lb_rule`. Google's pages disagree on the internal
+    and regional load balancer log IDs, so the filter takes all of them. Check
+    that objects appear in the audit bucket for a firewall hit, a NAT error, a
+    request to a load balancer with a Cloud Armor policy, a Secure Web Proxy
+    request and an NGFW threat.
+  - The shared writer identity. The sink has no IAM grant of its own: since
+    2023-05-22 Logging uses one service account for all sinks in a resource,
+    and `org-audit-sink` already grants it `roles/storage.objectCreator`. A
+    postcondition fails the apply when the two identities differ (an
+    `org-audit-sink` created before 2023-05-22 keeps a legacy dedicated
+    account); the fix is a break-glass grant and then
+    `gcp.network_log_writer_granted: true`, see `UPGRADING.md`. A failed
+    postcondition leaves the created sink in state, not tainted. Confirm on a
+    real org that the identities match and that `roles/storage.objectCreator`
+    alone delivers to a Cloud Storage bucket (Google's sink guide also lists
+    `roles/logging.logWriter` "for all destinations"; neither org sink to the
+    audit bucket has that grant).
+  - With the audit project in an enforced VPC-SC perimeter, the ingress rule
+    admits the shared identity.
+
+- **GCP Backup and DR vault for Cloud SQL** (BCK-07, CMP-8,
+  `modules/gcp/backup/backup-vault`; on for `compliance_class: regulated`,
+  else `enable_backup_vault` or `gcp.environments.<env>.backup_vault`).
+  Mock-tested only. Prove in a sandbox:
+  - The workload apply SA creates the vault, plan and associations with
+    `roles/backupdr.admin` on the environment folder (gcp-bootstrap
+    `workload_folder_roles`, granted directly by gcp-organization) and its
+    Cloud SQL roles. Google lists `backupdr.backupPlanAssociations.createForCloudSqlInstance`
+    and `backupdr.backupPlans.useForCloudSqlInstance` as the permissions.
+  - The service agent grant. The Backup and DR guide for Cloud SQL asks for
+    `roles/backupdr.cloudSqlOperator` in the Cloud SQL project only when it is
+    not the vault project; the Cloud SQL quickstart also lists
+    `roles/iam.serviceAccountUser`, which the module does not grant. A
+    CMEK-encrypted instance also needs `roles/cloudkms.cryptoKeyEncrypterDecrypter`
+    for the service agent on its key; the module does not grant it.
+  - Drift on the instance. An associated instance moves to enhanced backups and
+    the plan overwrites its backup schedule and retention. The google provider
+    suppresses diffs on most `backup_configuration` fields once the backup tier
+    is `ENHANCED`, but not on `location`; check that the next plan is clean.
+  - An enforced VPC-SC perimeter that restricts `backupdr.googleapis.com` or
+    `sqladmin.googleapis.com` still lets the service agent back up.
+
+- **Organization-only gateway endpoint policies (ARC-2, on in production).**
+  A production `aws-workload-<env>` puts endpoint policies on its S3 and
+  DynamoDB gateway endpoints (`enable_gateway_endpoint_policies`, NET-12):
+  `aws:ResourceOrgID` equals the organization ID, and read-only access to the AWS-owned buckets that AWS documents for ECR image
+  layers, Amazon Linux, SSM Agent and Patch Manager (bucket names checked
+  2026-11-12). Mock-tested only. Prove in a sandbox with `is_production: true`:
+  - An ECS task pulls a private ECR image (layers from
+    `prod-<region>-starport-layer-bucket`), and an Amazon Linux 2023 instance
+    runs `dnf` and an SSM patch scan, through the gateway endpoint.
+  - DynamoDB calls to a table in the organization pass, and calls to a table
+    in another organization are denied. AWS lists no S3 or DynamoDB action as
+    unsupported for `aws:ResourceOrgID`, but no AWS page shows a DynamoDB
+    gateway endpoint policy that uses it.
+  - Writes to a bucket outside the organization (for example a third-party
+    upload bucket) are denied; add such buckets to
+    `gateway_endpoint_extra_s3_arns` only for reads.
+  - Patch Manager bucket names have a per-region suffix copied from the AWS
+    reference; a region missing from the map gets a `check` warning.
+  - Calls whose resource is not an existing organization bucket:
+    `s3:ListAllMyBuckets` (no bucket in the request) and `s3:CreateBucket`
+    (the bucket does not exist yet) through the endpoint. Record whether
+    `aws:ResourceOrgID` is present for them; if not, they are denied, and
+    the AWS CLI `aws s3 ls` and in-VPC bucket creation fail.
+- **The regional AWS names in the egress allowlist admit any account (ARC-2).**
+  `api.ecr.<region>.amazonaws.com`, `.dkr.ecr.<region>.amazonaws.com` and
+  `secretsmanager.<region>.amazonaws.com` match on the host name only, so the
+  firewall also passes calls to ECR repositories and secrets in accounts
+  outside the organization. The real fix is hub interface endpoints for these
+  services with an organization endpoint policy
+  (`aws.network.vpc_endpoint_policy_mode`), which the stage does not create
+  for them today.
+
+- **Resource-organization policy on the hub interface endpoints**
+  (`aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`,
+  `modules/aws/network/vpc-endpoints` `endpoint_policy_mode`, CMP-7 D8). It adds
+  `aws:ResourceOrgID` to the endpoint policy of every service outside
+  `resource_org_exempt_services` (of the default services, only `kms`). It is
+  off for every estate, including one with a `compliance_class: regulated`
+  environment: `aws-network` only warns (a `check`) when a regulated estate
+  keeps the principal-only policy. Mock-tested only. To prove in a sandbox
+  before it becomes the regulated default:
+  - Calls that reach AWS-owned resources or no resource at all through a
+    non-exempt endpoint are denied. Confirm the exempt list covers every such
+    call your workloads make (for example a vendor's KMS key in another
+    organization, or a KMS call that names no key).
+  - Instance bootstrap (SSM agent, package repositories, ECR pulls) still works
+    from a spoke through the central endpoints.
 
 - **Organization trail managed by the CloudTrail delegated administrator**
   (`aws.enable_cloudtrail_delegated_admin`, ADR 0012,
@@ -720,6 +1398,18 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   logging project's own service agents — no cross-project KMS grant) and the
   control-plane alerts all move there. The project must NOT be owned by the
   automation SA. Decide before the first apply (KMS keys are undeletable).
+  With a separate logging project, the audit dataset grant
+  (`roles/bigquery.dataEditor` for the BigQuery sink writer) relies on the
+  role-conditioned org `iam.securityAdmin` of organization-apply admitting
+  dataset IAM: BigQuery datasets ignore the `modifiedGrantsByRole` attribute,
+  and organization-apply holds `bigquery.admin` only on the admin project. A
+  sandbox apply must prove the grant before LOG-04 leaves PREVIEW.
+  gcp-bootstrap binds organization-plan's `cloudkms.viewer`, `monitoring.viewer`,
+  `pubsub.viewer` and `bigquery.metadataViewer` roles on the admin project only.
+  In the logging project they come only from the manual grants in
+  production-hardening.md step 3, so without them a gcp-organization plan may
+  not read the control-plane alerts, the audit dataset or the audit keys there.
+  A sandbox plan with `gcp.logging_project_id` set must confirm this.
 - **G5 — VPC-SC perimeter expansion** (`vpc_sc_additional_restricted_services`,
   `vpc_sc_ingress_identities`, `modules/gcp/stages/network-hub`). Set the ingress
   identity BEFORE expanding services or an enforced apply is blocked.
@@ -739,7 +1429,7 @@ Enable only after validating in a real/test org. Each defaults to prior behaviou
   over the temporary VPN's dynamic routes).
 - **Smaller opt-ins from the 2026-11 remediation, mock-tested only.**
   SCC v2 notification/mute configs (`gcp_overrides.scc_api_version = "v2"`);
-  `gcp_overrides.disable_default_sink`; IPAM explicit-CIDR allocation
+  `gcp_overrides.disable_default_sink`; hub IPAM explicit-CIDR allocation
   (`ipam_mode_for_new_vpcs_only`, `ipam_new_vpcs`); the declarative EC2 Allowed
   AMIs policy (`ec2_allowed_images`, `audit_mode` by default, so it only logs);
   the Suspended deny-all and Sandbox guard SCPs (on by default where those OUs
@@ -851,22 +1541,434 @@ side (all mock-tested, secure defaults):
   `supabase_project` has no write-only `database_password`, so the creation-time
   password is in the `saas-<name>` state and its `supabase_database_password`
   output. The service-role key is in the same state as a data-source result and
-  an output. Access to that state is limited to the `saas-*` workspace's
-  writers, the listed `extra_remote_state_consumers` and the
-  `saas-outputs-reader` team (outputs only, read ephemerally by the bridging
-  workloads). Rotation: see
+  an output. Full state read is limited to organization owners, the team that
+  confirms saas applies (`saas_approvers_team_id`, else
+  `control_plane_approvers_team_id`), the listed `extra_remote_state_consumers`
+  and, only with `enable_saas_state_backup = true`, the state-backup team.
+  Viewers and the platform team get `state_versions = none` there. The
+  `saas-outputs-reader` teams read outputs only, ephemerally, for the bridging
+  workloads. Rotation: see
   [saas-bootstrap](runbooks/saas-bootstrap.md#bridging-secrets-to-a-workload-and-rotating-them).
+- **Viewers keep fixed `read` on the platform (tfc-admin) project.** tfc-admin
+  state holds no secret by design: sensitive variables are written write-only
+  (`value_wo`), and its `data "tfe_outputs"` reads of `gcp-bootstrap` and
+  `aws-organization` (stored in its state in full) return only identifiers:
+  project IDs and numbers, service-account emails, WIF pool and provider names,
+  role names, account and OU IDs, and role and topic ARNs. Neither root marks
+  an output sensitive. A future secret output in either root, or a secret
+  passed to tfc-admin without `sensitive = true`, would reach viewers.
+
+## OPEN — WS3 trust-model residuals (2026-11-11 due-diligence audit)
+
+- **SaaS bridge push model (SEC-1 follow-up).** Workloads with
+  `enable_saas_secret_bridge = true` still hold a `saas-outputs-reader`
+  `TFE_TOKEN`. tfc-admin marks them secret-bearing (no platform plan, no
+  speculative plan), so only the approvers team and organization owners can run
+  code that reads the token. A push model (`saas-<name>` writes the cloud
+  secrets) would remove the token from the workloads, but it needs AWS and
+  Google credentials in the saas root, which breaks the per-cloud workspace
+  split in [provider selection](architecture/provider-selection.md). Revisit
+  after the sandbox run.
+- **Secrets that tfc-admin does not write are invisible to it.** tfc-admin
+  derives secret-bearing workspaces from the variables it writes (sensitive or
+  secret-named), from `enable_saas_secret_bridge`, and from the fixed tfc-admin
+  and `saas-*` workspaces. A secret that a person adds by hand in the HCP
+  Terraform UI on any other workspace, with no bridge flag, is not detected:
+  that workspace keeps its normal platform access and speculative plans. The
+  same holds for project and organization variable sets that a person creates
+  by hand. Set every secret through tfc-admin's write-only
+  `workspace_variables`.
+- **Who still runs code with a secret-bearing workspace's tokens.** On a
+  secret-bearing non-production workload the approvers team now confirms runs,
+  so it gains plan-level reach to that workload's bridge `TFE_TOKEN`
+  (decision D1). The tfc-admin team, organization owners and anyone who can
+  merge to the VCS branch also run code with those tokens.
+- **`disable_speculative_on_saas = false` re-enables PR plans on `saas-*`**
+  even while `enable_speculative_on_secret_bearing = false`. The `saas-*`
+  workspaces keep their own switch.
+- **`no_plan_time_code_execution` acts after the plan.** HCP Terraform
+  evaluates policy sets after the plan. A `data "external"` / `data "http"`
+  block, a provider binary that is not on the allowlist, or a redirected
+  provider endpoint has already run with the workspace's credentials when the
+  policy fails. For those the policy marks the run and stops its apply; it
+  prevents only apply-time effects (provisioners, writes through a redirected
+  endpoint). The checks before the plan are `scripts/check-plan-time-exec.py`
+  in CI (run by `scripts/check-consistency.sh`) and `runs = read` for the
+  platform team on secret-bearing projects. The CI check parses the repo's
+  `.tf` and `.tf.json` files and applies the same lists, read from the policy
+  files. When branch protection requires `Validation Summary`
+  ([BRANCH_PROTECTION.md](guides/BRANCH_PROTECTION.md)), it blocks the merge, so
+  no run on the main branch plans the change. It does not stop a
+  speculative plan that HCP Terraform starts for the same pull request at the
+  same time (off on secret-bearing workspaces unless
+  `enable_speculative_on_secret_bearing` is set), and it never sees a CLI
+  upload.
+- **`removed` blocks are invisible to `no_plan_time_code_execution`.**
+  Terraform does not render a `removed` block in the plan JSON (verified with
+  Terraform 1.17.1). A destroy-time provisioner in one runs at apply without
+  the policy seeing it. What limits it today: `scripts/check-plan-time-exec.py`
+  in CI fails on a provisioner in any `removed` block in repo code, and confirming an apply needs
+  apply rights (the platform team has `runs = read` on secret-bearing
+  projects). A CLI or API upload by someone with apply rights is not covered,
+  except on VCS-connected control-plane, bootstrap and production
+  workspaces, where the PREVIEW `tfc_vcs_run_only` rule denies a run without
+  a commit SHA.
+- **OPA cannot attest module content.** The provisioner allowlist pins the
+  module-call chain and its source strings, not the bytes of
+  `modules/supabase/vault-secrets` or its `scripts/*.mjs`. The policy does
+  not pin the run's workspace either, so any workspace whose root has the
+  same two calls and the same relative sources passes. HCP Terraform's policy
+  input may carry `run.workspace` fields; pinning the rule to the `saas-*`
+  workspaces must first be verified against a real HCP run, because a wrong
+  field name would fail closed and block every saas apply. A CLI upload can
+  carry a modified copy at the same paths. The saas project's `runs = read` for the platform team and
+  approvers-only confirmation are the control there.
+- **Endpoint overrides that the plan JSON does not show.** The policy reads
+  the argument names in `configuration.provider_config.*.expressions`.
+  Terraform does not render a `dynamic` block inside a provider block there
+  (verified with Terraform 1.17.1: a `dynamic "endpoints"` block on the `aws`
+  provider is absent from the JSON). `scripts/check-plan-time-exec.py` flags
+  such a `dynamic` block in repo code before the merge. Environment variables (for example
+  `AWS_ENDPOINT_URL_STS`, `HTTPS_PROXY`, `TFE_HOSTNAME`) and an AWS shared
+  config file (`endpoint_url`) never appear in the plan. Workspace variables
+  that tfc-admin writes go through its reviewed configuration; a variable that
+  a person adds by hand in the HCP Terraform UI does not. tfc-admin refuses
+  env vars that run other code (`TERRAFORM_CONFIG`, `TF_CLI_CONFIG_FILE`,
+  `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `GIT_*`, `BASH_ENV`, `ENV`,
+  `PYTHON*`, `PATH`) from both the committed file and `workspace_variables`
+  (SEC-6), plus the shell, Perl, Ruby, Java, glibc and askpass names in
+  `code_exec_env_pattern`. That is a denylist, so a name it does not list
+  still passes. `HOME` and `XDG_CONFIG_HOME` are not blocked: pointing them at
+  a directory in the checkout makes git, npm and other tools read config files
+  (git hooks through `core.hooksPath`, an `.npmrc`) from it. An allowlist would
+  break the documented uses of `workspace_variables` (provider tokens,
+  `TF_CLI_ARGS_plan`, dynamic-credential overrides, a corporate proxy).
+- **`tfc_admin_guard` sees only the variable sets this configuration
+  manages.** It judges every `tfe_variable` that tfc-admin writes, also into
+  a variable set, and it denies attaching a set that tfc-admin does not
+  manage and making a set global. It cannot see variables that someone adds
+  by hand in the HCP Terraform UI to a set tfc-admin manages (such as
+  `<prefix>common`), and it cannot read the contents of an existing set.
+  When the set ID of an attachment is unknown at plan time (the set is
+  created in the same plan), the policy follows the references in the plan
+  JSON `configuration` (through `each.value`, module arguments and module
+  `for_each`) and passes the attachment if any of them reaches a
+  `tfe_variable_set`. The references list does not say which part of an
+  expression a reference feeds, so an expression that mixes a managed set
+  with another value, such as
+  `var.flag ? tfe_variable_set.c.id : data.tfe_variable_set.x.id`, passes. A
+  reference the walk cannot follow (a `local`, a data source, a module
+  output) is denied, and the security team overrides it.
+- **Credential arguments: what the two layers still miss (SEC-1).** The
+  policy and `scripts/check-plan-time-exec.py` deny the provider arguments in
+  `credential_key_pattern` (`profile`, `shared_config_files`,
+  `shared_credentials_files`, `access_key`, `secret_key`, `token`,
+  `access_token`, `api_token`, `assume_role_with_web_identity`,
+  `web_identity_token(_file)`, `impersonate_service_account(_delegates)`,
+  `external_credentials`) unless the argument is null or every reference of
+  its expression is exactly a path on `allowed_credential_references` for that
+  provider type and argument. OPA also checks the value the run uses
+  (`input.plan.variables`) of each variable an allowed form reads: a
+  dynamic-credentials `shared_config_file` must be an absolute path without
+  `.` or `..` segments and outside `/proc`, `/dev` and `/sys`;
+  `terraform_admin_email` must be a service account email;
+  `enable_saas_secret_bridge` must be a bool. The scanner fails on a tracked
+  `*.tfvars` / `*.tfvars.json` that sets one of those variables, on a
+  declaration of one with another type than `allowed_credential_variable_types`
+  or a default other than null or a bool, and on override files. What is left:
+  - HCP Terraform's documentation for dynamic provider credentials does not
+    give the path of the file it writes, so OPA cannot pin it. An absolute
+    path into the run's own checkout passes OPA if someone can guess it; the
+    scanner keeps a committed tfvars file from setting the value.
+  - The plan JSON shows the references of an expression, not its literals or
+    function calls, so OPA passes
+    `var.tfc_aws_dynamic_credentials == null ? ["./aws.cfg"] : [...]`. It does
+    not show variable types either: the plan's variable value omits an
+    attribute that an `optional()` default adds. The exact reference paths
+    close the case where such an attribute is read; the scanner's type check
+    closes the rest. The scanner runs only in CI.
+  - A value set on the workspace (a workspace variable, or an
+    `AWS_CONFIG_FILE` / `AWS_PROFILE` env var) is judged by OPA only as above;
+    tfc-admin's reviewed configuration writes the workspace variables.
+  - `assume_role` is not denied. It is not code execution, but it is an
+    identity swap: a `role_arn` in an account the attacker controls, whose
+    trust policy admits the workspace's role, makes the apply write to that
+    account (exfiltration), if the workspace's identity policy allows
+    `sts:AssumeRole` on that ARN. The roots use a `dynamic "assume_role"`
+    block, which the plan JSON does not render, and the documented stage
+    usage sets a literal ARN, so neither layer judges the role. The controls
+    are the identity policies of the TFC roles and review.
+- **Remote-state `hostname` is checked before the plan; OPA only detects it
+  (SEC-2, re-audit 4).** `scripts/check-plan-time-exec.py` requires a
+  `terraform_remote_state` `config` to be an object literal with only
+  `organization` and `workspaces` (`name` or `prefix`), so no `hostname` or
+  `token` passes CI. The OPA policy denies `hostname` or `token` in a constant
+  `config` and in the read value in `prior_state` when `config` holds
+  references. OPA runs after the plan, so by then the read, and the token it
+  sends, has already happened: OPA stops the apply and marks the run. A plan
+  of an unscanned commit (a CLI upload, or a VCS run before CI) is covered by
+  OPA only.
+- **Ephemeral resources are visible to OPA only when referenced (SEC-2).**
+  Terraform does not render an `ephemeral` block in the plan JSON (verified
+  with Terraform 1.17.1), yet it opens the resource during the plan and the
+  apply: an `ephemeral "aws_lambda_invocation"` invokes the function, and
+  `google_client_config`, `google_service_account_access_token` and the tfe
+  token types mint or return tokens. The policy denies a reference
+  (`ephemeral.<type>.…`) to any type not on `allowed_ephemeral_types`
+  (`tfe_outputs`, the SaaS bridge), but an ephemeral block that nothing
+  references, or that is read through a local, does not appear at all.
+  `scripts/check-plan-time-exec.py` denies every ephemeral block whose type is
+  not on `allowed_ephemeral_types` or is on `exec_data_types`, and it is the
+  only layer that sees all of them. It runs only in GitHub CI, before the
+  merge: a CLI or API upload, or a speculative plan HCP Terraform starts on
+  the same pull request, never passes through it, and by the time OPA runs
+  the plan has already opened the resource. Recommended: run the scanner as
+  an HCP Terraform pre-plan run task on every workspace, so it also checks
+  CLI uploads before any provider code runs. Not done here: a run task needs
+  an HTTPS service that receives the configuration version, runs the scanner
+  and calls back, which this repo does not host, and tfc-admin would need to
+  attach it to every workspace.
+- **The plan-time execution gate trusts the pull request's own copy.** CI runs
+  `scripts/check-plan-time-exec.py`, the policy files it reads in
+  `policies/opa/` and the parser lock in `.github/requirements/` from the pull
+  request's head. One pull request can widen an allowlist (or weaken the
+  script) and use the wider list in the same change. The intended control is
+  CODEOWNERS review on `/policies/`, `/scripts/check-plan-time-exec.py` and
+  `/.github/requirements/`. `.github/CODEOWNERS` lists the security team ALONE
+  on those three paths, so a security approval is required there once
+  code-owner review is required. `/.github/` (the workflows that run the gate)
+  and `/scripts/check-consistency.sh` list the platform and the security team,
+  so a platform approval alone satisfies them. Other files in `/scripts/` have
+  the platform team only. The teams are placeholders until a fork sets its own
+  (`scripts/init-landing-zone.sh --codeowners`).
+- **What the plan-time execution gate does not scan.** It parses tracked
+  `*.tf` and `*.tf.json` files only. `*.tftest.hcl` and `*.tfmock.hcl` files
+  are not scanned: `terraform test` runs them in CI with mock providers and in
+  the sandbox end-to-end workflow with sandbox credentials, never in an HCP
+  Terraform workspace. A module source pinned to this repository's release
+  tag (`git::…?ref=vX.Y.Z`) is allowed only outside `envs/` (examples and
+  templates, which HCP Terraform does not run); its code is not scanned, and
+  it was checked when that release was cut. Under `envs/` only local module
+  sources pass. The scanner checks the paths of `file()`, `templatefile()`
+  and the other file readers: a literal path must stay under `path.module` /
+  `path.root` in the repository and hold no interpolation, and a reference is
+  refused (SEC-1, re-audit 4). The exceptions are the reviewed readers on
+  `FILE_READERS`. Since re-audit 5 each is pinned to its whole expression, to
+  the locals that bind its path and to the exact validation of the variable it
+  reads, so `file(f)` with `f` bound to anything else fails: each root's
+  config loader (`landing_zone_config_path`: a relative `.yaml`/`.yml` path
+  that stays in the repository), tfc-admin's `workspace_variables_file`
+  reader and gcp-workload's preset loader (names `^[a-z0-9-]+$`). The pins
+  depend on how python-hcl2 (pinned with hashes) renders the expressions; a
+  python-hcl2 upgrade can need them refreshed. A workspace variable can still
+  point the loader at another estate file: the mandatory OPA policy accepts
+  only `../../../config/landing-zone.yaml` or `../../../config/<estate>/landing-zone.yaml` (`../../` for `envs/saas` and `envs/tfc-admin`), relative to the root
+  (never a test fixture, the example or `""`), but cannot tell one estate's
+  file from another's. gcp-workload also reads `compliance_class` from the
+  gcp-projects contract, and gcp-projects and gcp-organization refuse an
+  `environments` variable that drops it (re-audit 6), but a gcp-workload
+  workspace variable that replaces the contract (`projects_contract`,
+  `projects_workspace_name`) together with another estate's file can still
+  make a regulated environment standard there. Pinning the estate path and
+  the contract source per workspace in tfc-admin, with OPA comparing the run
+  to it, would close it. A `templatefile()` template is read too and may not
+  name a file function anywhere (re-audit 6: an expression scan lost to
+  string literals twice). The scanner runs as `python3 -P` so no file beside
+  it can replace a module. `archive_file` may only zip a literal `source_file`
+  under `path.module` (re-audit 5 SEC-2); OPA sees only the references of
+  that path, not `../` segments after `path.module`, and does not constrain
+  `output_path`, so the scanner is the control for both. The Google and AWS
+  token data sources are refused. Resource arguments that upload a runner path
+  (`path_reading_attributes`, re-audit 7) must hold a path under
+  `path.module`; the list follows the provider schemas and needs a re-check
+  on every provider upgrade, and OPA sees only the references of such a path,
+  so a `../` after `path.module` is the scanner's to catch. OPA cannot see
+  function calls at all.
+- **Workload SAs keep `workloadIdentityPoolAdmin` (SEC-10).** app-services
+  needs it to create the app-deploy pool. `custom.wifProviderTenantPinned` pins
+  each GitHub provider condition to the owner. The mandatory OPA policy
+  `gcp_wif_principalset_pinned` denies a principalSet on the whole pool, the
+  owner, a repository name, an actor, a bare ref, the audience, an AWS
+  account, `repo_env` without an environment or a raw `attribute.terraform_*`
+  claim when the run is planned. On every role it allows only the pinned
+  workload pool forms the repo builds, and it denies a workforce pool member
+  on a role that acts as a service account or on a custom role. Three cases
+  are advisory only (`gcp_wif_principalset_repo_wide`): a binding whose member
+  is unknown at plan time (the pool is created in the same run), and a binding
+  on `attribute.repository_id` alone, which trusts every branch and
+  environment of one repository, and a GitLab binding on
+  `attribute.project_path`, which trusts every ref of the project. The policy
+  also acts only on runs that HCP Terraform judges with the policy sets
+  attached; a direct API call with the workload apply SA's credentials is not
+  checked.
+- **Unknown AWS trusts in first-apply runs (SEC-1 residual).**
+  `aws_iam_federated_trust_pinned` denies an `aws_iam_role` trust that is
+  unknown at plan time, unless the role itself is created in that run and the
+  same run creates an `aws_iam_openid_connect_provider` or an
+  `aws_organizations_organization` in the role's own module instance or in a
+  module below it (a role at the root counts every module as below it). An
+  update of an existing role is never exempt. Such a role passes with only the
+  advisory `aws_iam_federated_trust_unknown` warning, so a wildcard subject
+  hidden behind an apply-time value is not caught for it. The two cases in
+  this repository are the first apply of an app-services GitHub deploy role
+  (role and provider in `module.app_services`) and a greenfield
+  `aws-organization` (roles in `module.aws_organization`, the organization in
+  `module.aws_organization.module.organization`). Read the advisory result on
+  those runs, and re-plan after the apply: the trust is then known and
+  checked.
+- **Web-identity issuers other than TFC and github.com are checked by shape
+  only.** `aws_iam_federated_trust_pinned` applies the GitHub repository and
+  context rule to every subject on the
+  `token.actions.githubusercontent.com` provider, and to a subject that starts
+  with `repo:` or `repository_owner` on any provider. A GitHub Enterprise
+  Server issuer or a customised claim template that starts with another
+  claim, and every other issuer (EKS, GitLab, Cognito, Google), gets only the
+  wildcard rule and the requirement of a `:sub` and an `:aud` key for one of
+  the statement's providers. In the same way, `gcp_wif_principalset_pinned`
+  checks a `principal://.../workloadIdentityPools/<pool>/subject/<sub>` member
+  only when `<sub>` has a TFC (`organization:`) or GitHub (`repo:`,
+  `repository_owner`) shape; any other subject passes unchecked.
+- **CloudFormation-built web-identity trusts are not read by OPA.** The
+  policy reads `aws_iam_role` resources in the plan. The `tfc-plan` and
+  `tfc-apply` roles that `modules/aws/iam/tfc-oidc-baseline` deploys through a
+  StackSet, and the phase-0 roles in
+  `templates/aws/bootstrap/phase0-management.yaml`, are CloudFormation
+  resources. The module validation keeps the organization and project
+  literal, but `tfc_oidc_allow_workspace_wildcards = true` still writes a
+  `StringLike` workspace wildcard that this policy would deny on an
+  `aws_iam_role`.
+- **Delegable infrastructure roles (SEC-4 residual).** `compute.admin`,
+  `dns.admin`, `container.admin` and `cloudsql.admin` stay delegable. A
+  projects-apply compromise can grant itself those on an environment folder.
+  None grants data-plane IAM. The roles that control IAM, identities,
+  data-plane IAM or project ownership are granted by gcp-organization.
+- **organization-apply's paths to a guardrail-owner role (SEC-3 residuals).**
+  organization-apply holds `folderCreator`, `folderEditor` and `folderIamAdmin`
+  at the org node (no `folderAdmin`, which carries
+  `resourcemanager.projects.setIamPolicy` on every project), and a
+  role-conditioned `iam.securityAdmin`
+  (`modifiedGrantsByRole.hasOnly(organization_apply_grantable_roles)`; the
+  gcp-bootstrap validation rejects every role that controls IAM, identities,
+  projects or PAM). It can no longer grant itself `denyAdmin`, or a role that
+  leads to the guardrails SA, on the org node or the admin project. These paths
+  remain:
+  - **PAM** (`enable_pam`). organization-apply holds
+    `privilegedaccessmanager.admin` and can edit the JIT entitlement's eligible
+    principals, approvers and roles. The PAM service agent, not
+    organization-apply's `setIamPolicy`, makes the grant. Alert
+    `pam_entitlement_change`. Owner: security team (move PAM ownership to
+    `gcp-guardrails`).
+  - **Principal access boundary** (`enable_principal_access_boundary`).
+    organization-apply holds `projectIamAdmin` on the admin project (for the
+    policy binding). It can grant itself `serviceAccountTokenCreator` on the
+    `<prefix>-guardrails-apply` SA there. Owner: security team (find a role
+    with only `resourcemanager.projects.createPolicyBinding`, or apply the
+    binding from `gcp-guardrails`).
+  - **Alert deletion.** organization-apply holds `monitoring.editor` on the
+    admin (audit) project, where the guardrail alerts live. Deleting them no
+    longer opens an escalation, so they are defence in depth. Owner: platform
+    team.
+  - **Folder self-grants.** `folderIamAdmin` at the org node lets
+    organization-apply grant itself any role on any folder, for example owner
+    of every workload or shared project. That is data plane, not the guardrails:
+    the admin project and every automation SA sit directly under the org node.
+    Keep the separate logging project (`gcp.logging_project_id`) outside any
+    folder, or this path reaches it. Owner: platform team.
+  - **Allow-list data roles.** organization-apply can grant itself
+    `storage.objectCreator` or `cloudkms.cryptoKeyEncrypterDecrypter` (on its
+    default allow-list for the logging project) on any bucket or key that the
+    tag-scoped containment rule does not cover. Owner: platform team.
+  - **Not validated on a real org.** That IAM accepts the condition on an
+    org-node `iam.securityAdmin` binding, that a `setIamPolicy` call with only
+    audit-config changes passes it, and that `folderCreator` + `folderEditor` +
+    `folderIamAdmin` cover a real gcp-organization apply. Owner: platform team
+    (sandbox apply).
+- **CODEOWNERS separates duties only on security-only lines (CICD-2
+  residual).** GitHub uses the last matching line, and one approval from any
+  owner on it satisfies the line. `.github/CODEOWNERS` lists the security team
+  alone on `/policies/`, `/envs/gcp/guardrails/`,
+  `/modules/gcp/stages/guardrails/`, `/scripts/check-plan-time-exec.py`,
+  `/.github/requirements/`, `/.github/CODEOWNERS`, `/templates/aws/bootstrap/`,
+  `/templates/CODEOWNERS.tftpl`, `/modules/gcp/iam/deny-policy/`,
+  `/modules/tfc/`, `/renovate.json`, `/release-please-config.json`,
+  `/.tool-versions` and `/.pre-commit-config.yaml`, so those need a security
+  approval. Every other security-sensitive line (`/envs/tfc-admin/`, which also
+  wires the policy sets in `main.tf`, `/.github/` workflows, the control-plane
+  roots, the other IAM modules and the governance modules, `.checkov.yaml`,
+  `config/landing-zone.yaml` and
+  `config/tfc-workspaces.yaml`) lists the platform and the security team, so a
+  platform approval alone satisfies it. A platform engineer can therefore
+  change, for example, the workflow that runs the plan-time gate, or
+  `gcp.admin_containment` in `config/landing-zone.yaml`, without a security
+  approval. The same holds for the waivers, which live in those two files:
+  `gcp.audit_store_waiver`, `aws.network.egress_alert_only_waived` and
+  `org.tfc.policy_sets_waiver` in `config/landing-zone.yaml`, and `production_vpc_sc_dry_run_waiver` and
+  `production_egress_proxy_waiver` on a `gcp-workload-<env>` workspace in
+  `config/tfc-workspaces.yaml`. `policy_sets_waiver` can also be set as a
+  variable on the tfc-admin workspace, which no git review sees: anyone with
+  write access there (organization owners and the tfc-admin team) can set it,
+  as they can set `enable_policy_sets`. All of this holds only when code-owner review is required on the
+  default branch and the security team has a member outside the platform team
+  (`docs/guides/BRANCH_PROTECTION.md`). Owner: security team (decide whether
+  more paths must be security-only).
 
 ## DECISION — needs a human call
 
 - **Behaviour-changing security defaults** (not applied, would change posture):
   packet-mirroring default mirrors all traffic; vpc-peering exports public-IP
-  subnet routes; the shared VPC-endpoint policy is `Action="*"`.
+  subnet routes; the shared VPC-endpoint policy defaults to `Action="*"`,
+  limited to callers in the organization by `aws:PrincipalOrgID`. The PREVIEW
+  mode `aws.network.vpc_endpoint_policy_mode: org_principals_and_resources`
+  also requires `aws:ResourceOrgID`.
 - **Toolchain currency automation.** Renovate owns Terraform providers and
   lockfiles (`renovate.json`: weekly `lockFileMaintenance`, one grouped
   `hashicorp/*` PR, labelled for review, never auto-merged, provider majors
-  disabled); Dependabot keeps GitHub Actions and the CI Python tooling. The
-  Renovate GitHub App still has to be installed by an operator. Open calls:
-  `semanticCommits` is off (the `fix(deps):` prefix is set by hand; Dependabot
-  also updates the `pg` package of `vault-secrets`), and
-  `required_version` / provider-major bumps stay manual by design.
+  disabled), the toolchain (one `toolchain` PR for `.tool-versions` and every
+  copy of a tool version) and the pre-commit hook revs; Dependabot keeps
+  GitHub Actions, the CI Python tooling and the `pg` package of
+  `vault-secrets`. The Renovate GitHub App has to be installed by an
+  operator; until it runs, the weekly `dependency-heartbeat.yml` check fails
+  on the upstream repository. Open calls: `semanticCommits` is off (the
+  `fix(deps):` and `build(deps):` prefixes are set by hand); `checkov` follows
+  the `checkov-action` image, so its `.tool-versions` pin is bumped by hand;
+  CI-pinned SHA-256 digests (OPA, shellcheck) are refreshed by the reviewer
+  with `scripts/tool-checksums.sh`; and `required_version` / provider-major
+  bumps stay manual by design.
+- **Spoke traffic to the central AWS interface endpoints is inspected (ARC-6,
+  D5).** It crosses Network Firewall in both directions, so it pays the
+  per-GB processing charge. Under a fail-closed production policy
+  (a drop action) it passes because the firewall's internal pass
+  rule group (priority 1500, on by default) passes every `top_cidr` address
+  to and from the hub VPCs, the VPN on-premises prefixes and
+  `aws.network.internal_pass_cidrs`, and spokes to spokes of the same
+  segment (ARC-1, re-audit 4; per segment since re-audit 5). The egress
+  allowlist matches only traffic from `HOME_NET` to the internet, so it
+  cannot pass internal traffic: do not add `.amazonaws.com` to it for this.
+  Prod and nonprod spokes stay apart through the transit gateway blackhole
+  routes and, under a fail-closed policy, the firewall's default action; to
+  drop a specific internal flow, write it in
+  `aws.network.suricata_rules`, which run before the pass group. The packet
+  behaviour is proved by code and tests only, not yet by a sandbox apply. A
+  direct transit gateway route from the spoke tables to the egress attachment
+  would make return traffic asymmetric (the `shared` table returns spoke
+  traffic through inspection), and the stateful firewall drops asymmetric
+  flows. Revisit with a dedicated endpoints segment.
+
+## Scanner coverage
+
+- **Checkov parsing errors.** With checkov 3.3.17, `-d modules` reports 1 parsing
+  error and `-d envs` reports 3. The files are `modules/gcp/stages/environment/variables.tf`,
+  `envs/gcp/workload/variables.tf` and `envs/aws/network/variables.tf`. They pass
+  `terraform fmt`, and CI runs `terraform validate` on every root, so they are
+  treated as Checkov parser limits. Checkov does not scan those three files, so a
+  misconfiguration in them would not be caught by Checkov. Trivy and CI validation
+  still cover them. They do not fail the gate. Re-check after each Checkov upgrade.
+- **Example module attribute check follows literals only.**
+  `scripts/check-example-module-attrs.py` (run by `make consistency`) fails when
+  a Terraform root under `examples/` passes a module an object attribute the
+  variable type does not declare, which Terraform drops without an error. It
+  follows literal objects, maps and lists through `object`, `map`, `list`,
+  `set` and `optional` types. It does not follow a value given as an expression
+  (a local, a `for` expression or a function call), and it does not check
+  `tuple(...)` or `any` types. Snippets in `examples/system-design/` are checked
+  by `scripts/check-examples-refs.sh` for top-level inputs only.

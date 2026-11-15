@@ -1,4 +1,12 @@
 repos:
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.39.0
+    hooks:
+      - id: check-jsonschema
+        name: config/landing-zone.yaml matches the schema
+        files: ^config/(landing-zone|sandbox/landing-zone).*\.yaml$
+        args: ["--schemafile", "config/landing-zone.schema.json"]
+
   # Terraform hooks
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: cba87736ffe2c479523d9d69919c1215084c7acc  # v1.104.0
@@ -7,23 +15,11 @@ repos:
         name: Terraform format
         description: Format Terraform files
 
-      - id: terraform_validate
-        name: Terraform validate
-        description: Validate Terraform configuration
-        args:
-          - --hook-config=--retry-once-with-cleanup=true
-
-      - id: terraform_docs
-        name: Terraform docs
-        description: Generate Terraform module documentation
-        args:
-          - --hook-config=--path-to-file=README.md
-          - --hook-config=--add-to-existing-file=true
-          - --hook-config=--create-file-if-not-exists=true
-
       - id: terraform_tflint
         name: TFLint
         description: Lint Terraform files
+        # Examples are excluded for the same GIT_DIR reason as terraform_validate below.
+        exclude: '(^|/)examples/'
         args:
           - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
           # `--module` was removed in tflint v0.54.0 (tflint now errors: "Failed to
@@ -56,9 +52,47 @@ repos:
       - id: terraform_trivy
         name: Trivy security scan
         description: Security scanner for Terraform
+        # Examples are excluded for the same GIT_DIR reason as terraform_validate below:
+        # Trivy config scans fetch git module sources. CI and `make security` still scan them.
+        exclude: '(^|/)examples/'
         args:
           - --args=--skip-dirs="**/.terraform"
           - --args=--severity=CRITICAL,HIGH
+
+  # Local Terraform hooks that must match the make targets.
+  - repo: local
+    hooks:
+      # Local hook, not the pre-commit-terraform one: that hook validates every
+      # directory with a changed .tf file, including modules that declare
+      # configuration_aliases, which cannot be validated as a standalone root.
+      # This one validates only the directories `make validate-all` validates
+      # (scripts/terraform-roots.sh all) and skips the same alias modules.
+      # git exports GIT_DIR to hooks. Running terraform init on a git-sourced
+      # example then runs its git checkout against this repository and moves
+      # HEAD, so examples are excluded here (and the script unsets GIT_DIR,
+      # GIT_WORK_TREE and GIT_INDEX_FILE). Examples are validated by
+      # `make validate-all` and CI (scripts/terraform-roots.sh collect_examples).
+      - id: terraform_validate
+        name: Terraform validate
+        description: Validate Terraform configuration (same directories as make validate-all)
+        entry: scripts/precommit-terraform-validate.sh
+        language: script
+        require_serial: true
+        files: '\.tf$'
+        exclude: '(^|/)examples/'
+
+      # Local hook, not the pre-commit-terraform one: that hook runs terraform-docs
+      # from inside each directory, so resource positions in the README differ
+      # from `make docs` and the two fight. This one uses the configs listed by
+      # scripts/docs-targets.sh from the repo root, like scripts/module-docs.sh.
+      - id: terraform_docs
+        name: Terraform docs
+        description: Generate Terraform module documentation (same as make docs)
+        entry: scripts/precommit-terraform-docs.sh
+        language: script
+        require_serial: true
+        files: '^(modules|envs)/.*\.tf$'
+        exclude: '(^|/)(examples|tests)/'
 
   # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -129,6 +163,13 @@ repos:
         name: Markdown lint
         description: Lint markdown files
         args: ['--fix']
+      # Check-only twin (no --fix): `make markdownlint-check` and the CI
+      # meta-lint job run it, so a lint run never rewrites files.
+      - id: markdownlint
+        alias: markdownlint-check
+        name: Markdown lint (check only)
+        description: Lint markdown files without fixing them
+        stages: [manual]
 
   # YAML linting
   - repo: https://github.com/adrienverge/yamllint

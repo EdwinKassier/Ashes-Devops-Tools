@@ -1,0 +1,56 @@
+# terraform-docs config for the deployable roots under envs/. Roots are not
+# consumed as modules, so there is no header or "Usage: module" block: the
+# generated block lists requirements, providers, inputs and outputs only.
+# Modules use .terraform-docs.yml. scripts/docs-targets.sh pairs each directory
+# with its config.
+formatter: "markdown table"
+
+version: ">=0.19"
+
+sections:
+  hide: []
+  show:
+    - requirements
+    - providers
+    - inputs
+    - outputs
+
+content: |-
+  {{ .Requirements }}
+
+  {{ .Providers }}
+
+  {{ .Inputs }}
+
+  {{ .Outputs }}
+
+output:
+  file: "README.md"
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
+
+output-values:
+  enabled: false
+  from: ""
+
+sort:
+  enabled: true
+  by: required
+
+settings:
+  anchor: true
+  color: true
+  default: true
+  description: true
+  escape: true
+  hide-empty: true
+  html: true
+  indent: 2
+  lockfile: true
+  read-comments: true
+  required: true
+  sensitive: true
+  type: true

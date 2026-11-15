@@ -75,12 +75,62 @@ run "every_script_run_installs_dependencies_first" {
   # A remote runner starts each run without node_modules, so the install must
   # happen in the same command as each script, before node, and stay hardened.
   assert {
-    condition     = local.bootstrap_command == "npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts && node ${path.module}/scripts/bootstrap.mjs"
-    error_message = "bootstrap must run npm ci --ignore-scripts in the same command, before node."
+    condition     = local.bootstrap_command == "${local.npm_install_command} && node ${path.module}/scripts/bootstrap.mjs"
+    error_message = "bootstrap must run the npm install in the same command, before node."
   }
 
   assert {
-    condition     = local.reconcile_command == "npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts && node ${path.module}/scripts/reconcile.mjs"
-    error_message = "reconcile must run npm ci --ignore-scripts in the same command, before node."
+    condition     = local.reconcile_command == "${local.npm_install_command} && node ${path.module}/scripts/reconcile.mjs"
+    error_message = "reconcile must run the npm install in the same command, before node."
+  }
+
+  assert {
+    condition     = endswith(local.npm_install_command, " npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts")
+    error_message = "the install must stay npm ci --ignore-scripts --no-audit --no-fund on the module's scripts directory."
+  }
+}
+
+# The provisioner environment (POSTGRES_URL, VAULT_DESIRED_JSON,
+# SUPABASE_SSL_CERT) and the workspace's own variables (SUPABASE_ACCESS_TOKEN)
+# must reach node, never npm: npm, its config files and its registry would see
+# them. env -i clears the environment for npm only and passes back the
+# variables npm needs, each one only when it is set.
+run "npm_install_sees_no_secret_environment" {
+  command = plan
+
+  assert {
+    condition = local.npm_install_command == join(" ", [
+      "env -i",
+      "$${PATH:+\"PATH=$${PATH}\"}",
+      "$${HOME:+\"HOME=$${HOME}\"}",
+      "$${TMPDIR:+\"TMPDIR=$${TMPDIR}\"}",
+      "$${npm_config_cache:+\"npm_config_cache=$${npm_config_cache}\"}",
+      "$${NPM_CONFIG_CACHE:+\"NPM_CONFIG_CACHE=$${NPM_CONFIG_CACHE}\"}",
+      "$${HTTP_PROXY:+\"HTTP_PROXY=$${HTTP_PROXY}\"}",
+      "$${HTTPS_PROXY:+\"HTTPS_PROXY=$${HTTPS_PROXY}\"}",
+      "$${NO_PROXY:+\"NO_PROXY=$${NO_PROXY}\"}",
+      "$${http_proxy:+\"http_proxy=$${http_proxy}\"}",
+      "$${https_proxy:+\"https_proxy=$${https_proxy}\"}",
+      "$${no_proxy:+\"no_proxy=$${no_proxy}\"}",
+      "$${NODE_EXTRA_CA_CERTS:+\"NODE_EXTRA_CA_CERTS=$${NODE_EXTRA_CA_CERTS}\"}",
+      "npm ci --ignore-scripts --no-audit --no-fund --prefix ${path.module}/scripts",
+    ])
+    error_message = "npm ci must run under env -i with only PATH, HOME, TMPDIR, the npm cache, the proxy variables and NODE_EXTRA_CA_CERTS passed back."
+  }
+
+  assert {
+    condition = alltrue([
+      for secret in ["POSTGRES_URL", "VAULT_DESIRED_JSON", "SUPABASE_SSL_CERT", "SUPABASE_ACCESS_TOKEN", "VERCEL_API_TOKEN", "TFE_TOKEN", "VAULT_ALLOW_EMPTY_DESIRED"] :
+      !strcontains(local.npm_install_command, secret)
+    ])
+    error_message = "no provisioner or workspace secret may be passed to npm."
+  }
+
+  assert {
+    condition = alltrue([
+      for c in [local.bootstrap_command, local.reconcile_command] :
+      length(split(" && ", c)) == 2 && startswith(split(" && ", c)[1], "node ")
+    ])
+    error_message = "node must still run with the full provisioner environment (no env -i before node)."
   }
 }

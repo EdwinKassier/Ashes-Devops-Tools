@@ -5,12 +5,15 @@
  */
 
 output "services" {
-  description = "Per-service golden-path facts: runtime, Cloud Run service name and URL (null for a job) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user and availability type (REGIONAL or ZONAL); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
+  description = "Per-service golden-path facts: runtime, effective Direct VPC egress (vpc_egress), Cloud Run service name, URL, effective minimum instance count and probe path (null for a job; the probe path is also null when probing is off) or job name (null for a service), image repository path, runtime and deploy SA emails, and (when a database is declared) the Cloud SQL connection name, IAM DB user, availability type (REGIONAL or ZONAL), backup location (database_backup_location), point-in-time-recovery log retention in days (database_transaction_log_retention_days) and whether a customer-managed key is required (database_cmek_required); Pub/Sub topic / subscription / dead-letter topic when pubsub is enabled; the ids of its alert policies and its SLO name (null when none is declared)."
   value = {
     for k, s in var.services : k => {
       runtime                  = s.runtime
+      vpc_egress               = local.vpc_egress[k]
       service_name             = s.runtime == "cloud-run" ? module.service[k].name : null
       url                      = s.runtime == "cloud-run" ? module.service[k].uri : null
+      min_instances            = s.runtime == "cloud-run" ? module.service[k].min_instance_count_effective : null
+      health_check_path        = s.runtime == "cloud-run" ? module.service[k].health_check_path_effective : null
       job_name                 = s.runtime == "cloud-run-job" ? module.job[k].name : null
       image_repository         = local.image_repository[k]
       initial_image            = local.initial_image[k]
@@ -19,11 +22,15 @@ output "services" {
       database_connection_name = s.database == null ? null : module.database[k].connection_name
       database_iam_user        = s.database == null ? null : trimsuffix(local.runtime_sa_email[k], ".gserviceaccount.com")
       database_availability    = s.database == null ? null : module.database[k].availability_type
-      pubsub_topic             = try(local.pubsub_topic[k], null)
-      pubsub_subscription      = try(local.pubsub_subscription[k], null)
-      pubsub_dead_letter_topic = try(local.pubsub_dlq_topic[k], null)
-      alert_policy_ids         = contains(keys(local.services_with_alerts), k) ? [google_monitoring_alert_policy.error_ratio[k].id, google_monitoring_alert_policy.latency_p99[k].id] : []
-      slo_name                 = contains(keys(local.services_with_slo), k) ? module.slo[k].slo_name : null
+      database_cmek_required   = s.database == null ? null : module.database[k].cmek_required
+      # Effective DR settings of the automated backups.
+      database_backup_location                = s.database == null ? null : module.database[k].backup_location
+      database_transaction_log_retention_days = s.database == null ? null : module.database[k].transaction_log_retention_days
+      pubsub_topic                            = try(local.pubsub_topic[k], null)
+      pubsub_subscription                     = try(local.pubsub_subscription[k], null)
+      pubsub_dead_letter_topic                = try(local.pubsub_dlq_topic[k], null)
+      alert_policy_ids                        = contains(keys(local.services_with_alerts), k) ? [google_monitoring_alert_policy.error_ratio[k].id, google_monitoring_alert_policy.latency_p99[k].id] : []
+      slo_name                                = contains(keys(local.services_with_slo), k) ? module.slo[k].slo_name : null
     }
   }
 }
@@ -46,6 +53,11 @@ output "image_repositories" {
 output "sql_connection_names" {
   description = "Cloud SQL instance connection name (<project>:<region>:<instance>) per service key that declares a database."
   value       = { for k, s in local.services_with_db : k => module.database[k].connection_name }
+}
+
+output "sql_instance_ids" {
+  description = "Cloud SQL instance resource name (projects/<project>/instances/<instance>) per service key that declares a database. The Backup and DR plan association takes this form."
+  value       = { for k, s in local.services_with_db : k => "projects/${local.service_project[k]}/instances/${module.database[k].name}" }
 }
 
 output "workload_identity_pool_name" {
@@ -76,4 +88,14 @@ output "github_actions" {
 output "gke_cluster_name" {
   description = "Name of the environment GKE Autopilot cluster, or null when disabled."
   value       = var.enable_gke_autopilot ? module.gke[0].name : null
+}
+
+output "egress_proxy_settings" {
+  description = "The egress proxy settings injected into every Cloud Run service and job: enabled, the proxy URL (http://<address>:<port>), port and the default NO_PROXY entries (each service appends its own no_proxy and any env_vars NO_PROXY). url is null and no_proxy is empty when egress_proxy.enabled = false."
+  value = {
+    enabled  = var.egress_proxy.enabled
+    url      = local.egress_proxy_url
+    port     = var.egress_proxy.enabled ? coalesce(var.egress_proxy.port, 443) : null
+    no_proxy = var.egress_proxy.enabled ? split(",", local.egress_no_proxy) : []
+  }
 }

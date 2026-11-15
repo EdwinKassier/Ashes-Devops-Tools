@@ -42,8 +42,10 @@ data "terraform_remote_state" "gcp_projects" {
 locals {
   spoke_peering_candidates = {
     for env in sort(keys(local.environments)) : env => {
-      project_id   = try(local.projects.project_ids["${env}-host"], "")
-      network_name = "${local.project_prefix}-${env}-vpc"
+      project_id = try(local.projects.project_ids["${env}-host"], "")
+      # gcp-projects publishes the name; a contract from before that key
+      # falls back to the same derivation.
+      network_name = coalesce(try(local.projects.environment_config[env].spoke_network_name, null), "${local.project_prefix}-${env}-vpc")
     }
     if local.create_spoke_peerings &&
     coalesce(try(local.cfg.environment_connectivity[env], null), local.cfg.network_connectivity, "peering") == "peering" &&

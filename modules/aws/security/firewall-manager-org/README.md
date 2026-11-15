@@ -78,3 +78,7 @@ The following resources are created:
 | <a name="output_admin_account_id"></a> [admin\_account\_id](#output\_admin\_account\_id) | The account ID registered as the Firewall Manager administrator, or null when Firewall Manager is disabled. |
 | <a name="output_policy_ids"></a> [policy\_ids](#output\_policy\_ids) | Map of FMS policy name to policy ID for every policy created by this module. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

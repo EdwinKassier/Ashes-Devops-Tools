@@ -7,7 +7,10 @@ on:
     paths:
       - 'modules/**/*.tf'
       - 'modules/**/README.md'
+      - 'envs/**/*.tf'
       - '.terraform-docs.yml'
+      - '.terraform-docs-envs.yml'
+      - 'scripts/docs-targets.sh'
       - 'scripts/module-docs.sh'
       - '.github/workflows/documentation.yml'
   workflow_dispatch:
@@ -18,6 +21,13 @@ permissions: {}
 concurrency:
   group: documentation-${{ github.ref }}
   cancel-in-progress: true
+
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
 
 jobs:
   docs:
@@ -35,14 +45,23 @@ jobs:
       contents: write        # create-pull-request pushes a branch (fallback token)
       pull-requests: write   # ... and opens the PR
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
-      # Not block yet: the terraform-docs release download redirects to a
-      # GitHub asset CDN host that GitHub has changed before. Move to block
-      # with the endpoints the StepSecurity audit log reports for this job.
+      # This job holds DOCS_BOT_PAT. Every endpoint it calls, from its steps:
+      # - github.com: checkout, the terraform-docs release download and the
+      #   create-pull-request push.
+      # - release-assets.githubusercontent.com and objects.githubusercontent.com:
+      #   the release download redirects to one of these asset hosts (GitHub
+      #   moved from the second to the first; both stay allowed).
+      # - api.github.com: create-pull-request opens the PR.
+      # make docs runs terraform-docs only, which reads local files.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

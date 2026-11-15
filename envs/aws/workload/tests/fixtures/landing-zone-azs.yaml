@@ -1,0 +1,27 @@
+# Test fixture: availability zone IDs for the aws-workload root
+# (availability_zones.tftest.hcl). The dev environment sets its own IDs; prod
+# falls back to aws.network.availability_zone_ids.
+version: 1
+org:
+  name: azco
+  regions:
+    aws: us-east-1
+aws:
+  enabled_regions: [us-east-1]
+  network:
+    availability_zone_ids: [use1-az1, use1-az4]
+  workload_environments:
+    dev:
+      account_key: workload_dev
+      is_production: false
+      availability_zone_ids: [use1-az6, use1-az4]
+    prod:
+      account_key: workload_prod
+      is_production: true
+  contracts:
+    organization:
+      account_ids:
+        workload_dev: "222222222222"
+        workload_prod: "333333333333"
+    security:
+      log_archive_bucket_name: azco-org-log-archive

@@ -229,3 +229,7 @@ The following resources are created:
 | <a name="output_service_account_email"></a> [service\_account\_email](#output\_service\_account\_email) | The email of the dedicated project service account (project-service-account@...); null when create\_project\_service\_account = false |
 | <a name="output_subnet_iam_bindings"></a> [subnet\_iam\_bindings](#output\_subnet\_iam\_bindings) | Map of (subnet\_key/member\_type) to IAM member resource ID for the networkUser bindings granted to this service project |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

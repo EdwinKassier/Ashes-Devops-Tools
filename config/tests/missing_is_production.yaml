@@ -1,0 +1,8 @@
+# Expected to FAIL schema validation: every environment must set is_production.
+version: 1
+org:
+  name: acme
+gcp:
+  environments:
+    prod:
+      region: europe-west2

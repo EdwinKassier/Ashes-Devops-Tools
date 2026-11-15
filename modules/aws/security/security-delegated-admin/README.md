@@ -99,3 +99,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_registered_services"></a> [registered\_services](#output\_registered\_services) | Service principals for which a delegated administrator was registered (the keys of the effective registration map). |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

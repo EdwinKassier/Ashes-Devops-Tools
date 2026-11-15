@@ -3,9 +3,18 @@
 # not a workflow for THIS repo (hence the .example.yml suffix), so it never runs
 # here. This is the AWS counterpart to cloud-run-delivery.example.yml.
 #
-# Flow: build -> scan -> push to ECR -> register a new task-definition revision
-# (only the image changes) -> roll the ECS service. Auth is keyless: GitHub OIDC
-# -> the per-service deploy role. No long-lived AWS keys.
+# Flow: build -> scan -> push to ECR -> resolve the pushed image digest -> attest
+# its build provenance -> register a new task-definition revision whose image is
+# <repo>@<digest> (only the image changes) -> roll the ECS service. Auth is
+# keyless: GitHub OIDC -> the per-service deploy role. No long-lived AWS keys.
+#
+# Digest, not tag: the task runs exactly the bytes that were scanned and
+# attested. The provenance attestation (SLSA build provenance, signed with the
+# job's OIDC identity through Sigstore) is stored in GitHub and pushed next to
+# the image in ECR. Verify it with
+#   gh attestation verify oci://<ECR_REPOSITORY_URL>@<digest> --repo <owner>/<app-repo>
+# (docs/guides/deploying-a-service.md). Enforcing it at deploy time is a
+# separate step this example does not configure.
 #
 # Everything this pipeline needs is created by ONE `services` entry (with
 # `github` set and enable_github_oidc = true) in the aws-workload-<env>
@@ -44,57 +53,94 @@
 # Manager / SSM), resolved by the ECS agent at task start; they never pass
 # through this pipeline.
 #
-# Action pinning: every action is pinned to a full commit SHA; keep them
-# current with Dependabot or Renovate.
+# Action pinning: every action is pinned to a full commit SHA.
+# These SHAs are not tracked by this repository's Dependabot (it scans
+# .github/workflows only, not examples/): keep them current with Dependabot or
+# Renovate in the application repository once copied.
 
 name: Deploy service (ECS/Fargate)
 
-on:
+"on":
   push:
-    branches: [main] # must match services.<svc>.github.ref when set
+    branches: [main]  # must match services.<svc>.github.ref when set
 
-permissions:
-  contents: read
-  id-token: write # required for keyless OIDC auth to AWS
+permissions: {}
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  IMAGE: ${{ vars.ECR_REPOSITORY_URL }}:${{ github.sha }}
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails.
+defaults:
+  run:
+    shell: bash
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # environment: dev # REQUIRED when services.<svc>.github.ref is not set
+    # environment: dev  # REQUIRED when services.<svc>.github.ref is not set
+    permissions:
+      contents: read
+      id-token: write      # keyless OIDC auth to AWS and Sigstore signing of the attestation
+      attestations: write  # store the image provenance attestation in GitHub
+    env:
+      REPO: ${{ vars.ECR_REPOSITORY_URL }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # First step of every job: monitor (audit) or restrict (block) the
+      # runner's network egress. audit only records the endpoints this job
+      # calls (registries, Trivy DB, Sigstore, the cloud APIs); once a few runs
+      # show the list, switch to egress-policy: block with allowed-endpoints,
+      # so a compromised build step or action cannot exfiltrate the OIDC token.
+      - name: Harden the runner (egress audit)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Authenticate to AWS (keyless OIDC)
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd  # v2.1.7
 
       - name: Build image
-        run: docker build -t "${IMAGE}" .
+        run: docker build -t "${REPO}:${GITHUB_SHA}" .
 
       - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}
+          image-ref: ${{ vars.ECR_REPOSITORY_URL }}:${{ github.sha }}
           severity: "CRITICAL,HIGH"
           exit-code: "1"
 
       # The repo has immutable tags, so each commit SHA is a unique,
-      # non-overwritable image.
-      - name: Push image
-        run: docker push "${IMAGE}"
+      # non-overwritable image. The digest is read back from the registry push.
+      - name: Push image and resolve its digest
+        id: push
+        run: |
+          docker push "${REPO}:${GITHUB_SHA}"
+          digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${REPO}:${GITHUB_SHA}" \
+            | awk -F@ -v repo="${REPO}" '$1 == repo && !found { found = 1; print $2 }')"
+          case "${digest}" in
+            sha256:*) echo "digest=${digest}" >> "${GITHUB_OUTPUT}" ;;
+            *) echo "::error::could not resolve the pushed digest of ${REPO}:${GITHUB_SHA}"; exit 1 ;;
+          esac
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ${{ vars.ECR_REPOSITORY_URL }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
       # Start from the latest revision of the Terraform-managed family (roles,
       # secrets, logging, sizing) and swap only the image. Terraform owns
@@ -108,16 +154,18 @@ jobs:
             --task-definition "${TASK_DEFINITION_FAMILY}" \
             --query taskDefinition > task-definition.json
 
-      - name: Render new image into the task definition
+      # The new revision names the immutable digest, never the tag: what was
+      # scanned and attested is exactly what runs.
+      - name: Render the image digest into the task definition
         id: render
-        uses: aws-actions/amazon-ecs-render-task-definition@8d79160660ad39c402a16e5fc7cd2a32e8f7d6b7 # v1.9.1
+        uses: aws-actions/amazon-ecs-render-task-definition@8d79160660ad39c402a16e5fc7cd2a32e8f7d6b7  # v1.9.1
         with:
           task-definition: task-definition.json
           container-name: ${{ vars.CONTAINER_NAME }}
-          image: ${{ env.IMAGE }}
+          image: ${{ vars.ECR_REPOSITORY_URL }}@${{ steps.push.outputs.digest }}
 
       - name: Deploy to ECS (wait for a stable service)
-        uses: aws-actions/amazon-ecs-deploy-task-definition@a00d4d57ac0de1a99b39fe469f3d898d38717c2b # v2.6.4
+        uses: aws-actions/amazon-ecs-deploy-task-definition@a00d4d57ac0de1a99b39fe469f3d898d38717c2b  # v2.6.4
         with:
           task-definition: ${{ steps.render.outputs.task-definition }}
           service: ${{ vars.ECS_SERVICE }}

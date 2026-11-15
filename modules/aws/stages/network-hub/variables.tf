@@ -13,7 +13,7 @@ variable "org_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:organizations::", var.org_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:organizations::", var.org_arn))
     error_message = "org_arn must be an AWS Organizations ARN beginning with arn:aws:organizations::."
   }
 }
@@ -24,7 +24,7 @@ variable "aws_region" {
   default     = "eu-west-2"
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.aws_region))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", var.aws_region))
     error_message = "aws_region must be a valid AWS region id (e.g. eu-west-2)."
   }
 }
@@ -60,6 +60,24 @@ variable "regional_cidrs" {
     condition     = alltrue([for c in values(var.regional_cidrs) : can(cidrhost(c, 0))])
     error_message = "Every value in regional_cidrs must be a valid IPv4 CIDR block."
   }
+}
+
+variable "regional_additional_cidrs" {
+  description = "Extra CIDRs per region, provisioned into that region's IPAM pool next to regional_cidrs (capacity growth without touching existing allocations). Each must sit in top_cidr and overlap nothing. A static hub VPC range inside one of the home-region CIDRs is reserved in the pool."
+  type        = map(list(string))
+  default     = {}
+  nullable    = false
+
+  validation {
+    condition     = alltrue(flatten([for r, cs in var.regional_additional_cidrs : [for c in cs : can(cidrhost(c, 0))]]))
+    error_message = "Every value in regional_additional_cidrs must be a valid IPv4 CIDR block."
+  }
+}
+
+variable "share_principal_arns" {
+  description = "RAM principals the regional IPAM pools are shared with. Null (default) = the whole organization (org_arn). Use the Workloads OU ARN(s) so accounts outside them cannot allocate from the pools."
+  type        = list(string)
+  default     = null
 }
 
 variable "inspection_cidr" {
@@ -116,7 +134,7 @@ variable "flow_log_destination_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:s3:::", var.flow_log_destination_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:s3:::", var.flow_log_destination_arn))
     error_message = "flow_log_destination_arn must be an S3 bucket ARN beginning with arn:aws:s3:::."
   }
 }
@@ -154,7 +172,7 @@ variable "network_firewall_managed_rule_groups" {
 }
 
 variable "network_firewall_stateful_default_actions" {
-  description = "STRICT_ORDER default actions for unmatched traffic. Default [\"aws:alert_established\"] = log-but-pass (no day-one blackhole); move to [\"aws:drop_established\", \"aws:alert_established\"] once allow rules cover legitimate egress."
+  description = "STRICT_ORDER default actions for unmatched traffic. Default [\"aws:alert_established\"] = log-but-pass (no day-one blackhole); move to [\"aws:drop_established_app_layer_to_server\", \"aws:alert_established_app_layer_to_server\"] once allow rules cover legitimate egress (the app-layer actions let the allowlist see a TLS ClientHello split across packets)."
   type        = list(string)
   default     = ["aws:alert_established"]
 }
@@ -166,9 +184,21 @@ variable "network_firewall_egress_domain_allowlist" {
 }
 
 variable "enforce_egress_allowlist" {
-  description = "Production egress gate. When true (and egress_alert_only_waived is false) the plan fails unless network_firewall_stateful_default_actions contains aws:drop_established and network_firewall_egress_domain_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is_production."
+  description = "Production egress gate. When true (and egress_alert_only_waived is false) the plan fails unless network_firewall_stateful_default_actions contains a drop action (aws:drop_established_app_layer_to_server recommended) and network_firewall_egress_domain_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is_production, or when any AWS workload environment is compliance_class: regulated."
   type        = bool
   default     = false
+}
+
+variable "vpc_endpoint_policy_mode" {
+  description = "Policy of the central interface endpoints. org_principals (default): the caller must be in the organization (aws:PrincipalOrgID). org_principals_and_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on the vpc-endpoints module's resource_org_exempt_services. PREVIEW: not yet proven in a sandbox (docs/known-gaps.md)."
+  type        = string
+  default     = "org_principals"
+  nullable    = false
+
+  validation {
+    condition     = contains(["org_principals", "org_principals_and_resources"], var.vpc_endpoint_policy_mode)
+    error_message = "vpc_endpoint_policy_mode must be org_principals or org_principals_and_resources."
+  }
 }
 
 variable "egress_alert_only_waived" {
@@ -181,6 +211,51 @@ variable "network_firewall_suricata_rules" {
   description = "Optional custom Suricata rules (STRICT_ORDER semantics) evaluated after the managed threat groups. Empty (default) = none."
   type        = string
   default     = ""
+}
+
+variable "network_firewall_internal_pass" {
+  description = "Create the firewall's internal pass rule group: every top_cidr address to and from the hub VPCs, the on-premises prefixes (vpn.onprem_cidrs when enable_vpn is true) and network_firewall_internal_pass_cidrs; and spokes to spokes of the same segment (spoke_attachments cidr). Prod to nonprod is never passed. Default true. Under a fail-closed policy internal traffic is dropped without it. Set false only when network_firewall_suricata_rules pass it instead."
+  type        = bool
+  default     = true
+}
+
+variable "network_firewall_internal_pass_cidrs" {
+  description = "Extra internal ranges outside top_cidr that the firewall passes in both directions (for example on-premises prefixes reached over Direct Connect). Private ranges only, and none may overlap top_cidr (that would pass traffic between segments). The vpn.onprem_cidrs prefixes are added automatically when enable_vpn is true. Empty (default) = none."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for c in var.network_firewall_internal_pass_cidrs : can(cidrnetmask(c)) && anytrue([
+        for b in ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "198.18.0.0/15"] :
+        tonumber(split("/", c)[1]) >= tonumber(split("/", b)[1]) && cidrhost("${split("/", c)[0]}/${split("/", b)[1]}", 0) == cidrhost(b, 0)
+      ])
+    ])
+    error_message = "network_firewall_internal_pass_cidrs (config aws.network.internal_pass_cidrs) entries must be IPv4 blocks inside a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 198.18.0.0/15); a public range or 0.0.0.0/0 would pass internet egress before the allowlist."
+  }
+
+  # Two ranges overlap when their network addresses agree on the shorter prefix.
+  validation {
+    condition = alltrue([
+      for c in var.network_firewall_internal_pass_cidrs : !try(
+        cidrhost("${split("/", c)[0]}/${min(tonumber(split("/", c)[1]), tonumber(split("/", var.top_cidr)[1]))}", 0) ==
+        cidrhost("${split("/", var.top_cidr)[0]}/${min(tonumber(split("/", c)[1]), tonumber(split("/", var.top_cidr)[1]))}", 0),
+        false
+      )
+    ])
+    error_message = "network_firewall_internal_pass_cidrs (config aws.network.internal_pass_cidrs) must not overlap top_cidr: a range inside top_cidr would pass traffic between the prod and nonprod segments."
+  }
+}
+
+variable "network_firewall_drop_alarm_threshold" {
+  description = "Stateful dropped packets per 5-minute period, per firewall AZ, above which the hub alarms for 3 periods in a row. A fail-closed firewall drops non-allowlisted egress on purpose, so the default (1000) alarms on a sustained surge (a broken allowlist, a missing internal pass rule or a workload calling a new domain), not on single drops. Only used when enable_network_firewall is true."
+  type        = number
+  default     = 1000
+
+  validation {
+    condition     = var.network_firewall_drop_alarm_threshold >= 0
+    error_message = "network_firewall_drop_alarm_threshold must be zero or more."
+  }
 }
 
 variable "enable_network_access_analyzer" {
@@ -203,7 +278,7 @@ variable "ipam_mode_for_new_vpcs_only" {
 }
 
 variable "ipam_new_vpcs" {
-  description = "Hub VPCs to create from the regional IPAM pool while ipam_mode_for_new_vpcs_only is true. Allowed: inspection, egress. List a VPC only when it is being created; listing an existing static VPC replaces it."
+  description = "Hub VPCs to create from the regional IPAM pool while ipam_mode_for_new_vpcs_only is true. Allowed: inspection, egress. List a VPC only when it is being created; listing an existing static VPC replaces it. Listing a static hub VPC in `ipam_new_vpcs` also removes its `hub_static` reservation in the same apply. Terraform does not order that release before the new VPC's allocation, and IPAM releases asynchronously, so the VPC create can fail with an overlapping-allocation error. Wait a few minutes and apply again."
   type        = set(string)
   default     = []
   nullable    = false
@@ -215,15 +290,21 @@ variable "ipam_new_vpcs" {
 }
 
 variable "enable_vpn" {
-  description = "Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer_gateway_ip. Traffic from on-premises is default-routed to the inspection VPC (a dedicated hybrid TGW route table), and the on-premises routes propagate only into the inspection route table, so spoke return traffic is inspected too. See docs/architecture/aws-landing-zone.md."
+  description = "Attach an on-premises Site-to-Site VPN to the transit gateway (network/vpn). Off by default. Requires vpn.customer_gateway_ip and enable_network_firewall = true. Traffic from on-premises is default-routed to the inspection VPC (a dedicated hybrid TGW route table), and the on-premises routes propagate only into the inspection route table, so spoke return traffic is inspected too. See docs/architecture/aws-landing-zone.md."
   type        = bool
   default     = false
   nullable    = false
 }
 
+variable "enable_resolver_endpoints" {
+  description = "Create the Route 53 Resolver inbound and outbound endpoints in the egress VPC (about USD 365 per month). Their security group admits DNS from top_cidr and vpn.onprem_cidrs. Null (default) = on only when enable_vpn is true, because only on-premises resolution needs them."
+  type        = bool
+  default     = null
+}
+
 variable "vpn" {
   description = <<-EOT
-    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN (not the transit gateway's 64512). static_routes_only = true uses static routing: then onprem_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate and onprem_cidrs is ignored. tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared_key_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state).
+    Site-to-Site VPN settings, used only when enable_vpn is true. customer_gateway_ip is the public IPv4 of the on-premises device; customer_gateway_bgp_asn its BGP ASN (not the transit gateway's 64512). static_routes_only = true uses static routing: then onprem_cidrs (the on-premises prefixes) is required and becomes static routes to the VPN in the inspection route table; with BGP the routes propagate into the inspection route table. In both modes each onprem_cidrs prefix is also routed from the egress VPC private tier to the transit gateway and from the shared route table to inspection, so the Resolver endpoints reach on-premises through the firewall, and it is admitted to the inbound Resolver endpoint. With BGP list at least the on-premises resolver ranges there. With the VPN on, no onprem_cidrs prefix may overlap top_cidr, inspection_cidr, egress_cidr or a spoke_attachments cidr (the plan fails). tunnel_inside_cidrs is empty (AWS-assigned) or two /30s in 169.254.0.0/16. preshared_key_storage is SecretsManager (default; the keys stay out of state and the stage outputs the secret ARN) or Standard (keys in state).
   EOT
   type = object({
     customer_gateway_ip      = optional(string)
@@ -257,6 +338,34 @@ variable "vpn" {
     error_message = "vpn.onprem_cidrs entries must be IPv4 CIDR blocks."
   }
 
+  # With the VPN, each on-premises prefix is routed from the egress VPC and the
+  # shared TGW table to the VPN, so it must not overlap an AWS range. Two ranges
+  # overlap when their network addresses agree on the shorter prefix.
+  validation {
+    condition = !var.enable_vpn || length([
+      for p in setproduct(var.vpn.onprem_cidrs, concat(
+        ["top_cidr ${var.top_cidr}", "inspection_cidr ${var.inspection_cidr}", "egress_cidr ${var.egress_cidr}"],
+        [for k, sp in var.spoke_attachments : "spoke_attachments.${k}.cidr ${sp.cidr}" if sp.cidr != null],
+      )) : "${p[0]} overlaps ${p[1]}"
+      if try(
+        cidrhost("${split("/", p[0])[0]}/${min(tonumber(split("/", p[0])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0) ==
+        cidrhost("${split("/", split(" ", p[1])[1])[0]}/${min(tonumber(split("/", p[0])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0),
+        false
+      )
+    ]) == 0
+    error_message = "vpn.onprem_cidrs must not overlap the AWS ranges (aws.network.vpn.onprem_cidrs): ${join("; ", [
+      for p in setproduct(var.vpn.onprem_cidrs, concat(
+        ["top_cidr ${var.top_cidr}", "inspection_cidr ${var.inspection_cidr}", "egress_cidr ${var.egress_cidr}"],
+        [for k, sp in var.spoke_attachments : "spoke_attachments.${k}.cidr ${sp.cidr}" if sp.cidr != null],
+      )) : "${p[0]} overlaps ${p[1]}"
+      if try(
+        cidrhost("${split("/", p[0])[0]}/${min(tonumber(split("/", p[0])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0) ==
+        cidrhost("${split("/", split(" ", p[1])[1])[0]}/${min(tonumber(split("/", p[0])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0),
+        false
+      )
+    ])}."
+  }
+
   validation {
     condition     = contains(["SecretsManager", "Standard"], var.vpn.preshared_key_storage)
     error_message = "vpn.preshared_key_storage must be SecretsManager or Standard."
@@ -265,15 +374,21 @@ variable "vpn" {
 
 variable "spoke_attachments" {
   description = <<-EOT
-    Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment_id is the aws-workload-<env> output tgw_attachment_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. A non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change.
+    Workload spoke attachments to the shared transit gateway, keyed by a plan-known name (usually the environment). attachment_id is the aws-workload-<env> output tgw_attachment_id (created in the workload account, so the hub only learns it once that workload has applied). segment is prod or nonprod: the attachment is associated with that route table (whose 0.0.0.0/0 goes to inspection) and propagated into the inspection route table so inspected traffic, egress replies and on-premises traffic reach the spoke. Without the firewall (enable_network_firewall = false, the starter profile) the segment tables route 0.0.0.0/0 to the egress attachment instead and the spoke propagates into the shared route table: egress is NAT only, not inspected. accept = true (default) accepts the cross-account attachment (the TGW does not auto-accept shared attachments); set false for an attachment that is already accepted. cidr is the spoke VPC CIDR; when set, the other segment's table blackholes it, so prod and nonprod spokes cannot reach each other. With the firewall, a non-empty map also adds the hub routes the spokes need: inspection 0.0.0.0/0 to the egress attachment and shared top_cidr to the inspection attachment (egress replies are inspected too). Empty (default): no change.
   EOT
   type = map(object({
     attachment_id = string
     segment       = string
     accept        = optional(bool, true)
+    cidr          = optional(string)
   }))
   default  = {}
   nullable = false
+
+  validation {
+    condition     = alltrue([for k, s in var.spoke_attachments : s.cidr == null || can(cidrnetmask(coalesce(s.cidr, "x")))])
+    error_message = "spoke_attachments[*].cidr must be an IPv4 CIDR block (the spoke's vpc_cidr)."
+  }
 
   validation {
     condition     = alltrue([for k, s in var.spoke_attachments : contains(["prod", "nonprod"], s.segment)])
@@ -290,8 +405,69 @@ variable "spoke_attachments" {
     error_message = "spoke_attachments must not list the same attachment_id twice (an attachment associates with exactly one route table)."
   }
 
+  # Second re-audit 5 review: a spoke CIDR must sit inside top_cidr (HOME_NET),
+  # so the firewall's segment rules and the default action apply to it.
   validation {
-    condition     = length(var.spoke_attachments) == 0 || var.enable_network_firewall
-    error_message = "spoke_attachments (config: aws.network.spoke_attachments) needs enable_network_firewall = true: spokes route 0.0.0.0/0 through the inspection VPC, which has no forwarding path without the firewall, so the spokes would have no egress."
+    condition = alltrue([
+      for sp in values(var.spoke_attachments) : sp.cidr == null || try(
+        tonumber(split("/", sp.cidr)[1]) >= tonumber(split("/", var.top_cidr)[1]) &&
+        cidrhost("${split("/", sp.cidr)[0]}/${split("/", var.top_cidr)[1]}", 0) == cidrhost(var.top_cidr, 0),
+        false
+      )
+    ])
+    error_message = "every spoke_attachments cidr must be inside top_cidr (${var.top_cidr}): outside it, the firewall does not treat the spoke as HOME_NET."
+  }
+
+  # Re-audit 5 review: spoke CIDRs must not overlap each other or the hub VPCs.
+  # An overlap would put one spoke in the other segment's firewall pass rule,
+  # or make a spoke a shared range that every address may reach. Two ranges
+  # overlap when their network addresses agree on the shorter prefix.
+  validation {
+    condition = length([
+      for p in setproduct(
+        [for k, sp in var.spoke_attachments : "spoke_attachments.${k} ${sp.cidr}" if sp.cidr != null],
+        concat(
+          [for k, sp in var.spoke_attachments : "spoke_attachments.${k} ${sp.cidr}" if sp.cidr != null],
+          ["inspection_cidr ${var.inspection_cidr}", "egress_cidr ${var.egress_cidr}"],
+        )
+      ) : "${split(" ", p[0])[0]} overlaps ${split(" ", p[1])[0]}"
+      if p[0] != p[1] && try(
+        cidrhost("${split("/", split(" ", p[0])[1])[0]}/${min(tonumber(split("/", split(" ", p[0])[1])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0) ==
+        cidrhost("${split("/", split(" ", p[1])[1])[0]}/${min(tonumber(split("/", split(" ", p[0])[1])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0),
+        false
+      )
+    ]) == 0
+    error_message = "spoke_attachments CIDRs must not overlap each other or inspection_cidr / egress_cidr: ${join("; ", distinct([
+      for p in setproduct(
+        [for k, sp in var.spoke_attachments : "spoke_attachments.${k} ${sp.cidr}" if sp.cidr != null],
+        concat(
+          [for k, sp in var.spoke_attachments : "spoke_attachments.${k} ${sp.cidr}" if sp.cidr != null],
+          ["inspection_cidr ${var.inspection_cidr}", "egress_cidr ${var.egress_cidr}"],
+        )
+      ) : "${split(" ", p[0])[0]} overlaps ${split(" ", p[1])[0]}"
+      if p[0] != p[1] && try(
+        cidrhost("${split("/", split(" ", p[0])[1])[0]}/${min(tonumber(split("/", split(" ", p[0])[1])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0) ==
+        cidrhost("${split("/", split(" ", p[1])[1])[0]}/${min(tonumber(split("/", split(" ", p[0])[1])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0),
+        false
+      )
+    ]))}."
+  }
+}
+
+variable "alarm_sns_topic_arn" {
+  description = "Existing SNS topic that receives the hub network alarms (transit gateway blackhole drops, NAT port exhaustion, VPN tunnel state). Null = the stage creates its own topic in the network account and subscribes alarm_subscriber_emails to it. The topic must allow cloudwatch.amazonaws.com to publish."
+  type        = string
+  default     = null
+}
+
+variable "alarm_subscriber_emails" {
+  description = "Email addresses subscribed to the topic the stage creates (ignored when alarm_sns_topic_arn is set). Each address must confirm its subscription. Empty = the alarms notify nobody."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for e in var.alarm_subscriber_emails : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))])
+    error_message = "alarm_subscriber_emails entries must be email addresses."
   }
 }

@@ -1,7 +1,25 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "project_prefix" {
@@ -196,7 +214,7 @@ variable "enable_principal_access_boundary" {
 }
 
 variable "environments" {
-  description = "Map of application environment definitions. Here each key gets a <prefix>-wl-<env>-plan/-apply SA pair bound to TFC workspace gcp-workload-<env>, and is_production (default false) marks the environments whose workspaces must be WIF-bound by immutable ID (tfc_workspace_ids). Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
+  description = "Map of application environment definitions. Here each key gets a <prefix>-wl-<env>-plan/-apply SA pair bound to TFC workspace gcp-workload-<env>, and is_production (default false here; required on every gcp.environments entry in config/landing-zone.yaml) marks the environments whose workspaces must be WIF-bound by immutable ID (tfc_workspace_ids). Null = gcp.environments from config/landing-zone.yaml (the single source shared by every GCP root and tfc-admin)."
   type = map(object({
     display_name            = string
     region                  = string
@@ -225,6 +243,11 @@ variable "environments" {
   validation {
     condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.cidr_block] : [for e in values(local.cfg.environments) : e.cidr_block]) : can(cidrnetmask(c))])
     error_message = "Each environment's cidr_block must be valid CIDR notation, e.g. 10.10.0.0/16."
+  }
+
+  validation {
+    condition     = var.environments != null || length(local.cfg.environments_missing_is_production) == 0
+    error_message = "Every gcp.environments entry in config/landing-zone.yaml must set is_production: true or false; the environment name is not read. Missing or invalid: ${join(", ", local.cfg.environments_missing_is_production)}."
   }
 }
 
@@ -261,5 +284,11 @@ variable "tfc_hostname" {
 variable "phase0_admin_impersonation_expires_at" {
   description = "RFC 3339 UTC timestamp after which the phase-0 human impersonation of terraform-admin stops working. Null = gcp.phase0_admin_impersonation_expires_at from config. Required (by either) while the grant is enabled and an environment is_production. Set it to the end of your bootstrap window (e.g. two weeks out); disable the grant entirely after the TFC handover."
   type        = string
+  default     = null
+}
+
+variable "organization_admin_members" {
+  description = "Members (group:... or user:...) granted the standing roles/resourcemanager.organizationAdmin by this root. Null = one group: member per gcp.organization_admin_groups in config/landing-zone.yaml. Set it explicitly to add the admin users that gcp-organization expects with gcp_overrides.allow_user_principals_for_break_glass (user:<admin_email>, user:<break_glass_user>): gcp-organization fails its plan when an org admin it expects is missing here."
+  type        = list(string)
   default     = null
 }

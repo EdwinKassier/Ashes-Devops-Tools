@@ -88,3 +88,7 @@ The following resources are created:
 |------|-------------|
 | <a name="output_detector_ids"></a> [detector\_ids](#output\_detector\_ids) | Map of Region to the GuardDuty detector ID created in that Region. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

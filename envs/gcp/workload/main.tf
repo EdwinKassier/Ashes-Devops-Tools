@@ -84,6 +84,9 @@ locals {
     try(local.cfg.environment_egress_proxy[var.environment], null),
     false,
   )
+  # The hub proxy's listening port, for HTTPS_PROXY in the app services. Null
+  # (a hub contract from before the key existed) = 443, the hub default.
+  egress_proxy_port = coalesce(try(local.hub_network.egress_proxy_port, null), 443)
   hub_ncc = {
     hub_id = try(local.hub_network.ncc_hub_id, null)
     group  = coalesce(try(local.hub_network.ncc_spoke_group, null), "edge")
@@ -122,7 +125,7 @@ locals {
   # not a bare lookup error, fails the plan. It can never be applied.
   env_config_map = local.read_projects ? local.projects_remote.environment_config : local.projects_contract.environment_config
   env_config = try(local.env_config_map[var.environment], {
-    folder_id               = "folders/0"
+    folder_id               = "0"
     host_project_id         = "contract-missing-env"
     host_project_number     = "0"
     region                  = "us-central1"
@@ -130,9 +133,14 @@ locals {
     labels                  = {}
     is_production           = null
     vpc_sc_access_policy_id = null
+    automation_identities   = []
+    spoke_network_name      = null
   })
 
-  labels = merge({ environment = var.environment, managed-by = "terraform" }, local.env_config.labels, var.extra_labels)
+  # Module labels. They repeat the four keys the mandatory require_labels OPA
+  # policy checks because some labels never receive the provider
+  # default_labels (Cloud SQL settings.user_labels).
+  labels = merge({ environment = var.environment, managed-by = "terraform", cost-center = local.gcp_label_cost_center, owner = local.gcp_label_owner }, local.env_config.labels, var.extra_labels)
 
   # Access policy for the environment perimeter: an explicit
   # vpc_sc_access_policy_name (legacy org-wide policy) wins; otherwise the
@@ -140,9 +148,9 @@ locals {
   # on which only this environment's workload SAs hold policyEditor.
   vpc_sc_access_policy = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : try(local.env_config.vpc_sc_access_policy_id, null)
 
-  # Explicit production marker from gcp-projects environment_config. The name
-  # match is only a fallback for an environment_config that predates it.
-  is_production = coalesce(try(local.env_config.is_production, null), can(regex("prod", lower(var.environment))))
+  # Production is the environment_config flag from gcp-projects, nothing else.
+  # projects_contract_guard fails the plan when the contract omits it.
+  is_production = try(local.env_config.is_production, null) == true
 
   # Public ingress: var.public_ingress_services, else
   # gcp.workload.public_ingress.<env>. Exposure needs the Cloud Armor policy.
@@ -187,12 +195,12 @@ ephemeral "tfe_outputs" "saas" {
 module "environment" {
   source = "../../../modules/gcp/stages/environment"
 
-  environment         = var.environment
-  project_prefix      = local.project_prefix
-  org_id              = local.org_id
-  billing_account     = local.billing_account
-  labels              = local.labels
-  deletion_protection = var.enable_deletion_protection
+  environment                = var.environment
+  project_prefix             = local.project_prefix
+  org_id                     = local.org_id
+  billing_account            = local.billing_account
+  labels                     = local.labels
+  enable_deletion_protection = var.enable_deletion_protection
 
   # Production: Cloud SQL HA by default, and app services must name a
   # service_team unless enable_host_project_workloads says otherwise.
@@ -208,13 +216,19 @@ module "environment" {
   }
 
   network = {
+    # The spoke VPC name gcp-projects publishes (gcp-network-hub peers with the
+    # same name). null = the stage's <project_prefix>-<environment>-vpc.
+    name = try(local.env_config.spoke_network_name, null)
     flow_logs = {
       aggregation_interval = var.log_config_aggregation_interval
-      sampling             = var.log_config_flow_sampling
+      sampling             = local.flow_log_sampling
     }
-    flow_logs_retention_days       = var.vpc_flow_logs_retention_days
-    private_service_connect_target = var.private_service_connect_target
-    additional_regions             = local.additional_regions
+    flow_logs_retention_days        = local.flow_logs_retention_days
+    explicit_zones                  = local.zones
+    private_service_connect_target  = var.private_service_connect_target
+    private_service_connect_name    = local.private_service_connect_name
+    private_service_connect_address = local.private_service_connect_address
+    additional_regions              = local.additional_regions
   }
 
   hub = {
@@ -225,6 +239,7 @@ module "environment" {
     egress_proxy = {
       enabled            = local.enable_egress_proxy
       service_attachment = try(local.hub_network.egress_proxy_service_attachment, null)
+      port               = local.egress_proxy_port
     }
   }
 
@@ -235,6 +250,12 @@ module "environment" {
     adaptive_protection = var.enable_adaptive_protection
     owasp_sensitivity   = var.owasp_sensitivity
   }
+
+  # This environment's own plan and apply SAs (gcp-bootstrap ->
+  # gcp-projects environment_config). The perimeter admits them with one
+  # ingress rule, so enforcing it does not block this workspace. A gcp-projects
+  # state that predates the key gives [] (no rule).
+  automation_identities = try(local.env_config.automation_identities, [])
 
   vpc_service_controls = {
     access_policy_name          = local.vpc_sc_access_policy
@@ -258,6 +279,13 @@ module "environment" {
     backup_schedules           = var.vm_backup_schedules
     enable_os_patch_management = var.enable_os_patch_management
     os_patch_deployments       = var.os_patch_deployments
+  }
+
+  # Backup and DR vault (CMP-8): on for a regulated environment.
+  backup_vault = {
+    enabled                 = local.enable_backup_vault
+    enforced_retention_days = local.backup_vault_enforced_retention_days
+    lock_effective_time     = local.backup_vault_lock_effective_time
   }
 
   saas_secret_bridge = {
@@ -286,6 +314,8 @@ module "environment" {
     github_repository_owner_id     = var.github_repository_owner_id
     enable_alerts                  = var.enable_app_alerts
     alert_notification_channel_ids = var.app_alert_notification_channel_ids
+    # CMP-12: a regulated environment's app-service databases need a CMEK.
+    require_database_cmek = local.require_database_cmek
     gke = {
       enabled                       = var.enable_gke_autopilot
       master_ipv4_cidr_block        = var.gke_master_ipv4_cidr_block
@@ -296,13 +326,164 @@ module "environment" {
   }
 }
 
-# Nothing else ties production to an enforced perimeter. Warn (check blocks never
-# fail the plan) when a production environment (environment_config is_production)
-# has no perimeter or only a dry-run one.
-check "vpc_sc_enforced_in_prod" {
+# The hub side (hub-to-<env>) is created by gcp-network-hub only once this
+# environment's network exists, so the first apply leaves the spoke side
+# INACTIVE until gcp-network-hub runs again (ARC-5). A run trigger from this
+# workspace back to gcp-network-hub would close a cycle in the tfc-admin run
+# trigger graph, so the second run stays a runbook step and this check warns.
+check "hub_peering_active" {
   assert {
-    condition     = !local.is_production || (local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run)
-    error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false (use vpc_sc_dry_run_restricted_services to keep staging further changes)."
+    condition     = local.hub_network == null || local.network_connectivity != "peering" || try(module.environment.vpc_peerings["hub-peering"].peering_state, "ACTIVE") != "INACTIVE"
+    error_message = "The hub peering of ${var.environment} is INACTIVE: queue a run of gcp-network-hub (docs/runbooks/add-environment.md step 5), then re-plan this workspace."
+  }
+}
+
+# Production needs an enforced perimeter: dry-run gives no exfiltration
+# protection. production_vpc_sc_dry_run_waiver is the explicit, reviewed
+# exception for a first rollout. It names a reason and an expiry date, and it
+# stops waiving after that date. The guard stops the plan; it changes no
+# resource.
+locals {
+  vpc_sc_prod_enforced = local.vpc_sc_access_policy != null && !local.vpc_sc_enable_dry_run
+  vpc_sc_waiver_until  = try("${substr(var.production_vpc_sc_dry_run_waiver.expires, 0, 10)}T23:59:59Z", null)
+}
+
+resource "terraform_data" "production_vpc_sc_enforced" {
+  count = local.is_production ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = local.vpc_sc_prod_enforced || (local.vpc_sc_waiver_until != null && timecmp(plantimestamp(), coalesce(local.vpc_sc_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
+      error_message = "Environment '${var.environment}' is production but its VPC-SC perimeter is ${local.vpc_sc_access_policy == null ? "NOT CREATED (no scoped access policy in environment_config and vpc_sc_access_policy_name is null)" : "in DRY-RUN (vpc_sc_enable_dry_run = true)"}${local.vpc_sc_waiver_until == null ? "" : ", and production_vpc_sc_dry_run_waiver expired on ${try(substr(var.production_vpc_sc_dry_run_waiver.expires, 0, 10), "")}"}. Dry-run gives no exfiltration protection: validate the violation logs, then set vpc_sc_enable_dry_run = false. For a first rollout only, set production_vpc_sc_dry_run_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
+    }
+  }
+}
+
+# Production network guards. Pinned zones (IAC-1): the subnet CIDRs are
+# index-aligned with the zones, so with discovered zones a change in the list
+# GCP returns re-derives the CIDRs and replaces in-use subnets. Egress (ARC-4):
+# without the hub Secure Web Proxy the private tier leaves through Cloud NAT
+# (and Cloud Run with the PRIVATE_RANGES_ONLY egress it then keeps by default
+# leaves on its own internet path) with no destination allowlist, so production needs the proxy or
+# production_egress_proxy_waiver, the explicit, reviewed and time-boxed
+# exception (same shape and expiry rule as production_vpc_sc_dry_run_waiver).
+# The guard stops the plan; it changes no resource.
+locals {
+  # Example zones for the guard message: us-east1 and europe-west1 have no -a
+  # zone (Google "Regions and zones", checked 2026-11-13).
+  zone_example        = join(", ", [for z in(contains(["us-east1", "europe-west1"], local.env_config.region) ? ["b", "c", "d"] : ["a", "b", "c"]) : "${local.env_config.region}-${z}"])
+  egress_waiver_until = try("${substr(var.production_egress_proxy_waiver.expires, 0, 10)}T23:59:59Z", null)
+}
+
+resource "terraform_data" "production_network_guard" {
+  count = local.is_production ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = length(local.zones) > 0
+      error_message = "Environment '${var.environment}' is production, so its zones must be pinned. Set gcp.environments.${var.environment}.zones in config/landing-zone.yaml (or the zones variable) to zones of the region, as gcloud compute zones list --filter=region:${local.env_config.region} shows them, for example [${local.zone_example}]. Subnet i of each tier takes the i-th CIDR. For an existing network, list the zones in the order of its subnet CIDRs (UPGRADING.md), and check that the plan shows no subnet change."
+    }
+
+    precondition {
+      condition     = local.enable_egress_proxy || (local.egress_waiver_until != null && timecmp(plantimestamp(), coalesce(local.egress_waiver_until, "1970-01-01T00:00:00Z")) <= 0)
+      error_message = "Environment '${var.environment}' is production but its private-tier egress does not go through the hub Secure Web Proxy${local.hub_network == null ? " (standalone: there is no hub)" : ""}, so it leaves through Cloud NAT (Cloud Run services and jobs with PRIVATE_RANGES_ONLY egress: on Cloud Run's own internet path) with no destination allowlist${local.egress_waiver_until == null ? "" : ", and production_egress_proxy_waiver expired on ${try(substr(var.production_egress_proxy_waiver.expires, 0, 10), "")}"}. Set gcp.environments.${var.environment}.egress_proxy: true (or enable_egress_proxy) with secure_web_proxy on gcp-network-hub (PREVIEW, docs/known-gaps.md), or set production_egress_proxy_waiver = { reason, expires = \"YYYY-MM-DD\" } for this workspace in config/tfc-workspaces.yaml."
+    }
+  }
+}
+
+# compliance_class: regulated (CMP-7). The regulated-gcp-workload preset sets
+# the values (config.tf); these guards fail the plan when an explicit variable
+# or a missing perimeter leaves the environment weaker. They change no resource,
+# and a standard environment's plan does not contain them. The perimeter admits
+# the environment's own pipeline SAs (automation_identities from gcp-projects),
+# so enforcing it does not block the apply.
+resource "terraform_data" "compliance_class_guard" {
+  count = local.compliance_class != "standard" ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    precondition {
+      condition     = contains(["standard", "regulated"], local.compliance_class)
+      error_message = "gcp.environments.${var.environment}.compliance_class is \"${local.compliance_class}\": use standard or regulated."
+    }
+
+    # CMP-1: the production gates (egress proxy, perimeter, zones, workload
+    # identity binding, admin containment) key on is_production, so a
+    # regulated environment must be production.
+    precondition {
+      condition     = !local.regulated || local.is_production
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated) but not production, so it would miss the production controls (CMP-1). Set gcp.environments.${var.environment}.is_production: true (then apply gcp-projects so environment_config carries it), or set compliance_class: standard."
+    }
+  }
+}
+
+resource "terraform_data" "regulated_perimeter_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    # Dry-run gives no exfiltration protection. production_vpc_sc_dry_run_waiver
+    # is a rollout aid for production; a regulated environment refuses it.
+    precondition {
+      condition     = local.vpc_sc_prod_enforced && var.production_vpc_sc_dry_run_waiver == null
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so its VPC-SC perimeter must be enforced with no waiver. ${local.vpc_sc_access_policy == null ? "There is NO perimeter: no scoped access policy in environment_config and vpc_sc_access_policy_name is null. Apply gcp-organization (enable_scoped_access_policies) and gcp-projects first." : (local.vpc_sc_enable_dry_run ? "The perimeter is in DRY-RUN: remove the vpc_sc_enable_dry_run = true override (the regulated preset sets false)." : "The perimeter is enforced.")}${var.production_vpc_sc_dry_run_waiver == null ? "" : " Remove production_vpc_sc_dry_run_waiver: a regulated environment does not accept it."} Read the dry-run violation logs before you mark an environment regulated."
+    }
+  }
+}
+
+resource "terraform_data" "regulated_flow_logs_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    precondition {
+      condition     = local.flow_log_sampling == 1 && local.flow_logs_retention_days >= 365
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so VPC flow logs must sample every flow (log_config_flow_sampling = 1, now ${local.flow_log_sampling}) and keep the export at least 365 days (vpc_flow_logs_retention_days, now ${local.flow_logs_retention_days}). Remove the overriding variable: the regulated preset sets both."
+    }
+  }
+}
+
+# The regulated preset turns Cloud Armor and its OWASP rules on; an explicit
+# enable_cloud_armor = false or enable_owasp_rules = false fails the plan.
+resource "terraform_data" "regulated_cloud_armor_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    precondition {
+      condition     = local.enable_cloud_armor && local.enable_owasp_rules
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so the Cloud Armor policy and its OWASP managed rules must stay on (enable_cloud_armor now ${local.enable_cloud_armor}, enable_owasp_rules now ${local.enable_owasp_rules}). Remove the overriding variable: the regulated preset sets both."
+    }
+  }
+}
+
+# Re-audit 5 CMP-1: a regulated environment may run without the egress proxy
+# (which leaves the private tier on Cloud NAT with no destination allowlist)
+# only on a waiver that expires within 90 days of the plan, so the exception is
+# reviewed at least every quarter. The VPC-SC waiver is refused outright above.
+resource "terraform_data" "regulated_egress_waiver_guard" {
+  count = local.regulated && !local.enable_egress_proxy && local.egress_waiver_until != null ? 1 : 0
+  input = try(var.production_egress_proxy_waiver.expires, null)
+
+  lifecycle {
+    precondition {
+      condition     = timecmp(coalesce(local.egress_waiver_until, "1970-01-01T00:00:00Z"), timeadd(plantimestamp(), "2160h")) <= 0
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so production_egress_proxy_waiver may expire at most 90 days after the plan (it expires ${try(substr(var.production_egress_proxy_waiver.expires, 0, 10), "")}). Without the egress proxy the private tier reaches any internet destination through Cloud NAT; set a nearer expiry and renew it after review, or turn the egress proxy on."
+    }
+  }
+}
+
+# CMP-8: a regulated environment keeps its Cloud SQL backups in an
+# enforced-retention, organization-only Backup and DR vault.
+resource "terraform_data" "regulated_backup_vault_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.compliance_class
+
+  lifecycle {
+    precondition {
+      condition     = local.enable_backup_vault
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so it needs the Backup and DR vault. Remove enable_backup_vault = false (or gcp.environments.${var.environment}.backup_vault.enabled: false)."
+    }
   }
 }
 
@@ -315,6 +496,10 @@ resource "terraform_data" "projects_contract_guard" {
     precondition {
       condition     = contains(keys(local.env_config_map), var.environment)
       error_message = "The gcp-projects contract environment_config has no \"${var.environment}\" entry (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output); add the environment to gcp.environments and apply gcp-projects first."
+    }
+    precondition {
+      condition     = try(local.env_config.is_production, null) != null
+      error_message = "The gcp-projects contract environment_config.${var.environment} has no is_production (projects_contract / gcp.contracts.projects, else the ${var.projects_workspace_name} workspace's contract output). Set it to true or false; the environment name is not read."
     }
   }
 }

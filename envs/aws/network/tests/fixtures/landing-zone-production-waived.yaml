@@ -10,7 +10,7 @@ org:
 aws:
   log_archive_bucket_name: cfgco-org-log-archive
   workload_environments:
-    prod: {account_key: workload_prod}
+    prod: {is_production: true, account_key: workload_prod}
   contracts:
     organization:
       organization_id: o-cfgcfgcfg0

@@ -61,6 +61,7 @@ resource "aws_security_group" "this" {
 # -----------------------------------------------------------------------------
 
 resource "aws_lb" "this" {
+  # checkov:skip=CKV2_AWS_20:HTTP listeners are caller-supplied via var.listeners (for_each), which Checkov cannot follow. The module supports an HTTP-to-HTTPS redirect (default_action = redirect-https, tested) but does not forbid a plain HTTP forward listener; see docs/known-gaps.md.
   # checkov:skip=CKV_AWS_91:Access logging is opt-in via var.access_logs (the caller supplies the S3 bucket + prefix). The dynamic access_logs block enables it when configured; a landing-zone LB primitive cannot mandate a bucket it does not own.
   name               = var.name
   load_balancer_type = var.load_balancer_type

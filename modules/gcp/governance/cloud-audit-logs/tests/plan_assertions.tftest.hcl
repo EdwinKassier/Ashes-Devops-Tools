@@ -173,3 +173,272 @@ run "module_labels_applied" {
     error_message = "var.labels must land on the audit-log buckets."
   }
 }
+
+# The retention output reads the planned lifecycle rule, and the lock uses the
+# same number of days.
+run "retention_output_reads_lifecycle" {
+  command = plan
+
+  variables {
+    log_retention_days = 2190
+    enable_bucket_lock = true
+  }
+
+  assert {
+    condition     = output.log_retention_days == 2190 && tonumber(google_storage_bucket.audit_logs.retention_policy[0].retention_period) == 2190 * 86400
+    error_message = "log_retention_days must set the lifecycle Delete age, the output and the locked retention period."
+  }
+}
+
+# ── CMP-02: network and edge logs into the protected audit store ───────────────
+
+run "network_log_export_off_by_default" {
+  command = plan
+
+  variables {
+    org_id = "123456789"
+  }
+
+  assert {
+    condition     = length(google_logging_organization_sink.org_network_logs_sink) == 0
+    error_message = "The network log sink must not be planned unless enable_network_log_export = true."
+  }
+
+  assert {
+    condition     = output.network_log_sink == null
+    error_message = "network_log_sink must be null when the export is off."
+  }
+}
+
+run "network_log_export_needs_org_id" {
+  command = plan
+
+  variables {
+    enable_network_log_export = true
+  }
+
+  assert {
+    condition     = length(google_logging_organization_sink.org_network_logs_sink) == 0
+    error_message = "The network log sink is an org sink: without org_id nothing must be planned."
+  }
+}
+
+run "network_log_export_routes_to_audit_bucket" {
+  command = plan
+
+  variables {
+    org_id                    = "123456789"
+    enable_network_log_export = true
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_network_logs_sink[0].destination == "storage.googleapis.com/${var.project_id}-audit-logs"
+    error_message = "The network log sink must write to the protected audit bucket (<project>-audit-logs), not to a second store."
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_network_logs_sink[0].include_children == true && google_logging_organization_sink.org_network_logs_sink[0].org_id == "123456789"
+    error_message = "The network log sink must be an aggregated org sink (include_children = true)."
+  }
+
+  # The sink shares the org Logging service account, which org_log_writer
+  # already grants objectCreator: the module adds no IAM binding for it, so
+  # turning the export off can never remove the audit export's grant.
+  assert {
+    condition     = length(google_storage_bucket_iam_member.org_log_writer) == 1
+    error_message = "The org audit sink's objectCreator grant (shared by the network log sink) must stay."
+  }
+
+  assert {
+    condition     = output.network_log_sink.name == "org-network-logs" && output.network_log_sink.destination == "storage.googleapis.com/${var.project_id}-audit-logs"
+    error_message = "network_log_sink must report the sink name and destination."
+  }
+}
+
+# Exact log IDs through log_id() (unencoded), never a logName substring.
+run "network_log_filter_uses_exact_log_ids" {
+  command = plan
+
+  variables {
+    org_id                    = "123456789"
+    enable_network_log_export = true
+  }
+
+  assert {
+    condition = alltrue([
+      for id in [
+        "compute.googleapis.com/firewall",
+        "compute.googleapis.com/nat_flows",
+        "requests",
+        "loadbalancing.googleapis.com/requests",
+        "loadbalancing.googleapis.com/external_regional_requests",
+        "networkservices.googleapis.com/gateway_requests",
+        "networksecurity.googleapis.com/firewall_threat",
+      ] : strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "log_id(\"${id}\")")
+    ])
+    error_message = "The filter must select every network and edge log ID with log_id()."
+  }
+
+  assert {
+    condition     = !strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "logName") && !strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "%2F")
+    error_message = "The filter must not use logName substrings or URL-encoded IDs."
+  }
+
+  assert {
+    condition     = strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "((log_id(\"requests\") OR log_id(\"loadbalancing.googleapis.com/requests\") OR log_id(\"loadbalancing.googleapis.com/external_regional_requests\")) AND (resource.type=\"http_load_balancer\" OR resource.type=\"internal_http_lb_rule\" OR resource.type=\"http_external_regional_lb_rule\"))")
+    error_message = "The request log IDs must be scoped to the load balancer resource types."
+  }
+
+  assert {
+    condition     = !strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "cloudaudit") && !strcontains(google_logging_organization_sink.org_network_logs_sink[0].filter, "vpc_flows")
+    error_message = "The filter must not duplicate the audit logs (org-audit-sink) or take the VPC flow logs (exported per environment)."
+  }
+}
+
+# The postcondition: the network sink must write as the same (shared) service
+# account as org-audit-sink, which holds objectCreator on the audit bucket.
+run "network_log_sink_shares_audit_writer_identity" {
+  command = plan
+
+  variables {
+    org_id                    = "123456789"
+    enable_network_log_export = true
+  }
+
+  override_resource {
+    target          = google_logging_organization_sink.org_audit_sink
+    override_during = plan
+    values = {
+      writer_identity = "serviceAccount:service-org-123456789@gcp-sa-logging.iam.gserviceaccount.com"
+    }
+  }
+
+  override_resource {
+    target          = google_logging_organization_sink.org_network_logs_sink
+    override_during = plan
+    values = {
+      writer_identity = "serviceAccount:service-org-123456789@gcp-sa-logging.iam.gserviceaccount.com"
+    }
+  }
+
+  assert {
+    condition     = output.network_log_sink_writer_identity == "serviceAccount:service-org-123456789@gcp-sa-logging.iam.gserviceaccount.com"
+    error_message = "With the shared org Logging service account the plan must pass."
+  }
+}
+
+run "network_log_sink_legacy_audit_identity_fails" {
+  command = plan
+
+  variables {
+    org_id                    = "123456789"
+    enable_network_log_export = true
+  }
+
+  override_resource {
+    target          = google_logging_organization_sink.org_audit_sink
+    override_during = plan
+    values = {
+      writer_identity = "serviceAccount:o123456789-111111@gcp-sa-logging.iam.gserviceaccount.com"
+    }
+  }
+
+  override_resource {
+    target          = google_logging_organization_sink.org_network_logs_sink
+    override_during = plan
+    values = {
+      writer_identity = "serviceAccount:service-org-123456789@gcp-sa-logging.iam.gserviceaccount.com"
+    }
+  }
+
+  expect_failures = [google_logging_organization_sink.org_network_logs_sink]
+}
+
+# Legacy audit sink identity after the break-glass grant: the operator sets
+# network_log_writer_granted and the differing identities are accepted.
+run "network_log_sink_legacy_identity_with_grant_flag_passes" {
+  command = plan
+
+  variables {
+    org_id                     = "123456789"
+    enable_network_log_export  = true
+    network_log_writer_granted = true
+  }
+
+  override_resource {
+    target          = google_logging_organization_sink.org_audit_sink
+    override_during = plan
+    values = {
+      writer_identity = "serviceAccount:o123456789-111111@gcp-sa-logging.iam.gserviceaccount.com"
+    }
+  }
+
+  override_resource {
+    target          = google_logging_organization_sink.org_network_logs_sink
+    override_during = plan
+    values = {
+      writer_identity = "serviceAccount:service-org-123456789@gcp-sa-logging.iam.gserviceaccount.com"
+    }
+  }
+
+  assert {
+    condition     = length(google_logging_organization_sink.org_network_logs_sink) == 1
+    error_message = "With network_log_writer_granted the sink must plan despite a legacy audit sink identity."
+  }
+}
+
+# The export adds no IAM binding: the module's IAM resources are the same with
+# the export off and on (scripts/check-consistency.sh also fails on any IAM
+# resource that binds the network sink's writer identity).
+run "iam_bindings_with_export_off" {
+  command = plan
+
+  variables {
+    org_id = "123456789"
+  }
+
+  assert {
+    condition     = length(google_storage_bucket_iam_member.org_log_writer) == 1 && length(google_project_iam_member.audit_analytics_writer) == 1 && length(google_bigquery_dataset_iam_member.bq_sink_writer) == 0
+    error_message = "Baseline IAM bindings with the export off."
+  }
+}
+
+run "iam_bindings_unchanged_with_export_on" {
+  command = plan
+
+  variables {
+    org_id                    = "123456789"
+    enable_network_log_export = true
+  }
+
+  assert {
+    condition     = length(google_storage_bucket_iam_member.org_log_writer) == 1 && length(google_project_iam_member.audit_analytics_writer) == 1 && length(google_bigquery_dataset_iam_member.bq_sink_writer) == 0
+    error_message = "Turning the export on must not add or remove an IAM binding."
+  }
+}
+
+# Re-audit 7 IAC-1: the primary org audit sink exports every child's audit
+# logs into the audit bucket. include_children = false would stop every
+# project's logs reaching the WORM store.
+run "org_audit_sink_covers_every_project" {
+  command = plan
+
+  variables {
+    org_id = "123456789"
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_audit_sink[0].include_children == true
+    error_message = "The org audit sink must include every child resource (include_children = true)."
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_audit_sink[0].filter == "logName:cloudaudit.googleapis.com" && google_logging_organization_sink.org_audit_sink[0].org_id == "123456789"
+    error_message = "The org audit sink must export every Cloud Audit Log of the organization."
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_audit_sink[0].destination == "storage.googleapis.com/${google_storage_bucket.audit_logs.name}"
+    error_message = "The org audit sink must write to this module's audit bucket."
+  }
+}

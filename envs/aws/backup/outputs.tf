@@ -10,3 +10,8 @@ output "backup_policy_id" {
   description = "ID of the organization BACKUP_POLICY attached to the Workloads OU."
   value       = module.aws_backup.backup_policy_id
 }
+
+output "copy_vault_arn" {
+  description = "ARN of the locked central copy vault in the backup account. Null unless compliance.backup.copy_to_central_vault."
+  value       = module.aws_backup.copy_vault_arn
+}

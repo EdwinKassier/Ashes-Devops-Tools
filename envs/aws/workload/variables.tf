@@ -3,9 +3,27 @@
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "tfc_organization" {
@@ -51,10 +69,11 @@ variable "organization_contract" {
 }
 
 variable "network_contract" {
-  description = "aws-network stage contract: tgw_id (shared transit gateway, null = no attachment) and ipam_pool_ids (region => IPAM pool ID; a missing region uses the literal vpc_cidr). Null = aws.contracts.network from config/landing-zone.yaml, else read from the aws-network workspace's remote state. Ignored when enable_network_hub = false."
+  description = "aws-network stage contract: tgw_id (shared transit gateway, null = no attachment), ipam_pool_ids (region => IPAM pool ID; a missing region uses the literal vpc_cidr) and resolver_profile_id (the org Route 53 Profile the spoke VPC associates, null = no association). Null = aws.contracts.network from config/landing-zone.yaml, else read from the aws-network workspace's remote state. Ignored when enable_network_hub = false."
   type = object({
-    tgw_id        = optional(string)
-    ipam_pool_ids = optional(map(string), {})
+    tgw_id              = optional(string)
+    ipam_pool_ids       = optional(map(string), {})
+    resolver_profile_id = optional(string)
   })
   default = null
 
@@ -62,13 +81,59 @@ variable "network_contract" {
     condition     = try(var.network_contract.tgw_id, null) == null || can(regex("^tgw-", try(var.network_contract.tgw_id, "")))
     error_message = "network_contract.tgw_id must be null or a transit gateway id (tgw-xxxxxxxx)."
   }
+
+  validation {
+    condition     = try(var.network_contract.resolver_profile_id, null) == null || can(regex("^rp-[0-9a-z]+$", try(var.network_contract.resolver_profile_id, "")))
+    error_message = "network_contract.resolver_profile_id must be null or a Route 53 Profile ID (rp-xxxxxxxx)."
+  }
 }
 
 variable "ipam_explicit_cidr" {
-  description = "Opt a NEW spoke VPC into requesting vpc_cidr explicitly from the IPAM pool (pool + cidr_block). Default false keeps the legacy pool + netmask_length shape; enabling it on an existing VPC replaces it."
+  description = "When ipam_pool_id is set, request vpc_cidr explicitly from the pool (default true). false keeps the legacy pool + netmask_length shape. An existing netmask VPC plans no change when vpc_cidr equals its allocated block (see UPGRADING.md)."
   type        = bool
-  default     = false
+  default     = true
   nullable    = false
+}
+
+variable "availability_zones" {
+  description = "Availability zone NAMES for the spoke VPC, valid in this account only (a name can map to a different physical zone in another account). Null (default) resolves them from availability_zone_ids, else aws.workload_environments.<env>.availability_zone_ids, else aws.network.availability_zone_ids from config/landing-zone.yaml, else the region's first three available zones. Only the first az_count entries are used."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.availability_zones == null ? true : length(var.availability_zones) > 0
+    error_message = "availability_zones must contain at least one zone."
+  }
+}
+
+variable "availability_zone_ids" {
+  description = "Availability zone IDs (for example euw2-az2) for the spoke VPC, the same physical zones in every account. Ignored when availability_zones is set. Null = aws.workload_environments.<env>.availability_zone_ids, else aws.network.availability_zone_ids from config/landing-zone.yaml, else the region's first three available zones. Changing the resolved zone names of an existing workload replaces its subnets: see UPGRADING.md."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.availability_zone_ids == null ? true : length(var.availability_zone_ids) > 0 && alltrue([for id in var.availability_zone_ids : can(regex("^[a-z]+[0-9]+-az[0-9]+$", id))])
+    error_message = "availability_zone_ids must be a non-empty list of AZ IDs such as euw2-az2 or use1-az4."
+  }
+}
+
+variable "az_count" {
+  description = "Number of availability zones the spoke spreads each subnet tier across (1-3)."
+  type        = number
+  default     = 2
+  nullable    = false
+
+  validation {
+    condition     = var.az_count >= 1 && var.az_count <= 3
+    error_message = "az_count must be between 1 and 3."
+  }
+
+  # Resolved zones (IDs or the region) are checked by the
+  # aws_availability_zones postcondition in azs.tf.
+  validation {
+    condition     = var.availability_zones == null ? true : var.az_count <= length(var.availability_zones)
+    error_message = "az_count must not exceed the number of availability_zones provided."
+  }
 }
 
 variable "enable_network_hub" {
@@ -111,7 +176,7 @@ variable "aws_region" {
   default     = null
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
     error_message = "aws_region (or org.regions.aws in config/landing-zone.yaml) must be a valid AWS region name, e.g. eu-west-2."
   }
 }
@@ -189,6 +254,29 @@ variable "kms_key_arn" {
     condition     = var.kms_key_arn == "" || can(regex("^arn:aws[a-z-]*:kms:[a-z0-9-]+:[0-9]{12}:(key|alias)/.+$", var.kms_key_arn))
     error_message = "kms_key_arn must be empty (create the workload CMK) or a KMS key/alias ARN."
   }
+}
+
+variable "enable_patch_install" {
+  description = "Install approved patches weekly (Patch Manager AWS-RunPatchBaseline, RebootIfNeeded, Sunday 03:00 UTC, 10% concurrency) on every SSM-managed instance in this workload account and region. Instances reboot when a patch needs it. False keeps the daily patch scan only."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "patch_install_target_tag" {
+  description = "Install patches only on the managed instances in this workload account that carry this tag (key and value), which narrows the reboot scope. Null (default) installs on every SSM-managed instance in the account and region. The daily scan always covers every managed instance."
+  type = object({
+    key   = string
+    value = string
+  })
+  default = null
+}
+
+variable "patch_operating_systems" {
+  description = "Operating systems that get a custom patch baseline in this workload account, each set as the account default for that OS. Default Amazon Linux 2023. An account that still runs Amazon Linux 2 sets [\"AMAZON_LINUX_2\", \"AMAZON_LINUX_2023\"]."
+  type        = set(string)
+  default     = ["AMAZON_LINUX_2023"]
+  nullable    = false
 }
 
 variable "enable_edge" {
@@ -381,6 +469,23 @@ variable "assume_role_arn" {
 # docs/guides/deploying-a-service.md (AWS section).
 # -----------------------------------------------------------------------------
 
+variable "is_production" {
+  description = "Production environment: ECS services whose enable_autoscaling is unset scale on CPU. Null = aws.workload_environments.<environment>.is_production from config/landing-zone.yaml, else false. The environment name is not read."
+  type        = bool
+  default     = null
+}
+
+variable "data_classification" {
+  description = "Data sensitivity of this environment, written as the DataClassification tag through the provider default_tags: public, internal, confidential or restricted (the organization tag policy allows only these). Null = aws.workload_environments.<environment>.data_classification from config/landing-zone.yaml, else internal."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = contains(["public", "internal", "confidential", "restricted"], coalesce(var.data_classification, try(local.cfg.workload_data_classification[local.environment], null), "internal"))
+    error_message = "data_classification (or aws.workload_environments.<environment>.data_classification in config/landing-zone.yaml) must be public, internal, confidential or restricted."
+  }
+}
+
 variable "services" {
   description = "Services to run in this environment, keyed by service name. Full field reference: modules/aws/stages/app-services (variable services). Null (default) = aws.workload_environments.<environment>.services from config/landing-zone.yaml, else nothing; an explicit value replaces the config."
   type = map(object({
@@ -408,7 +513,7 @@ variable "services" {
     task_role_managed_policy_arns = optional(list(string), [])
 
     enable_execute_command   = optional(bool, false)
-    enable_autoscaling       = optional(bool, false)
+    enable_autoscaling       = optional(bool) # null = on in production (var.is_production), off elsewhere
     autoscaling_min_capacity = optional(number, 2)
     autoscaling_max_capacity = optional(number, 10)
 
@@ -433,10 +538,11 @@ variable "services" {
       enable_serverless_v2    = optional(bool, true)
       serverless_min_capacity = optional(number, 0.5)
       serverless_max_capacity = optional(number, 4)
-      database_name           = optional(string) # null => service name with _ for -
+      database_name           = optional(string) # null => service name, underscores for hyphens
       backup_retention_period = optional(number, 7)
       deletion_protection     = optional(bool, true)
       skip_final_snapshot     = optional(bool, false)
+      enable_org_backup       = optional(bool, true) # false keeps the cluster out of the org backup policy (no backup tag)
     }))
 
     # Per-service CloudWatch alarms (CPU, memory, 5xx, p99 latency, DLQ).
@@ -553,10 +659,17 @@ variable "app_alb_ingress_cidrs" {
   default     = []
 }
 
-variable "app_alb_enable_deletion_protection" {
-  description = "Deletion protection on the shared ALB. Set false only for ephemeral environments."
+variable "enable_app_alb_deletion_protection" {
+  description = "Deletion protection on the shared ALB. Set false only for ephemeral environments. Null (default) uses the deprecated app_alb_enable_deletion_protection input, else true."
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "app_alb_enable_deletion_protection" {
+  description = "Deprecated: use enable_app_alb_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_app_alb_deletion_protection; app_alb_enable_deletion_protection is removed in v1.0."
 }
 
 variable "app_alb_access_logs_bucket" {
@@ -581,4 +694,17 @@ variable "app_alarm_sns_topic_arn" {
   description = "SNS topic for app alarm notifications, or null for no notification action."
   type        = string
   default     = null
+}
+
+variable "enable_gateway_endpoint_policies" {
+  description = "Limit the spoke's S3 and DynamoDB gateway endpoints, which bypass the hub egress firewall, to resources of this organization (aws:ResourceOrgID) and the documented AWS-owned buckets of the region (ECR image layers, Amazon Linux repositories, SSM Agent, Patch Manager) plus gateway_endpoint_extra_s3_arns. Null = on in production (is_production), off elsewhere. Needs the organization_id of the aws-organization contract."
+  type        = bool
+  default     = null
+}
+
+variable "gateway_endpoint_extra_s3_arns" {
+  description = "Further S3 object ARNs (arn:aws:s3:::<bucket>/*) that workloads may read through the S3 gateway endpoint when gateway endpoint policies are on: AWS-owned buckets of other services, or a partner bucket outside the organization. Exact bucket names only."
+  type        = list(string)
+  default     = []
+  nullable    = false
 }

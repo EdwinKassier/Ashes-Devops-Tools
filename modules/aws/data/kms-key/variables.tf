@@ -83,7 +83,7 @@ variable "key_user_arns" {
 }
 
 variable "enable_protection_tag" {
-  description = "Tag the key <protection_tag_key> = \"true\" so the organization deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey/DisableKeyRotation and protection-tag removal except via break-glass. Default false; the security stage enables it for the log-archive, forensics and security-tooling keys."
+  description = "Tag the key <protection_tag_key> = \"true\" so the organization deny-tamper SCP blocks ScheduleKeyDeletion/DisableKey/DisableKeyRotation, alias retargeting or deletion (UpdateAlias/DeleteAlias) and protection-tag removal except via break-glass. Default false; the security stage enables it for the log-archive, forensics and security-tooling keys."
   type        = bool
   default     = false
 }
@@ -109,6 +109,13 @@ variable "via_services" {
   description = "Optional list of kms:ViaService values that scope the general-usage grant for key_user_arns (e.g. s3.eu-west-1.amazonaws.com). Never applied to the log-service grants."
   type        = list(string)
   default     = []
+}
+
+variable "enable_key_user_grants" {
+  description = "Add a KeyUserGrants statement: key_user_arns may call kms:CreateGrant, ListGrants and RevokeGrant for AWS resources only (kms:GrantIsForAWSResource = true), scoped by via_services when set. Services such as AWS Backup, EBS and RDS use a customer managed key through grants. Default false (no grant statement)."
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 variable "service_principals" {

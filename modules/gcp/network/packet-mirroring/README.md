@@ -139,3 +139,7 @@ The following resources are created:
 | <a name="output_policy"></a> [policy](#output\_policy) | The full packet mirroring policy resource object, or null when enable = false |
 | <a name="output_region"></a> [region](#output\_region) | The region of the packet mirroring policy |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

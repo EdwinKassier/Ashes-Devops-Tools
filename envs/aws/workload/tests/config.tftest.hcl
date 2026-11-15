@@ -2,7 +2,15 @@
 # aws-workload-<env> workspace; the workload account key, VPC CIDR and the
 # shared org values come from the landing-zone config file.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 mock_provider "aws" { alias = "us_east_1" }
 # tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
 # no run contacts HCP Terraform.
@@ -19,6 +27,7 @@ override_data {
   values = {
     outputs = {
       contract = {
+        organization_id   = "o-abc1234567"
         account_ids       = { workload_nonprod = "222222222222", workload_prod = "333333333333" }
         account_role_arns = { workload_nonprod = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
       }
@@ -142,6 +151,7 @@ run "scaffold_aws_plans" {
     values = {
       outputs = {
         contract = {
+          organization_id   = "o-abc1234567"
           account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
           account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
         }
@@ -164,6 +174,7 @@ run "scaffold_gcp_aws_plans" {
     values = {
       outputs = {
         contract = {
+          organization_id   = "o-abc1234567"
           account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
           account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
         }
@@ -186,10 +197,101 @@ run "scaffold_gcp_aws_saas_plans" {
     values = {
       outputs = {
         contract = {
+          organization_id   = "o-abc1234567"
           account_ids       = { workload_dev = "222222222222", workload_prod = "333333333333" }
           account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account", workload_prod = "arn:aws:iam::333333333333:role/cross-account" }
         }
       }
     }
   }
+}
+
+# ARC-16: production comes from is_production, never from the environment name.
+run "is_production_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+    environment              = "prod"
+  }
+
+  assert {
+    condition     = local.is_production == true
+    error_message = "aws.workload_environments.prod.is_production: true must make the root production."
+  }
+}
+
+run "dev_config_is_not_production" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+  }
+
+  assert {
+    condition     = local.is_production == false
+    error_message = "aws.workload_environments.dev.is_production: false must leave the root non-production."
+  }
+}
+
+run "is_production_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.services.yaml"
+    is_production            = true
+  }
+
+  assert {
+    condition     = local.is_production == true
+    error_message = "An explicit is_production variable must win over the config file."
+  }
+}
+
+# DataClassification default tag (CMP-10): aws.workload_environments.<env>
+# .data_classification, else internal; an explicit variable wins; any value
+# outside the tag policy's four is rejected.
+run "data_classification_tag_from_config" {
+  command = plan
+
+  variables {
+    environment = "prod"
+  }
+
+  assert {
+    condition     = local.aws_default_tags["DataClassification"] == "restricted"
+    error_message = "the DataClassification default tag must come from aws.workload_environments.<env>.data_classification."
+  }
+}
+
+run "data_classification_tag_defaults_to_internal" {
+  command = plan
+
+  assert {
+    condition     = local.aws_default_tags["DataClassification"] == "internal"
+    error_message = "an environment without data_classification must be tagged DataClassification = internal."
+  }
+}
+
+run "data_classification_variable_wins" {
+  command = plan
+
+  variables {
+    data_classification = "confidential"
+  }
+
+  assert {
+    condition     = local.aws_default_tags["DataClassification"] == "confidential"
+    error_message = "an explicit data_classification must win over the config file."
+  }
+}
+
+run "data_classification_rejects_unknown_value" {
+  command = plan
+
+  variables {
+    data_classification = "secret"
+  }
+
+  expect_failures = [var.data_classification]
 }

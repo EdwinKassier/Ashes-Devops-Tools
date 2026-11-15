@@ -1,0 +1,5 @@
+# Expected to FAIL schema validation: AWS region ordinals start at 1.
+version: 1
+org:
+  regions:
+    aws: us-gov-west-0

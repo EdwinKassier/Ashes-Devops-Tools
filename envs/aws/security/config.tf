@@ -29,6 +29,24 @@ locals {
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
     notification_emails     = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    # compliance.breach_notification_contacts: people who must see the first
+    # signal of a breach (for example the DPO). Added to the subscriber map.
+    breach_contacts = try([for e in local.lz.compliance.breach_notification_contacts : tostring(e)], [])
+    # aws.workload_environments entries with is_production: true. Any one makes
+    # the security contact guard strict (CMP-6), like a production profile.
+    workload_production = try([
+      for k, e in local.lz.aws.workload_environments : k if try(tobool(e.is_production), false)
+    ], [])
+    # aws.workload_environments entries with compliance_class: regulated. Any
+    # one sets a 365-day floor on the log-archive retention: every account's
+    # VPC flow logs land in that bucket (LOG-13).
+    workload_regulated = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tostring(e.compliance_class), "standard") == "regulated"
+    ])
+    # compliance: the log-archive retention and the framework floors (CMP-2).
+    audit_log_retention_days = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
+    compliance_frameworks    = try([for f in local.lz.compliance.frameworks : tostring(f)], [])
     # Same key, same value in the aws-organization root.
     enable_cloudtrail_delegated_admin = try(tobool(local.lz.aws.enable_cloudtrail_delegated_admin), null)
     create_management_trail           = try(tobool(local.lz.aws.create_management_trail), null)
@@ -45,19 +63,28 @@ locals {
     }
   }
 
+  # Framework audit-retention floors in days. Canonical copy: every root that
+  # reads compliance.frameworks holds this exact line (check-consistency.sh).
+  retention_floor_days = { pci_dss = 365, hipaa = 2190, fedramp_moderate = 913, soc2 = 0, iso27001 = 0, nist_800_53 = 0, dora = 0, nis2 = 0, gdpr = 0 }
+  retention_floor      = max(0, [for f in local.cfg.compliance_frameworks : lookup(local.retention_floor_days, f, 0)]...)
+
   # The aws section as the stage's aws object (config-backed keys only; every
   # other key is unset here). notifications.emails feeds the subscriber map, so
   # the effective object below keeps aws_overrides > config file > default.
   lz_aws = {
     log_archive_bucket_name = local.cfg.log_archive_bucket_name
     aws_enabled_regions     = local.cfg.aws_enabled_regions
+    # compliance.audit_log_retention_days: the same value as the GCP audit bucket.
+    log_archive_retention_days = local.cfg.audit_log_retention_days
     # Org trail managed by the CloudTrail delegated admin (security tooling).
     enable_cloudtrail_delegated_admin = local.cfg.enable_cloudtrail_delegated_admin
     create_management_trail           = local.cfg.create_management_trail
-    # One email subscriber per notifications.emails entry.
-    notification_subscribers = length(coalesce(local.cfg.notification_emails, [])) > 0 ? {
-      for i, e in local.cfg.notification_emails : "notify-${i}" => { protocol = "email", endpoint = e }
-    } : null
+    # One email subscriber per notifications.emails entry (notify-<i>) and per
+    # compliance.breach_notification_contacts entry (notify-dpo-<i>).
+    notification_subscribers = length(coalesce(local.cfg.notification_emails, [])) + length(local.cfg.breach_contacts) > 0 ? merge(
+      { for i, e in coalesce(local.cfg.notification_emails, []) : "notify-${i}" => { protocol = "email", endpoint = e } },
+      { for i, e in local.cfg.breach_contacts : "notify-dpo-${i}" => { protocol = "email", endpoint = e } },
+    ) : null
   }
   # A set (non-null) override key wins; an unset one keeps the config value.
   aws = merge(local.lz_aws, { for k, v in var.aws_overrides : k => v if v != null })
@@ -73,10 +100,11 @@ locals {
   management_account_id = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
   aws_enabled_regions   = local.aws.aws_enabled_regions != null ? local.aws.aws_enabled_regions : ["eu-west-2"]
 
-  # aws_overrides > notifications.emails > a placeholder SecOps email.
-  notification_subscribers = local.aws.notification_subscribers != null ? tomap(local.aws.notification_subscribers) : tomap({
-    secops = { protocol = "email", endpoint = "secops@example.com" }
-  })
+  # aws_overrides > notifications.emails and
+  # compliance.breach_notification_contacts > no subscriber. There is no
+  # placeholder: main.tf fails a production plan without a real subscriber
+  # (security_contact_guard) and warns otherwise (CMP-6).
+  notification_subscribers = local.aws.notification_subscribers != null ? tomap(local.aws.notification_subscribers) : tomap({})
 
   # Profile-driven defaults (aws_overrides > profile). starter keeps every
   # preventive and core detective control (CloudTrail, Config, GuardDuty,

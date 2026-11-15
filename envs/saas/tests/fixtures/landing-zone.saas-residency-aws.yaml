@@ -1,0 +1,25 @@
+# Fixture: no saas.allowed_regions, so the SaaS residency check falls back to
+# aws.allowed_regions.
+org:
+  tfc:
+    organization: acme-tfc
+aws:
+  allowed_regions: [eu-west-2]
+saas:
+  enabled: true
+  workspaces: [web]
+  supabase: true
+  vercel: true
+  defaults:
+    supabase:
+      organization_id: acmeorgid1234
+      region: eu-west-2
+    vercel:
+      team_id: team_acme
+  stacks:
+    web:
+      supabase:
+        project_name: acme-web
+      vercel:
+        project_name: acme-web
+        github_repo: acme/web

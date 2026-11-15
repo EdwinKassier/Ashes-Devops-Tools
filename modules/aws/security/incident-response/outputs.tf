@@ -17,3 +17,8 @@ output "quarantine_security_group_id" {
   description = "ID of the deny-all quarantine security group, or null when incident response is disabled or quarantine_vpc_id is unset."
   value       = try(aws_security_group.quarantine[0].id, null)
 }
+
+output "forensics_kms_grant_enabled" {
+  description = "True when the forensics role is granted use of forensics_kms_key_arn (known at plan, even when the key ARN is not)."
+  value       = length(aws_iam_role_policy.forensics_kms) == 1
+}

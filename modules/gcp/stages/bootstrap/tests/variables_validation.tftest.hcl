@@ -178,3 +178,93 @@ run "rejects_non_numeric_github_repository_owner_id" {
     github_repository_owner_id = "my-org"
   }
 }
+
+run "grantable_roles_reject_deny_admin" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles = ["roles/billing.admin", "roles/iam.denyAdmin"]
+  }
+
+  expect_failures = [var.organization_apply_grantable_roles]
+}
+
+run "grantable_roles_reject_org_admin" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles = ["roles/resourcemanager.organizationAdmin"]
+  }
+
+  expect_failures = [var.organization_apply_grantable_roles]
+}
+
+run "grantable_roles_reject_token_creator" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles = ["roles/iam.serviceAccountTokenCreator"]
+  }
+
+  expect_failures = [var.organization_apply_grantable_roles]
+}
+
+run "grantable_roles_reject_owner_and_iam_admins" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles = ["roles/owner", "roles/compute.securityAdmin"]
+  }
+
+  expect_failures = [var.organization_apply_grantable_roles]
+}
+
+run "grantable_roles_reject_custom_roles" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles = ["organizations/123456789/roles/anything"]
+  }
+
+  expect_failures = [var.organization_apply_grantable_roles]
+}
+
+run "grantable_roles_reject_more_than_ten" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles = [for i in range(11) : "roles/logging.viewer${i}"]
+  }
+
+  expect_failures = [var.organization_apply_grantable_roles]
+}
+
+run "org_admin_members_must_be_principals" {
+  command = plan
+
+  variables {
+    organization_admin_members = ["gcp-org-admins@example.com"]
+  }
+
+  expect_failures = [var.organization_admin_members]
+}
+
+run "logging_config_viewer_role_id_rejects_invalid_characters" {
+  command = plan
+
+  variables {
+    logging_config_viewer_role_id = "logging-config-viewer"
+  }
+
+  expect_failures = [var.logging_config_viewer_role_id]
+}
+
+run "logging_config_viewer_role_id_must_differ_from_plan_viewer" {
+  command = plan
+
+  variables {
+    logging_config_viewer_role_id = "landingZonePlanViewer"
+  }
+
+  expect_failures = [var.logging_config_viewer_role_id]
+}

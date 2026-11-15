@@ -45,10 +45,12 @@ override_data {
       contract = {
         billing_account = "billingAccounts/000000-111111-222222"
         folders = {
-          dev = { id = "folders/111", display_name = "Development" }
+          dev = { id = "111", name = "folders/111", display_name = "Development" }
         }
         tag_values = {
-          "environment-dev" = "tagValues/123"
+          "environment-dev"                = "tagValues/123"
+          "data-classification-internal"   = "tagValues/902"
+          "data-classification-restricted" = "tagValues/904"
         }
         scoped_access_policy_ids = {
           dev = "555555555"
@@ -89,15 +91,22 @@ run "projects_output_contract" {
   # producer drift, so this is the real guard on the seam.
   assert {
     condition = alltrue([
-      for k in ["folder_id", "folder_name", "host_project_id", "host_project_number", "region", "cidr_block", "labels", "tag_value_ids", "is_production", "vpc_sc_access_policy_id"] :
+      for k in ["folder_id", "folder_name", "host_project_id", "host_project_number", "region", "cidr_block", "labels", "tag_value_ids", "is_production", "vpc_sc_access_policy_id", "automation_identities"] :
       contains(keys(output.environment_config["dev"]), k)
     ])
-    error_message = "environment_config must expose every key gcp-workload consumes: folder_id, folder_name, host_project_id, host_project_number, region, cidr_block, labels, tag_value_ids, is_production, vpc_sc_access_policy_id."
+    error_message = "environment_config must expose every key gcp-workload consumes: folder_id, folder_name, host_project_id, host_project_number, region, cidr_block, labels, tag_value_ids, is_production, vpc_sc_access_policy_id, automation_identities."
   }
 
   assert {
     condition     = output.environment_config["dev"].host_project_id == "acme-dev-host-abcd" && output.environment_config["dev"].host_project_number == "333333333333" && output.environment_config["dev"].folder_name == "Development" && output.environment_config["dev"].tag_value_ids.environment == "tagValues/123"
     error_message = "environment_config must combine org folders/tag values with this root's project IDs/numbers (consumed by gcp-workload)."
+  }
+
+  # One derivation of the spoke VPC name: gcp-workload creates the network
+  # under it and gcp-network-hub peers with it (ARC-5).
+  assert {
+    condition     = output.contract.environment_config["dev"].spoke_network_name == "acme-dev-vpc"
+    error_message = "environment_config.<env>.spoke_network_name must be <project_prefix>-<env>-vpc, published once for gcp-workload and gcp-network-hub."
   }
 }
 
@@ -122,10 +131,11 @@ run "environment_config_tolerates_pre_scoped_org_state" {
         contract = {
           billing_account = "billingAccounts/000000-111111-222222"
           folders = {
-            dev = { id = "folders/111", display_name = "Development" }
+            dev = { id = "111", name = "folders/111", display_name = "Development" }
           }
           tag_values = {
-            "environment-dev" = "tagValues/123"
+            "environment-dev"              = "tagValues/123"
+            "data-classification-internal" = "tagValues/902"
           }
         }
       }
@@ -150,8 +160,8 @@ run "contracts_skip_remote_state" {
     }
     organization_contract = {
       billing_account = "billingAccounts/000000-111111-222222"
-      folders         = { dev = { id = "folders/999", name = "folders/999", display_name = "Development" } }
-      tag_values      = { "environment-dev" = "tagValues/999" }
+      folders         = { dev = { id = "999", name = "folders/999", display_name = "Development" } }
+      tag_values      = { "environment-dev" = "tagValues/999", "data-classification-internal" = "tagValues/998" }
     }
   }
 
@@ -159,7 +169,7 @@ run "contracts_skip_remote_state" {
     condition = (
       length(data.terraform_remote_state.gcp_bootstrap) == 0 &&
       length(data.terraform_remote_state.gcp_organization) == 0 &&
-      output.environment_config["dev"].folder_id == "folders/999" &&
+      output.environment_config["dev"].folder_id == "999" &&
       output.environment_config["dev"].tag_value_ids.environment == "tagValues/999" &&
       output.environment_config["dev"].vpc_sc_access_policy_id == null
     )
@@ -175,7 +185,7 @@ run "organization_contract_missing_env_folder_fails" {
   variables {
     organization_contract = {
       billing_account = "billingAccounts/000000-111111-222222"
-      folders         = { shared = { id = "folders/100", name = "folders/100", display_name = "Shared" } }
+      folders         = { shared = { id = "100", name = "folders/100", display_name = "Shared" } }
       tag_values      = {}
     }
     bootstrap_contract = { admin_project_id = "acme-admin-abcd", suffix = "abcd" }
@@ -208,5 +218,95 @@ run "ncc_api_on_hub_and_host_projects" {
       alltrue([for v in values(local.ncc_project_services) : v == ["networkconnectivity.googleapis.com"]])
     )
     error_message = "With NCC on, networkconnectivity.googleapis.com must be enabled on shared-hub and each <env>-host project only."
+  }
+}
+
+# ── Data classification (CMP-10) ─────────────────────────────────────────────
+# Each environment's host project is bound to the organization
+# data-classification tag value of its data_classification (default internal),
+# and the value ID is published in environment_config.
+run "data_classification_defaults_to_internal" {
+  command = plan
+
+  assert {
+    condition = (
+      local.project_environments["dev"].projects.host.tag_bindings == { data_classification = "tagValues/902" } &&
+      output.contract.environment_config["dev"].tag_value_ids.data_classification == "tagValues/902" &&
+      length(try(local.project_environments["shared"].projects.hub.tag_bindings, {})) == 0
+    )
+    error_message = "an environment without data_classification must bind its host project (only) to data-classification-internal and publish the value ID."
+  }
+}
+
+run "data_classification_bound" {
+  command = plan
+
+  variables {
+    environments = {
+      dev = {
+        display_name            = "Development"
+        region                  = "europe-west1"
+        cidr_block              = "10.10.0.0/16"
+        budget_monthly_limit    = 100
+        iam_group_role_bindings = {}
+        is_production           = true
+        data_classification     = "restricted"
+      }
+    }
+  }
+
+  assert {
+    condition = (
+      local.project_environments["dev"].projects.host.tag_bindings == { data_classification = "tagValues/904" } &&
+      output.contract.environment_config["dev"].tag_value_ids.data_classification == "tagValues/904"
+    )
+    error_message = "each environment's host project must be bound to its data-classification tag value."
+  }
+}
+
+run "data_classification_rejects_unknown_value" {
+  command = plan
+
+  variables {
+    environments = {
+      dev = {
+        display_name            = "Development"
+        region                  = "europe-west1"
+        cidr_block              = "10.10.0.0/16"
+        budget_monthly_limit    = 100
+        iam_group_role_bindings = {}
+        data_classification     = "secret"
+      }
+    }
+  }
+
+  expect_failures = [var.environments]
+}
+
+# An organization contract without the environment's data-classification tag
+# value fails on the named guard.
+run "organization_contract_missing_classification_fails" {
+  command = plan
+
+  variables {
+    organization_contract = {
+      billing_account = "billingAccounts/000000-111111-222222"
+      folders         = { dev = { id = "999", name = "folders/999", display_name = "Development" } }
+      tag_values      = { "environment-dev" = "tagValues/999" }
+    }
+    bootstrap_contract = { admin_project_id = "acme-admin-abcd", suffix = "abcd" }
+  }
+
+  expect_failures = [terraform_data.organization_contract_guard]
+}
+
+# Provider default labels carry cost-center and owner (built-in defaults here,
+# org.cost_center / org.owner from the config file in config.tftest.hcl).
+run "default_labels_carry_cost_center_and_owner" {
+  command = plan
+
+  assert {
+    condition     = local.gcp_default_labels["cost-center"] == "platform" && local.gcp_default_labels["owner"] == "platform-team" && local.gcp_default_labels["managed-by"] == "terraform" && local.gcp_default_labels["environment"] == "shared"
+    error_message = "gcp_default_labels must carry managed-by, environment, cost-center (default platform) and owner (default platform-team)."
   }
 }

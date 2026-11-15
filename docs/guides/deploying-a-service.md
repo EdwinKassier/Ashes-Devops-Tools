@@ -23,11 +23,11 @@ from `gcp-projects`), on the **environment Shared VPC**, not the hub.
 |----------|------|-------|
 | Artifact Registry docker repo | `<region>-docker.pkg.dev/<host>/<svc>` | Immutable tags; cleanup policies (keep the 20 most recent versions, delete untagged after 7 days); optional CMEK via `artifact_registry_kms_key_name`. |
 | Runtime service account | `<svc>-run@<host>.iam.gserviceaccount.com` | No project roles. It gets `secretmanager.secretAccessor` on the secrets it references only, plus Cloud SQL client/instanceUser conditioned to its own instance when it has a database. |
-| Cloud Run v2 service | `<svc>` | `INGRESS_TRAFFIC_INTERNAL_ONLY` by default, Direct VPC egress (`PRIVATE_RANGES_ONLY`) to the env VPC's first private subnet, min 0 / max 10 instances, secrets from Secret Manager, optional Binary Authorization, deletion protection follows `enable_deletion_protection`. |
+| Cloud Run v2 service | `<svc>` | `INGRESS_TRAFFIC_INTERNAL_ONLY` by default, Direct VPC egress to the env VPC's first private subnet (`PRIVATE_RANGES_ONLY` by default; `ALL_TRAFFIC` plus `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` for the hub Secure Web Proxy when the environment egress proxy is on, and production then rejects an explicit `PRIVATE_RANGES_ONLY`), min 0 / max 10 instances, secrets from Secret Manager, optional Binary Authorization, deletion protection follows `enable_deletion_protection`. |
 | Cloud Run v2 job (instead, with `runtime = "cloud-run-job"`) | `<svc>` | Run to completion, no URL: `job = { task_count, parallelism, max_retries }`, `timeout` is the task timeout. Same runtime SA, secrets, database and Direct VPC egress as a service; `invoker_members` get `run.invoker` on the job (start executions) and the deploy SA `run.developer`. No request alerts or SLO; `enable_unauthenticated` is rejected. |
 | SLO (optional `slo`) | `<svc>-<availability\|latency>` | `modules/gcp/monitoring/slo` on a basic `CLOUD_RUN` monitored service `cloud-run-<svc>`: `slo = { goal = 0.999 }` (availability) or `slo = { sli_type = "latency", latency_threshold = "0.5s" }`; `enable_burn_rate_alert = true` pages the `app_alert_notification_channel_ids`. Cloud Run services only. |
 | Cloud SQL Postgres (optional `database`) | `<svc>-db` | Private IP only through the env VPC's Private Service Access (the host stage creates it by default: `enable_private_service_access = true`). TLS-only, backups + PITR, IAM database auth. The runtime SA is the IAM database user. Edition `ENTERPRISE` with `db-custom-1-3840`. |
-| Deploy identity (optional `github`) | `<svc>-deploy@<host>.iam.gserviceaccount.com` | Impersonable only through the app-deploy WIF pool, by the GitHub repo's **immutable numeric `repository_id`** (optionally a ref and/or a GitHub environment). Roles: `run.developer` on the service, `artifactregistry.writer` on the repo, `iam.serviceAccountUser` on the runtime SA only. |
+| Deploy identity (optional `github`) | `<svc>-deploy@<host>.iam.gserviceaccount.com` | Impersonable only through the app-deploy WIF pool, by the GitHub repo's **immutable numeric `repository_id`** plus a ref and/or a GitHub environment. With neither `ref` nor `environment`, the GitHub environment is the landing-zone environment key (`dev` below), so the deploy job must declare `environment: dev`. No binding trusts the whole repository. Roles: `run.developer` on the service, `artifactregistry.writer` on the repo, `iam.serviceAccountUser` on the runtime SA only. |
 
 The app-deploy Workload Identity pool (`apps-<env>`, provider `github`) lives in
 the env host project, separate from the infrastructure pool that `gcp-bootstrap`
@@ -76,7 +76,8 @@ gcp:
             repository_id: "987654321"        # immutable numeric ID
             repository: acme/orders-api       # informational only
             ref: refs/heads/main              # optional: only this ref may deploy
-            # environment: dev                # optional: only this GitHub environment
+            # environment: dev                # optional: only this GitHub environment.
+            #   With neither ref nor environment it is the env key (dev).
 ```
 
 The deploy identity also needs two workspace-level settings, which are not
@@ -97,10 +98,12 @@ The typed shape, with every default, is the `services` variable of
 Common optional fields include `image` (first-revision image; default the
 root's `app_bootstrap_image` / `gcp.workload.bootstrap_image`, else
 `us-docker.pkg.dev/cloudrun/container/hello`), `ingress`, `cpu`, `memory`,
-`min_instances`, `max_instances`, `subnetwork_id`, `invoker_members`,
+`min_instances` (default 1 in production, else 0), `health_check_path` (HTTP
+probe path, default `/`, empty string for the TCP probe), `max_instances`, `subnetwork_id`, `invoker_members`,
 `enable_unauthenticated`, `enable_binary_authorization` / `binary_authorization_policy`,
 `runtime_project_roles` (an escape hatch, empty by default), `artifact_registry`
-(cleanup tuning) and `database.{tier,edition,enable_high_availability,encryption_key_name}`.
+(cleanup tuning) and `database.{tier,edition,enable_high_availability,encryption_key_name,backup_location,transaction_log_retention_days}`
+(more than 7 days of PITR logs needs `edition: ENTERPRISE_PLUS` with a `db-perf-optimized-*` tier).
 
 After merge, Terraform Cloud plans the change and a person approves the apply.
 The first apply creates the service with the bootstrap image.
@@ -126,37 +129,99 @@ terraform -chdir=envs/gcp/workload output -json app_github_actions
 ```
 
 Set each key as a GitHub Actions **variable** (not a secret: none of them is
-sensitive) on the app repository, or on the GitHub environment if you declared
-`github.environment`. Then copy
+sensitive) on the app repository, or on the GitHub environment the deploy job
+uses. The deploy job must declare `environment: <name>` unless the entry sets
+only `ref`. `<name>` is `github.environment`, or the landing-zone environment key
+(`dev`) when the entry sets neither `ref` nor `environment`. Then copy
 [`examples/app-delivery/cloud-run-delivery.example.yml`](../../examples/app-delivery/cloud-run-delivery.example.yml)
 to `.github/workflows/deploy.yml` in the app repository. Its core steps are:
 
 ```yaml
 permissions:
   contents: read
-  id-token: write
+  id-token: write      # WIF auth and Sigstore signing
+  attestations: write  # store the provenance attestation
+env:
+  REPO: ${{ vars.IMAGE_REPOSITORY }}
 steps:
-  - uses: google-github-actions/auth@v2 # pin to a SHA in your app repo
+  - uses: google-github-actions/auth@v3 # pin to a SHA in your app repo
     with:
       workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
       service_account: ${{ vars.GCP_DEPLOY_SA }}
-  - run: |
-      gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
-      docker build -t "${{ vars.IMAGE_REPOSITORY }}:${GITHUB_SHA}" .
-      docker push "${{ vars.IMAGE_REPOSITORY }}:${GITHUB_SHA}"
-      gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" --project "${{ vars.GCP_PROJECT_ID }}" \
-        --region "${{ vars.GCP_REGION }}" --image "${{ vars.IMAGE_REPOSITORY }}:${GITHUB_SHA}" --quiet
+  - id: push
+    env:
+      REGION: ${{ vars.GCP_REGION }}
+    run: |
+      gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+      docker build -t "${REPO}:${GITHUB_SHA}" .
+      docker push "${REPO}:${GITHUB_SHA}"
+      digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${REPO}:${GITHUB_SHA}" \
+        | grep -F "${REPO}@" | head -n 1 | cut -d@ -f2)"
+      echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+  - uses: actions/attest-build-provenance@v4 # pin to a SHA in your app repo
+    with:
+      subject-name: ${{ vars.IMAGE_REPOSITORY }}
+      subject-digest: ${{ steps.push.outputs.digest }}
+      push-to-registry: true
+  - env:
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      DIGEST: ${{ steps.push.outputs.digest }}
+    run: |
+      gcloud run deploy "${SERVICE}" --project "${PROJECT}" --region "${REGION}" \
+        --image "${REPO}@${DIGEST}" --quiet
 ```
 
 The full example also scans the image with Trivy, using the same CRITICAL/HIGH bar
-as the IaC gate, before it pushes. The `google-github-actions/deploy-cloudrun`
-action is an equivalent replacement for the `gcloud run deploy` step.
+as the IaC gate, before it pushes, and fails when it cannot resolve the digest. It
+deploys the image digest, not the tag, and attests the image's build provenance;
+see [Image provenance](#image-provenance-deploy-by-digest-and-verify). The
+`google-github-actions/deploy-cloudrun` action is an equivalent replacement for the
+`gcloud run deploy` step. Values from `vars` reach the shell through `env:`, never
+through `${{ }}` inside `run:`, so a variable cannot inject shell code.
 
 **Who owns what:** Terraform owns the service *configuration* (ingress, VPC egress,
 secrets, runtime SA, scaling). The pipeline owns the *image*. The Cloud Run module
 ignores image and client changes, so Terraform runs never roll back a deploy.
 Change configuration in `services` in the YAML, not with `gcloud run deploy --set-*` flags.
 Terraform would revert those flags on its next apply.
+
+## Image provenance: deploy by digest and verify
+
+Each reference pipeline in `examples/app-delivery/` does three things after the
+scan:
+
+1. It pushes the image under the commit-SHA tag and reads back the image
+   **digest** (`sha256:...`) from the push.
+2. It runs `actions/attest-build-provenance` on `<repository>@<digest>`. The
+   action signs a SLSA build-provenance statement with the job's GitHub OIDC
+   identity (Sigstore), stores it in the app repository's attestations, and
+   with `push-to-registry: true` also pushes it to the registry next to the
+   image. The job needs `id-token: write` and `attestations: write`.
+3. It deploys `<repository>@<digest>` (Cloud Run revision, ECS task-definition
+   image, Kubernetes container image), never the tag. The workload runs exactly
+   the bytes that were scanned and attested.
+
+Verify an image before you trust it, for example during an incident or before a
+manual promotion:
+
+```bash
+gh attestation verify oci://<repository>@<digest> --repo <owner>/<app-repo>
+```
+
+The command checks the Sigstore signature and that the provenance names a
+workflow in `<owner>/<app-repo>`. Add `--signer-workflow <owner>/<app-repo>/.github/workflows/deploy.yml`
+to also pin the workflow file. Artifact attestations need a public repository
+or a GitHub plan that offers them for private repositories (GitHub Enterprise
+Cloud); on other plans the attest step fails, so remove it there.
+
+**Not in scope: enforcement.** Nothing in the landing zone rejects an
+unattested image yet. The next step is admission control that checks the
+attestation before a workload starts: Binary Authorization for Cloud Run and
+GKE, and image signature verification for ECS (for example an AWS Signer or
+Sigstore check in the deploy path). Until then, verification is a manual or
+pipeline check.
 
 ## Exposing the service (front door)
 
@@ -234,15 +299,26 @@ These items are verified by mocked plan tests only:
   lives outside the perimeter. Mirror a placeholder into a repo inside it and set
   `gcp.workload.bootstrap_image` in `config/landing-zone.yaml` (or
   `app_bootstrap_image`) once for every service, or `image` per service.
+  The perimeter holds the host project and every service-team project. A CMEK
+  key (`database.encryption_key_name`, `artifact_registry_kms_key_name`) or an
+  image registry in a project outside the perimeter needs an egress rule
+  (`vpc_sc_egress_policies`) once the perimeter is enforced.
 - **Binary Authorization.** The first-revision image must satisfy the policy, or
   the first apply fails. Use an attested image as `bootstrap_image`.
 - **Shared repos.** Two services may share one GitHub repository with *different*
   `ref`/`environment` constraints. The provider condition only pins the owner
   (`assertion.repository_owner_id == "<id>"`); each deploy SA is bound to the
   principalSet of its own `(repository_id, ref, environment)` tuple
-  (`attribute.repo_ref_env`, `repo_ref`, `repo_env` or `repository_id`), so a
-  token reaches only the deploy SA whose constraint it satisfies. A service that
-  declares neither `ref` nor `environment` accepts any ref of the repository.
+  (`attribute.repo_ref_env`, `repo_ref` or `repo_env`), so a token reaches only
+  the deploy SA whose constraint it satisfies. A service that declares neither
+  `ref` nor `environment` is bound to the GitHub environment named after the
+  landing-zone environment (`repo_env/<repository_id>/<env>`). No binding
+  accepts every ref of a repository.
+- **The `environment:` key.** GitHub adds the `environment` claim to the OIDC
+  token only when the job declares `environment:`. A job without it maps to
+  `<repository_id>/-` and matches no `repo_env` or `repo_ref_env` binding, so
+  authentication fails. Only a service that sets `ref` and no `environment`
+  accepts a job without `environment:`.
 - **Pool IDs.** A WIF pool ID stays reserved for 30 days after deletion. Set
   `app_deploy_wif_pool_id` if you need to re-create a pool sooner.
 
@@ -342,7 +418,12 @@ OIDC subject options, in order of precedence:
 `job_workflow_ref`. The default `sub` names the repository, so a renamed or
 deleted-and-recreated `org/repo` would inherit the trust. To pin the immutable
 IDs, or a reusable deploy workflow, put them **into** `sub` using GitHub's OIDC
-customisation API, then set `github.subject` to the resulting string:
+customisation API, then set `github.subject` to the resulting string. The
+template must keep the repository (`repo` or `repository_id`) and the context
+(`context`, `environment` or `ref`). The mandatory OPA policy
+`aws_iam_federated_trust_pinned` denies a subject without a literal repository
+and a `ref:` or `environment:` value, for example one that holds only
+`job_workflow_ref`, which any repository that calls the workflow can match:
 
 ```sh
 gh api -X PUT repos/acme/orders/actions/oidc/customization/sub \
@@ -368,7 +449,9 @@ mirror in reach of a spoke without internet egress. With a different
 `container_port`, set `container_image`, or the targets stay unhealthy until
 the first deploy (the plan warns). Once a service has a deploy role, the ECS service
 **ignores** `task_definition` and `desired_count` drift, so Terraform never
-reverts what CI deployed.
+reverts what CI deployed. In a production environment (`is_production: true`)
+a service scales on CPU between `autoscaling_min_capacity` and
+`autoscaling_max_capacity` unless it sets `enable_autoscaling: false`.
 
 ### Step 3: the delivery pipeline (GitHub Actions)
 
@@ -385,7 +468,8 @@ on:
 
 permissions:
   contents: read
-  id-token: write # mint the GitHub OIDC token
+  id-token: write      # mint the GitHub OIDC token (AWS role and Sigstore signing)
+  attestations: write  # store the image provenance attestation
 
 concurrency:
   group: deploy-dev
@@ -418,10 +502,21 @@ jobs:
       - name: Log in to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2 # pin to a SHA
 
-      - name: Build and push (immutable tag = commit SHA)
+      - name: Build and push (immutable tag = commit SHA), then read the digest
+        id: push
         run: |
           docker build -t "${ECR_REPOSITORY_URL}:${GITHUB_SHA}" .
           docker push "${ECR_REPOSITORY_URL}:${GITHUB_SHA}"
+          digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${ECR_REPOSITORY_URL}:${GITHUB_SHA}" \
+            | grep -F "${ECR_REPOSITORY_URL}@" | head -n 1 | cut -d@ -f2)"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@v4 # pin to a SHA
+        with:
+          subject-name: ${{ env.ECR_REPOSITORY_URL }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
       - name: Fetch the current task definition
         run: |
@@ -435,7 +530,7 @@ jobs:
         with:
           task-definition: task-definition.json
           container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ env.ECR_REPOSITORY_URL }}:${{ github.sha }}
+          image: ${{ env.ECR_REPOSITORY_URL }}@${{ steps.push.outputs.digest }}
 
       - name: Deploy to ECS and wait for a steady state
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2 # pin to a SHA
@@ -448,7 +543,9 @@ jobs:
 
 The deploy role allows exactly these calls. Anything else, such as tagging the
 task definition (`ecs:TagResource`), creating repositories, or passing another
-role, is denied. Before the push step you can add an image scan, as the
+role, is denied. The task definition names the image digest, not the tag
+([Image provenance](#image-provenance-deploy-by-digest-and-verify) explains the
+attestation and how to verify it). Before the push step you can add an image scan, as the
 reference pipeline
 [`examples/app-delivery/ecs-fargate-delivery.example.yml`](../../examples/app-delivery/ecs-fargate-delivery.example.yml)
 does with Trivy. ECR also scans on push. For promotion to `prod`, add a second

@@ -221,9 +221,10 @@ variable "vercel_serverless_region" {
 
   validation {
     condition = contains([
-      "iad1", "sfo1", "pdx1", "sea1", "lhr1", "cdg1", "fra1",
-      "bom1", "sin1", "kix1", "cle1", "hnd1", "gru1", "icn1",
-      "dub1", "cpt1",
+      # Vercel function regions (https://vercel.com/docs/regions). Keep in step
+      # with local.vercel_to_aws_region in envs/saas/main.tf.
+      "arn1", "bom1", "cdg1", "cle1", "cpt1", "dub1", "fra1", "gru1", "hkg1", "hnd1",
+      "iad1", "icn1", "kix1", "lhr1", "pdx1", "sfo1", "sin1", "syd1", "yul1",
     ], var.vercel_serverless_region)
     error_message = "vercel_serverless_region must be a valid Vercel edge network region."
   }

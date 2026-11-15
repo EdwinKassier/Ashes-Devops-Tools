@@ -137,3 +137,7 @@ The following resources are created:
 | <a name="output_topics"></a> [topics](#output\_topics) | Map of Pub/Sub topics created for severity-based routing |
 | <a name="output_v2_notification_configs"></a> [v2\_notification\_configs](#output\_v2\_notification\_configs) | Map of SCC v2 notification configs (empty unless scc\_api\_version is both or v2) |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

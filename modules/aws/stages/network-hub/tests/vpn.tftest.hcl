@@ -2,13 +2,19 @@
 # terminates on the hub TGW and is associated with / propagated into the
 # configured segments. Same stubbing as plan_assertions.tftest.hcl.
 
-mock_provider "aws" {}
+# The alarm actions validate the topic ARN, which a mock would generate as random text.
+mock_provider "aws" {
+  mock_resource "aws_sns_topic" {
+    defaults = { arn = "arn:aws:sns:eu-west-2:111111111111:network-hub-alarms" }
+  }
+}
 
 variables {
   org_id                   = "o-abc1234567"
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 override_module {
@@ -76,8 +82,11 @@ override_module {
 }
 
 override_module {
-  target  = module.vpc_endpoints
-  outputs = { phz_id = "Z0000000000000000000" }
+  target = module.vpc_endpoints
+  outputs = {
+    phz_id               = "Z0000000000000000000"
+    shared_dns_zone_arns = { ssm = "arn:aws:route53:::hostedzone/Z0000000000000000001" }
+  }
 }
 
 override_module {
@@ -107,7 +116,7 @@ run "aws_vpn_attaches_to_tgw" {
 
   variables {
     enable_vpn = true
-    vpn        = { customer_gateway_ip = "203.0.113.10" }
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
   }
 
   # module.vpn is planned for real (not overridden): the stage hands it the hub
@@ -161,11 +170,265 @@ run "spoke_routes_stay_default_to_inspection" {
 
   variables {
     enable_vpn = true
-    vpn        = { customer_gateway_ip = "203.0.113.10" }
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
   }
 
   assert {
     condition     = output.tgw_inspection_routes["prod:default"].attachment == "inspection" && output.tgw_inspection_routes["nonprod:default"].attachment == "inspection"
     error_message = "Spoke segments must keep default-routing to inspection so return traffic to on-premises is inspected."
+  }
+}
+
+run "resolver_endpoints_follow_the_vpn" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn = {
+      customer_gateway_ip = "203.0.113.10"
+      static_routes_only  = true
+      onprem_cidrs        = ["192.168.0.0/16"]
+    }
+  }
+
+  assert {
+    condition     = local.enable_resolver_endpoints && local.resolver_allowed_cidrs == tolist(["10.0.0.0/8", "192.168.0.0/16"])
+    error_message = "With the VPN on, the resolver endpoints must be on and admit DNS from top_cidr and the on-premises prefixes."
+  }
+}
+
+run "resolver_endpoints_off_without_the_vpn" {
+  command = plan
+
+  assert {
+    condition     = !local.enable_resolver_endpoints
+    error_message = "Without the VPN the resolver endpoints (about USD 365 per month) must be off by default (ARC-21)."
+  }
+}
+
+run "resolver_endpoints_explicit_override" {
+  command = plan
+
+  variables {
+    enable_vpn                = true
+    vpn                       = { customer_gateway_ip = "203.0.113.10" }
+    enable_resolver_endpoints = false
+  }
+
+  assert {
+    condition     = !local.enable_resolver_endpoints
+    error_message = "An explicit enable_resolver_endpoints = false must win over the VPN default."
+  }
+}
+
+# On-premises return path from the egress VPC (resolver endpoints). Each
+# on-premises prefix leaves the egress private tier through the TGW, the shared
+# table (egress attachment) sends it to inspection, and the inspection table
+# learns the egress VPC, so both directions cross the same firewall endpoint.
+run "egress_vpc_routes_onprem_prefixes_through_inspection" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn = {
+      customer_gateway_ip = "203.0.113.10"
+      static_routes_only  = true
+      onprem_cidrs        = ["192.168.0.0/16", "172.20.0.0/14"]
+    }
+  }
+
+  assert {
+    condition = (
+      aws_route.hub_to_tgw["egress-onprem-0-192.168.0.0/16"].route_table_id == "rtb-egr-prv-a" &&
+      aws_route.hub_to_tgw["egress-onprem-1-192.168.0.0/16"].route_table_id == "rtb-egr-prv-b" &&
+      aws_route.hub_to_tgw["egress-onprem-1-172.20.0.0/14"].destination_cidr_block == "172.20.0.0/14" &&
+      aws_route.hub_to_tgw["egress-onprem-0-172.20.0.0/14"].transit_gateway_id == "tgw-000000000000abcd" &&
+      length([for k, r in aws_route.hub_to_tgw : k if startswith(k, "egress-onprem-")]) == 4
+    )
+    error_message = "Every egress private route table must send each on-premises prefix to the TGW, or resolver replies and forwards go to NAT."
+  }
+
+  assert {
+    condition     = length([for k, r in aws_route.hub_to_tgw : k if startswith(k, "egress-onprem-") && !contains(["rtb-egr-prv-a", "rtb-egr-prv-b"], r.route_table_id)]) == 0
+    error_message = "Only the egress private tier (the resolver endpoints) routes on-premises prefixes; the public tier (NAT) must not."
+  }
+
+  assert {
+    condition = (
+      output.tgw_inspection_routes["shared:onprem:192.168.0.0/16"].route_table == "shared" &&
+      output.tgw_inspection_routes["shared:onprem:192.168.0.0/16"].attachment == "inspection" &&
+      output.tgw_inspection_routes["shared:onprem:172.20.0.0/14"].cidr == "172.20.0.0/14" &&
+      output.tgw_inspection_routes["shared:onprem:172.20.0.0/14"].attachment == "inspection"
+    )
+    error_message = "The shared table (egress attachment) must send on-premises prefixes to inspection, so the return path crosses the firewall like the request."
+  }
+
+  assert {
+    condition     = local.tgw_propagations["egress->inspection"].attachment == "egress" && local.tgw_propagations["egress->inspection"].route_table == "inspection"
+    error_message = "The inspection table must learn the egress VPC, or inspected on-premises traffic cannot reach the resolver endpoints when no spoke is wired."
+  }
+}
+
+run "bgp_vpn_routes_the_listed_onprem_prefixes" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn = {
+      customer_gateway_ip = "203.0.113.10"
+      onprem_cidrs        = ["172.16.0.0/24"]
+    }
+  }
+
+  assert {
+    condition     = aws_route.hub_to_tgw["egress-onprem-0-172.16.0.0/24"].route_table_id == "rtb-egr-prv-a" && output.tgw_inspection_routes["shared:onprem:172.16.0.0/24"].attachment == "inspection" && length(aws_ec2_transit_gateway_route.vpn_onprem) == 0
+    error_message = "With BGP the listed on-premises prefixes must still be routed from the egress VPC (BGP propagates only into the inspection table)."
+  }
+}
+
+run "no_onprem_routes_without_the_vpn" {
+  command = apply
+
+  variables {
+    vpn = { onprem_cidrs = ["192.168.0.0/16"] }
+  }
+
+  assert {
+    condition = (
+      length([for k, r in aws_route.hub_to_tgw : k if startswith(k, "egress-onprem-")]) == 0 &&
+      length([for k in keys(output.tgw_inspection_routes) : k if startswith(k, "shared:onprem:")]) == 0 &&
+      !contains(keys(local.tgw_propagations), "egress->inspection")
+    )
+    error_message = "Without the VPN no on-premises route and no egress propagation into inspection may be planned."
+  }
+}
+
+# BGP learns the on-premises prefixes only in the TGW inspection table. The
+# egress VPC routes only vpn.onprem_cidrs, so an empty list warns.
+run "bgp_vpn_without_onprem_cidrs_warns" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10" }
+  }
+
+  expect_failures = [check.resolver_endpoints_reach_onprem]
+}
+
+# On-premises prefixes must not overlap an AWS range: the egress VPC and the
+# shared table would route that range to the VPN (or the apply would fail on a
+# duplicate route).
+run "onprem_prefix_overlapping_top_cidr_fails" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16", "10.200.0.0/16"] }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "onprem_prefix_overlapping_a_hub_vpc_fails" {
+  command = plan
+
+  variables {
+    top_cidr        = "10.64.0.0/10"
+    regional_cidrs  = { "eu-west-2" = "10.64.0.0/12" }
+    inspection_cidr = "10.0.0.0/16"
+    enable_vpn      = true
+    vpn             = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["10.0.5.0/24"] }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "onprem_prefix_overlapping_a_spoke_fails" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    top_cidr   = "100.64.0.0/10" # the spoke sits inside top_cidr
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["100.64.0.0/12"] }
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "100.70.0.0/16" }
+    }
+  }
+
+  expect_failures = [var.vpn]
+}
+
+run "onprem_prefixes_outside_aws_ranges_pass" {
+  command = plan
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16", "172.16.0.0/12", "100.64.0.0/16"] }
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.72.0.0/16" }
+    }
+  }
+
+  assert {
+    condition     = length(local.onprem_route_cidrs) == 3
+    error_message = "Prefixes that overlap no AWS range must be accepted and routed."
+  }
+}
+
+run "overlap_is_not_checked_without_the_vpn" {
+  command = plan
+
+  variables {
+    vpn = { onprem_cidrs = ["10.200.0.0/16"] }
+  }
+
+  assert {
+    condition     = length(local.onprem_route_cidrs) == 0
+    error_message = "Without the VPN onprem_cidrs is not routed, so it is not checked for overlap."
+  }
+}
+
+run "vpn_tunnel_state_alarm_follows_the_vpn" {
+  command = apply
+
+  variables {
+    enable_vpn = true
+    vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
+  }
+
+  assert {
+    condition = (
+      output.network_alarms["vpn-tunnel-not-up"].namespace == "AWS/VPN" &&
+      output.network_alarms["vpn-tunnel-not-up"].metric_name == "TunnelState" &&
+      keys(output.network_alarms["vpn-tunnel-not-up"].dimensions) == ["VpnId"]
+    )
+    error_message = "enable_vpn must alarm on TunnelState of the hub VPN connection"
+  }
+}
+
+# ARC-1: the firewall passes traffic to and from the on-premises prefixes, so a
+# fail-closed policy does not drop hybrid traffic.
+run "firewall_passes_onprem_prefixes" {
+  command = plan
+
+  variables {
+    enable_vpn                           = true
+    vpn                                  = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
+    network_firewall_internal_pass_cidrs = ["172.20.0.0/14", "192.168.0.0/16"]
+  }
+
+  assert {
+    condition     = tolist(local.firewall_internal_pass_cidrs) == tolist(["10.0.0.0/16", "10.1.0.0/16", "192.168.0.0/16", "172.20.0.0/14"])
+    error_message = "the firewall shared ranges must be the hub VPCs, the VPN on-premises prefixes and the extra ranges, without duplicates"
+  }
+}
+
+run "firewall_internal_pass_ranges_empty_without_vpn" {
+  command = plan
+
+  assert {
+    condition     = tolist(local.firewall_internal_pass_cidrs) == tolist(["10.0.0.0/16", "10.1.0.0/16"]) && length(local.firewall_internal_segments["prod"]) == 0 && length(local.firewall_internal_segments["nonprod"]) == 0
+    error_message = "without the VPN, extra ranges or spokes the firewall passes only HOME_NET to and from the hub VPCs"
   }
 }

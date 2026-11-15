@@ -28,6 +28,7 @@ locals {
     "envs/aws/backup" = [
       "modules/aws/backup/backup-org-policy",
       "modules/aws/backup/backup-vault",
+      "modules/aws/data/kms-key",
       "modules/aws/stages/backup",
     ]
     "envs/aws/identity" = [
@@ -42,6 +43,7 @@ locals {
       "modules/aws/network/vpc",
       "modules/aws/network/vpc-endpoints",
       "modules/aws/network/vpn",
+      "modules/aws/ops/cloudwatch",
       "modules/aws/stages/network-hub",
     ]
     "envs/aws/organization" = [
@@ -150,6 +152,7 @@ locals {
       "examples/presets",
       "modules/gcp/artifact-registry",
       "modules/gcp/backup/backup-plan",
+      "modules/gcp/backup/backup-vault",
       "modules/gcp/compute/cloud-run",
       "modules/gcp/compute/cloud-run-job",
       "modules/gcp/compute/gke-autopilot",
@@ -328,10 +331,17 @@ locals {
 
   # The managed workspaces: the enabled clouds' entries, each per_environment
   # family expanded into <key>-<env> (environment = null for the others).
+  # aws-organization and aws-security are always created with AWS; the other
+  # AWS layers follow aws_layers (aws.layers). Every grant, trigger, consumer
+  # edge and variable below derives from this map, so a dropped layer leaves
+  # no trace.
+  aws_required_layers = ["aws-organization", "aws-security"]
   workspaces = merge(
     {
       for k, e in local.catalog_entries : k => merge(e, { environment = null })
-      if !e.per_environment && local.catalog_cloud_enabled[e.cloud]
+      if !e.per_environment && local.catalog_cloud_enabled[e.cloud] && (
+        e.cloud != "aws" || contains(local.aws_required_layers, k) || contains(local.aws_layers, trimprefix(k, "aws-"))
+      )
     },
     merge([
       for k, e in local.catalog_entries : {
@@ -601,8 +611,12 @@ locals {
 
   # Workload roots declare var.environment; set it from the workspace name so the
   # env is never hand-typed. aws-workload-<env> also gets workload_account_key
-  # when environments[env].aws_account_key is set. Overridable via
-  # workspace_variables (or the committed workspace_variables_file).
+  # when environments[env].aws_account_key is set, and enable_network_hub =
+  # false when there is no aws-network workspace and no aws.contracts.network
+  # (aws_workload_standalone): in hub mode the root reads aws-network's state.
+  # Overridable via workspace_variables (or the committed
+  # workspace_variables_file); aws_workloads_needing_network rejects an
+  # override back to hub mode.
   derived_terraform_vars = merge(
     {
       for ws in local.saas_workspace_names : ws => {
@@ -620,9 +634,20 @@ locals {
         try(local.aws_environments[local.workspaces[ws].environment].aws_account_key, null) == null ? {} : {
           workload_account_key = { value = local.aws_environments[local.workspaces[ws].environment].aws_account_key, category = "terraform", hcl = false, sensitive = false, description = "aws-organization account key this workload deploys into (environments[*].aws_account_key or aws.workload_environments[*].account_key)." }
         },
+        !local.aws_workload_standalone ? {} : {
+          enable_network_hub = { value = "false", category = "terraform", hcl = true, sensitive = false, description = "Standalone VPC: aws.layers has no network layer, so there is no aws-network workspace to attach to." }
+        },
       )
     },
   )
+
+  # aws-workload-<env> in hub mode (enable_network_hub, default true) reads the
+  # aws-network state unless aws.contracts.network supplies the contract.
+  aws_workload_standalone = !contains(local.aws_layers, "network") && !local.cfg.aws_network_contract
+  aws_workloads_needing_network = sort([
+    for ws in local.aws_workload_names : ws
+    if local.aws_workload_standalone && try(lower(trim(local.workspace_vars[ws].enable_network_hub.value, " \t\r\n\"'")), "true") != "false"
+  ])
 
   # ── Committed per-workspace variables (VCS-driven runs) ───────────────────
   workspace_variables_file_path = var.workspace_variables_file == null ? null : (
@@ -646,13 +671,42 @@ locals {
       }
     }
   }
-  # The committed file must not steer credentials or the CLI: dynamic-credential
-  # env vars (TFC_*), CLI argument injection (TF_CLI_ARGS*), provider auth env
-  # vars, or Terraform's own controls. tfc-admin derives the legitimate ones.
+  # Env vars that make the runner execute code other than the reviewed
+  # configuration: the CLI config file under either name (provider
+  # installation, credentials helpers), the dynamic loader (LD_*, DYLD_*), the
+  # interpreters the run starts (NODE_OPTIONS / NODE_PATH for the vault-secrets
+  # provisioner, PYTHON*, PERL5*, RUBY*, JAVA options), shell start-up and
+  # tracing (BASH_ENV, BASH_FUNC_*, ENV, SHELLOPTS, PS4), glibc modules
+  # (GCONV_PATH), askpass helpers (SSH_ASKPASS*), git hooks and transports for
+  # module downloads (GIT_*) and PATH. Refused from both the
+  # committed file and workspace_variables. A denylist, not an allowlist:
+  # workspace_variables is documented to carry provider tokens (TFE_TOKEN,
+  # SUPABASE_ACCESS_TOKEN, VERCEL_API_TOKEN), TF_CLI_ARGS_plan
+  # (add-environment.md), dynamic-credential overrides and a corporate proxy
+  # (UPGRADING.md), and the committed file takes free-form env vars, so no
+  # fixed list of names fits. tfc_admin_guard (overridable) flags TFC_* and
+  # TF_CLI_ARGS* writes for the security team.
+  # scripts/check-env-pattern-sync.sh keeps this list equal to the tail of
+  # steering_env_pattern in policies/opa-destructive/tfc_admin_guard.rego.
+  code_exec_env_pattern = "^(TERRAFORM_CONFIG|TF_CLI_CONFIG_FILE|LD_[A-Z_]+|DYLD_[A-Z_]+|NODE_OPTIONS|NODE_PATH|GIT_[A-Z0-9_]+|BASH_ENV|BASH_FUNC_.+|ENV|SHELLOPTS|PS4|PYTHON[A-Z_]+|PERL5OPT|PERL5LIB|RUBYOPT|RUBYLIB|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|GCONV_PATH|SSH_ASKPASS[A-Z_]*|PATH)$"
+  # The committed file must not steer credentials, the CLI or HTTPS either:
+  # dynamic-credential env vars (TFC_*), CLI argument injection
+  # (TF_CLI_ARGS*), host tokens (TF_TOKEN_*), the tfe provider's host and
+  # token (TFE_*), provider auth env vars, Terraform's own controls, and
+  # anything that reroutes or re-trusts HTTPS (proxies in any case,
+  # SSL_CERT_FILE / SSL_CERT_DIR, NODE_EXTRA_CA_CERTS). tfc-admin derives the
+  # legitimate ones; the rest go through workspace_variables.
+  reserved_env_pattern = "(^(TFC_|TFE_|TF_CLI_ARGS|TF_TOKEN_|TF_VAR_|TF_WORKSPACE|TF_LOG|AWS_|GOOGLE_|CLOUDSDK_|SUPABASE_|VERCEL_))|(^(SSL_CERT_FILE|SSL_CERT_DIR|NODE_EXTRA_CA_CERTS|(?i:(HTTPS?|ALL|NO)_PROXY))$)|(${local.code_exec_env_pattern})"
   file_reserved_entries = flatten([
     for ws, vars in local.file_workspace_variables : [
       for k, v in vars : "${ws}.${k}"
-      if v.category == "env" && can(regex("^(TFC_|TF_CLI_ARGS|TF_VAR_|TF_WORKSPACE|TF_LOG|AWS_|GOOGLE_|CLOUDSDK_|SUPABASE_|VERCEL_)", k))
+      if v.category == "env" && can(regex(local.reserved_env_pattern, k))
+    ]
+  ])
+  workspace_variables_exec_entries = flatten([
+    for ws, vars in var.workspace_variables : [
+      for k, v in vars : "${ws}.${k}"
+      if v.category == "env" && can(regex(local.code_exec_env_pattern, k))
     ]
   ])
   file_sensitive_entries = flatten([
@@ -740,6 +794,16 @@ locals {
     sentinel_mocks = "none"
     locking        = true
   }
+  # Release reader on the guardrails project (terraform-apply.yml, gcp-guardrails
+  # tags): sees run status and the run's source commit, nothing else. Fixed
+  # read would also return the state file, so the grant is custom.
+  release_reader_custom_access = {
+    runs           = "read"
+    variables      = "none"
+    state_versions = "none"
+    sentinel_mocks = "none"
+    locking        = false
+  }
   approvers_custom_access = {
     runs           = "apply"
     variables      = "read"
@@ -747,9 +811,34 @@ locals {
     sentinel_mocks = "none"
     locking        = true
   }
+  # Viewers on projects whose STATE holds secrets (saas: the Supabase database
+  # password and service-role key). Fixed read includes the full state file,
+  # and read-outputs would also return sensitive outputs, so viewers see runs
+  # and variables (sensitive values stay write-only) but no state at all.
+  viewer_secret_state_access = {
+    runs           = "read"
+    variables      = "read"
+    state_versions = "none"
+    sentinel_mocks = "none"
+    locking        = false
+  }
+  # The platform team on the same projects: the same access. Its usual
+  # read-outputs is not enough of a limit there, because the API can still
+  # return a sensitive output value. Bridging workloads read the saas outputs
+  # with their own saas-outputs-reader team token, not the platform team's.
+  platform_secret_state_access = local.viewer_secret_state_access
   # State export team (state-backup.yml): reads state versions, nothing else.
   state_backup_custom_access = {
     runs           = "read"
+    variables      = "none"
+    state_versions = "read"
+    sentinel_mocks = "none"
+    locking        = false
+  }
+  # Drift team (drift-detection.yml): reads the current state version to find
+  # the last applied run, then queues a plan-only, refresh-only run on it.
+  drift_custom_access = {
+    runs           = "plan"
     variables      = "none"
     state_versions = "read"
     sentinel_mocks = "none"
@@ -774,8 +863,8 @@ locals {
   # auto_apply_run_trigger (enable_nonprod_workload_auto_apply). Trust change:
   # a confirmed upstream apply (gcp-network-hub, aws-network, aws-security)
   # applies these without a further confirmation. Fail-closed: only an
-  # environment whose is_production is EXPLICITLY false qualifies; an omitted
-  # flag (prd, live, prod-eu, ...) keeps manual confirmation.
+  # environment whose is_production is false qualifies (the environments
+  # validation fails the plan when an environment omits the flag).
   explicit_nonprod_workloads = toset(concat(
     [for k in local.gcp_workload_names : k if lookup(local.gcp_production_flags, local.workspaces[k].environment, null) == false],
     [for k in local.aws_workload_names : k if try(local.aws_environments[local.workspaces[k].environment].is_production, null) == false],
@@ -795,16 +884,71 @@ locals {
   tfc_admin_only_projects = var.manage_tfc_admin_workspace && var.enable_projects ? toset([local.workspace_project_key[var.tfc_admin_workspace_name]]) : toset([])
 
   # The saas project holds the account-wide SUPABASE_ACCESS_TOKEN and
-  # VERCEL_API_TOKEN. Its runs are confirmed by the approvers team, like the
-  # control plane.
+  # VERCEL_API_TOKEN. Its runs are confirmed by saas_approvers_team_id when set,
+  # else by the control-plane approvers team. A team that may confirm an apply
+  # may also queue a plan (HCP Terraform has no apply-only permission), and a
+  # plan can read those tokens.
   saas_projects = setintersection(local.project_keys, toset(["saas"]))
+  # Saas projects that the control-plane approvers team confirms.
+  control_plane_approved_saas_projects = var.saas_approvers_team_id == null ? local.saas_projects : toset([])
 
   # A plan is code execution with the workspace's credentials: anyone who may
   # queue a plan, including a CLI speculative plan with their own unreviewed
-  # configuration (speculative_enabled = false does not stop those), can read
-  # every environment variable on the workspace. So the broad platform team gets
-  # runs = read, never plan, on projects whose workspaces hold static secrets.
-  secret_bearing_projects = setunion(local.tfc_admin_only_projects, local.saas_projects)
+  # configuration (speculative_enabled = false does not stop those), or a PR
+  # speculative plan, can read every variable on the workspace. A workspace is
+  # secret-bearing when:
+  #   - this root writes a sensitive variable to it (workspace_variables, such
+  #     as the TFE_TOKEN of the SaaS bridge), or a variable whose key looks like
+  #     a secret (secret_variable_key_pattern) even if it is not marked sensitive;
+  #   - it runs the SaaS bridge (enable_saas_secret_bridge, as a Terraform or
+  #     TF_VAR_ env variable): its TFE_TOKEN may be set by hand, out of sight;
+  #   - the shared variable set carries a sensitive or secret-named value: that
+  #     set reaches every workspace except gcp-guardrails;
+  #   - it is tfc-admin (org-admin TFE_TOKEN) or a saas-* workspace (account-wide
+  #     Supabase/Vercel tokens), whose secrets are set by hand.
+  # The broad platform team gets runs = read, never plan, on every project that
+  # holds one; the workspace gets no workspace-level write and no speculative
+  # plans (unless enable_speculative_on_secret_bearing).
+  # Marking a variable sensitive is the contract; the name pattern is defence
+  # in depth for a secret that was not marked.
+  secret_variable_key_pattern = "(?i)(^|_)(TOKEN|SECRET|SECRET_KEY|SERVICE_ROLE_KEY|PASSWORD|PASSWD|PASSPHRASE|PRIVATE_KEY|API_KEY|ACCESS_KEY|CREDENTIALS)$"
+  common_set_is_secret = anytrue([
+    for k, v in var.common_workspace_variables : v.sensitive || can(regex(local.secret_variable_key_pattern, k))
+  ])
+  # The bridge flag fails closed: a present key counts as on unless its value
+  # is an explicit false ("false", "0" or "" after trimming spaces and quotes,
+  # any case). "1", "!false" or "1 == 1" (HCL) all count as on.
+  saas_bridge_keys       = ["enable_saas_secret_bridge", "TF_VAR_enable_saas_secret_bridge"]
+  saas_bridge_off_values = ["false", "0", ""]
+  secret_bearing_workspaces = toset(concat(
+    [
+      for ws, vars in local.workspace_vars : ws
+      if anytrue([for k, v in vars : v.sensitive || can(regex(local.secret_variable_key_pattern, k))])
+    ],
+    [
+      for ws, vars in local.workspace_vars : ws
+      if anytrue([
+        for k in local.saas_bridge_keys : contains(keys(vars), k) &&
+        !contains(local.saas_bridge_off_values, try(lower(trim(vars[k].value, " \t\r\n\"'")), "unparsed"))
+      ])
+    ],
+    local.common_set_is_secret ? [for ws in local.workspace_names : ws if !contains(local.guardrails_workspaces, ws)] : [],
+    local.saas_workspace_names,
+    var.manage_tfc_admin_workspace ? [var.tfc_admin_workspace_name] : [],
+  ))
+  secret_bearing_workloads_in_control_plane = sort([
+    for ws in local.secret_bearing_workspaces : ws
+    if contains(["gcp", "aws"], local.workspaces[ws].cloud) && !local.is_control_plane[ws] &&
+    contains(local.control_plane_projects, local.workspace_project_key[ws])
+  ])
+  secret_bearing_projects = setunion(
+    local.tfc_admin_only_projects,
+    local.saas_projects,
+    toset([
+      for ws in local.secret_bearing_workspaces : local.workspace_project_key[ws]
+      if contains(keys(local.workspace_project_key), ws) && contains(local.shared_access_projects, local.workspace_project_key[ws])
+    ]),
+  )
 
   # Production gcp-/aws-workload-<env> workspaces this root manages, and the
   # projects holding them: <cloud> (one project per cloud) or
@@ -815,11 +959,19 @@ locals {
     for k in local.managed_production_workloads : local.workspace_project_key[k]
     if contains(local.project_keys, local.workspace_project_key[k])
   ])
-  platform_custom_projects = setunion(local.control_plane_projects, local.saas_projects, local.production_workload_projects)
+  # Secret-bearing projects whose runs the control-plane approvers team
+  # confirms: not the tfc-admin project (the tfc-admin team confirms there) and
+  # not a saas project that has saas_approvers_team_id.
+  control_plane_approved_secret_projects = setsubtract(
+    local.secret_bearing_projects,
+    setunion(local.tfc_admin_only_projects, setsubtract(local.saas_projects, local.control_plane_approved_saas_projects)),
+  )
+  platform_custom_projects = setunion(local.control_plane_projects, local.saas_projects, local.production_workload_projects, local.secret_bearing_projects)
   approver_projects = setunion(
     setsubtract(local.control_plane_projects, local.tfc_admin_only_projects),
-    local.saas_projects,
+    local.control_plane_approved_saas_projects,
     local.production_workload_projects,
+    local.control_plane_approved_secret_projects,
   )
 
   team_project_access = merge(
@@ -829,7 +981,9 @@ locals {
         team_id = var.platform_team_id
         access  = contains(local.platform_custom_projects, p) ? "custom" : "write"
         custom = contains(local.platform_custom_projects, p) ? (
-          contains(local.secret_bearing_projects, p) ? merge(local.platform_custom_access, { runs = "read" }) : local.platform_custom_access
+          contains(local.saas_projects, p) ? local.platform_secret_state_access : (
+            contains(local.secret_bearing_projects, p) ? merge(local.platform_custom_access, { runs = "read" }) : local.platform_custom_access
+          )
         ) : null
       }
     },
@@ -841,12 +995,28 @@ locals {
         custom  = local.approvers_custom_access
       }
     },
+    var.saas_approvers_team_id == null ? {} : {
+      for p in local.saas_projects : "${p}/saas-approvers" => {
+        project = p
+        team_id = var.saas_approvers_team_id
+        access  = "custom"
+        custom  = local.approvers_custom_access
+      }
+    },
     {
       for pair in setproduct(tolist(local.shared_access_projects), var.viewer_team_ids) :
-      "${pair[0]}/${pair[1]}" => { project = pair[0], team_id = pair[1], access = "read", custom = null }
+      "${pair[0]}/${pair[1]}" => {
+        project = pair[0]
+        team_id = pair[1]
+        access  = contains(local.saas_projects, pair[0]) ? "custom" : "read"
+        custom  = contains(local.saas_projects, pair[0]) ? local.viewer_secret_state_access : null
+      }
     },
     var.security_team_id == null || !local.guardrails_project ? {} : {
       "guardrails/security" = { project = "guardrails", team_id = var.security_team_id, access = "custom", custom = local.security_custom_access }
+    },
+    var.guardrails_release_reader_team_id == null || !local.guardrails_project ? {} : {
+      "guardrails/release-reader" = { project = "guardrails", team_id = var.guardrails_release_reader_team_id, access = "custom", custom = local.release_reader_custom_access }
     },
     var.state_backup_team_id == null ? {} : {
       for p in local.shared_access_projects : "${p}/state-backup" => {
@@ -854,18 +1024,37 @@ locals {
         team_id = var.state_backup_team_id
         access  = "custom"
         custom  = local.state_backup_custom_access
+      } if var.enable_saas_state_backup || !contains(local.saas_projects, p)
+    },
+    {
+      for p in local.drift_projects : "${p}/drift" => {
+        project = p
+        team_id = var.drift_team_id
+        access  = "custom"
+        custom  = local.drift_custom_access
       }
     },
   )
 
+  # A refresh-only plan is still a plan: it runs with the workspace's
+  # variables. The drift team gets no secret-bearing project (tfc-admin, saas,
+  # a project with a static secret) and no guardrails project. There HCP
+  # health assessments (enable_health_assessments) are the only drift check.
+  drift_projects = var.drift_team_id == null ? toset([]) : setsubtract(local.shared_access_projects, local.secret_bearing_projects)
+  drift_workspaces = sort([
+    for ws, p in local.workspace_project_key : ws if contains(local.drift_projects, p)
+  ])
+
   # Non-production gcp/aws workload workspaces that share a project with the
-  # control plane or with a production workload. The saas project is
-  # secret-bearing and keeps runs = read for every saas-* workspace.
+  # control plane, with a production workload or with a secret-bearing
+  # workspace. A secret-bearing workspace never gets this grant: the saas
+  # project and every secret-bearing workload keep platform runs = read.
   platform_workspace_write = var.platform_team_id == null ? toset([]) : toset([
     for k, p in local.workspace_project_key : k
     if !local.is_control_plane[k] && !contains(local.managed_production_workloads, k) &&
+    !contains(local.secret_bearing_workspaces, k) &&
     contains(["gcp", "aws"], local.workspaces[k].cloud) &&
-    contains(setunion(local.control_plane_projects, local.production_workload_projects), p)
+    contains(setunion(local.control_plane_projects, local.production_workload_projects, local.secret_bearing_projects), p)
   ])
 
   # ── Speculative plans ──────────────────────────────────────────
@@ -874,6 +1063,8 @@ locals {
     toset(local.guardrails_workspaces),
     var.disable_speculative_on_production ? local.production_workloads : toset([]),
     var.disable_speculative_on_saas ? toset(local.saas_workspace_names) : toset([]),
+    # Secret-bearing workspaces; saas-* keep their own switch above.
+    var.enable_speculative_on_secret_bearing ? toset([]) : setsubtract(local.secret_bearing_workspaces, toset(local.saas_workspace_names)),
   )
 
   # Every input keyed by workspace name must name a managed workspace of the
@@ -931,7 +1122,11 @@ resource "terraform_data" "input_contract" {
     }
     precondition {
       condition     = length(local.file_reserved_entries) == 0
-      error_message = "workspace_variables_file sets reserved environment variables: ${join(", ", local.file_reserved_entries)}. Dynamic-credential (TFC_*), CLI (TF_CLI_ARGS*, TF_*) and provider-auth env vars are derived by tfc-admin or set write-only via workspace_variables, never from the committed file."
+      error_message = "workspace_variables_file sets reserved environment variables: ${join(", ", local.file_reserved_entries)}. Dynamic-credential (TFC_*), CLI (TF_CLI_ARGS*, TF_CLI_CONFIG_FILE, TERRAFORM_CONFIG, TF_TOKEN_*, TF_*), TFE_*, provider-auth, loader, shell and interpreter (LD_*, DYLD_*, NODE_*, PYTHON*, PERL5*, RUBY*, JAVA options, GIT_*, BASH_ENV, BASH_FUNC_*, ENV, SHELLOPTS, PS4, GCONV_PATH, SSH_ASKPASS*, PATH), proxy and CA (SSL_CERT_*, NODE_EXTRA_CA_CERTS) env vars never come from the committed file: tfc-admin derives the credential ones, and workspace_variables may set the credential, CLI-argument, proxy and CA ones (not the loader or interpreter ones)."
+    }
+    precondition {
+      condition     = length(local.workspace_variables_exec_entries) == 0
+      error_message = "workspace_variables sets environment variables that make the run execute other code: ${join(", ", local.workspace_variables_exec_entries)}. TERRAFORM_CONFIG, TF_CLI_CONFIG_FILE, LD_*, DYLD_*, NODE_OPTIONS, NODE_PATH, GIT_*, BASH_ENV, BASH_FUNC_*, ENV, SHELLOPTS, PS4, PYTHON*, PERL5OPT, PERL5LIB, RUBYOPT, RUBYLIB, JAVA_TOOL_OPTIONS, _JAVA_OPTIONS, GCONV_PATH, SSH_ASKPASS* and PATH are refused on every workspace."
     }
     precondition {
       condition     = length(local.file_sensitive_entries) == 0
@@ -960,6 +1155,27 @@ resource "terraform_data" "input_contract" {
       error_message = "state_backup_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its token reads every state file, so it must carry nothing else."
     }
     precondition {
+      condition = var.saas_approvers_team_id == null || !contains(
+        concat(compact([var.platform_team_id, var.control_plane_approvers_team_id, var.security_team_id, var.tfc_admin_team_id, var.state_backup_team_id]), var.viewer_team_ids, values(var.saas_outputs_reader_team_ids)),
+        coalesce(var.saas_approvers_team_id, "-"),
+      )
+      error_message = "saas_approvers_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, state_backup_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its members can read the account-wide SaaS tokens through a plan."
+    }
+    precondition {
+      condition = var.drift_team_id == null || !contains(
+        concat(compact([var.platform_team_id, var.control_plane_approvers_team_id, var.security_team_id, var.tfc_admin_team_id, var.state_backup_team_id, var.saas_approvers_team_id]), var.viewer_team_ids, values(var.saas_outputs_reader_team_ids)),
+        coalesce(var.drift_team_id, "-"),
+      )
+      error_message = "drift_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, state_backup_team_id, saas_approvers_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its token sits in GitHub (environment tfc-drift) and may queue plans, so it must carry nothing else."
+    }
+    precondition {
+      condition = var.guardrails_release_reader_team_id == null || !contains(
+        concat(compact([var.platform_team_id, var.control_plane_approvers_team_id, var.security_team_id, var.tfc_admin_team_id, var.state_backup_team_id, var.saas_approvers_team_id, var.drift_team_id]), var.viewer_team_ids, values(var.saas_outputs_reader_team_ids)),
+        coalesce(var.guardrails_release_reader_team_id, "-"),
+      )
+      error_message = "guardrails_release_reader_team_id must be a dedicated team (not platform_team_id, control_plane_approvers_team_id, security_team_id, tfc_admin_team_id, state_backup_team_id, saas_approvers_team_id, drift_team_id, a viewer_team_ids entry or a saas_outputs_reader_team_ids value): its token sits in GitHub (environment tfc-readonly) and must carry runs = read on the guardrails project and nothing else."
+    }
+    precondition {
       condition     = length(distinct(values(var.saas_outputs_reader_team_ids))) == length(var.saas_outputs_reader_team_ids)
       error_message = "saas_outputs_reader_team_ids must map each saas-* workspace to its own team: a shared team would let a non-production workload's token read production saas outputs."
     }
@@ -976,8 +1192,12 @@ resource "terraform_data" "input_contract" {
       error_message = "GCP service-account IDs are at most 30 characters, so <prefix>-wl-<env>-apply must fit (prefix from gcp_project_prefix or org.prefix): ${join(", ", local.gcp_workload_account_ids_too_long)}. Shorten the gcp.environments key or the prefix."
     }
     precondition {
-      condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0
-      error_message = "config/landing-zone.yaml address plan conflicts (docs/architecture/cidr-plan.md: GCP 10.0.0.0/12, AWS 10.64.0.0/10): ${join("; ", concat(local.cidr_overlaps, local.cidr_outside_aws_top))}."
+      condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_outside_aws_pool) == 0 && length(local.cidr_pool_issues) == 0
+      error_message = "config/landing-zone.yaml address plan conflicts (docs/architecture/cidr-plan.md: GCP 10.0.0.0/12, AWS 10.64.0.0/10, one regional pool per region): ${join("; ", concat(local.cidr_overlaps, local.cidr_outside_aws_top, local.cidr_outside_aws_pool, local.cidr_pool_issues))}. Give every aws.workload_environments entry its own vpc_cidr inside aws.network.regional_cidrs.<org.regions.aws> or one of its aws.network.regional_additional_cidrs, and keep aws.network.vpn.onprem_cidrs clear of every cloud range."
+    }
+    precondition {
+      condition     = length(local.aws_workloads_needing_network) == 0
+      error_message = "aws-workload-<env> in hub mode reads the aws-network workspace's state, but aws.layers (aws_layers) has no network layer: ${join(", ", local.aws_workloads_needing_network)}. Add network to aws.layers, set aws.contracts.network, or drop the enable_network_hub override (tfc-admin sets enable_network_hub = false without the network layer)."
     }
     precondition {
       condition     = length(local.file_bad_categories) == 0
@@ -995,12 +1215,32 @@ data "tfe_outputs" "gcp_bootstrap" {
   count        = var.gcp_bootstrap_outputs_from_tfc ? 1 : 0
   organization = local.tfc_organization
   workspace    = "gcp-bootstrap"
+
+  # Fail instead of silently dropping the TFC_* dynamic-credential variables:
+  # the reads in locals use try(), so a renamed or missing output would
+  # otherwise leave every workspace this upstream feeds without credentials.
+  lifecycle {
+    postcondition {
+      condition     = length(setsubtract(["tfc_workload_provider_name", "tfc_plan_service_accounts", "tfc_apply_service_accounts"], keys(try(self.nonsensitive_values.contract, self.nonsensitive_values, {})))) == 0
+      error_message = "gcp_bootstrap_outputs_from_tfc = true but the gcp-bootstrap outputs lack ${join(", ", sort(tolist(setsubtract(["tfc_workload_provider_name", "tfc_plan_service_accounts", "tfc_apply_service_accounts"], keys(try(self.nonsensitive_values.contract, self.nonsensitive_values, {}))))))}. Apply gcp-bootstrap first. If it has applied, its contract output changed (scripts/check-contracts.sh). Without these keys no gcp-* workspace gets TFC_GCP_* dynamic credentials."
+    }
+  }
 }
 
 data "tfe_outputs" "aws_organization" {
   count        = var.aws_organization_outputs_from_tfc ? 1 : 0
   organization = local.tfc_organization
   workspace    = "aws-organization"
+
+  # Fail instead of silently dropping the TFC_* dynamic-credential variables:
+  # the reads in locals use try(), so a renamed or missing output would
+  # otherwise leave every workspace this upstream feeds without credentials.
+  lifecycle {
+    postcondition {
+      condition     = length(setsubtract(["tfc_plan_role_arns", "tfc_apply_role_arns", "tfc_workspace_bindings"], keys(try(self.nonsensitive_values.contract, self.nonsensitive_values, {})))) == 0
+      error_message = "aws_organization_outputs_from_tfc = true but the aws-organization outputs lack ${join(", ", sort(tolist(setsubtract(["tfc_plan_role_arns", "tfc_apply_role_arns", "tfc_workspace_bindings"], keys(try(self.nonsensitive_values.contract, self.nonsensitive_values, {}))))))}. Apply aws-organization first. If it has applied, its contract output changed (scripts/check-contracts.sh). Without these keys no aws-* workspace gets TFC_AWS_* dynamic credentials."
+    }
+  }
 }
 
 # The hand-created tfc-admin workspace, looked up only when it is not
@@ -1209,6 +1449,44 @@ check "guardrails_project_has_security_team" {
   }
 }
 
+# With one project per cloud, a secret-bearing workload shares its project with
+# the control plane, so the platform team can no longer queue control-plane
+# plans either. split_workload_projects = true keeps them apart. A sensitive or
+# secret-named value in the shared variable set reaches every control-plane
+# workspace, so it has the same effect in both modes.
+check "secret_bearing_control_plane_project" {
+  assert {
+    condition     = length(local.secret_bearing_workloads_in_control_plane) == 0
+    error_message = "Secret-bearing workloads (a sensitive or secret-named variable, or enable_saas_secret_bridge) share a TFC project with control-plane workspaces: ${join(", ", local.secret_bearing_workloads_in_control_plane)}. The platform team gets runs = read on that whole project, control plane included. Set split_workload_projects = true (org.tfc.split_workload_projects) to keep control-plane plans."
+  }
+  assert {
+    condition     = !local.common_set_is_secret
+    error_message = "common_workspace_variables carries a sensitive or secret-named value, and the shared variable set reaches every workspace except gcp-guardrails: every project is secret-bearing and the platform team gets runs = read everywhere. Set that value on the workspaces that need it (workspace_variables) instead."
+  }
+}
+
+# Without an approvers team, only organization owners can confirm runs on a
+# secret-bearing project (the platform team has runs = read there). The
+# tfc-admin project is left out: the tfc-admin team confirms its runs. So is a
+# saas project when saas_approvers_team_id confirms its runs.
+check "secret_bearing_projects_have_approvers" {
+  assert {
+    condition     = var.platform_team_id == null || var.control_plane_approvers_team_id != null || length(local.control_plane_approved_secret_projects) == 0
+    error_message = "control_plane_approvers_team_id is null while these projects are secret-bearing: ${join(", ", sort(tolist(local.control_plane_approved_secret_projects)))}. The platform team has runs = read there, so only organization owners can queue and confirm their runs. Set control_plane_approvers_team_id."
+  }
+}
+
+# Whoever confirms a saas-* apply can also queue a plan, and a plan can read
+# the account-wide SUPABASE_ACCESS_TOKEN and VERCEL_API_TOKEN. Without a
+# dedicated saas approvers team the whole control-plane approvers team holds
+# that exposure.
+check "saas_approvers_dedicated" {
+  assert {
+    condition     = length(local.saas_projects) == 0 || var.saas_approvers_team_id != null || var.control_plane_approvers_team_id == null
+    error_message = "saas-* applies are confirmed by control_plane_approvers_team_id. A confirmer can also queue a plan and read SUPABASE_ACCESS_TOKEN and VERCEL_API_TOKEN. Set saas_approvers_team_id to a smaller, dedicated team."
+  }
+}
+
 # Adopt the hand-created tfc-admin workspace instead of creating a duplicate.
 # An unmanaged tfc-admin workspace keeps TFC's default speculative_enabled =
 # true. With a VCS connection that hands every PR a plan that can read the
@@ -1229,15 +1507,20 @@ import {
 # ── OPA policy sets (both sourced from this repo via VCS) ──────────────────
 # Two sets, attached to every managed workspace:
 #   - <prefix>opa-guardrails (policies/opa): enforcement per policy in its
-#     policies.hcl, 11 mandatory (public exposure, identity, encryption,
-#     plan-time code execution) + 3 advisory. NOT overridable by default (policy_set_overridable = false), so
+#     policies.hcl, 13 mandatory (public exposure, identity, encryption,
+#     plan-time code execution, labels) + 3 advisory. NOT overridable by default (policy_set_overridable = false), so
 #     a mandatory failure is a hard stop no "Manage Policy Overrides" user can
 #     wave through.
 #   - <prefix>destructive-change-guard (policies/opa-destructive): the
 #     mandatory destroy_guard, which stops any delete or replace of a stateful
 #     resource, and the mandatory tfc_admin_guard, which stops a plan that
 #     detaches a policy set, turns on auto-apply for a production or
-#     control-plane workspace, or widens team access. Always overridable: an
+#     control-plane workspace, widens team access, moves runs to local or
+#     agent execution, rewires a protected workspace (VCS, working directory,
+#     project) or writes a TFC_* / TF_CLI_ARGS* / code-execution env var,
+#     and the PREVIEW tfc_vcs_run_only, which stops a control-plane or
+#     production apply of code that did not come from VCS.
+#     Always overridable: an
 #     intended change is overridden on the run by the security team. An owner creates that team by hand (its ID is
 #     security_team_id) and grants it Manage Policy Overrides in the HCP UI;
 #     this root creates no teams and sets no organization access, so it keeps
@@ -1337,6 +1620,26 @@ check "destructive_changes_guarded" {
   assert {
     condition     = local.enable_policy_sets || !var.enable_unguarded_destroy_warning
     error_message = "Policy sets are off (${local.vcs_repo == null ? "no vcs_repo / org.tfc.vcs_repo" : "org.tfc.plan / tfc_plan is ${coalesce(local.tfc_plan, "unset")}, not standard or premium"}): destructive changes are unguarded, no destroy_guard stops a delete or replace of a stateful resource. Set vcs_repo and org.tfc.plan, or enable_policy_sets = true on a plan that supports VCS policy sets."
+  }
+}
+
+# ADO-20: a production estate must not run without the policy sets. Off means
+# no destroy_guard, no tfc_admin_guard and no OPA guardrail checks any run of a
+# production workspace, so the plan fails. An explicit, time-boxed waiver
+# (policy_sets_waiver / org.tfc.policy_sets_waiver: { reason, expires }) lets an
+# estate on a plan without VCS policy sets proceed and records the risk.
+resource "terraform_data" "policy_sets_guard" {
+  input = sort(tolist(local.managed_production_workloads))
+
+  lifecycle {
+    precondition {
+      condition     = local.policy_sets_waiver_valid
+      error_message = "org.tfc.policy_sets_waiver (or policy_sets_waiver) needs a non-empty reason and expires as a real calendar date, YYYY-MM-DD (UTC), quoted in YAML."
+    }
+    precondition {
+      condition     = length(local.managed_production_workloads) == 0 || local.enable_policy_sets || local.policy_sets_waived
+      error_message = "Production workspaces (${join(", ", sort(tolist(local.managed_production_workloads)))}) need the OPA policy sets, but they are off (${var.enable_policy_sets == false ? "enable_policy_sets = false" : (local.vcs_repo == null ? "no vcs_repo / org.tfc.vcs_repo" : "org.tfc.plan / tfc_plan is ${coalesce(local.tfc_plan, "unset")}, not standard or premium")}): no destroy_guard or guardrail policy checks their runs.${local.policy_sets_waiver_until == null ? "" : " The policy-sets waiver expired on ${try(substr(local.policy_sets_waiver_until, 0, 10), "")}."} Set org.tfc.plan: standard (or premium) and org.tfc.vcs_repo in config/landing-zone.yaml, or enable_policy_sets = true on a plan that supports VCS policy sets. Or set org.tfc.policy_sets_waiver: { reason, expires: \"YYYY-MM-DD\" } and record the risk (UPGRADING.md)."
+    }
   }
 }
 

@@ -1,0 +1,10 @@
+# Negative fixture: an environment WITHOUT is_production. The plan must fail
+# naming it (config-check expects this file to fail schema validation too).
+gcp:
+  principal_access_boundary: true
+  environments:
+    dev:
+      display_name: Development
+      region: europe-west1
+      cidr_block: 10.10.0.0/16
+      budget_monthly_limit: 100

@@ -35,6 +35,12 @@ aws_enabled_regions = ["eu-west-2"]
 # Optional — spoke VPC CIDR (subnet math; actual CIDR allocated from shared IPAM).
 vpc_cidr = "10.72.0.0/16"
 
+# Optional — AZ spread for the spoke subnets. Default: aws.workload_environments.<env>.availability_zone_ids,
+# else aws.network.availability_zone_ids (the hub's zones), else the region's first three available zones.
+# availability_zone_ids = ["euw2-az2", "euw2-az3"]   # AZ IDs: same physical zones in every account
+# availability_zones    = ["eu-west-2a", "eu-west-2b"] # names: this account only; wins over IDs
+az_count = 2
+
 # REQUIRED — central log-archive bucket name. MUST match the name the
 # aws-organization and aws-network roots use (cross-root naming contract).
 log_archive_bucket_name = "acme-org-log-archive"

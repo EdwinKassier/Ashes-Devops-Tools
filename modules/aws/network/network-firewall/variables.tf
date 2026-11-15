@@ -16,7 +16,7 @@ variable "rule_group_capacity" {
 }
 
 variable "rule_group_name" {
-  description = "Name of the custom Suricata rule group (the allowlist group is named <rule_group_name>-egress-allowlist)."
+  description = "Name of the custom Suricata rule group (the allowlist group is named <rule_group_name>-egress-allowlist, the internal pass group <rule_group_name>-internal-pass)."
   type        = string
   default     = "org-stateful"
 
@@ -53,15 +53,16 @@ variable "managed_rule_groups" {
 }
 
 variable "stateful_default_actions" {
-  description = "STRICT_ORDER default actions for traffic no rule matched. Default [\"aws:alert_established\"] = log-but-pass (safe on day one: never blackholes existing flows). AWS-recommended steady state once allow rules exist: [\"aws:drop_established\", \"aws:alert_established\"]. At most one drop and one alert action."
+  description = "STRICT_ORDER default actions for traffic no rule matched. Default [\"aws:alert_established\"] = log-but-pass (safe on day one: never blackholes existing flows). Fail-closed steady state once allow rules exist: [\"aws:drop_established_app_layer_to_server\", \"aws:alert_established_app_layer_to_server\"]. The app-layer actions wait for the application layer (a TLS ClientHello split across packets, as post-quantum key shares make common) before dropping, so domain allowlist rules can match it; aws:drop_established can drop the second packet first. The _to_server form leaves server-to-client TCP packets (window updates, keep-alives, resets) alone; the bidirectional form drops them unless pass rules exist. Both drop unmatched UDP and ICMP in either direction: internal traffic is passed by the internal pass group, but external NTP or DNS and returning ICMP (path MTU discovery) need suricata_rules pass rules, for example pass icmp $EXTERNAL_NET any -> $HOME_NET any (itype:3; ...). Never mix the established and app-layer families. At most one drop and one alert action."
   type        = list(string)
   default     = ["aws:alert_established"]
 
   validation {
     condition = alltrue([for a in var.stateful_default_actions : contains([
-      "aws:drop_strict", "aws:drop_established", "aws:alert_strict", "aws:alert_established",
+      "aws:drop_strict", "aws:drop_established", "aws:drop_established_app_layer", "aws:drop_established_app_layer_to_server",
+      "aws:alert_strict", "aws:alert_established", "aws:alert_established_app_layer", "aws:alert_established_app_layer_to_server",
     ], a)])
-    error_message = "stateful_default_actions entries must be aws:drop_strict, aws:drop_established, aws:alert_strict or aws:alert_established."
+    error_message = "stateful_default_actions entries must be one of the AWS STRICT_ORDER default actions: aws:drop_strict, aws:drop_established, aws:drop_established_app_layer, aws:drop_established_app_layer_to_server, or the matching aws:alert_* action."
   }
 
   validation {
@@ -70,6 +71,79 @@ variable "stateful_default_actions" {
       length([for a in var.stateful_default_actions : a if startswith(a, "aws:alert_")]) <= 1
     )
     error_message = "stateful_default_actions may contain at most one drop action and one alert action."
+  }
+
+  # AWS refuses a policy that mixes aws:{drop,alert}_established with any
+  # *_app_layer* action (Strict evaluation order); catch it at plan.
+  validation {
+    condition = !(
+      length([for a in var.stateful_default_actions : a if contains(["aws:drop_established", "aws:alert_established"], a)]) > 0 &&
+      length([for a in var.stateful_default_actions : a if strcontains(a, "_app_layer")]) > 0
+    )
+    error_message = "stateful_default_actions must not mix aws:drop_established / aws:alert_established with an *_app_layer* action (AWS rejects the policy). Switch both entries, for example to aws:drop_established_app_layer_to_server and aws:alert_established_app_layer_to_server."
+  }
+}
+
+variable "enable_internal_pass" {
+  description = "Create the internal pass rule group (priority 1500) from internal_pass_cidrs and internal_segments. Default true; no group is created when both are empty. Under a fail-closed policy (aws:drop_established) internal traffic is dropped without it, because the egress allowlist matches only HOME_NET to EXTERNAL_NET. Set false only when custom suricata_rules pass that traffic instead."
+  type        = bool
+  default     = true
+}
+
+variable "internal_pass_cidrs" {
+  description = "Shared internal ranges that every HOME_NET address may reach and be reached from: the hub VPCs (central endpoints, Resolver) and on-premises prefixes. Private ranges only (10/8, 172.16/12, 192.168/16, 100.64/10, 198.18/15). Never list HOME_NET itself: that would pass traffic between segments. Empty (default) = none."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for c in var.internal_pass_cidrs : can(cidrnetmask(c)) && anytrue([
+        for b in ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "198.18.0.0/15"] :
+        tonumber(split("/", c)[1]) >= tonumber(split("/", b)[1]) && cidrhost("${split("/", c)[0]}/${split("/", b)[1]}", 0) == cidrhost(b, 0)
+      ])
+    ])
+    error_message = "internal_pass_cidrs entries must be IPv4 CIDR blocks inside a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 198.18.0.0/15); a public range or 0.0.0.0/0 would pass internet egress before the allowlist."
+  }
+
+  # A range that contains a HOME_NET range would pass traffic between segments.
+  validation {
+    condition = alltrue([
+      for p in setproduct(var.internal_pass_cidrs, var.home_net_cidrs) : !try(
+        tonumber(split("/", p[0])[1]) <= tonumber(split("/", p[1])[1]) &&
+        cidrhost("${split("/", p[1])[0]}/${split("/", p[0])[1]}", 0) == cidrhost(p[0], 0),
+        false
+      )
+    ])
+    error_message = "internal_pass_cidrs must not contain a home_net_cidrs range: passing it would pass traffic between segments."
+  }
+}
+
+variable "internal_segments" {
+  description = "Segments whose members may reach each other, keyed by segment name (for example { prod = [spoke CIDRs], nonprod = [spoke CIDRs] }). Each entry passes its CIDRs to its own CIDRs only, so traffic between segments still meets the default action. Same private-range rule as internal_pass_cidrs. Empty (default) = none."
+  type        = map(list(string))
+  default     = {}
+
+  validation {
+    condition = alltrue(flatten([
+      for k, cs in var.internal_segments : [
+        for c in cs : can(cidrnetmask(c)) && anytrue([
+          for b in ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "198.18.0.0/15"] :
+          tonumber(split("/", c)[1]) >= tonumber(split("/", b)[1]) && cidrhost("${split("/", c)[0]}/${split("/", b)[1]}", 0) == cidrhost(b, 0)
+        ])
+      ]
+    ])) && alltrue([for k in keys(var.internal_segments) : can(regex("^[a-z][a-z0-9_-]*$", k))])
+    error_message = "internal_segments keys must be lowercase names and every CIDR must be an IPv4 block inside a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 198.18.0.0/15)."
+  }
+}
+
+variable "internal_pass_capacity" {
+  description = "Reserved capacity for the internal pass rule group. Cannot be changed after creation."
+  type        = number
+  default     = 100
+
+  validation {
+    condition     = var.internal_pass_capacity >= 4
+    error_message = "internal_pass_capacity must be at least 4 (one per generated rule)."
   }
 }
 
@@ -176,10 +250,17 @@ variable "kms_key_arn" {
   default     = ""
 }
 
-variable "delete_protection" {
-  description = "Whether to enable deletion protection on the firewall. On by default so the inspection firewall is not torn down accidentally; set false to allow teardown."
+variable "enable_deletion_protection" {
+  description = "Whether to enable deletion protection on the firewall. On by default so the inspection firewall is not torn down accidentally; set false to allow teardown. Null (default) uses the deprecated delete_protection input, else true."
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "delete_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; delete_protection is removed in v1.0."
 }
 
 variable "region" {
@@ -188,7 +269,7 @@ variable "region" {
   default     = null
 
   validation {
-    condition     = var.region == null || can(regex("^[a-z]{2}(-[a-z]+)+-[0-9]$", var.region))
+    condition     = var.region == null || can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", var.region))
     error_message = "region must be null or an AWS region name such as eu-west-2."
   }
 }

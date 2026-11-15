@@ -47,10 +47,10 @@ module "secure_web_proxy" {
   allowed_fqdns = ["*.github.com", "pypi.org"]
 
   create_proxy_only_subnet = true
-  proxy_only_subnet_cidr   = "10.0.254.0/23"
+  proxy_only_subnet_cidr   = "10.0.250.0/23"
 
   create_service_attachment = true
-  psc_nat_subnet_cidr       = "10.0.253.0/24"
+  psc_nat_subnet_cidr       = "10.0.252.0/24"
   consumer_accept_projects  = ["111111111111"]
 }
 ```
@@ -58,9 +58,7 @@ module "secure_web_proxy" {
 <!-- BEGIN_TF_DOCS -->
 Copyright 2026 Ashes
 
-# Secure Web Proxy (preview, opt-in)
-
-A regional Secure Web Proxy (Cloud Secure Web Proxy, an Envoy-based egress
+A regional Secure Web Proxy (preview, opt-in; Cloud Secure Web Proxy, an Envoy-based egress
 proxy) with a gateway security policy that allows an FQDN allowlist and
 denies everything else. Optionally creates the proxy-only subnet it needs
 and publishes the gateway through a Private Service Connect service
@@ -113,13 +111,13 @@ The following resources are created:
 
 
 - resource.google_compute_service_attachment.this (modules/gcp/network/secure-web-proxy/main.tf#L126)
-- resource.google_compute_subnetwork.proxy_only (modules/gcp/network/secure-web-proxy/main.tf#L28)
-- resource.google_compute_subnetwork.psc_nat (modules/gcp/network/secure-web-proxy/main.tf#L115)
-- resource.google_network_security_gateway_security_policy.this (modules/gcp/network/secure-web-proxy/main.tf#L50)
-- resource.google_network_security_gateway_security_policy_rule.additional (modules/gcp/network/secure-web-proxy/main.tf#L71)
-- resource.google_network_security_gateway_security_policy_rule.allowlist (modules/gcp/network/secure-web-proxy/main.tf#L57)
-- resource.google_network_security_url_lists.allowlist (modules/gcp/network/secure-web-proxy/main.tf#L40)
-- resource.google_network_services_gateway.this (modules/gcp/network/secure-web-proxy/main.tf#L86)
+- resource.google_compute_subnetwork.proxy_only (modules/gcp/network/secure-web-proxy/main.tf#L26)
+- resource.google_compute_subnetwork.psc_nat (modules/gcp/network/secure-web-proxy/main.tf#L113)
+- resource.google_network_security_gateway_security_policy.this (modules/gcp/network/secure-web-proxy/main.tf#L48)
+- resource.google_network_security_gateway_security_policy_rule.additional (modules/gcp/network/secure-web-proxy/main.tf#L69)
+- resource.google_network_security_gateway_security_policy_rule.allowlist (modules/gcp/network/secure-web-proxy/main.tf#L55)
+- resource.google_network_security_url_lists.allowlist (modules/gcp/network/secure-web-proxy/main.tf#L38)
+- resource.google_network_services_gateway.this (modules/gcp/network/secure-web-proxy/main.tf#L84)
 
 
 ## Inputs
@@ -157,3 +155,7 @@ The following resources are created:
 | <a name="output_service_attachment_id"></a> [service\_attachment\_id](#output\_service\_attachment\_id) | ID of the PSC service attachment (projects/<project>/regions/<region>/serviceAttachments/<name>) consumers target from their endpoint, or null when create\_service\_attachment is false. |
 | <a name="output_url_list_id"></a> [url\_list\_id](#output\_url\_list\_id) | ID of the FQDN allowlist URL list, or null when allowed\_fqdns is empty. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

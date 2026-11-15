@@ -7,7 +7,15 @@
 # validate already covers syntax/type wiring; this guards the remote-state
 # contract shape the root depends on.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 mock_provider "aws" { alias = "us_east_1" }
 # tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
 # no run contacts HCP Terraform. The default mock is a saas workspace that
@@ -517,4 +525,188 @@ run "bridge_off_reads_nothing" {
     )
     error_message = "with the bridge off, no bridge resource is planned."
   }
+}
+
+# CMP-3: patch_install_target_tag reaches the systems-manager module.
+run "patch_install_target_tag_reaches_module" {
+  command = plan
+
+  variables {
+    patch_install_target_tag = { key = "PatchInstall", value = "true" }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
+  }
+
+  assert {
+    condition     = module.aws_workload.patch_install_targets.key == "tag:PatchInstall" && module.aws_workload.patch_install_targets.values[0] == "true"
+    error_message = "patch_install_target_tag must narrow the install association to tagged instances."
+  }
+}
+
+# ARC-2: production gateway endpoints reach only organization resources and
+# the documented AWS-owned buckets; the organization ID comes from the
+# aws-organization contract.
+run "production_gateway_endpoints_get_org_policies" {
+  command = plan
+
+  variables {
+    is_production = true
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { contract = { organization_id = "o-abc1234567", account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
+  }
+
+  assert {
+    condition = (
+      local.enable_gateway_endpoint_policies &&
+      local.organization_id == "o-abc1234567" &&
+      jsondecode(module.aws_workload.gateway_endpoint_policies["s3"]).Statement[0].Condition.StringEquals["aws:ResourceOrgID"] == "o-abc1234567" &&
+      jsondecode(module.aws_workload.gateway_endpoint_policies["dynamodb"]).Statement[0].Condition.StringEquals["aws:ResourceOrgID"] == "o-abc1234567"
+    )
+    error_message = "a production workload must put organization-only policies on its S3 and DynamoDB gateway endpoints"
+  }
+}
+
+run "non_production_gateway_endpoints_keep_full_access" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
+  }
+
+  assert {
+    condition     = !local.enable_gateway_endpoint_policies && length(module.aws_workload.gateway_endpoint_policies) == 0
+    error_message = "a non-production workload keeps the default gateway endpoint policy unless enable_gateway_endpoint_policies is set"
+  }
+}
+
+run "production_without_organization_id_fails" {
+  command = plan
+
+  variables {
+    is_production = true
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
+  }
+
+  expect_failures = [terraform_data.gateway_endpoint_policy_inputs]
+}
+
+run "gateway_endpoint_policies_can_be_turned_off_in_production" {
+  command = plan
+
+  variables {
+    is_production                    = true
+    enable_gateway_endpoint_policies = false
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = { outputs = { contract = { account_ids = { workload_dev = "222222222222" }, account_role_arns = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = { outputs = { contract = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } } } }
+  }
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = { outputs = { contract = { log_archive_bucket_name = "ashes-org-log-archive" } } }
+  }
+
+  assert {
+    condition     = length(module.aws_workload.gateway_endpoint_policies) == 0
+    error_message = "enable_gateway_endpoint_policies = false must win over the production default"
+  }
+}
+
+# Re-audit 7 CMP-1: the aws-organization remote state marks the workload
+# account regulated, so the environment is regulated even when this root's
+# config file (here: none) does not say so.
+run "remote_state_keeps_the_regulated_class" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        contract = {
+          account_ids            = { workload_dev = "222222222222" }
+          account_role_arns      = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" }
+          regulated_account_keys = ["workload_dev"]
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = {
+      outputs = {
+        contract = {
+          tgw_id        = "tgw-000000000000abcd"
+          ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = {
+      outputs = {
+        contract = {
+          log_archive_bucket_name = "ashes-org-log-archive"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.regulated
+    error_message = "regulated_account_keys in the aws-organization contract must make the workload regulated."
+  }
+
+  # Not production here, so the regulated guard fails the plan.
+  expect_failures = [terraform_data.regulated_guard]
 }

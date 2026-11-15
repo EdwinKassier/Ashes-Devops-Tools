@@ -7,20 +7,27 @@ locals {
   sns_topic_arn = var.create_sns_topic ? aws_sns_topic.this[0].arn : var.sns_topic_arn
   alarm_actions = local.sns_topic_arn != null ? [local.sns_topic_arn] : []
 
-  dashboard_body = jsonencode({
-    widgets = length(var.dashboard_widgets) > 0 ? var.dashboard_widgets : [
-      {
-        type   = "text"
-        x      = 0
-        y      = 0
-        width  = 24
-        height = 2
-        properties = {
-          markdown = "# ${var.name_prefix} — no widgets configured. Populate var.dashboard_widgets."
-        }
+  # Each branch is encoded to a string on its own: a single conditional over
+  # list(any) and a literal tuple has no consistent result type, so Terraform
+  # rejects it as soon as dashboard_widgets is non-empty.
+  dashboard_placeholder = [
+    {
+      type   = "text"
+      x      = 0
+      y      = 0
+      width  = 24
+      height = 2
+      properties = {
+        markdown = "# ${var.name_prefix} — no widgets configured. Populate var.dashboard_widgets."
       }
-    ]
-  })
+    }
+  ]
+
+  dashboard_body = (
+    length(var.dashboard_widgets) > 0
+    ? jsonencode({ widgets = var.dashboard_widgets })
+    : jsonencode({ widgets = local.dashboard_placeholder })
+  )
 }
 
 resource "aws_sns_topic" "this" {

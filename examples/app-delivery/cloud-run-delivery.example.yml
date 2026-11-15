@@ -3,21 +3,34 @@
 # a workflow for THIS repo (hence the .example.yml suffix), so it never runs
 # here.
 #
-# Flow: build -> scan -> push to Artifact Registry -> deploy a new revision of the
-# Cloud Run service. Auth is keyless: GitHub OIDC -> the app-deploy Workload
+# Flow: build -> scan -> push to Artifact Registry -> resolve the pushed image
+# digest -> attest its build provenance -> deploy a new revision of the Cloud
+# Run service BY DIGEST. Auth is keyless: GitHub OIDC -> the app-deploy Workload
 # Identity pool (apps-<env>) in the env host project -> the per-service deploy
 # SA. No keys.
 #
+# Digest, not tag: the revision runs exactly the bytes that were scanned and
+# attested, even if a tag were ever moved. The provenance attestation (SLSA
+# build provenance, signed with the job's OIDC identity through Sigstore) is
+# stored in GitHub and pushed next to the image. Verify it with
+#   gh attestation verify oci://<IMAGE_REPOSITORY>@<digest> --repo <owner>/<app-repo>
+# (docs/guides/deploying-a-service.md). Enforcing it at deploy time (Binary
+# Authorization) is a separate step this example does not configure.
+#
 # Everything this pipeline needs is created by ONE app_services entry in the
 # gcp-workload-<env> workspace (modules/gcp/stages/app-services):
-# (<project> below is the service's project: the env host project by default,
-# or the team project when the entry sets project_id.)
+# (<project> below is the service's project: the team's service project when
+# the entry sets service_team, an explicit project_id when it sets one, else
+# the env host project. A production environment refuses the host project
+# unless enable_host_project_workloads = true, so give production services a
+# service_team.)
 #   - Artifact Registry repo  <region>-docker.pkg.dev/<project>/<service>
 #   - Cloud Run service       <service> (runtime SA <service>-run@...)
 #   - deploy SA               <service>-deploy@... with run.developer on the
 #     service, artifactregistry.writer on the repo, serviceAccountUser on the
 #     runtime SA only; impersonable only from this repo's numeric repository_id
-#     (and the ref / GitHub environment you declared).
+#     plus the ref and/or GitHub environment you declared. With neither, the
+#     GitHub environment is the landing-zone environment key (<env>).
 #
 # Set these GitHub repository (or environment) VARIABLES from
 #   terraform -chdir=envs/gcp/workload output -json app_github_actions
@@ -26,72 +39,128 @@
 #   GCP_DEPLOY_SA      <service>-deploy@<project>.iam.gserviceaccount.com
 #   GCP_PROJECT_ID     <project> (the service's project; host by default)
 #   GCP_REGION         e.g. europe-west1
-#   CLOUD_RUN_SERVICE  <service>
+#   CLOUD_RUN_SERVICE  <service> (null for a runtime = "cloud-run-job" entry)
+#   CLOUD_RUN_JOB      <service> for a runtime = "cloud-run-job" entry, else null
 #   IMAGE_REPOSITORY   <region>-docker.pkg.dev/<project>/<service>/<service>
 #
-# If the app_services entry sets github.environment, add `environment: <name>`
-# to the job; if it sets github.ref, trigger only from that ref (as below).
+# A Cloud Run JOB entry: set CLOUD_RUN_JOB instead of CLOUD_RUN_SERVICE and
+# replace the last step's command with
+#   gcloud run jobs deploy "${JOB}" --project "${PROJECT}" --region "${REGION}" \
+#     --image "${REPO}@${DIGEST}" --quiet
+# (JOB: ${{ vars.CLOUD_RUN_JOB }}).
+#
+# The job declares `environment: <name>` (below). GitHub puts the environment
+# claim in the OIDC token only for a job that declares one, and the deploy SA is
+# bound to it unless the entry sets only github.ref. <name> is
+# github.environment, or the landing-zone environment key when the entry sets
+# neither ref nor environment. If the entry sets github.ref, trigger only from
+# that ref (as below).
 #
 # Action pinning: every action is pinned to a full commit SHA (the same SHAs as
-# this repo's own workflows); keep them current with Dependabot or Renovate.
+# this repo's own workflows where they overlap when this file was last edited).
+# These SHAs are not tracked by this repository's Dependabot (it scans
+# .github/workflows only, not examples/): keep them current with Dependabot or
+# Renovate in the application repository once copied.
 # The gcloud steps use the CLI preinstalled on GitHub-hosted ubuntu runners; on
 # a self-hosted runner, add a SHA-pinned google-github-actions/setup-gcloud
 # step first.
 
 name: Deploy service (Cloud Run)
 
-on:
+"on":
   push:
-    branches: [main] # must match app_services.<svc>.github.ref when set
+    branches: [main]  # must match app_services.<svc>.github.ref when set
 
-permissions:
-  contents: read
-  id-token: write # required for keyless WIF auth
+permissions: {}
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  IMAGE: ${{ vars.IMAGE_REPOSITORY }}:${{ github.sha }}
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails.
+defaults:
+  run:
+    shell: bash
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # environment: dev # set when app_services.<svc>.github.environment is set
+    # github.environment, or the env key (gcp-workload-dev -> dev) when the
+    # entry sets neither ref nor environment. A job without it is refused.
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write      # keyless WIF auth and Sigstore signing of the attestation
+      attestations: write  # store the image provenance attestation in GitHub
+    env:
+      REPO: ${{ vars.IMAGE_REPOSITORY }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # First step of every job: monitor (audit) or restrict (block) the
+      # runner's network egress. audit only records the endpoints this job
+      # calls (registries, Trivy DB, Sigstore, the cloud APIs); once a few runs
+      # show the list, switch to egress-policy: block with allowed-endpoints,
+      # so a compromised build step or action cannot exfiltrate the OIDC token.
+      - name: Harden the runner (egress audit)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build image
-        run: docker build -t "${IMAGE}" .
+        run: docker build -t "${REPO}:${GITHUB_SHA}" .
 
       - name: Scan image (block on CRITICAL/HIGH, matching the IaC gate)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}
+          image-ref: ${{ vars.IMAGE_REPOSITORY }}:${{ github.sha }}
           severity: "CRITICAL,HIGH"
           exit-code: "1"
 
       - name: Authenticate to Google Cloud (keyless WIF)
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
 
-      - name: Push image
+      # The repo has immutable tags, so each commit SHA is a unique,
+      # non-overwritable image. The digest is read back from the registry push.
+      - name: Push image and resolve its digest
+        id: push
+        env:
+          REGION: ${{ vars.GCP_REGION }}
         run: |
-          gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
-          docker push "${IMAGE}"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker push "${REPO}:${GITHUB_SHA}"
+          digest="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${REPO}:${GITHUB_SHA}" \
+            | awk -F@ -v repo="${REPO}" '$1 == repo && !found { found = 1; print $2 }')"
+          case "${digest}" in
+            sha256:*) echo "digest=${digest}" >> "${GITHUB_OUTPUT}" ;;
+            *) echo "::error::could not resolve the pushed digest of ${REPO}:${GITHUB_SHA}"; exit 1 ;;
+          esac
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-name: ${{ vars.IMAGE_REPOSITORY }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
       # Terraform owns the service configuration (ingress, VPC egress, secrets,
       # runtime SA, scaling) and ignores image changes; this step only rolls a
-      # new revision with the new image. The repo has immutable tags, so each
-      # commit SHA is a unique, non-overwritable image.
+      # new revision. It deploys the immutable digest, never the tag: what was
+      # scanned and attested is exactly what runs.
       - name: Deploy to Cloud Run
+        env:
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
-          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE }}" \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "${{ vars.GCP_REGION }}" \
-            --image "${IMAGE}" \
-            --quiet
+          gcloud run deploy "${SERVICE}" --project "${PROJECT}" --region "${REGION}" \
+            --image "${REPO}@${DIGEST}" --quiet

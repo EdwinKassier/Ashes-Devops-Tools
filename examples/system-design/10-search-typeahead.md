@@ -472,7 +472,10 @@ the module's single cluster runs in the first `private` subnet, not
 the control plane, Google APIs and image pulls. The compensating control is a
 Kubernetes NetworkPolicy that admits 9200 only from `indexer`, `search` and
 `typeahead`. Egress from the indexer is per-environment Cloud NAT, not
-inspected through the hub.
+inspected, while the egress proxy is off or waived. With `egress_proxy` on,
+the `private` tier has no Cloud NAT and app-services sets the proxy variables
+on Cloud Run only, so the cluster's pods must set `HTTPS_PROXY` themselves to
+reach the internet ([known gaps](../../docs/known-gaps.md)).
 
 ### Config
 

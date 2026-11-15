@@ -212,7 +212,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 }
 
 resource "aws_s3_bucket_policy" "this" {
-  bucket = aws_s3_bucket.this.id
+  bucket = aws_s3_bucket.this.bucket
   policy = local.bucket_policy
 }
 
@@ -276,6 +276,7 @@ resource "aws_s3_bucket_versioning" "access_logs" {
   }
 }
 
+#trivy:ignore:AVD-AWS-0132 S3 server access logging cannot deliver to an SSE-KMS bucket (AWS limitation, also stated in the Trivy rule text). This is the access-log destination, so SSE-S3 is required.
 resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
   count  = local.create_access_log_bucket ? 1 : 0
   bucket = aws_s3_bucket.access_logs[0].id

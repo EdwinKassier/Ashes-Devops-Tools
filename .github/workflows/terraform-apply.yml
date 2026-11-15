@@ -11,6 +11,7 @@ on:
     tags:
       - "gcp-bootstrap/v*"
       - "gcp-organization/v*"
+      - "gcp-guardrails/v*"
       - "gcp-projects/v*"
       - "gcp-network-hub/v*"
       - "gcp-workload/*/v*"
@@ -24,6 +25,13 @@ permissions: {}
 concurrency:
   group: terraform-apply-${{ github.ref_name }}
   cancel-in-progress: false
+
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
 
 jobs:
   verify-run:
@@ -42,13 +50,53 @@ jobs:
       release_name: ${{ steps.parse.outputs.release_name }}
       version: ${{ steps.parse.outputs.version }}
       status: ${{ steps.run_status.outputs.status }}
-      commit_match: ${{ steps.run_status.outputs.commit_match }}
+      commit_match: ${{ steps.run_commit.outputs.commit_match }}
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds TFC_TOKEN (or TFC_TOKEN_GUARDRAILS) in one step only.
+      # Its network calls are the GitHub compare API, the checkout of
+      # scripts/verify-run-commit.sh from github.com and curl to the HCP
+      # Terraform API, so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            app.terraform.io:443
+            github.com:443
+
+      # CICD-1: a deployment tag must point at a commit on the default branch,
+      # so a tag on an unreviewed branch commit gets no release. Runs before
+      # any step that holds a secret. This check lives in the tagged commit's
+      # workflow file, so a writer who also edits this file on that commit
+      # bypasses it: the tag ruleset (docs/guides/CI_SECRETS.md) is the control
+      # that stops a writer from creating deployment tags at all.
+      - name: Check the tagged commit is on the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TAG_COMMIT: ${{ github.sha }}
+        run: |
+          compare=$(gh api "repos/${REPO}/compare/${DEFAULT_BRANCH}...${TAG_COMMIT}" --jq .status)
+          case "$compare" in
+            identical|behind) ;;
+            *)
+              echo "::error::Tagged commit ${TAG_COMMIT} is not on ${DEFAULT_BRANCH} (compare status '${compare}')." \
+                "Tag a commit that is merged to ${DEFAULT_BRANCH}." >&2
+              exit 1
+              ;;
+          esac
+
+      # Only the commit verifier, from the default branch (not the tagged
+      # commit, CICD-1); no credentials kept.
+      - name: Checkout the run-commit verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: scripts/verify-run-commit.sh
+          sparse-checkout-cone-mode: false
 
       - name: Parse tag
         id: parse
@@ -57,31 +105,40 @@ jobs:
         run: |
           if [[ "$TAG_NAME" == gcp-organization/* ]]; then
             VERSION="${TAG_NAME##*/}"
-            echo "workspace=gcp-organization" >> "$GITHUB_OUTPUT"
-            echo "release_name=GCP Organization ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=gcp-organization"
+              echo "release_name=GCP Organization ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$TAG_NAME" == gcp-workload/* ]]; then
             # Tag shape: gcp-workload/<env>/v1.2.3 -> workspace gcp-workload-<env>
             ENVIRONMENT=$(echo "$TAG_NAME" | cut -d'/' -f2)
             VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
-            echo "workspace=gcp-workload-${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
-            echo "release_name=GCP Workload ${ENVIRONMENT} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=gcp-workload-${ENVIRONMENT}"
+              echo "release_name=GCP Workload ${ENVIRONMENT} ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$TAG_NAME" == aws-workload/* ]]; then
             # Tag shape: aws-workload/<env>/v1.2.3 -> workspace aws-workload-<env>
             ENVIRONMENT=$(echo "$TAG_NAME" | cut -d'/' -f2)
             VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
-            echo "workspace=aws-workload-${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
-            echo "release_name=AWS Workload ${ENVIRONMENT} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=aws-workload-${ENVIRONMENT}"
+              echo "release_name=AWS Workload ${ENVIRONMENT} ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           elif [[ "$TAG_NAME" == saas/* ]]; then
             # Tag shape: saas/<name>/v1.2.3 -> workspace saas-<name>
             NAME=$(echo "$TAG_NAME" | cut -d'/' -f2)
             VERSION=$(echo "$TAG_NAME" | cut -d'/' -f3)
-            echo "workspace=saas-${NAME}" >> "$GITHUB_OUTPUT"
-            echo "release_name=SaaS ${NAME} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          elif [[ "$TAG_NAME" == gcp-bootstrap/* || "$TAG_NAME" == gcp-projects/* \
+            {
+              echo "workspace=saas-${NAME}"
+              echo "release_name=SaaS ${NAME} ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
+          elif [[ "$TAG_NAME" == gcp-bootstrap/* || "$TAG_NAME" == gcp-guardrails/* \
+                || "$TAG_NAME" == gcp-projects/* \
                 || "$TAG_NAME" == gcp-network-hub/* || "$TAG_NAME" == tfc-admin/* \
                 || "$TAG_NAME" == aws-organization/* || "$TAG_NAME" == aws-security/* \
                 || "$TAG_NAME" == aws-network/* || "$TAG_NAME" == aws-identity/* \
@@ -89,12 +146,14 @@ jobs:
             # Tag shape: <root>/v1.2.3 -> single-account root workspace == first path segment
             WORKSPACE=$(echo "$TAG_NAME" | cut -d'/' -f1)
             VERSION=$(echo "$TAG_NAME" | cut -d'/' -f2)
-            echo "workspace=${WORKSPACE}" >> "$GITHUB_OUTPUT"
-            echo "release_name=${WORKSPACE} ${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            {
+              echo "workspace=${WORKSPACE}"
+              echo "release_name=${WORKSPACE} ${VERSION}"
+              echo "version=${VERSION}"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "::error::Unrecognized release tag '$TAG_NAME'." >&2
-            echo "Expected: gcp-{bootstrap,organization,projects,network-hub}/v*," >&2
+            echo "Expected: gcp-{bootstrap,organization,guardrails,projects,network-hub}/v*," >&2
             echo "gcp-workload/<env>/v*, aws-*/v*, aws-workload/<env>/v*," >&2
             echo "saas/<name>/v*, tfc-admin/v*." >&2
             exit 1
@@ -109,23 +168,42 @@ jobs:
         # Drift detection needs to CREATE speculative runs and therefore uses a
         # SEPARATE token, TFC_TOKEN_DRIFT (Queue Plans). Keep the two distinct so
         # this release token stays read-only (see drift-detection.yml).
+        # gcp-guardrails lives in a security-only project that TFC_TOKEN cannot
+        # see, so its tags use TFC_TOKEN_GUARDRAILS (runs = read on that project
+        # only; tfc-admin guardrails_release_reader_team_id). There is no
+        # fallback: a guardrails tag without that secret fails here.
+        # Re-audit 5 CICD-10: this step sees only whether each token is set,
+        # never the token, so TFC_TOKEN stays in the curl step alone.
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN_SET: ${{ secrets.TFC_TOKEN != '' }}
+          GUARDRAILS_TOKEN_SET: ${{ secrets.TFC_TOKEN_GUARDRAILS != '' }}
+          TAG_NAME: ${{ github.ref_name }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
         run: |
-          test -n "$TFC_TOKEN"
+          if [[ "$TAG_NAME" == gcp-guardrails/* ]]; then
+            if [[ "$GUARDRAILS_TOKEN_SET" != "true" ]]; then
+              echo "::error::TFC_TOKEN_GUARDRAILS is not set. gcp-guardrails tags need it" \
+                "(docs/guides/CI_SECRETS.md)." >&2
+              exit 1
+            fi
+          elif [[ "$TFC_TOKEN_SET" != "true" ]]; then
+            echo "::error::TFC_TOKEN is not set (docs/guides/CI_SECRETS.md)." >&2
+            exit 1
+          fi
           test -n "$TFC_ORGANIZATION"
 
       - name: Fetch latest Terraform Cloud run
         id: run_status
         env:
-          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+          TFC_TOKEN: >-
+            ${{ startsWith(github.ref_name, 'gcp-guardrails/')
+            && secrets.TFC_TOKEN_GUARDRAILS || secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ steps.parse.outputs.workspace }}
-          TAG_COMMIT: ${{ github.sha }}
+          RUNS_FILE: ${{ runner.temp }}/tfc-runs.json
         run: |
           RUNS_URL="https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}"
-          RUNS_URL="${RUNS_URL}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1&include=configuration_version"
+          RUNS_URL="${RUNS_URL}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1&include=configuration_version.ingress_attributes"
           response=$(curl --silent --show-error --fail-with-body \
             --max-time 30 --connect-timeout 10 \
             --header "Authorization: Bearer ${TFC_TOKEN}" \
@@ -168,21 +246,24 @@ jobs:
               ;;
           esac
 
-          # L7: verify the run's source commit matches THIS tag's commit, so a
-          # release never asserts a deploy of a different configuration. A non-VCS
-          # (CLI-driven) run exposes no ingress commit; then we cannot verify, so
-          # we do not block (commit_match=true) and emit a notice.
-          run_commit=$(echo "$response" | jq -r \
-            '([.included[]? | select(.type=="ingress-attributes") | .attributes["commit-sha"]] | .[0]) // ""')
-          if [ -z "$run_commit" ] || [ "$run_commit" = "null" ]; then
-            echo "commit_match=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::No source commit on the run (non-VCS?); skipping provenance check."
-          elif [ "$run_commit" = "$TAG_COMMIT" ]; then
-            echo "commit_match=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "commit_match=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Run commit ${run_commit} != tag commit ${TAG_COMMIT}; release held."
-          fi
+          # The response goes to a file for the next step, which runs the
+          # verifier without the token (CICD-1).
+          printf '%s' "$response" > "$RUNS_FILE"
+
+      # L7: verify the run's source commit matches THIS tag's commit, so a
+      # release never asserts a deploy of a different configuration. The commit
+      # is in the ingress attributes of the run's configuration version, which
+      # the runs API includes when asked for
+      # include=configuration_version.ingress_attributes (above). A run with no
+      # source commit (a CLI or API run) fails this job, so no release is
+      # published: a release must point at a VCS run of the tagged commit. This
+      # step has no TFC token in its environment.
+      - name: Verify the run commit
+        id: run_commit
+        env:
+          TAG_COMMIT: ${{ github.sha }}
+          RUNS_FILE: ${{ runner.temp }}/tfc-runs.json
+        run: ./scripts/verify-run-commit.sh < "$RUNS_FILE" >> "$GITHUB_OUTPUT"
 
   release:
     name: Publish GitHub Release
@@ -192,11 +273,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Egress/process audit for this job (audit mode: observe, never block).
+      # This job holds a contents: write token. Its only network call is the
+      # gh CLI to the GitHub API, so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
 
       - name: Create release summary
         # Tag-derived values reach the shell through env, never by expression
@@ -219,14 +303,23 @@ jobs:
         # applied run's source commit matches this tag (L7), so a release tag can
         # never assert a deploy that is only queued, plan-only, or of a different
         # configuration than the tag points at.
+        # The runner's gh CLI does this with the job token, so no third-party
+        # action holds contents: write. A re-run updates the existing release.
         if: needs.verify-run.outputs.status == 'applied' && needs.verify-run.outputs.commit_match == 'true'
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
-        with:
-          name: ${{ needs.verify-run.outputs.release_name }}
-          tag_name: ${{ github.ref_name }}
-          body: >-
-            Terraform Cloud workspace `${{ needs.verify-run.outputs.workspace }}`
-            was successfully applied (status `${{ needs.verify-run.outputs.status }}`).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+          RELEASE_NAME: ${{ needs.verify-run.outputs.release_name }}
+          WORKSPACE: ${{ needs.verify-run.outputs.workspace }}
+          STATUS: ${{ needs.verify-run.outputs.status }}
+        run: |
+          notes="Terraform Cloud workspace \`${WORKSPACE}\` was successfully applied (status \`${STATUS}\`)."
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --title "$RELEASE_NAME" --notes "$notes"
+          else
+            gh release create "$TAG_NAME" --verify-tag --title "$RELEASE_NAME" --notes "$notes"
+          fi
 
       - name: Release held (not applied or commit mismatch)
         # Non-applied statuses (apply_queued / planned_and_finished) or a tag whose

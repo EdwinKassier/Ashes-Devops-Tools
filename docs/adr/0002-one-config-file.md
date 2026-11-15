@@ -9,7 +9,7 @@ Forks need to configure about a dozen roots across four providers. Per-root tfva
 
 ## Decision
 
-One committed file, `config/landing-zone.yaml` (schema and placeholders in `config/landing-zone.example.yaml`; scaffolded by `scripts/init-landing-zone.sh`), feeds every root under `envs/**`. Each root has a `config.tf` where `local.lz` is the decoded file (path in `landing_zone_config_path`, `""` disables it) and `local.cfg` holds the config-only values. Precedence is explicit variable (tfvars or workspace variable), then the config file, then the built-in default. Config-backed variables default to `null`, and validations check the effective value so an unset value or untouched placeholder fails the plan naming the config key. The file holds no secrets. Per-workspace overrides live in `config/tfc-workspaces.yaml`.
+One committed file, `config/landing-zone.yaml` (schema and placeholders in `config/landing-zone.example.yaml`; scaffolded by `scripts/init-landing-zone.sh`), feeds every root under `envs/**`. Each root has a `config.tf` where `local.lz` is the decoded file (path in `landing_zone_config_path`; `""` disables it in local and test runs, and the OPA policy refuses it in HCP Terraform) and `local.cfg` holds the config-only values. Precedence is explicit variable (tfvars or workspace variable), then the config file, then the built-in default. Config-backed variables default to `null`, and validations check the effective value so an unset value or untouched placeholder fails the plan naming the config key. The file holds no secrets. Per-workspace overrides live in `config/tfc-workspaces.yaml`.
 
 ## Consequences
 

@@ -105,7 +105,21 @@ run "accepts_max_log_retention" {
   command = plan
 
   variables {
+    edition                        = "ENTERPRISE_PLUS"
+    tier                           = "db-perf-optimized-N-2"
     transaction_log_retention_days = 35
+  }
+}
+
+# Cloud SQL keeps at most 7 days of logs on the Enterprise edition.
+run "rejects_log_retention_above_enterprise_max" {
+  command = plan
+
+  expect_failures = [var.transaction_log_retention_days]
+
+  variables {
+    edition                        = "ENTERPRISE"
+    transaction_log_retention_days = 14
   }
 }
 
@@ -225,5 +239,54 @@ run "rejects_invalid_backup_location" {
 
   variables {
     backup_location = "Europe West 2"
+  }
+}
+
+# ── require_cmek (CMP-12) ──────────────────────────────────────────────────────
+
+run "require_cmek_without_key_fails" {
+  command = plan
+
+  variables {
+    require_cmek = true
+  }
+
+  expect_failures = [terraform_data.cmek_guard]
+}
+
+# encryption_key_name is ForceNew: without the deletion guard a later key change
+# would replace the instance, so require_cmek needs it.
+run "require_cmek_without_deletion_protection_fails" {
+  command = plan
+
+  variables {
+    require_cmek               = true
+    encryption_key_name        = "projects/kms-project/locations/europe-west1/keyRings/sql/cryptoKeys/db"
+    enable_deletion_protection = false
+  }
+
+  expect_failures = [terraform_data.cmek_guard]
+}
+
+run "require_cmek_with_key_passes" {
+  command = plan
+
+  variables {
+    require_cmek        = true
+    encryption_key_name = "projects/kms-project/locations/europe-west1/keyRings/sql/cryptoKeys/db"
+  }
+
+  assert {
+    condition     = length(terraform_data.cmek_guard) == 1 && google_sql_database_instance.this.encryption_key_name == "projects/kms-project/locations/europe-west1/keyRings/sql/cryptoKeys/db"
+    error_message = "require_cmek with a key must plan the instance on that key."
+  }
+}
+
+run "no_cmek_guard_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(terraform_data.cmek_guard) == 0
+    error_message = "the CMEK guard must not exist unless require_cmek is set."
   }
 }

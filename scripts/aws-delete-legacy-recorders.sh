@@ -102,8 +102,10 @@ for a in "${account_list[@]}"; do
     [[ "${a}" != "${x}" ]] || die "account ${a} is excluded (--exclude-account): it keeps its own recorder; refusing"
   done
 done
+# Canonical AWS region regex (scripts/check-consistency.sh).
+aws_region_re='^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$'
 for r in "${region_list[@]}"; do
-  [[ "${r}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]] || die "region '${r}' is not an AWS Region name"
+  [[ "${r}" =~ ${aws_region_re} ]] || die "region '${r}' is not an AWS Region name"
 done
 
 # Live StackSet stacks only: a failed instance's stack (ROLLBACK_COMPLETE and

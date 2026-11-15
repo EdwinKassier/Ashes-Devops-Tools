@@ -30,6 +30,11 @@ override_data {
         }
         delegated_workload_folder_roles = ["roles/compute.admin", "roles/run.admin"]
         delegated_network_folder_roles  = ["roles/compute.networkAdmin"]
+        organization_apply_grantable_roles = [
+          "roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter",
+          "roles/logging.logWriter", "roles/storage.objectCreator",
+        ]
+        organization_admin_members = ["group:gcp-org-admins@acme.io", "group:gcp-organization-admins@acme.example"]
       }
     }
   }
@@ -76,14 +81,14 @@ override_module {
     folder_iam_members                 = {}
     enabled_apis                       = []
     organizational_units = {
-      shared = { id = "folders/100", name = "folders/100", display_name = "Shared Services" }
-      dev    = { id = "folders/200", name = "folders/200", display_name = "Development" }
-      prod   = { id = "folders/300", name = "folders/300", display_name = "Production" }
+      shared = { id = "100", name = "folders/100", display_name = "Shared Services" }
+      dev    = { id = "200", name = "folders/200", display_name = "Development" }
+      prod   = { id = "300", name = "folders/300", display_name = "Production" }
     }
     folders = {
-      shared = { id = "folders/100", name = "folders/100", display_name = "Shared Services" }
-      dev    = { id = "folders/200", name = "folders/200", display_name = "Development" }
-      prod   = { id = "folders/300", name = "folders/300", display_name = "Production" }
+      shared = { id = "100", name = "folders/100", display_name = "Shared Services" }
+      dev    = { id = "200", name = "folders/200", display_name = "Development" }
+      prod   = { id = "300", name = "folders/300", display_name = "Production" }
     }
   }
 }
@@ -95,6 +100,8 @@ run "scaffold_gcp_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 run "scaffold_gcp_aws_plans" {
@@ -103,6 +110,8 @@ run "scaffold_gcp_aws_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
   }
+
+  expect_failures = [check.production_audit_store]
 }
 
 run "scaffold_gcp_aws_saas_plans" {
@@ -110,5 +119,273 @@ run "scaffold_gcp_aws_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+  }
+
+  expect_failures = [check.production_audit_store]
+}
+
+# CMP-2: compliance.audit_log_retention_days reaches the audit bucket. The
+# assertion reads the lifecycle age the cloud-audit-logs module plans.
+run "compliance_retention_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.audit_log_retention_days == 2190 && module.organization.audit_log_retention_days == 2190
+    error_message = "compliance.audit_log_retention_days must reach the organization stage and the audit bucket."
+  }
+}
+
+run "explicit_retention_beats_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    audit_log_retention_days = 2555
+  }
+
+  assert {
+    condition     = local.audit_log_retention_days == 2555 && module.organization.audit_log_retention_days == 2555
+    error_message = "the explicit variable must win over compliance.audit_log_retention_days."
+  }
+}
+
+# A config file without a compliance section keeps today's 365 days.
+run "retention_default_unchanged" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = local.audit_log_retention_days == 365 && module.organization.audit_log_retention_days == 365
+    error_message = "with no compliance section the retention must stay 365 days."
+  }
+}
+
+# CMP-4: the logging project and the WORM lock come from the config file.
+run "logging_project_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-sod.yaml"
+  }
+
+  override_data {
+    target = data.google_project.logging
+    values = {
+      folder_id = ""
+    }
+  }
+
+  assert {
+    condition     = local.gcp.logging_project_id == "acme-logging-prod" && local.gcp.logging_project_number == "222233334444" && local.gcp.enable_audit_bucket_lock == true
+    error_message = "gcp.logging_project_id/number and gcp.enable_audit_bucket_lock must flow from config into the stage object."
+  }
+
+  # CMP-12: gcp.audit_key_protection_level reaches the stage object.
+  assert {
+    condition     = local.gcp.audit_key_protection_level == "HSM"
+    error_message = "gcp.audit_key_protection_level must flow from config into the stage object."
+  }
+}
+
+run "compliance_class_defaults_to_standard" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = alltrue([for e in values(local.cfg.environments) : e.compliance_class == "standard"]) && length(local.regulated_environment_keys) == 0
+    error_message = "an environment without compliance_class must be standard."
+  }
+}
+
+# CMP-5: the production profile denies TLS 1.0/1.1 on Google APIs.
+run "restrict_tls_versions_on_in_production" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = local.profile == "production" && contains(module.organization.org_policy_constraints, "gcp.restrictTLSVersion")
+    error_message = "the production profile must set gcp.restrictTLSVersion denying TLS 1.0 and 1.1."
+  }
+}
+
+run "restrict_tls_versions_opt_out" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    gcp_overrides = {
+      restrict_tls_versions = false
+    }
+  }
+
+  assert {
+    condition     = !contains(module.organization.org_policy_constraints, "gcp.restrictTLSVersion")
+    error_message = "gcp_overrides.restrict_tls_versions = false must drop the policy."
+  }
+}
+
+run "restrict_tls_versions_off_in_starter" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-starter.yaml"
+  }
+
+  assert {
+    condition     = local.profile == "starter" && !contains(module.organization.org_policy_constraints, "gcp.restrictTLSVersion")
+    error_message = "the starter profile must not set gcp.restrictTLSVersion."
+  }
+}
+
+# ── CMP-02: network and edge logs into the audit store ─────────────────────────
+# Default: off for an estate with no regulated environment and no framework.
+run "network_log_export_off_by_default" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+  }
+
+  assert {
+    condition     = local.enable_network_log_export == false && module.organization.network_log_sink == null
+    error_message = "without a regulated environment or a compliance framework the network log sink must not be planned."
+  }
+}
+
+# A compliance.frameworks entry turns it on, and the logs land in the audit
+# bucket that has the framework retention floor (hipaa: 2190 days).
+run "network_log_export_on_for_frameworks" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.enable_network_log_export && module.organization.network_log_sink.destination == "storage.googleapis.com/acme-admin-abcd-audit-logs"
+    error_message = "compliance.frameworks must turn on the network log sink into the audit bucket."
+  }
+
+  assert {
+    condition     = module.organization.audit_log_retention_days == 2190
+    error_message = "the audit bucket that receives the network logs must keep the framework retention."
+  }
+}
+
+# A regulated environment turns it on; the sink writes to the logging project.
+run "network_log_export_on_for_regulated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated-sod.yaml"
+  }
+
+  override_data {
+    target = data.google_project.logging
+    values = {
+      folder_id = ""
+    }
+  }
+
+  assert {
+    condition     = local.enable_network_log_export && module.organization.network_log_sink.destination == "storage.googleapis.com/acme-logging-prod-audit-logs"
+    error_message = "a compliance_class: regulated environment must turn on the network log sink into the logging project's audit bucket."
+  }
+
+  assert {
+    condition     = strcontains(module.organization.network_log_sink.filter, "log_id(\"compute.googleapis.com/firewall\")") && strcontains(module.organization.network_log_sink.filter, "log_id(\"requests\")") && strcontains(module.organization.network_log_sink.filter, "log_id(\"compute.googleapis.com/nat_flows\")") && strcontains(module.organization.network_log_sink.filter, "log_id(\"networkservices.googleapis.com/gateway_requests\")")
+    error_message = "the root's sink must carry the firewall, request and NAT log filter."
+  }
+}
+
+# gcp.enable_network_log_export: false in config turns it off for a framework estate.
+run "network_log_export_forced_off_in_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.network-logs-off.yaml"
+  }
+
+  assert {
+    condition     = length(local.cfg.compliance_frameworks) > 0 && local.enable_network_log_export == false && module.organization.network_log_sink == null
+    error_message = "gcp.enable_network_log_export: false must win over the compliance.frameworks default."
+  }
+}
+
+# gcp_overrides.enable_network_log_export = true turns it on for any estate.
+run "network_log_export_forced_on_by_override" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-notifications.yaml"
+    gcp_overrides = {
+      enable_network_log_export = true
+    }
+  }
+
+  assert {
+    condition     = local.enable_network_log_export && module.organization.network_log_sink != null
+    error_message = "gcp_overrides.enable_network_log_export = true must turn on the network log sink."
+  }
+}
+
+# The override also beats the derived default in the other direction.
+run "network_log_export_forced_off_by_override" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    gcp_overrides = {
+      enable_network_log_export = false
+    }
+  }
+
+  assert {
+    condition     = module.organization.network_log_sink == null
+    error_message = "gcp_overrides.enable_network_log_export = false must turn off the network log sink."
+  }
+}
+
+# gcp.network_log_writer_granted reaches the module (legacy audit sink identity
+# after the break-glass grant); the override wins over the config file.
+run "network_log_writer_granted_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.network-logs-granted.yaml"
+  }
+
+  assert {
+    condition     = local.enable_network_log_export && local.gcp.network_log_writer_granted == true
+    error_message = "gcp.network_log_writer_granted must flow from config into the stage object."
+  }
+}
+
+run "network_log_writer_granted_override" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.network-logs-granted.yaml"
+    gcp_overrides = {
+      network_log_writer_granted = false
+    }
+  }
+
+  assert {
+    condition     = local.gcp.network_log_writer_granted == false
+    error_message = "gcp_overrides.network_log_writer_granted must win over the config file."
   }
 }

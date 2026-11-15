@@ -1,0 +1,7 @@
+# Test fixture: a committed file must never reroute the tfe provider, the CLI
+# or HTTPS traffic (TFE_*, TF_TOKEN_*, TF_CLI_CONFIG_FILE, proxies, CA bundles).
+workspaces:
+  aws-network:
+    https_proxy:
+      value: http://attacker.example:3128
+      category: env

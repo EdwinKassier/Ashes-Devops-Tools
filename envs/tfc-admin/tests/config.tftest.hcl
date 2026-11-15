@@ -16,6 +16,10 @@ variables {
   # Policy sets are off in most runs; the policy_sets_* runs turn the
   # unguarded-destroy warning back on and expect it.
   enable_unguarded_destroy_warning = false
+  # The estate has a production environment and policy sets are off in most
+  # runs: an unexpired waiver keeps the policy_sets_guard quiet. The
+  # production_policy_sets_* runs unset it.
+  policy_sets_waiver = { reason = "test estate without VCS policy sets", expires = "2099-12-31" }
 }
 
 run "workspaces_derived_from_config" {
@@ -91,7 +95,7 @@ run "vcs_repo_and_pinned_opa_from_config" {
   }
 
   assert {
-    condition     = tfe_policy_set.opa[0].vcs_repo[0].identifier == "cfg/landing-zone" && tfe_policy_set.opa[0].vcs_repo[0].branch == "main" && tfe_policy_set.opa[0].policy_tool_version == "1.22.2"
+    condition     = tfe_policy_set.opa[0].vcs_repo[0].identifier == "cfg/landing-zone" && tfe_policy_set.opa[0].vcs_repo[0].branch == "main" && can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.opa_version)) && tfe_policy_set.opa[0].policy_tool_version == var.opa_version
     error_message = "vcs_repo must fall back to org.tfc.vcs_repo (branch default main) and opa_version must be pinned by default."
   }
 }
@@ -104,7 +108,7 @@ run "explicit_variables_win_over_config" {
     enable_aws          = false
     enable_saas         = false
     project_name_prefix = "x-"
-    environments        = { qa = {} }
+    environments        = { qa = { is_production = false } }
     enable_policy_sets  = true
     vcs_repo            = { identifier = "acme/landing-zone", oauth_token_id = "ot-abc123" }
   }
@@ -130,7 +134,7 @@ run "missing_organization_fails" {
   command = plan
 
   variables {
-    landing_zone_config_path = "tests/fixtures/does-not-exist.yaml"
+    landing_zone_config_path = ""
     enable_gcp               = true
   }
 
@@ -275,6 +279,14 @@ run "scaffold_gcp_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -283,6 +295,14 @@ run "scaffold_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.aws.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -291,6 +311,14 @@ run "scaffold_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.saas.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -299,6 +327,14 @@ run "scaffold_gcp_aws_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -307,6 +343,14 @@ run "scaffold_gcp_aws_saas_plans" {
 
   variables {
     landing_zone_config_path = "../../tests/fixtures/scaffold/landing-zone.gcp-aws-saas.yaml"
+    policy_sets_waiver       = null
+  }
+
+  # ADO-20: the production scaffold writes org.tfc.plan (standard) and
+  # vcs_repo, so the policy sets are on and the estate needs no waiver.
+  assert {
+    condition     = local.tfc_plan == "standard" && local.enable_policy_sets
+    error_message = "the production scaffold must turn the OPA policy sets on (org.tfc.plan standard + vcs_repo)."
   }
 }
 
@@ -365,4 +409,349 @@ run "cidr_outside_aws_supernet_fails_the_plan" {
   }
 
   expect_failures = [terraform_data.input_contract]
+}
+
+# Production is the is_production flag alone: a config environment (either
+# cloud) without it fails the plan, naming the entry.
+run "config_environment_without_is_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+  }
+
+  expect_failures = [var.environments]
+}
+
+# Re-audit 5 CMP-3: an explicit environments map cannot mark a regulated
+# environment non-production.
+run "environments_override_cannot_unmark_regulated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    environments = {
+      dev = { is_production = false, aws_account_key = "workload_dev" }
+      pci = { is_production = false, aws_account_key = "workload_pci" }
+    }
+  }
+
+  expect_failures = [var.environments]
+}
+
+run "regulated_config_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+  }
+
+  assert {
+    condition     = local.cfg.regulated_keys == tolist(["pci"])
+    error_message = "the regulated keys of both clouds must be read from the config file."
+  }
+}
+
+# CMP-1: a regulated environment (either cloud) must be is_production: true.
+run "regulated_environment_not_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated-not-production.yaml"
+  }
+
+  expect_failures = [var.environments]
+}
+
+run "workloads_sharing_the_default_vpc_cidr_fail_the_plan" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-pool.yaml"
+  }
+
+  assert {
+    condition     = contains(local.cidr_overlaps, "aws.workload_environments.dev.vpc_cidr (10.72.0.0/16) overlaps aws.workload_environments.staging.vpc_cidr (10.72.0.0/16)")
+    error_message = "A workload without vpc_cidr takes the built-in 10.72.0.0/16; two of them must be reported as an overlap."
+  }
+
+  assert {
+    condition     = contains(local.cidr_outside_aws_pool, "aws.workload_environments.perf.vpc_cidr (10.96.0.0/16) is outside the eu-west-2 regional pool (10.64.0.0/12)")
+    error_message = "A fixed AWS VPC range outside the home-region pool must be reported."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# A static hub CIDR outside the regional pool cannot conflict with IPAM, so it
+# passes while it overlaps nothing.
+run "hub_cidr_outside_the_pool_passes" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-hub-outside-pool.yaml"
+  }
+
+  assert {
+    condition     = local.cidr_all["aws.network.inspection_cidr"] == "10.100.0.0/16" && length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_outside_aws_pool) == 0
+    error_message = "A hub inspection_cidr outside the pool (inside top_cidr) must be accepted."
+  }
+}
+
+# A hub CIDR outside the pool still fails when it overlaps a workload range.
+run "hub_cidr_outside_the_pool_overlapping_a_workload_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-hub-overlap.yaml"
+  }
+
+  assert {
+    condition     = contains(local.cidr_overlaps, "aws.network.egress_cidr (10.96.0.0/16) overlaps aws.workload_environments.dev.vpc_cidr (10.96.0.0/16)")
+    error_message = "A hub CIDR outside the pool must still be checked against every workload range."
+  }
+
+  assert {
+    condition     = !anytrue([for o in local.cidr_outside_aws_pool : strcontains(o, "aws.network.")])
+    error_message = "Hub CIDRs are not part of the regional pool check."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# A workload may take its range from any CIDR of the home-region pool, the first
+# one or an additional one (aws.network.regional_additional_cidrs). perf at
+# 10.96.0.0/16 sits in neither, so it is still reported.
+run "workload_inside_an_additional_pool_cidr_passes" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-additional-pool.yaml"
+  }
+
+  assert {
+    condition     = length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_pool_issues) == 0
+    error_message = "A second pool CIDR inside top_cidr and clear of the first must pass."
+  }
+
+  assert {
+    condition     = length(local.cidr_outside_aws_pool) == 1 && contains(local.cidr_outside_aws_pool, "aws.workload_environments.perf.vpc_cidr (10.96.0.0/16) is outside the eu-west-2 regional pool (10.64.0.0/12, 10.80.0.0/12)")
+    error_message = "Only the workload outside every home-region pool CIDR is reported; 10.81.0.0/16 (inside the additional CIDR) is not."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# Additional pool CIDRs must sit inside top_cidr and overlap no other pool CIDR.
+run "additional_pool_cidrs_outside_top_or_overlapping_fail" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-additional-bad.yaml"
+  }
+
+  assert {
+    condition = (
+      contains(local.cidr_pool_issues, "aws.network.regional_additional_cidrs.eu-west-2[0] (10.20.0.0/12) is outside aws.network.top_cidr (10.64.0.0/10)") &&
+      contains(local.cidr_pool_issues, "aws.network.regional_additional_cidrs.eu-west-2[1] (10.64.0.0/13) overlaps aws.network.regional_cidrs.eu-west-2 (10.64.0.0/12)") &&
+      length(local.cidr_pool_issues) == 2
+    )
+    error_message = "An additional pool CIDR outside top_cidr, or overlapping another pool CIDR, must be reported (and a clean one must not)."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# With the AWS VPN on, each on-premises prefix is checked against the AWS and
+# GCP ranges. Prefixes on the on-premises side may overlap each other.
+run "onprem_prefix_overlapping_aws_ranges_fails_the_plan" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-onprem-overlap.yaml"
+  }
+
+  assert {
+    condition = (
+      contains(local.cidr_overlaps, "aws.network.inspection_cidr (10.64.0.0/16) overlaps aws.network.vpn.onprem_cidrs[0] (10.64.5.0/24)") &&
+      contains(local.cidr_overlaps, "aws.network.top_cidr (10.64.0.0/10) overlaps aws.network.vpn.onprem_cidrs[0] (10.64.5.0/24)") &&
+      contains(local.cidr_overlaps, "aws.network.vpn.onprem_cidrs[1] (10.72.0.0/12) overlaps aws.workload_environments.dev.vpc_cidr (10.72.0.0/16)") &&
+      !anytrue([for o in local.cidr_overlaps : strcontains(o, "192.168.")])
+    )
+    error_message = "On-premises prefixes that overlap AWS ranges (top_cidr included) must be reported; on-premises prefixes overlapping each other must not."
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+run "onprem_prefixes_clear_of_aws_ranges_pass" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-cidr-onprem-clean.yaml"
+  }
+
+  assert {
+    condition     = local.cidr_all["aws.network.vpn.onprem_cidrs[2]"] == "172.16.0.0/12" && length(local.cidr_overlaps) == 0 && length(local.cidr_outside_aws_top) == 0 && length(local.cidr_outside_aws_pool) == 0
+    error_message = "On-premises prefixes clear of every AWS and GCP range must pass, and they are not held to top_cidr or the pool."
+  }
+}
+
+# ── aws.layers: the minimum AWS footprint ──────────────────────────────────
+# aws.layers: [] keeps aws-organization and aws-security (always created) and
+# the aws-workload-<env> family; the four optional layers, and every grant,
+# trigger and consumer edge that names them, drop out.
+run "aws_layers_empty_creates_only_organization_and_security" {
+  command = plan
+
+  variables {
+    landing_zone_config_path        = "tests/fixtures/landing-zone-aws-minimal.yaml"
+    platform_team_id                = "team-platform1"
+    drift_team_id                   = "team-drift1"
+    control_plane_approvers_team_id = "team-approvers1"
+    saas_approvers_team_id          = "team-saasapprove1"
+  }
+
+  assert {
+    condition = alltrue([
+      for ws in ["aws-network", "aws-identity", "aws-shared-services", "aws-backup"] : !contains(keys(local.workspaces), ws)
+    ]) && contains(keys(local.workspaces), "aws-organization") && contains(keys(local.workspaces), "aws-security")
+    error_message = "aws.layers: [] must create aws-organization and aws-security only (plus aws-workload-<env>)."
+  }
+
+  assert {
+    condition     = contains(keys(local.workspaces), "aws-workload-dev") && contains(keys(local.workspaces), "aws-workload-staging")
+    error_message = "aws.layers must not change the aws-workload-<env> family (aws.workload_environments)."
+  }
+
+  # No run trigger, remote-state edge or drift entry names a dropped layer.
+  assert {
+    condition     = length([for k in keys(local.run_trigger_pairs) : k if can(regex("aws-(network|identity|shared-services|backup)", k))]) == 0 && contains(keys(local.run_trigger_pairs), "aws-security->aws-workload-dev")
+    error_message = "Run triggers must keep aws-security -> aws-workload-<env> and drop every edge of a dropped layer."
+  }
+  assert {
+    condition     = !contains(keys(local.consumer_names), "aws-network") && !contains(output.drift_workspaces, "aws-network") && !contains(output.drift_workspaces, "aws-backup")
+    error_message = "A dropped layer must have no remote-state consumers and no drift entry."
+  }
+
+  # Without aws-network the workloads run standalone: tfc-admin sets
+  # enable_network_hub = false on them.
+  assert {
+    condition     = local.workspace_vars["aws-workload-dev"]["enable_network_hub"].value == "false" && local.workspace_vars["aws-workload-dev"]["enable_network_hub"].hcl == true && local.workspace_vars["aws-workload-staging"]["enable_network_hub"].value == "false"
+    error_message = "Without the network layer every aws-workload-<env> must get enable_network_hub = false (HCL)."
+  }
+}
+
+run "aws_layers_absent_keeps_every_layer" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+  }
+
+  assert {
+    condition     = alltrue([for ws in ["aws-network", "aws-identity", "aws-shared-services", "aws-backup"] : contains(keys(local.workspaces), ws)])
+    error_message = "Without aws.layers every AWS layer workspace must exist."
+  }
+
+  assert {
+    condition     = !contains(keys(local.workspace_vars["aws-workload-dev"]), "enable_network_hub") && contains(keys(local.run_trigger_pairs), "aws-network->aws-workload-dev")
+    error_message = "With the network layer the workloads keep hub mode and the aws-network run trigger."
+  }
+}
+
+# An explicit aws_layers wins over aws.layers in the config file.
+run "aws_layers_variable_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-aws-minimal.yaml"
+    aws_layers               = ["network", "backup"]
+  }
+
+  assert {
+    condition     = contains(keys(local.workspaces), "aws-network") && contains(keys(local.workspaces), "aws-backup") && !contains(keys(local.workspaces), "aws-identity") && !contains(keys(local.workspaces), "aws-shared-services")
+    error_message = "aws_layers = [network, backup] must create aws-network and aws-backup only among the optional layers."
+  }
+}
+
+run "aws_layers_rejects_unknown_layer" {
+  command = plan
+
+  variables {
+    aws_layers = ["networking"]
+  }
+
+  expect_failures = [var.aws_layers]
+}
+
+# aws-workload-<env> in hub mode reads aws-network's state: without that
+# workspace (and without aws.contracts.network) hub mode cannot plan.
+run "aws_layers_without_network_rejects_hub_mode_workloads" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-aws-minimal.yaml"
+    workspace_variables = {
+      "aws-workload-dev" = { enable_network_hub = { value = "true", hcl = true } }
+    }
+  }
+
+  expect_failures = [terraform_data.input_contract]
+}
+
+# aws.contracts.network supplies the hub contract, so the workloads read no
+# aws-network state and keep hub mode.
+run "aws_layers_without_network_keeps_hub_mode_with_a_network_contract" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-aws-minimal-contract.yaml"
+    workspace_variables = {
+      "aws-workload-dev" = { enable_network_hub = { value = "true", hcl = true } }
+    }
+  }
+
+  assert {
+    condition     = !contains(keys(local.workspaces), "aws-network") && !contains(keys(local.workspace_vars["aws-workload-staging"]), "enable_network_hub")
+    error_message = "With aws.contracts.network tfc-admin must not force standalone mode."
+  }
+}
+
+# ADO-20: org.tfc.policy_sets_waiver { reason, expires } in the config file
+# waives the policy_sets_guard for a production estate without policy sets.
+run "production_policy_sets_off_fails_from_config" {
+  command = plan
+
+  variables {
+    tfc_plan           = "free"
+    policy_sets_waiver = null
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
+}
+
+run "config_policy_sets_waiver_passes" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/policy-sets-waiver-unquoted-date.yaml"
+    policy_sets_waiver       = null
+  }
+
+  assert {
+    condition     = !local.enable_policy_sets && local.policy_sets_waived && local.policy_sets_waiver_until == "2099-12-31T23:59:59Z"
+    error_message = "org.tfc.policy_sets_waiver (unquoted YAML date) must waive the guard through its expiry day."
+  }
+}
+
+run "config_policy_sets_waiver_expired_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-policy-sets-waiver-expired.yaml"
+    policy_sets_waiver       = null
+  }
+
+  expect_failures = [terraform_data.policy_sets_guard]
 }

@@ -3,8 +3,8 @@
 # The stage runs entirely in ONE workload account. The default provider covers
 # the workload's home region; the us_east_1-aliased provider (SAME account) is
 # threaded into the optional edge-security module. In a real deployment both
-# providers assume the same workload-account role; here they use ambient
-# credentials for a validate-only check. Run `terraform init && terraform
+# providers assume the same workload-account role (the assume_role lines
+# below); here they use ambient credentials. Run `terraform init && terraform
 # validate` here.
 
 provider "aws" {
@@ -29,5 +29,5 @@ module "aws_workload" {
   tgw_id                   = "tgw-000000000000abcd"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_archive_bucket_name  = "ashes-org-log-archive"
-  kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/abcd-1234"
+  kms_key_arn              = "arn:aws:kms:eu-west-2:222222222222:key/00000000-0000-0000-0000-000000000000"
 }

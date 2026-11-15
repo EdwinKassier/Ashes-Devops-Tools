@@ -159,3 +159,124 @@ run "rejects_invalid_member_backup_vault_name" {
 
   expect_failures = [var.member_backup_vault_name]
 }
+
+run "rejects_malformed_backup_account" {
+  command = plan
+
+  variables {
+    member_backup_vault_encryption = "cmk"
+    backup_copy_account_id         = "12345"
+  }
+
+  expect_failures = [var.member_backup_vault_encryption]
+}
+
+run "rejects_cmk_without_backup_account" {
+  command = plan
+
+  variables {
+    member_backup_vault_encryption = "cmk"
+    accounts = {
+      log_archive      = { email = "aws+log-archive@example.com", ou = "Security" }
+      security_tooling = { email = "aws+security-tooling@example.com", ou = "Security" }
+      shared_services  = { email = "aws+shared-services@example.com", ou = "Infrastructure" }
+    }
+    tfc_workspace_bindings = {}
+  }
+
+  expect_failures = [var.member_backup_vault_encryption]
+}
+
+run "rejects_cmk_without_member_vault" {
+  command = plan
+
+  variables {
+    member_backup_vault_encryption = "cmk"
+    backup_copy_account_id         = "444444444444"
+    create_member_backup_vault     = false
+  }
+
+  expect_failures = [var.member_backup_vault_encryption]
+}
+
+run "rejects_unknown_vault_encryption" {
+  command = plan
+
+  variables {
+    member_backup_vault_encryption = "sse"
+  }
+
+  expect_failures = [var.member_backup_vault_encryption]
+}
+
+run "rejects_dr_region_outside_allowed_regions" {
+  command = plan
+
+  variables {
+    member_backup_vault_encryption = "cmk"
+    backup_copy_account_id         = "444444444444"
+    member_backup_dr_region        = "ap-south-1"
+  }
+
+  expect_failures = [var.member_backup_dr_region]
+}
+
+run "rejects_dr_region_equal_to_home_region" {
+  command = plan
+
+  variables {
+    member_backup_vault_encryption = "cmk"
+    backup_copy_account_id         = "444444444444"
+    member_backup_dr_region        = "eu-west-2"
+  }
+
+  expect_failures = [var.member_backup_dr_region]
+}
+
+run "rejects_dr_region_without_cmk" {
+  command = plan
+
+  variables {
+    allowed_regions         = ["eu-west-2", "eu-west-1"]
+    member_backup_dr_region = "eu-west-1"
+  }
+
+  expect_failures = [var.member_backup_dr_region]
+}
+
+# Partitions: the run-role and break-glass ARNs accept the commercial (`aws`),
+# China (`aws-cn`), GovCloud (`aws-us-gov`) and European Sovereign Cloud
+# (`aws-eusc`) partitions, and nothing else.
+run "accepts_govcloud_and_eusc_arns" {
+  command = plan
+
+  variables {
+    terraform_run_role_arn = "arn:aws-eusc:iam::111111111111:role/tfc-run-role"
+    break_glass_role_arn   = "arn:aws-us-gov:iam::111111111111:role/break-glass"
+  }
+
+  assert {
+    condition     = var.terraform_run_role_arn == "arn:aws-eusc:iam::111111111111:role/tfc-run-role" && var.break_glass_role_arn == "arn:aws-us-gov:iam::111111111111:role/break-glass"
+    error_message = "the European Sovereign Cloud and GovCloud partitions must pass ARN validation."
+  }
+}
+
+run "rejects_unknown_partition_arn" {
+  command = plan
+
+  variables {
+    terraform_run_role_arn = "arn:aws-eu:iam::111111111111:role/tfc-run-role"
+  }
+
+  expect_failures = [var.terraform_run_role_arn]
+}
+
+run "rejects_malformed_eusc_partition_arn" {
+  command = plan
+
+  variables {
+    break_glass_role_arn = "arn:aws-eusc-de:iam::111111111111:role/break-glass"
+  }
+
+  expect_failures = [var.break_glass_role_arn]
+}

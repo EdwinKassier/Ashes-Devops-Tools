@@ -2,8 +2,9 @@ name: Release
 
 # Repository-level SemVer releases (vX.Y.Z) driven by Conventional Commits.
 # On every push to main, release-please opens or updates a single release PR
-# that bumps .release-please-manifest.json and prepends CHANGELOG.md. Merging
-# that PR creates the vX.Y.Z tag and GitHub Release.
+# that bumps .release-please-manifest.json. Merging that PR creates the vX.Y.Z
+# tag and GitHub Release. It does not write CHANGELOG.md ("skip-changelog":
+# true): contributors keep the Unreleased section by hand.
 #
 # These repo tags (vX.Y.Z) intentionally do NOT match the per-workspace
 # deployment tag patterns in terraform-apply.yml (gcp-organization/v*, ...),
@@ -23,6 +24,13 @@ concurrency:
   group: release-please
   cancel-in-progress: false
 
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   release-please:
     name: Release Please
@@ -38,9 +46,9 @@ jobs:
       pull-requests: write  # open/update the release PR
       issues: write         # create the autorelease labels on first run
     steps:
-      # This job holds RELEASE_PLEASE_TOKEN. release-please talks only to the
-      # GitHub API (REST and GraphQL) and checks nothing out, so all other
-      # egress is blocked.
+      # This job holds the release App private key. The App token step and
+      # release-please talk only to the GitHub API (REST and GraphQL) and
+      # nothing is checked out, so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
@@ -53,30 +61,46 @@ jobs:
       # PR opened with GITHUB_TOKEN does not trigger pull_request workflows, so
       # it never receives the required "Validation Summary" check and can never
       # merge under branch protection: a silent fallback just produces a stuck
-      # PR. Setup: docs/guides/CI_SECRETS.md#release_please_token.
-      - name: Require RELEASE_PLEASE_TOKEN
+      # PR. Setup: docs/guides/CI_SECRETS.md#release_app.
+      - name: Require the release App
         env:
-          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          APP_ID: ${{ vars.RELEASE_APP_ID }}
+          HAS_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY != '' }}
         run: |
-          if [ -z "${RELEASE_PLEASE_TOKEN}" ]; then
+          if [ -z "${APP_ID}" ] || [ "${HAS_KEY}" != "true" ]; then
             {
-              echo "Repository secret RELEASE_PLEASE_TOKEN is not set. release-please needs a"
-              echo "fine-grained PAT or GitHub App token (contents, pull requests, issues: read/write)"
-              echo "so its release PR triggers the required checks."
-              echo "See docs/guides/CI_SECRETS.md#release_please_token. Forks that do not cut"
-              echo "releases can disable this workflow (Actions > Release > Disable workflow)."
+              echo "The release GitHub App is not configured. Set the variable RELEASE_APP_ID and"
+              echo "the secret RELEASE_APP_PRIVATE_KEY in the release environment."
+              echo "See docs/guides/CI_SECRETS.md#release_app. Forks that do not cut releases"
+              echo "can disable this workflow (Actions > Release > Disable workflow)."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error title=RELEASE_PLEASE_TOKEN missing::Secret RELEASE_PLEASE_TOKEN is not set (see job summary)."
+            msg="Set variable RELEASE_APP_ID and secret RELEASE_APP_PRIVATE_KEY"
+            msg="${msg} in the release environment (docs/guides/CI_SECRETS.md#release_app)."
+            echo "::error title=Release App missing::${msg}"
             exit 1
           fi
+
+      # The release bot GitHub App (contents, pull requests, issues: write on
+      # this repository only). Its token lasts one hour and is minted per run,
+      # so no long-lived PAT exists.
+      - name: Mint release token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Narrow the token to what release-please needs, on this repository only.
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
 
       - name: Run release-please
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
         with:
-          # Machine-account token (asserted present by the step above). Never
-          # GITHUB_TOKEN: see the rationale on "Require RELEASE_PLEASE_TOKEN".
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          # App installation token (minted above). Never GITHUB_TOKEN: see the
+          # rationale on "Require the release App".
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 

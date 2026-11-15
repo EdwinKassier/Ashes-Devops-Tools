@@ -14,6 +14,8 @@
 
 ## Step 1 — Add the account to the org map
 
+Run `make aws-preflight` first (management-account credentials): one more account needs one more slot in the AWS Organizations account quota, and the default quota is 10.
+
 Edit the committed `config/landing-zone.yaml`. For a **workload** account, add a row to `aws.workload_accounts` **and** an `aws.workload_environments` entry naming it. For a foundational account, add to `aws.accounts`.
 
 ```yaml
@@ -23,7 +25,7 @@ aws:
     payments_prod: {email: aws+payments-prod@example.com, ou: Workloads/Prod}   # child OUs are keyed by path
   workload_environments:
     # ...existing...
-    payments-prod: {account_key: payments_prod}   # env key: hyphens, not underscores
+    payments-prod: {account_key: payments_prod, is_production: true}   # env key: hyphens, not underscores; is_production is required
 ```
 
 The `workload_environments` key is the environment name: `aws-workload` accepts only lowercase letters, digits and hyphens there (`^[a-z][a-z0-9-]{0,30}$`), so use `payments-prod`. The account key (`payments_prod`) may keep its underscore.
@@ -120,7 +122,7 @@ aws:
       payments-prod: {attachment_id: tgw-attach-0123456789abcdef0, segment: prod}   # segment: prod | nonprod
 ```
 
-Then apply `aws-network`. It accepts the attachment, associates it with the `prod` / `nonprod` route table (whose `0.0.0.0/0` goes to inspection) and propagates the spoke CIDR into the inspection table, so egress replies and on-premises traffic reach it (see [network topology](../architecture/aws-landing-zone.md#network-topology)). Set `accept: false` for an attachment that is already accepted.
+Then apply `aws-network`. It accepts the attachment, associates it with the `prod` / `nonprod` route table (whose `0.0.0.0/0` goes to inspection) and propagates the spoke CIDR into the inspection table, so egress replies and on-premises traffic reach it (see [network topology](../architecture/aws-landing-zone.md#network-topology)). Set `accept: false` for an attachment that is already accepted. Use the environment name (the `aws.workload_environments` key) as the `spoke_attachments` key: aws-network then copies its `vpc_cidr` as the spoke `cidr` and blackholes it in the other segment's table, so prod and nonprod spokes cannot reach each other. With another key, set `cidr` yourself.
 
 > **New-account defaults not covered by Terraform.** A brand-new account still has a default VPC per Region and needs EBS-encryption-by-default, S3 Block Public Access, and a password policy. The default-VPC deletion is handled by the org-wide **auto-deploying StackSet** from [`aws-bootstrap.md`](aws-bootstrap.md#phase-05-org-wide-default-vpc-deletion-stackset-out-of-band); the rest is applied per layer via `modules/aws/governance/account-baseline`. Confirm the StackSet auto-deployed to the new account.
 

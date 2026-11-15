@@ -40,7 +40,7 @@ variable "aws_region" {
   default     = "eu-west-2"
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.aws_region))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", var.aws_region))
     error_message = "aws_region must be a valid AWS region id (e.g. eu-west-2)."
   }
 }
@@ -74,9 +74,9 @@ variable "ipam_pool_id" {
 }
 
 variable "ipam_explicit_cidr" {
-  description = "When true and ipam_pool_id is set, the spoke VPC requests vpc_cidr explicitly from the pool (pool + cidr_block). Default false keeps the legacy pool + netmask_length shape; switching an existing VPC replaces it, so enable for NEW workloads only."
+  description = "When ipam_pool_id is set, request vpc_cidr explicitly from the pool (default true). false keeps the legacy pool + netmask_length shape. An existing netmask VPC plans no change when vpc_cidr equals its allocated block (see UPGRADING.md)."
   type        = bool
-  default     = false
+  default     = true
   nullable    = false
 }
 
@@ -153,12 +153,23 @@ variable "tgw_id" {
   }
 }
 
+variable "resolver_profile_id" {
+  description = "ID of the org Route 53 Profile shared by aws-network over RAM (network contract resolver_profile_id). The spoke VPC associates it and inherits DNS Firewall, the resolver forward rules and the central interface endpoint zones. Null (default) = no association."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.resolver_profile_id == null || can(regex("^rp-[0-9a-z]+$", coalesce(var.resolver_profile_id, "x")))
+    error_message = "resolver_profile_id must be null or a Route 53 Profile ID (rp-xxxxxxxx)."
+  }
+}
+
 variable "flow_log_destination_arn" {
   description = "ARN of the central log-archive S3 bucket that receives the spoke VPC's flow logs."
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:s3:::", var.flow_log_destination_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:s3:::", var.flow_log_destination_arn))
     error_message = "flow_log_destination_arn must be an S3 bucket ARN beginning with arn:aws:s3:::."
   }
 }
@@ -258,7 +269,7 @@ variable "workload_roles" {
 # -----------------------------------------------------------------------------
 
 variable "enable_ssm" {
-  description = "Deploy the Systems Manager baseline (Session Manager preferences, patch baseline, inventory). On by default. Requires a non-empty kms_key_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank)."
+  description = "Deploy the Systems Manager baseline (Session Manager preferences, patch baselines, a daily patch scan, a weekly patch install unless enable_patch_install is false, inventory). On by default. Requires a non-empty kms_key_arn (Session Manager sessions/logs are KMS-encrypted; an empty key would leave the session document's kmsKeyId blank)."
   type        = bool
   default     = true
 
@@ -269,6 +280,29 @@ variable "enable_ssm" {
     condition     = !var.enable_ssm || length(trimspace(var.kms_key_arn)) > 0
     error_message = "kms_key_arn must be a non-empty CMK ARN when enable_ssm is true (Session Manager sessions must be KMS-encrypted)."
   }
+}
+
+variable "enable_patch_install" {
+  description = "With enable_ssm: install approved patches weekly (AWS-RunPatchBaseline Operation=Install, RebootIfNeeded, Sunday 03:00 UTC, 10% concurrency) on every SSM-managed instance in this account and region. Instances reboot when a patch needs it. False keeps the daily patch scan only."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "patch_install_target_tag" {
+  description = "With enable_ssm and enable_patch_install: install patches only on the managed instances that carry this tag (key and value), which narrows the reboot scope. Null (default) installs on every SSM-managed instance in this account and region. The daily scan always covers every managed instance."
+  type = object({
+    key   = string
+    value = string
+  })
+  default = null
+}
+
+variable "patch_operating_systems" {
+  description = "With enable_ssm: operating systems that get a custom patch baseline, each set as the account default for that OS. Default Amazon Linux 2023 (Amazon Linux 2 reached end of support on 2026-06-30)."
+  type        = set(string)
+  default     = ["AMAZON_LINUX_2023"]
+  nullable    = false
 }
 
 variable "enable_edge" {
@@ -309,4 +343,39 @@ variable "enable_vpc_bpa_exclusion" {
   description = "Create a VPC Block Public Access exclusion (allow-bidirectional) for this spoke VPC so an internet-facing ALB in its public tier can receive traffic. The org declarative EC2 policy blocks internet-gateway ingress for every VPC; an exclusion is only accepted when aws-organization sets allow_vpc_bpa_exclusions = true. Scoped to this one VPC. Default false."
   type        = bool
   default     = false
+}
+
+variable "enable_gateway_endpoint_policies" {
+  description = "Attach endpoint policies to the spoke's S3 and DynamoDB gateway endpoints, which bypass the hub egress firewall: each service only on resources of the organization (aws:ResourceOrgID = organization_id) and (S3) read-only access to the documented AWS-owned buckets of aws_region (ECR image layers, Amazon Linux repositories, SSM Agent, Patch Manager) plus gateway_endpoint_extra_s3_arns. Requires organization_id. Default false: the endpoints carry the AWS default full-access policy (sent explicitly, so turning this off also removes the restriction). The aws-workload root turns it on for production."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "organization_id" {
+  description = "AWS Organizations ID (o-...) that the gateway endpoint policies require as aws:ResourceOrgID. Required when enable_gateway_endpoint_policies is true."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.organization_id == null || can(regex("^o-[a-z0-9]{10,32}$", coalesce(var.organization_id, "o-0000000000")))
+    error_message = "organization_id must be an AWS Organizations ID such as o-abc1234567."
+  }
+
+  validation {
+    condition     = !var.enable_gateway_endpoint_policies || var.organization_id != null
+    error_message = "enable_gateway_endpoint_policies needs organization_id (the aws-organization contract organization_id)."
+  }
+}
+
+variable "gateway_endpoint_extra_s3_arns" {
+  description = "Further S3 object ARNs (for example arn:aws:s3:::<bucket>/*) that workloads may read (s3:GetObject) through the S3 gateway endpoint when enable_gateway_endpoint_policies is true: AWS-owned buckets of services this stage does not list, or a partner bucket outside the organization. Use exact bucket names."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for a in var.gateway_endpoint_extra_s3_arns : can(regex("^arn:aws(-us-gov|-cn|-eusc)?:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](/.*)?$", a))])
+    error_message = "gateway_endpoint_extra_s3_arns entries must be S3 ARNs with an exact bucket name (arn:aws:s3:::<bucket>/<key pattern>)."
+  }
 }

@@ -1,0 +1,17 @@
+# Test fixture: pinned spoke zones (gcp.environments.<env>.zones, IAC-1).
+# Used by default_plan.tftest.hcl.
+version: 1
+org:
+  prefix: acme
+  tfc:
+    organization: acme-tfc
+gcp:
+  environments:
+    dev:
+      cidr_block: 10.10.0.0/16
+      is_production: false
+      zones: [europe-west1-d]
+    prod:
+      cidr_block: 10.30.0.0/16
+      is_production: true
+      zones: [europe-west1-d, europe-west1-b]

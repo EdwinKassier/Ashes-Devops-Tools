@@ -5,7 +5,15 @@
 # Contracts come from variables (no remote state); the CMK's ARN is pinned at
 # plan with override_resource so its consumers can be asserted concretely.
 
-mock_provider "aws" {}
+# The root reads data.aws_availability_zones when no zone names are set (azs.tf).
+mock_provider "aws" {
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names    = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+      zone_ids = ["euw2-az2", "euw2-az3", "euw2-az1"]
+    }
+  }
+}
 mock_provider "aws" { alias = "us_east_1" }
 # tfe serves only the SaaS secret bridge (ephemeral "tfe_outputs"); mocked so
 # no run contacts HCP Terraform.
@@ -15,7 +23,7 @@ variables {
   landing_zone_config_path = ""
   landing_zone_name        = "acme"
   workload_account_key     = "workload_dev"
-  organization_contract    = { account_ids = { workload_dev = "222222222222" } }
+  organization_contract    = { organization_id = "o-abc1234567", account_ids = { workload_dev = "222222222222" } }
   network_contract         = { tgw_id = "tgw-000000000000abcd", ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" } }
   security_contract        = { log_archive_bucket_name = "acme-org-log-archive" }
   services                 = { orders = {} }
@@ -273,4 +281,164 @@ run "public_mode_without_services_builds_no_public_tier" {
     condition     = !contains(keys(module.aws_workload.subnet_ids_by_tier), "public") && length(module.app_edge) == 0 && output.app_endpoint == null
     error_message = "No public tier, IGW or WAF until a service exists."
   }
+}
+
+# ARC-16: production ECS services autoscale by default. The flag comes from
+# is_production, never from the environment name.
+run "production_flag_turns_autoscaling_on" {
+  command = plan
+
+  variables {
+    is_production = true
+  }
+
+  assert {
+    condition     = output.app_services["orders"].autoscaling_enabled == true
+    error_message = "is_production = true must autoscale a service that leaves enable_autoscaling unset."
+  }
+}
+
+run "environment_named_prod_without_flag_is_not_production" {
+  command = plan
+
+  variables {
+    environment = "prod"
+  }
+
+  assert {
+    condition     = output.app_services["orders"].autoscaling_enabled == false
+    error_message = "An environment named prod without is_production must keep a fixed task count."
+  }
+}
+
+run "deprecated_app_alb_enable_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    app_alb_enable_deletion_protection = false
+  }
+
+  assert {
+    condition     = module.aws_workload.vpc_bpa_exclusion_enabled == false
+    error_message = "The deprecated app_alb_enable_deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_app_alb_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_app_alb_deletion_protection = true
+    app_alb_enable_deletion_protection = false
+  }
+
+  assert {
+    condition     = module.aws_workload.vpc_bpa_exclusion_enabled == false
+    error_message = "Setting enable_app_alb_deletion_protection together with the deprecated alias must still plan."
+  }
+}
+
+# Re-audit 5 CMP-2/CMP-3: a regulated environment refuses plaintext ingress to
+# the ALB and the production overrides.
+run "regulated_refuses_plaintext_ingress" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+# One override per run, so each precondition is proven on its own.
+run "regulated_refuses_is_production_false" {
+  command = plan
+
+  variables {
+    landing_zone_config_path         = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode                 = "internal"
+    app_alb_certificate_arn          = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    app_alb_access_logs_bucket       = "acme-alb-logs"
+    is_production                    = false
+    enable_gateway_endpoint_policies = true # isolate the is_production precondition
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+run "regulated_refuses_open_gateway_endpoints" {
+  command = plan
+
+  variables {
+    landing_zone_config_path         = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode                 = "internal"
+    app_alb_certificate_arn          = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    app_alb_access_logs_bucket       = "acme-alb-logs"
+    enable_gateway_endpoint_policies = false
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+run "regulated_with_https_ingress_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path   = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode           = "internal"
+    app_alb_certificate_arn    = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    app_alb_access_logs_bucket = "acme-alb-logs"
+  }
+
+  assert {
+    condition     = length(terraform_data.regulated_guard) == 1 && local.regulated && local.is_production
+    error_message = "a regulated environment with an HTTPS ALB must plan, with the regulated guard in place."
+  }
+}
+
+# Second re-audit 5 review: an environment name outside the config cannot
+# deploy into a regulated account without the regulated guard.
+run "regulated_account_under_another_environment_name" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    environment              = "dev2"
+    workload_account_key     = "workload_dev"
+  }
+
+  assert {
+    condition     = local.regulated
+    error_message = "an environment deploying into a regulated environment's account must be regulated."
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+# Re-audit 6 CMP-1: a regulated ALB writes access logs, and an internet-facing
+# one keeps its WAF.
+run "regulated_needs_alb_access_logs" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode         = "internal"
+    app_alb_certificate_arn  = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+run "regulated_public_alb_keeps_its_waf" {
+  command = plan
+
+  variables {
+    landing_zone_config_path   = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode           = "public_alb"
+    app_alb_certificate_arn    = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    app_alb_access_logs_bucket = "acme-alb-logs"
+    enable_app_waf             = false
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
 }

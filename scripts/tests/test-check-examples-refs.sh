@@ -49,6 +49,9 @@ expect_fail bad-terraform-fence.md "modules/gcp/network/nope-tf not found"
 expect_fail bad-single-line.md "modules/gcp/network/nope-single not found"
 expect_fail bad-unclosed.md "unclosed module"
 expect_fail bad-envs.md "envs/gcp/nowhere not found"
+expect_fail bad-lineref-prose.md "line-reference main.tf:176"
+expect_fail bad-lineref-fence.md "line-reference main.tf:42"
+expect_pass good-fileref.md
 
 # Missing and empty dirs pass.
 if bash "${SCRIPT}" "${workdir}/missing" >/dev/null 2>&1; then ok "missing dir passes"; else bad "missing dir should pass"; fi

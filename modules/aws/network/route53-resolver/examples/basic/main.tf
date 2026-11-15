@@ -1,13 +1,16 @@
 # Basic working example for the aws/route53-resolver module.
-# Supplies the required vpc_id, org_arn, and query log destination, plus one
-# FORWARD rule. Run `terraform init && terraform validate` here to check it.
+# Supplies the required vpc_id, org_arn, and query log destination, turns on the
+# resolver endpoints and adds one FORWARD rule (which needs the outbound
+# endpoint). Run `terraform init && terraform validate` here to check it.
 
 module "route53_resolver" {
   source = "../../"
 
   name_prefix               = "org"
   vpc_id                    = "vpc-0123456789abcdef0"
+  enable_resolver_endpoints = true
   subnet_ids                = ["subnet-aaaaaaaaaaaaaaaaa", "subnet-bbbbbbbbbbbbbbbbb"]
+  allowed_cidrs             = ["10.64.0.0/10"]
   org_arn                   = "arn:aws:organizations::111122223333:organization/o-exampleorgid"
   query_log_destination_arn = "arn:aws:s3:::example-log-archive-bucket"
 

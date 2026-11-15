@@ -5,13 +5,20 @@
 #   1. ${platform_team}, ${security_team}, ${app_platform_team} and ${docs_team} exist and each has at least one member.
 #   2. Branch protection on the default branch has "Require review from Code
 #      Owners" enabled (docs/guides/BRANCH_PROTECTION.md).
-#   3. The required teams together have at least two people, so a guardrail
-#      change cannot be self-approved.
+#   3. The security team has at least one member who is not on the platform
+#      team and is not the author of the pull request.
+#   4. Every team is visible (not secret) and has Write access or higher to
+#      this repository. GitHub ignores an owner without it, and a line with
+#      no valid owner needs no code-owner review, so a security-only line
+#      fails open. `gh api repos/{owner}/{repo}/codeowners/errors` must show
+#      no errors.
 #
-# PRECEDENCE: GitHub applies the LAST matching line only, and every owner on that
-# line is required. General areas come first; security-sensitive paths come
-# LATER so they win and require BOTH the platform and the security team. Keep that
-# order when editing.
+# PRECEDENCE: GitHub applies the LAST matching line only, and ONE approval from
+# ANY owner on that line satisfies it. A line that lists the platform and the
+# security team therefore accepts a platform approval alone. Only a line that
+# lists the security team ALONE makes a security approval required. General
+# areas come first; more specific paths come LATER so they win. Keep that order
+# when editing.
 
 # ── Default ──────────────────────────────────────────────────────────────────
 * ${platform_team}
@@ -23,7 +30,6 @@
 /.terraform-docs.yml      ${platform_team}
 /.tflint.hcl              ${platform_team}
 /.checkov.yaml            ${platform_team} ${security_team}
-/.pre-commit-config.yaml  ${platform_team} ${security_team}
 
 # ── Deployable roots ─────────────────────────────────────────────────────────
 /envs/           ${platform_team}
@@ -32,7 +38,6 @@
 # ── Modules ──────────────────────────────────────────────────────────────────
 /modules/gcp/        ${platform_team}
 /modules/aws/        ${platform_team}
-/modules/tfc/        ${platform_team}
 /modules/supabase/   ${app_platform_team}
 /modules/vercel/     ${app_platform_team}
 /modules/saas/       ${app_platform_team}
@@ -43,22 +48,20 @@
 SECURITY.md    ${security_team}
 CHANGELOG.md   ${platform_team}
 
-# ── Control-plane and security roots (platform + security REQUIRED) ──────────
+# ── Control-plane and security roots (platform or security) ────────────────
 /envs/gcp/bootstrap/      ${platform_team} ${security_team}
 /envs/gcp/organization/   ${platform_team} ${security_team}
-/envs/gcp/guardrails/     ${platform_team} ${security_team}
 /envs/aws/organization/   ${platform_team} ${security_team}
 /envs/aws/security/       ${platform_team} ${security_team}
 /envs/aws/identity/       ${platform_team} ${security_team}
 /envs/aws/backup/         ${platform_team} ${security_team}
 /envs/tfc-admin/          ${platform_team} ${security_team}
 
-# ── Security-sensitive modules (platform + security REQUIRED) ────────────────
+# ── Security-sensitive modules (platform or security) ──────────────────────
 /modules/gcp/governance/            ${platform_team} ${security_team}
 /modules/gcp/iam/                   ${platform_team} ${security_team}
 /modules/gcp/stages/organization/   ${platform_team} ${security_team}
 /modules/gcp/stages/bootstrap/      ${platform_team} ${security_team}
-/modules/gcp/stages/guardrails/     ${platform_team} ${security_team}
 /modules/aws/governance/            ${platform_team} ${security_team}
 /modules/aws/iam/                   ${platform_team} ${security_team}
 /modules/aws/security/              ${platform_team} ${security_team}
@@ -66,13 +69,50 @@ CHANGELOG.md   ${platform_team}
 /modules/aws/stages/security/       ${platform_team} ${security_team}
 /modules/aws/stages/backup/         ${platform_team} ${security_team}
 
-# ── Policy-as-code and the configuration file ────────────────────────────────
-# The OPA guardrails decide what a plan may do; landing-zone.yaml feeds every root;
+# ── Consistency gate and the configuration files (platform or security) ──────
+# landing-zone.yaml feeds every root (gcp-guardrails included);
 # tfc-workspaces.yaml sets per-workspace variables (credential env vars included).
-/policies/                   ${platform_team} ${security_team}
 /config/landing-zone.yaml    ${platform_team} ${security_team}
 /config/tfc-workspaces.yaml  ${platform_team} ${security_team}
 /config/sandbox/             ${platform_team} ${security_team}
 
-# ── This file ────────────────────────────────────────────────────────────────
-/.github/CODEOWNERS  ${platform_team} ${security_team}
+# ── Guardrails (security team ONLY: a security approval is REQUIRED) ──────────
+# Listed last so these lines win over every broader line above. The OPA policy
+# sets, the org IAM deny policies (including the committed
+# guardrails.auto.tfvars that holds iam_deny_policies), the plan-time execution
+# gate and its parser lock, the AWS phase-0 CloudFormation templates (they
+# create the management-account roles), this file and the template it is
+# rendered from. Also the deny-policy module the guardrails root uses, the TFC
+# workspace module tfc-admin builds every workspace with, and the supply-chain
+# pins: Renovate, release-please, the tool versions and the pre-commit hooks.
+# The security team must have at least one member who is not on the platform
+# team.
+/policies/                        ${security_team}
+/envs/gcp/guardrails/             ${security_team}
+/modules/gcp/stages/guardrails/   ${security_team}
+/scripts/check-plan-time-exec.py  ${security_team}
+/.github/requirements/            ${security_team}
+/.github/CODEOWNERS               ${security_team}
+/templates/aws/bootstrap/         ${security_team}
+/templates/CODEOWNERS.tftpl       ${security_team}
+/modules/gcp/iam/deny-policy/     ${security_team}
+/modules/tfc/                     ${security_team}
+/renovate.json                    ${security_team}
+/release-please-config.json       ${security_team}
+/.tool-versions                   ${security_team}
+/.pre-commit-config.yaml          ${security_team}
+# Re-audit 6: the firewall rule groups and the hub that feeds them, the
+# module whose provisioners run with production database credentials, the
+# release verifier and the ruleset JSON operators paste.
+/modules/aws/network/network-firewall/  ${security_team}
+/modules/aws/stages/network-hub/        ${security_team}
+/modules/supabase/vault-secrets/        ${security_team}
+/scripts/verify-run-commit.sh           ${security_team}
+/scripts/check-tag-patterns.py          ${security_team}
+# Re-audit 7 CICD-4: the scanner's callers, so it cannot be skipped or
+# repointed without a security approval.
+/scripts/check-consistency.sh           ${security_team}
+/scripts/tests/test-check-plan-time-exec.sh ${security_team}
+/.github/workflows/terraform-plan.yml   ${security_team}
+/docs/guides/CI_SECRETS.md              ${security_team}
+/docs/guides/BRANCH_PROTECTION.md       ${security_team}

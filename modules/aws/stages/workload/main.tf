@@ -15,11 +15,15 @@
 #                            literal vpc_cidr or allocated from the shared IPAM
 #                            pool (ipam_pool_id). Gateway endpoints for s3 +
 #                            dynamodb keep that traffic off the TGW (associated
-#                            with the module-owned non-public route tables).
+#                            with the module-owned non-public route tables);
+#                            enable_gateway_endpoint_policies limits them to
+#                            organization resources and AWS-owned buckets.
 #   - spoke routes         — the configured tiers (var.tgw_route_tiers, default
 #                            private) route var.tgw_destination_cidrs (default
 #                            0.0.0.0/0 -> centralized egress/inspection) to the
 #                            shared TGW via the vpc module's `routes` input.
+#   - DNS profile          — associates the spoke VPC with the org Route 53
+#                            Profile (resolver_profile_id, shared over RAM).
 #   - spoke TGW attachment — attaches the spoke VPC to the SHARED transit gateway
 #                            (tgw_id, shared with this account via RAM by the
 #                            network account). Route-table association/propagation
@@ -35,7 +39,9 @@
 #                            former module.config_recorder leaves state through
 #                            the removed block below (destroy = false).
 #   - systems_manager      — optional (enable_ssm, default true): Session Manager
-#                            preferences, patch baseline, inventory.
+#                            preferences, patch baselines, a daily patch scan,
+#                            a weekly patch install (enable_patch_install),
+#                            inventory.
 #   - edge_security         — optional (enable_edge, default false): per-workload
 #                            CloudFront + WAF edge. Uses the us_east_1 alias.
 
@@ -99,8 +105,7 @@ locals {
 }
 
 locals {
-  # Legacy shape (pool + netmask_length) unless the caller opts a NEW workload
-  # into the explicit-CIDR allocation; switching an existing VPC replaces it.
+  # explicit_cidr unless the caller opts back into the legacy netmask shape.
   ipam_allocation = var.ipam_explicit_cidr ? "explicit_cidr" : "netmask"
 }
 
@@ -118,8 +123,10 @@ module "vpc" {
   ipam_pool_id             = var.ipam_pool_id
   ipam_allocation          = local.ipam_allocation
   gateway_endpoints        = ["s3", "dynamodb"]
-  routes                   = local.spoke_routes
-  tags                     = var.tags
+  # ARC-2: org-only S3/DynamoDB when enabled (gateway_endpoint_policies.tf).
+  gateway_endpoint_policies = local.gateway_endpoint_policies
+  routes                    = local.spoke_routes
+  tags                      = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -155,6 +162,26 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "spoke" {
 moved {
   from = aws_ec2_transit_gateway_vpc_attachment.spoke
   to   = aws_ec2_transit_gateway_vpc_attachment.spoke[0]
+}
+
+# ---------------------------------------------------------------------------
+# Org Route 53 Profile association
+#
+# aws-network shares the org Route 53 Profile over RAM (to the organization).
+# The association is created HERE, in the workload account that owns the VPC:
+# the spoke then inherits the profile's DNS Firewall rule group, resolver
+# forward rules and the central interface endpoint zones. A VPC can hold up to
+# two profile associations; this is the first, so it takes priority 100.
+# ---------------------------------------------------------------------------
+
+resource "aws_route53profiles_association" "spoke" {
+  count = var.resolver_profile_id == null ? 0 : 1
+
+  name        = "${local.name}-dns-profile"
+  profile_id  = var.resolver_profile_id
+  resource_id = module.vpc.vpc_id
+
+  tags = var.tags
 }
 
 # ---------------------------------------------------------------------------
@@ -217,7 +244,7 @@ removed {
 }
 
 # ---------------------------------------------------------------------------
-# Systems Manager — optional (Session Manager, patch baseline, inventory)
+# Systems Manager — optional (Session Manager, patch baselines, patch scan and install, inventory)
 # ---------------------------------------------------------------------------
 
 module "systems_manager" {
@@ -234,6 +261,11 @@ module "systems_manager" {
 
   log_bucket_name = var.log_archive_bucket_name
   kms_key_id      = var.kms_key_arn
+
+  # CMP-3: weekly patch install on the account's SSM-managed instances.
+  enable_patch_install     = var.enable_patch_install
+  patch_install_target_tag = var.patch_install_target_tag
+  patch_operating_systems  = var.patch_operating_systems
 
   tags = var.tags
 }

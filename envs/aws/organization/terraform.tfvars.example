@@ -47,10 +47,11 @@ accounts = {
 # aws_management_apply_role_arn.
 terraform_run_role_arn = "arn:aws:iam::111111111111:role/tfc-mgmt-apply"
 
-# REQUIRED — the management-account break-glass role: hand-created in phase-0,
-# or the role aws-security will create with create_break_glass = true
-# (arn:aws:iam::<mgmt>:role/OrganizationBreakGlass by default).
-break_glass_role_arn = "arn:aws:iam::111111111111:role/break-glass"
+# REQUIRED — the management-account break-glass role. Replace with the phase-0
+# stack output BreakGlassRoleArn (templates/aws/bootstrap/phase0-management.yaml
+# creates arn:aws:iam::<mgmt>:role/OrganizationBreakGlass), or with the ARN of a
+# break-glass role you created by hand in phase-0.
+break_glass_role_arn = "arn:aws:iam::111111111111:role/OrganizationBreakGlass"
 
 # REQUIRED — central log-archive S3 bucket protected by the deny-tamper SCP.
 log_archive_bucket_name = "ashes-org-log-archive"

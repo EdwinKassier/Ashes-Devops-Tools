@@ -1,4 +1,4 @@
-.PHONY: help install fmt fmt-check validate validate-all lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live backend-check cfn-lint shellcheck test test-scripts ci clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
+.PHONY: help install fmt fmt-check validate validate-all examples-plan lint consistency security security-low security-report docs docs-check count count-check links examples-refs required-checks required-checks-live security-contact-live backend-check cfn-lint shellcheck test test-scripts ci ci-quick yamllint markdownlint-check zizmor commit-check module-api module-usage opa-test codeowners-check clean clean-locks init-gcp-organization init-gcp-workload plan-gcp-organization plan-gcp-workload plan-aws-workload apply-gcp-organization apply-gcp-workload validate-requirements pre-commit-install pre-commit-run pre-commit-update state-list-gcp-organization state-list-gcp-workload state-rm-gcp-organization state-rm-gcp-workload unlock-gcp-organization unlock-gcp-workload
 
 TERRAFORM := terraform
 TFLINT := tflint
@@ -8,11 +8,17 @@ TRIVY := trivy
 TRIVY_VERSION := $(shell awk '$$1=="trivy"{print $$2}' .tool-versions)
 TRIVY_ARGS := config . --skip-dirs '**/.terraform'
 SHELLCHECK_VERSION := $(shell awk '$$1=="shellcheck"{print $$2}' .tool-versions)
+# OPA MUST match the version the `opa` job in terraform-plan.yml installs (OPA_VERSION there).
+OPA_VERSION := $(shell awk '$$1=="opa"{print $$2}' .tool-versions)
 # Checkov MUST match the version CI runs (checkov-action pins the image; keep
 # .tool-versions in sync). Newer checkov ships new checks, so a skewed local
 # binary gives a false green. Prefer an exact-version uvx run; otherwise the
 # local binary is used and `make security` refuses to run on a version mismatch.
 CHECKOV_VERSION := $(shell awk '$$1=="checkov"{print $$2}' .tool-versions)
+# zizmor MUST match the hash-locked version meta-lint installs: the pin lives in
+# .github/requirements/zizmor.in and is read from there.
+ZIZMOR_VERSION := $(shell sed -nE 's/^zizmor==([0-9.]+).*/\1/p' .github/requirements/zizmor.in)
+ZIZMOR_ARGS := --offline --config .github/zizmor.yml .github/workflows
 CHECKOV := $(shell if command -v uvx >/dev/null 2>&1; then echo "uvx --python 3.12 checkov==$(CHECKOV_VERSION)"; else echo checkov; fi)
 TERRAFORM_DOCS := terraform-docs
 PRE_COMMIT := pre-commit
@@ -28,7 +34,7 @@ $(if $(TF_PLUGIN_CACHE_DIR),$(shell mkdir -p "$(TF_PLUGIN_CACHE_DIR)"))
 
 APP_ENV ?= dev
 APP_WORKSPACE ?= gcp-workload-$(APP_ENV)
-APP_VARS ?= examples/dev.tfvars.example
+APP_VARS ?=
 
 BLUE := \033[0;34m
 GREEN := \033[0;32m
@@ -39,7 +45,7 @@ TERRAFORM_ROOTS := $(shell $(ROOT_DISCOVERY) all)
 
 help: ## Show available commands
 	@echo '$(BLUE)Ashes DevOps Tools$(NC)'
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n"} /^[a-zA-Z0-9_.-]+:.*?##/ { printf "  $(BLUE)%-22s$(NC) %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make <target>\n"} /^[a-zA-Z0-9_.%-]+:.*?##/ { printf "  $(BLUE)%-22s$(NC) %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 install: ## Install required local tooling
 	@bash scripts/setup.sh
@@ -137,11 +143,19 @@ examples-refs: ## Fail when a code snippet in examples/system-design cites a mis
 links: ## Fail on broken repo-relative links in any Markdown file (offline; CI: meta-lint)
 	@python3 scripts/check-md-links.py
 
+security-contact-live: ## Fail if GitHub private vulnerability reporting is off (needs gh auth; opt-in, not in make ci)
+	@./scripts/check-security-contact.sh
+
 required-checks-live: ## Diff BRANCH_PROTECTION.md against the LIVE branch protection (needs gh auth with repo admin)
 	@./scripts/check-required-checks.sh --live
 
 cfn-lint: ## Lint the shipped CloudFormation templates (templates/aws/bootstrap) with cfn-lint via uvx
 	@uvx --python 3.12 cfn-lint templates/aws/bootstrap/*.yaml && echo "cfn-lint: templates OK"
+
+# EXAMPLES overrides the discovered set (the CI shards pass their slice):
+#   make examples-plan EXAMPLES="modules/gcp/network/vpc/examples/basic"
+examples-plan: ## Plan every modules/**/examples/basic under mock providers (terraform test, no credentials); EXAMPLES="dirs" limits it
+	@TERRAFORM=$(TERRAFORM) ./scripts/plan-module-examples.sh $(EXAMPLES)
 
 backend-check: ## Real (credential-less) terraform init of every envs/** root — catches invalid backend/cloud blocks (CI: Terraform Format)
 	@./scripts/check-backends.sh
@@ -196,21 +210,83 @@ consistency: ## Assert canonical strings (region regex, provider pins) haven't d
 	@./scripts/check-consistency.sh
 	@./scripts/check-contracts.sh
 
-ci: ## Run the local CI pipeline (fmt → consistency → counts → links → shellcheck → docs → validate → lint → test → security)
+yamllint: ## yamllint exactly as CI: the pre-commit hook config, all files (CI: meta-lint)
+	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "pre-commit not found: pipx install pre-commit (or brew install pre-commit)"; exit 1; }
+	@$(PRE_COMMIT) run yamllint --all-files
+
+markdownlint-check: ## markdownlint as CI, check-only (manual-stage hook without --fix; never rewrites files) (CI: meta-lint)
+	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "pre-commit not found: pipx install pre-commit (or brew install pre-commit)"; exit 1; }
+	@$(PRE_COMMIT) run markdownlint-check --all-files --hook-stage manual
+
+zizmor: ## GitHub Actions static analysis, offline audits, .github/zizmor.yml (CI: meta-lint)
+	@if command -v uvx >/dev/null 2>&1; then \
+		uvx zizmor==$(ZIZMOR_VERSION) $(ZIZMOR_ARGS); \
+	elif command -v zizmor >/dev/null 2>&1; then \
+		v="$$(zizmor --version | awk '{print $$2}')"; \
+		[ "$$v" = "$(ZIZMOR_VERSION)" ] || { echo "zizmor $$v does not match the CI-pinned $(ZIZMOR_VERSION) (.github/requirements/zizmor.in)."; exit 1; }; \
+		zizmor $(ZIZMOR_ARGS); \
+	else \
+		echo "zizmor not found: install uv (uvx) or pip install zizmor==$(ZIZMOR_VERSION)"; exit 1; \
+	fi
+
+# CI (meta-lint) checks the commits of the PR: merge-base with the base branch..HEAD.
+COMMIT_BASE ?= origin/main
+commit-check: ## Conventional-commit check and the UPGRADING.md rule for breaking commits, merge-base(COMMIT_BASE)..HEAD (CI: meta-lint)
+	@command -v cz >/dev/null 2>&1 || { echo "cz (commitizen) not found: pipx install commitizen (CI uses .github/requirements/commitizen.txt)"; exit 1; }
+	@git rev-parse --verify --quiet $(COMMIT_BASE) >/dev/null || { echo "$(COMMIT_BASE) not found: run 'git fetch origin main' or set COMMIT_BASE=<ref>"; exit 1; }
+	@base="$$(git merge-base $(COMMIT_BASE) HEAD)" && [ -n "$$base" ] || { echo "no merge-base with $(COMMIT_BASE): fetch full history (git fetch --unshallow)"; exit 1; }; \
+	if [ "$$base" = "$$(git rev-parse HEAD)" ]; then echo "commit-check: no commits ahead of $(COMMIT_BASE)"; exit 0; fi; \
+	cz check --rev-range "$$base..HEAD" || exit 1; \
+	if git log --format=%B "$$base..HEAD" | grep -Eq '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE'; then \
+		git diff --name-only "$$base..HEAD" | grep -qx 'UPGRADING.md' || { echo "A commit is marked breaking (!: or BREAKING CHANGE) but UPGRADING.md is not in the diff. Add an entry under 'Unreleased'."; exit 1; }; \
+	fi; echo "commit-check: OK"
+
+module-api: ## Fail when a module input or output is removed without a breaking-change commit, merge-base(COMMIT_BASE)..HEAD (CI: meta-lint)
+	@./scripts/check-module-api.sh $(COMMIT_BASE)
+
+module-usage: ## Fail on unreferenced modules that are not marked library-only (CI: meta-lint)
+	@python3 scripts/check-module-usage.py --check
+
+opa-test: ## opa check --strict and opa test on both policy sets, at the CI-pinned version (CI: opa)
+	@command -v opa >/dev/null 2>&1 || { echo "opa not found. Install opa $(OPA_VERSION) (pinned in .tool-versions): 'brew install opa' or 'mise install opa@$(OPA_VERSION)' or https://www.openpolicyagent.org/docs/latest/#running-opa"; exit 1; }
+	@v="$$(opa version 2>/dev/null | awk '/^Version:/{print $$2; exit}')"; \
+	if [ "$$v" != "$(OPA_VERSION)" ]; then echo "opa $$v does not match the CI-pinned $(OPA_VERSION) (.tool-versions). Install opa $(OPA_VERSION)."; exit 1; fi
+	@opa check --strict policies/opa policies/opa-destructive
+	@opa test policies/opa policies/opa-destructive
+
+codeowners-check: ## Fail on @your-org/ placeholder owners when CODEOWNERS_ENFORCE=true; otherwise warn, as CI does (CI: codeowners)
+	@if grep -nE '@your-org/' .github/CODEOWNERS; then \
+		if [ "$${CODEOWNERS_ENFORCE:-false}" = "true" ]; then echo "CODEOWNERS still contains @your-org/ placeholder teams (CODEOWNERS_ENFORCE=true)."; exit 1; fi; \
+		echo "warning: CODEOWNERS still contains @your-org/ placeholder teams (set CODEOWNERS_ENFORCE=true to make this fatal)."; \
+	else echo "No placeholder owners found."; fi
+
+ci-quick: ## Fast offline gates, no terraform init: fmt, consistency, config, scaffold fixtures, counts, links, refs, required checks, shellcheck, script tests, docs
 	@$(MAKE) fmt-check
 	@$(MAKE) consistency
 	@$(MAKE) config-check
+	@$(MAKE) scaffold-fixtures-check
 	@$(MAKE) count-check
 	@$(MAKE) links
 	@$(MAKE) examples-refs
 	@$(MAKE) required-checks
-	@$(MAKE) backend-check
 	@$(MAKE) shellcheck
 	@$(MAKE) test-scripts
 	@$(MAKE) docs-check
+
+ci: ## Run the local CI pipeline: every workstation-runnable gate of terraform-plan.yml and reusable-security.yml (see make -n ci)
+	@$(MAKE) ci-quick
+	@$(MAKE) yamllint
+	@$(MAKE) markdownlint-check
+	@$(MAKE) zizmor
+	@$(MAKE) commit-check
+	@$(MAKE) module-api
+	@$(MAKE) codeowners-check
+	@$(MAKE) backend-check
 	@$(MAKE) validate-all
+	@$(MAKE) examples-plan
 	@$(MAKE) lint
 	@$(MAKE) test
+	@$(MAKE) opa-test
 	@$(MAKE) security
 
 init-gcp-organization: ## Initialize the gcp-organization root
@@ -222,8 +298,26 @@ init-gcp-workload: ## Initialize the gcp-workload root
 plan-gcp-organization: ## Plan the gcp-organization root
 	@$(TERRAFORM) -chdir=envs/gcp/organization plan
 
-plan-gcp-workload: ## Plan the gcp-workload root for APP_ENV using APP_VARS
-	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp/workload plan -var-file=$(abspath $(APP_VARS))
+plan-gcp-workload: ## Plan gcp-workload-<APP_ENV> in HCP Terraform (read-only); APP_VARS=<file> adds a tuning -var-file
+	@TF_WORKSPACE=$(APP_WORKSPACE) $(TERRAFORM) -chdir=envs/gcp/workload plan $(if $(APP_VARS),-var-file=$(abspath $(APP_VARS)))
+
+# Every other root: make plan-gcp-<root> / make plan-aws-<root>. Each root's
+# backend.tf names its HCP Terraform workspace, so no TF_WORKSPACE is needed
+# (the workload roots select theirs from APP_ENV). Explicit rules above win over
+# these pattern rules.
+GCP_PLAN_ROOTS := bootstrap organization guardrails projects network-hub
+AWS_PLAN_ROOTS := organization security network identity shared-services backup
+
+plan-aws-workload: ## Plan aws-workload-<APP_ENV> in HCP Terraform (read-only): make plan-aws-workload APP_ENV=dev
+	@TF_WORKSPACE=aws-workload-$(APP_ENV) $(TERRAFORM) -chdir=envs/aws/workload plan
+
+plan-gcp-%: ## Plan a GCP root in HCP Terraform (read-only): make plan-gcp-projects
+	@case " $(GCP_PLAN_ROOTS) " in *" $* "*) ;; *) echo "Unknown GCP root '$*': one of $(GCP_PLAN_ROOTS), or plan-gcp-workload"; exit 1 ;; esac
+	@$(TERRAFORM) -chdir=envs/gcp/$* plan
+
+plan-aws-%: ## Plan an AWS layer root in HCP Terraform (read-only): make plan-aws-network
+	@case " $(AWS_PLAN_ROOTS) " in *" $* "*) ;; *) echo "Unknown AWS root '$*': one of $(AWS_PLAN_ROOTS), or plan-aws-workload"; exit 1 ;; esac
+	@$(TERRAFORM) -chdir=envs/aws/$* plan
 
 apply-gcp-organization: ## Refuses: applies run in Terraform Cloud only (CLAUDE.md "State & Apply Rules")
 	@echo "Local apply is not supported. gcp-organization is applied by Terraform Cloud:"
@@ -235,6 +329,12 @@ apply-gcp-workload: ## Refuses: applies run in Terraform Cloud only (CLAUDE.md "
 	@echo "Local apply is not supported. $(APP_WORKSPACE) is applied by Terraform Cloud:"
 	@echo "merge to main (VCS-driven run) or queue a run on the $(APP_WORKSPACE) workspace in TFC."
 	@echo "Preview locally with: make plan-gcp-workload APP_ENV=$(APP_ENV). Promotion: docs/runbooks/promotion.md"
+	@exit 1
+
+apply-gcp-% apply-aws-%: ## Refuses: applies run in Terraform Cloud only, for every root (CLAUDE.md "State & Apply Rules")
+	@echo "Local apply is not supported. $(patsubst apply-%,%,$@) is applied by Terraform Cloud:"
+	@echo "merge to main (VCS-driven run) or queue a run on its workspace in TFC."
+	@echo "Preview locally with: make plan-$(patsubst apply-%,%,$@). Failed applies: docs/runbooks/apply-recovery.md"
 	@exit 1
 
 validate-requirements: ## Print local tool versions
@@ -316,7 +416,7 @@ e2e-aws: ## REAL apply: run tests/e2e/aws in the ambient (sandbox!) AWS account,
 # ---------------------------------------------------------------------------
 # Single-source configuration (config/landing-zone.yaml)
 # ---------------------------------------------------------------------------
-.PHONY: init bootstrap-ids config-check scaffold-fixtures scaffold-fixtures-check
+.PHONY: init bootstrap-ids aws-preflight config-check scaffold-fixtures scaffold-fixtures-check
 
 init: ## Scaffold config/landing-zone.yaml: make init ARGS="--org-name acme --clouds gcp,aws ..."
 	@./scripts/init-landing-zone.sh $(ARGS)
@@ -330,12 +430,8 @@ scaffold-fixtures: ## Regenerate tests/fixtures/scaffold/*.yaml from the scaffol
 scaffold-fixtures-check: ## Fail if tests/fixtures/scaffold/ differs from fresh scaffolder output (CI: meta-lint)
 	./scripts/scaffold-fixtures.sh --check
 
-config-check: ## Validate config/*.example.yaml, config/sandbox/ and every test fixture and tests/fixtures/scaffold against config/landing-zone.schema.json (needs check-jsonschema)
-	@command -v check-jsonschema >/dev/null || { echo "check-jsonschema not found: pipx install check-jsonschema (see .tool-versions)"; exit 1; }
-	@{ echo config/landing-zone.example.yaml; find config/sandbox -name 'landing-zone*.yaml' 2>/dev/null; find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*'; find tests/fixtures/scaffold -name 'landing-zone*.yaml'; } | sort | \
-		xargs check-jsonschema --schemafile config/landing-zone.schema.json
-	@./scripts/check-config-schema-coverage.sh
-	@for f in config/tests/*.yaml; do \
-		if check-jsonschema --schemafile config/landing-zone.schema.json "$$f" >/dev/null 2>&1; then \
-			echo "config-check: $$f should FAIL schema validation but passed"; exit 1; fi; \
-	done; echo "config-check: negative fixtures rejected as expected"
+config-check: ## Validate config/landing-zone.yaml (when present), the examples, config/sandbox/ and every test fixture and tests/fixtures/scaffold against config/landing-zone.schema.json (needs check-jsonschema)
+	@./scripts/check-config.sh
+
+aws-preflight: ## Check the AWS Organizations account quota fits config/landing-zone.yaml (needs the aws CLI and management-account credentials)
+	@./scripts/aws-preflight.sh

@@ -52,3 +52,18 @@ output "vpc_bpa_exclusion_enabled" {
   description = "Whether this spoke VPC has a VPC Block Public Access exclusion (true only for public ALB ingress)."
   value       = length(aws_vpc_block_public_access_exclusion.public_ingress) == 1
 }
+
+output "availability_zones" {
+  description = "Availability zone names the spoke VPC subnets are placed in (the first az_count entries of availability_zones), index-aligned with subnet_ids_by_tier."
+  value       = module.vpc.availability_zones
+}
+
+output "patch_install_targets" {
+  description = "Targets of the weekly patch install association (key and values): InstanceIds * for every managed instance, or tag:<key> when patch_install_target_tag is set. Null when the install is off."
+  value       = try(module.systems_manager[0].patch_install_targets, null)
+}
+
+output "gateway_endpoint_policies" {
+  description = "Endpoint policy JSON per gateway endpoint service (s3, dynamodb) when enable_gateway_endpoint_policies is true; {} when off (the vpc module then sends the AWS default full-access policy)."
+  value       = local.gateway_endpoint_policies
+}

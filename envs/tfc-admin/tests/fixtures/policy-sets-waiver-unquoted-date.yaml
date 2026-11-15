@@ -1,0 +1,20 @@
+# Test fixture: a production estate on the free plan (no VCS policy sets) with
+# an org.tfc.policy_sets_waiver. The expiry is an unquoted YAML date on purpose:
+# yamldecode reads it as YYYY-MM-DDT00:00:00Z, which the waiver accepts. The
+# schema wants a quoted date, so the file name keeps it out of make config-check.
+version: 1
+org:
+  tfc:
+    organization: cfg-tfc
+    plan: free
+    policy_sets_waiver:
+      reason: free plan until the Standard upgrade
+      expires: 2099-12-31
+gcp:
+  enabled: false
+aws:
+  enabled: true
+  workload_environments:
+    prod: {account_key: workload_prod, is_production: true, vpc_cidr: 10.74.0.0/16}
+saas:
+  enabled: false

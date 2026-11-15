@@ -4,7 +4,7 @@
 
 # Ashes DevOps Tools
 
-**Production-grade Terraform infrastructure for AWS, GCP, Supabase, and Vercel**
+**Reference Terraform landing zone for AWS, GCP, Supabase and Vercel (pre-production: not yet applied to a real organization)**
 
 [![Terraform](https://img.shields.io/badge/Terraform-1.17%2B-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://terraform.io)
 [![AWS](https://img.shields.io/badge/AWS-FF9900?style=for-the-badge&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZmZmZiI%2BPHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnoiLz48L3N2Zz4K&logoColor=white)](https://aws.amazon.com)
@@ -18,24 +18,25 @@
 [![Terraform Validation](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/terraform-plan.yml)
 [![Security Scan](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml/badge.svg)](https://github.com/EdwinKassier/Ashes-Devops-Tools/actions/workflows/security-scan.yml)
 [![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat-square&logo=pre-commit)](https://pre-commit.com)
-[![Modules](https://img.shields.io/badge/modules-125-blueviolet?style=flat-square)](modules/)
-[![Tests](https://img.shields.io/badge/test_suites-339-blue?style=flat-square)](modules/)
+[![Modules](https://img.shields.io/badge/modules-126-blueviolet?style=flat-square)](modules/)
+[![Tests](https://img.shields.io/badge/test_suites-353-blue?style=flat-square)](modules/)
 
 <sub>Module/test-suite counts are static badges, enforced in CI: <code>make count</code> prints the live figures and <code>scripts/check-docs-counts.sh</code> (meta-lint) fails when this README or CLAUDE.md disagrees with the tree.</sub>
 
 </div>
 
-> **Maturity: v0.x.** Every module plans and is tested against mock providers, but
-> most guardrails and the newer opt-in modes have not yet been proven against a real
-> organization in the sandbox estate. Read [`docs/known-gaps.md`](docs/known-gaps.md)
-> (open, preview and sandbox-pending items) before relying on a control in
-> production, and [`UPGRADING.md`](UPGRADING.md) before taking a new release.
+> **Maturity: v0.x, pre-production.** Every module plans and is tested against mock
+> providers and scanned by Trivy and Checkov. No root has yet been applied to a real
+> organization, and the guardrails are unproven against real clouds. Read
+> [`docs/known-gaps.md`](docs/known-gaps.md) before relying on any control,
+> [`docs/runbooks/production-hardening.md`](docs/runbooks/production-hardening.md) before a
+> production estate, and [`UPGRADING.md`](UPGRADING.md) before taking a new release.
 
 ---
 
 ## Overview
 
-**Ashes DevOps Tools** is a fully-tested, security-scanned Terraform platform covering the four clouds it supports — `{aws, gcp, supabase, vercel}`. Each cloud is its own root(s) and Terraform Cloud workspace(s), so you deploy **any combination**:
+**Ashes DevOps Tools** is a reference landing zone, tested against mock providers and security-scanned, covering the four clouds it supports, `{aws, gcp, supabase, vercel}`. Each cloud is its own root(s) and Terraform Cloud workspace(s), so you deploy **any combination**:
 
 | Cloud | Roots | What it manages |
 |:--------|:--------|:----------------|
@@ -45,6 +46,8 @@
 | **Vercel** | `saas` (`enable_vercel`) | Projects, three-tier environments |
 
 **Execution model:** Terraform Cloud owns all live state and applies. GitHub Actions validates every PR. Tags trigger release metadata — never direct applies.
+
+**HCP Terraform tier:** Standard or above for a production estate ([why](docs/guides/QUICK_START.md#hcp-terraform-tier-and-cost)).
 
 ---
 
@@ -59,7 +62,7 @@ make install && make pre-commit-install
 # 2. Configure the whole landing zone in ONE committed file, config/landing-zone.yaml
 #    (org name/prefix, domain, TFC org, regions, environments, AWS accounts, clouds).
 scripts/init-landing-zone.sh            # interactive; or pass --org-name ... --clouds gcp,aws
-git add config/landing-zone.yaml && git commit -m "config: landing zone"
+git add config/landing-zone.yaml && git commit -m "chore(config): landing zone"
 
 # 3. Authenticate (only the clouds whose workspaces you apply)
 gcloud auth application-default login     # GCP roots (gcp-bootstrap, gcp-organization, gcp-guardrails, gcp-projects, gcp-network-hub, gcp-workload-<env>)
@@ -79,6 +82,7 @@ make ci
 Every root reads `config/landing-zone.yaml`. An explicit variable (tfvars or a TFC variable) wins over it, and an unset or placeholder value fails the plan. The schema is [`config/landing-zone.example.yaml`](config/landing-zone.example.yaml).
 
 > Full bootstrap sequence, backend config, and first apply: **[Quick Start Guide →](docs/guides/QUICK_START.md)**
+> Supabase and/or Vercel: **[SaaS bootstrap runbook →](docs/runbooks/saas-bootstrap.md)**. It assumes the `tfc-admin` workspace exists.
 
 ---
 
@@ -89,12 +93,12 @@ flowchart TB
     CI["<b>GitHub Actions</b> — PR gates<br/>fmt · validate · lint · trivy · checkov · docs · test"]
     TFC["<b>Terraform Cloud</b> — remote state · plan · apply<br/>one root = one workspace, per cloud"]
     CI -->|"merge to main"| TFC
-    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>5 roots"]
+    TFC --> GCP["<b>GCP</b><br/>envs/gcp/*<br/>6 roots"]
     TFC --> AWS["<b>AWS</b><br/>envs/aws/*<br/>7 layered roots"]
     TFC --> SAAS["<b>SaaS</b><br/>envs/saas<br/>no cloud provider"]
 ```
 
-Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP uses **five** roots where the AWS SRA spreads across **seven**. This table aligns them layer-for-layer:
+Both clouds are full landing zones; the difference is only how the same responsibilities are packaged into roots — GCP uses **6** roots (five layered roots plus the security-team `gcp-guardrails`) where the AWS SRA spreads across **7**. This table aligns them layer-for-layer:
 
 | Responsibility band | GCP root | AWS root |
 |:--------------------|:---------|:---------|
@@ -122,7 +126,7 @@ Deploy **any combination** of `{aws, gcp, supabase, vercel}`. Each cloud lives i
 
 ## Module Library
 
-125 modules — **65 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
+126 modules — **66 GCP · 53 AWS · 6 SaaS · 1 TFC** — each with auto-generated docs and `mock_provider` tests.
 
 Both clouds are organized into the **same conceptual domains** so you can map a capability across providers at a glance. Each table reads: **capability → Google Cloud module → Amazon Web Services module**. A `—` means the platform has no dedicated module for that capability (often because it is native, or lives in an adjacent domain — noted inline). Link text is the module's path under `modules/<cloud>/`.
 
@@ -140,22 +144,23 @@ Both clouds are organized into the **same conceptual domains** so you can map a 
 ### Cloud modules by domain
 
 <details>
-<summary><strong>Networking</strong> — GCP 19 · AWS 10</summary>
+<summary><strong>Networking</strong> — GCP 24 · AWS 11</summary>
 
 Both clouds build a hub-and-spoke private network from the same primitives; the names differ, the roles line up.
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Core private network | [`network/vpc`](modules/gcp/network/vpc/), [`network/subnet`](modules/gcp/network/subnet/) | [`network/vpc`](modules/aws/network/vpc/) |
+| Core private network | [`network/vpc`](modules/gcp/network/vpc/), [`network/subnet`](modules/gcp/network/subnet/), [`network/tiered-vpc`](modules/gcp/network/tiered-vpc/) (shared VPC, three subnet tiers, baseline firewall core) | [`network/vpc`](modules/aws/network/vpc/) |
 | IP address management | *(manual CIDR planning)* | [`network/ipam`](modules/aws/network/ipam/) |
 | Hub interconnect / transit | [`network/shared-vpc-service`](modules/gcp/network/shared-vpc-service/), [`network/vpc-peering`](modules/gcp/network/vpc-peering/), [`network/ncc-hub`](modules/gcp/network/ncc-hub/) + [`network/ncc-spoke`](modules/gcp/network/ncc-spoke/) (opt-in), [`network/interconnect`](modules/gcp/network/interconnect/) | [`network/transit-gateway`](modules/aws/network/transit-gateway/) |
 | Private service access | [`network/private-service-connect`](modules/gcp/network/private-service-connect/), [`network/private-service-access`](modules/gcp/network/private-service-access/) | [`network/vpc-endpoints`](modules/aws/network/vpc-endpoints/) |
-| DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/) |
-| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA-VPN; supported in `stages/net-hub`, exposed through `network-hub` and config by a planned follow-up) | [`network/vpn`](modules/aws/network/vpn/) *(library-only)* (Site-to-Site) |
+| DNS | [`network/dns`](modules/gcp/network/dns/) | [`network/route53-resolver`](modules/aws/network/route53-resolver/), [`network/dns-records`](modules/aws/network/dns-records/) *(library-only)* |
+| Hybrid VPN | [`network/vpn`](modules/gcp/network/vpn/) (HA VPN on the hub; `gcp.network.vpn` + `vpn_shared_secret_wo` on `gcp-network-hub`) | [`network/vpn`](modules/aws/network/vpn/) (Site-to-Site on the Transit Gateway; `aws.network.vpn`) |
 | Egress NAT | [`network/nat`](modules/gcp/network/nat/) | *(native, in `network/vpc`)* |
 | Egress FQDN control | [`network/secure-web-proxy`](modules/gcp/network/secure-web-proxy/) (opt-in preview, hub + PSC) | [`network/network-firewall`](modules/aws/network/network-firewall/) (egress domain allowlist) |
 | Load balancing | [`network/internal-lb`](modules/gcp/network/internal-lb/) *(library-only)* | [`network/load-balancer`](modules/aws/network/load-balancer/) (ALB/NLB) |
-| Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) *(library-only)* | [`security/edge-security`](modules/aws/security/edge-security/) (CloudFront + WAF/Shield) |
+| Application ingress | [`network/app-ingress`](modules/gcp/network/app-ingress/) (Cloud Run front door) | [`network/load-balancer`](modules/aws/network/load-balancer/) |
+| Content delivery / CDN | [`network/cdn`](modules/gcp/network/cdn/) *(library-only)* | *(Security → `edge-security`: CloudFront + WAF/Shield)* |
 | API gateway / edge | [`network/api-gateway`](modules/gcp/network/api-gateway/) *(library-only)* | [`network/api-gateway`](modules/aws/network/api-gateway/) *(library-only)* |
 | Stateful firewall | [`network/network-firewall`](modules/gcp/network/network-firewall/), [`network/hierarchical-firewall`](modules/gcp/network/hierarchical-firewall/) | [`network/network-firewall`](modules/aws/network/network-firewall/) |
 | Web app firewall / DDoS | [`network/cloud-armor`](modules/gcp/network/cloud-armor/) | *(Security → `edge-security`, `firewall-manager-org`)* |
@@ -166,7 +171,7 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 </details>
 
 <details>
-<summary><strong>IAM &amp; Identity</strong> — GCP 7 · AWS 2</summary>
+<summary><strong>IAM &amp; Identity</strong> — GCP 8 · AWS 4</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
@@ -175,11 +180,12 @@ Both clouds build a hub-and-spoke private network from the same primitives; the 
 | Deny-policy guardrails | [`iam/deny-policy`](modules/gcp/iam/deny-policy/), [`iam/principal-access-boundary`](modules/gcp/iam/principal-access-boundary/) | *(SCP/RCP — see Governance)* |
 | Service / machine identity | [`iam/service-account`](modules/gcp/iam/service-account/) | *(IAM roles + instance profiles)* |
 | Federated workload identity | [`iam/workload-identity`](modules/gcp/iam/workload-identity/) | *(OIDC via `iam/iam-role`)* |
+| Terraform Cloud run roles | *(plan/apply service accounts from `stages/bootstrap`)* | [`iam/tfc-oidc-baseline`](modules/aws/iam/tfc-oidc-baseline/), [`iam/tfc-management-roles`](modules/aws/iam/tfc-management-roles/) |
 
 </details>
 
 <details>
-<summary><strong>Security &amp; Threat Detection</strong> — GCP 2 · AWS 13</summary>
+<summary><strong>Security &amp; Threat Detection</strong> — GCP 2 · AWS 14</summary>
 
 GCP consolidates detection into Security Command Center plus audit logs; the AWS SRA breaks the same surface into many org-wide, delegated-admin services — hence the count asymmetry.
 
@@ -227,37 +233,42 @@ GCP consolidates detection into Security Command Center plus audit logs; the AWS
 </details>
 
 <details>
-<summary><strong>Backup &amp; Resilience</strong> — GCP 1 · AWS 2</summary>
+<summary><strong>Backup &amp; Resilience</strong> — GCP 2 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Scheduled backups / snapshots | [`backup/backup-plan`](modules/gcp/backup/backup-plan/) (snapshot schedules + retention) | [`backup/backup-vault`](modules/aws/backup/backup-vault/) |
+| Scheduled backups / snapshots | [`backup/backup-plan`](modules/gcp/backup/backup-plan/) (snapshot schedules + retention), [`backup/backup-vault`](modules/gcp/backup/backup-vault/) (Backup and DR vault for Cloud SQL) | [`backup/backup-vault`](modules/aws/backup/backup-vault/) |
 | Org-wide backup policy | *(per-project resource policies)* | [`backup/backup-org-policy`](modules/aws/backup/backup-org-policy/) |
 
 </details>
 
 <details>
-<summary><strong>Observability &amp; Operations</strong> — GCP 3 · AWS 2</summary>
+<summary><strong>Observability &amp; Operations</strong> — GCP 5 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
-| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) *(library-only)* | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (metric alarms + SNS) |
+| Metrics &amp; alerting | [`monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/) (used by `net-hub` / `net-spoke` data-plane alerts) | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (metric alarms + SNS) |
 | Dashboards | [`monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) *(library-only)* | [`ops/cloudwatch`](modules/aws/ops/cloudwatch/) (dashboard) |
+| Landing-zone self-observability | [`monitoring/control-plane`](modules/gcp/monitoring/control-plane/) | *(see `ops/cloudwatch`)* |
+| Service level objectives | [`monitoring/slo`](modules/gcp/monitoring/slo/) | *(see `ops/cloudwatch`)* |
 | Fleet / patch management | [`ops/os-config`](modules/gcp/ops/os-config/) (VM Manager) | [`ops/systems-manager`](modules/aws/ops/systems-manager/) |
 
 </details>
 
 <details>
-<summary><strong>Application Platform</strong> — GCP 1 · AWS 0</summary>
+<summary><strong>Application Platform</strong> — GCP 6 · AWS 2</summary>
 
 | Capability | Google Cloud | Amazon Web Services |
 |:-----------|:-------------|:--------------------|
+| Container runtime | [`compute/cloud-run`](modules/gcp/compute/cloud-run/), [`compute/cloud-run-job`](modules/gcp/compute/cloud-run-job/), [`compute/gke-autopilot`](modules/gcp/compute/gke-autopilot/) | [`compute/ecs-fargate`](modules/aws/compute/ecs-fargate/) |
+| Relational database | [`data/cloud-sql`](modules/gcp/data/cloud-sql/) | [`data/rds-aurora`](modules/aws/data/rds-aurora/) |
+| Application secrets | [`data/secret-manager`](modules/gcp/data/secret-manager/) | *(see Security → `secrets-baseline`)* |
 | App / mobile backend | [`firebase/project`](modules/gcp/firebase/project/) *(library-only)* | *(Amplify / App Runner — no module)* |
 
 </details>
 
 <details>
-<summary><strong>Orchestration Stages</strong> — GCP 7 · AWS 6</summary>
+<summary><strong>Orchestration Stages</strong> — GCP 11 · AWS 7</summary>
 
 Composite stages wrap the primitives above into deployable landing-zone layers, one per root/workspace. Layers line up across clouds even where a cloud folds two responsibilities into one stage.
 
@@ -270,6 +281,7 @@ Composite stages wrap the primitives above into deployable landing-zone layers, 
 | Network hub | [`stages/network-hub`](modules/gcp/stages/network-hub/) (composes [`stages/net-hub`](modules/gcp/stages/net-hub/) + [`stages/dns-anchor`](modules/gcp/stages/dns-anchor/)) | [`stages/network-hub`](modules/aws/stages/network-hub/) |
 | Shared services | *(via `stages/projects`)* | [`stages/shared-services`](modules/aws/stages/shared-services/) |
 | Backup | — | [`stages/backup`](modules/aws/stages/backup/) |
+| Application services (golden path) | [`stages/app-services`](modules/gcp/stages/app-services/) | [`stages/app-services`](modules/aws/stages/app-services/) |
 | Workload (per environment) | [`stages/environment`](modules/gcp/stages/environment/), [`stages/workload`](modules/gcp/stages/workload/), [`stages/net-spoke`](modules/gcp/stages/net-spoke/) *(replaced the removed `stages/host`)* | [`stages/workload`](modules/aws/stages/workload/) |
 
 </details>
@@ -285,13 +297,11 @@ These modules are tested and documented but **no `envs/**` root composes them** 
 | [`gcp/firebase/project`](modules/gcp/firebase/project/) | Example-only; Firebase is opt-in per app |
 | [`gcp/iam/identity-group`](modules/gcp/iam/identity-group/), [`gcp/iam/identity-group-memberships`](modules/gcp/iam/identity-group-memberships/) | Example-only; Cloud Identity groups are usually managed in the IdP / Workspace |
 | [`gcp/iam/role`](modules/gcp/iam/role/) | Example-only; custom roles are org-specific |
-| [`gcp/monitoring/alert-policy`](modules/gcp/monitoring/alert-policy/), [`gcp/monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | Example-only; app-level alerting/dashboards (the landing zone's own alerting is `monitoring/control-plane`) |
+| [`gcp/monitoring/compute-dashboard`](modules/gcp/monitoring/compute-dashboard/) | Example-only; app-level dashboards (the landing zone's own alerting is `monitoring/control-plane`) |
 | [`gcp/network/api-gateway`](modules/gcp/network/api-gateway/), [`gcp/network/cdn`](modules/gcp/network/cdn/), [`gcp/network/internal-lb`](modules/gcp/network/internal-lb/), [`gcp/network/packet-mirroring`](modules/gcp/network/packet-mirroring/) | Not composed by `net-hub` / `net-spoke`; example-only — compose directly |
-| [`gcp/network/app-ingress`](modules/gcp/network/app-ingress/) | Golden-path Cloud Run front door; opt-in per service |
 | [`gcp/governance/private-ca`](modules/gcp/governance/private-ca/) | Private CA (CAS) is opt-in; no root needs internal certificates by default |
 | [`aws/network/dns-records`](modules/aws/network/dns-records/) | Write records into an existing zone (DNS unification); caller-owned records |
 | [`aws/network/api-gateway`](modules/aws/network/api-gateway/) | Opt-in API edge per workload |
-| [`aws/network/vpn`](modules/aws/network/vpn/) | Site-to-Site VPN needs customer-gateway details; opt-in |
 
 </details>
 
@@ -300,17 +310,22 @@ These modules are tested and documented but **no `envs/**` root composes them** 
 ## Commands
 
 ```bash
-make ci                    # Full local pipeline (fmt + docs + validate + lint + security + test)
+make ci-quick              # Fast offline subset of make ci (no terraform init); needs check-jsonschema
+make ci                    # Every workstation-runnable CI gate (see make -n ci); needs pre-commit, cz, check-jsonschema, opa 1.22.2, origin/main
 make fmt                   # Format all Terraform files
 make test                  # Run every .tftest.hcl suite (no cloud creds needed)
 make validate-all          # terraform validate across all roots
+make examples-plan         # Plan every modules/**/examples/basic under mock providers (no creds needed)
 make lint                  # TFLint with the GCP + AWS rulesets
 make security              # Trivy (IaC config) + Checkov — tfsec is EOL and no longer used
 make count                 # Live module / root / test-suite counts
-make docs                  # Regenerate all module READMEs via terraform-docs
+make docs                  # Regenerate the READMEs of all modules and the 15 roots via terraform-docs
 make docs-check            # Verify no README is stale
 make plan-gcp-organization     # Plan control-plane changes
-make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
+make plan-gcp-workload APP_ENV=dev
+make plan-gcp-<root>       # Any other GCP root: bootstrap, guardrails, projects, network-hub (read-only plan in HCP Terraform)
+make plan-aws-<root>       # Any AWS layer: organization, security, network, identity, shared-services, backup
+make plan-aws-workload APP_ENV=dev
 ```
 
 ---
@@ -320,15 +335,31 @@ make plan-gcp-workload APP_ENV=dev APP_VARS=examples/dev.tfvars.example
 | Workflow | Trigger | What it does |
 |:---------|:--------|:-------------|
 | [`terraform-plan.yml`](.github/workflows/terraform-plan.yml) | Pull Request | fmt · docs-check · validate (sharded) · lint · Trivy · Checkov · tests · meta-lint → `Validation Summary` |
-| [`terraform-apply.yml`](.github/workflows/terraform-apply.yml) | Workspace tags (`gcp-*/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*`) | Verify TFC run → publish release metadata |
-| [`release.yml`](.github/workflows/release.yml) | Push to `main` | release-please: maintain the release PR; merging it tags `vX.Y.Z` + updates CHANGELOG |
+| [`terraform-apply.yml`](.github/workflows/terraform-apply.yml) | Workspace tags (`gcp-*/v*` including `gcp-guardrails/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*`) | Verify TFC run → publish release metadata |
+| [`release.yml`](.github/workflows/release.yml) | Push to `main` | release-please: maintains the release PR; merging it tags `vX.Y.Z` (CHANGELOG is written by hand). **Fails until a maintainer creates the release GitHub App** ([CI secrets](docs/guides/CI_SECRETS.md#release_app)) |
 | [`security-scan.yml`](.github/workflows/security-scan.yml) | Push + weekly | Trivy · Checkov · Gitleaks → SARIF |
 | [`documentation.yml`](.github/workflows/documentation.yml) | Module `*.tf` changes | Auto-generate docs → open PR |
 | [`drift-detection.yml`](.github/workflows/drift-detection.yml) | Scheduled | Detect infrastructure drift |
+| [`dependency-heartbeat.yml`](.github/workflows/dependency-heartbeat.yml) | Weekly | Fail when Renovate has not updated an issue or PR for 8 days (forks: warning unless `RENOVATE_HEARTBEAT_REQUIRED=true`) |
+| [`reusable-security.yml`](.github/workflows/reusable-security.yml) | Called by `terraform-plan.yml` and `security-scan.yml` | Shared Trivy and Checkov scan job |
+| [`sandbox-e2e.yml`](.github/workflows/sandbox-e2e.yml) | Nightly, manual, or a PR with the `e2e` label | Real apply and destroy of `tests/e2e/{gcp,aws}` in a sandbox ([sandbox E2E](docs/guides/sandbox-e2e.md)) |
+| [`state-backup.yml`](.github/workflows/state-backup.yml) | Daily + manual | Export every HCP Terraform workspace state to write-once buckets ([state backup](docs/runbooks/state-backup.md)) |
+| [`tfc-audit-trail.yml`](.github/workflows/tfc-audit-trail.yml) | Daily + manual | Export the HCP Terraform organization audit trail to the same buckets |
 
-**Releasing:** the repository is versioned `vX.Y.Z` by release-please from Conventional Commits — merge the
-open release PR to cut a release (see [CHANGELOG.md](CHANGELOG.md)). Separately, a per-workspace deployment
-tag records release metadata for a Terraform Cloud run:
+**CI status.** The two workflow badges at the top are live and show the state of `main`.
+A red badge means a gate is failing on `main` now. Open the latest run to see which one.
+Known causes are tracked in [`docs/known-gaps.md`](docs/known-gaps.md).
+The Release workflow fails until the release GitHub App exists.
+The Dependency heartbeat fails on schedule until the Renovate GitHub App is installed and has run.
+Drift detection and the sandbox end-to-end job fail on schedule until a sandbox is funded
+([sandbox E2E](docs/guides/sandbox-e2e.md)).
+
+**Releasing:** the repository is versioned `vX.Y.Z` by release-please from Conventional Commits once the
+release GitHub App is set up. Until then a maintainer tags releases by hand (`v0.1.0` was cut that way).
+See [CHANGELOG.md](CHANGELOG.md). What a version promises, what counts as a breaking change and how
+to pin a release: [versioning and compatibility policy](docs/policies/versioning-and-compatibility.md).
+Separately, a per-workspace deployment tag records release metadata
+for a Terraform Cloud run:
 
 ```bash
 git tag -a gcp-organization/v1.2.0 -m "Release organization v1.2.0"
@@ -344,7 +375,7 @@ git push origin gcp-organization/v1.2.0
 | [Documentation Index](docs/INDEX.md) | Complete navigation hub |
 | [Quick Start](docs/guides/QUICK_START.md) | Bootstrap, creds, first apply |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | Roots, modules, execution model |
-| [GCP Landing Zone](docs/architecture/gcp-landing-zone.md) | Folder/project model, five-root layer map, Shared VPC hub-spoke, foundation conformance checklist |
+| [GCP Landing Zone](docs/architecture/gcp-landing-zone.md) | Folder/project model, layer map, Shared VPC hub-spoke, foundation conformance checklist |
 | [AWS Landing Zone](docs/architecture/aws-landing-zone.md) | Multi-account SRA model, layer map, SRA conformance checklist |
 | [Cross-Cloud Comparison](docs/architecture/cross-cloud-comparison.md) | Where each capability lives per provider, side by side |
 | [Landing-Zone Conformance](docs/architecture/landing-zone-conformance.md) | 2026 best-practice adherence review + gap register, both clouds |

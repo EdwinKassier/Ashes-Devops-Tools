@@ -9,7 +9,7 @@ Cost allocation and ownership need consistent tags, but many modules do not acce
 
 ## Decision
 
-Set tags at the provider, not per module. Each AWS root's `provider "aws"` has `default_tags` (`ManagedBy`, `LandingZone`, `Workspace`, `Environment`, `CostCenter`, `Owner`), with `CostCenter` and `Owner` taken from `org.cost_center` and `org.owner` in `config/landing-zone.yaml`. Each GCP root sets `default_labels` (`managed-by`, `landing-zone`, `workspace`, `environment`). Stages add stage-specific extras through their `tags` input. The AWS organization applies a tag policy of required tags, and the `require_labels` OPA policy checks listed types.
+Set tags at the provider, not per module. Each AWS root's `provider "aws"` has `default_tags` (`ManagedBy`, `LandingZone`, `Workspace`, `Environment`, `CostCenter`, `Owner`), with `CostCenter` and `Owner` taken from `org.cost_center` and `org.owner` in `config/landing-zone.yaml`. Each GCP root sets `default_labels` (`managed-by`, `landing-zone`, `workspace`, `environment`, `cost-center`, `owner`). Each AWS root also sets `DataClassification`. Stages add stage-specific extras through their `tags` input. The AWS organization applies a tag policy that fixes the key casing and the `DataClassification` values, and the mandatory `require_labels` OPA policy checks listed types for the four shared keys.
 
 ## Consequences
 

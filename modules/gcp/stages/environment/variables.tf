@@ -17,7 +17,7 @@ variable "environment" {
 }
 
 variable "project_prefix" {
-  description = "Landing-zone name prefix (org.prefix). Names the VPC (<prefix>-<environment>-vpc) and the budget."
+  description = "Landing-zone name prefix (org.prefix). Names the VPC (<prefix>-<environment>-vpc, unless network.name is set) and the budget."
   type        = string
 
   validation {
@@ -92,24 +92,34 @@ variable "labels" {
   nullable    = false
 }
 
-variable "deletion_protection" {
-  description = "Deletion protection for the network core, Cloud SQL and the GKE cluster."
+variable "enable_deletion_protection" {
+  description = "Deletion protection for the network core, Cloud SQL and the GKE cluster. Null (default) uses the deprecated deletion_protection input, else true."
   type        = bool
-  default     = true
-  nullable    = false
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 # --- Network --------------------------------------------------------------------
 
 variable "network" {
-  description = "Spoke VPC settings: flow_logs (aggregation_interval, sampling 0.0-1.0), flow_logs_retention_days for the BigQuery export, private_service_connect_target (all-apis | vpc-sc; null derives vpc-sc once the perimeter is enforced, else all-apis), and additional_regions: opt-in extra regions of the spoke VPC keyed by region name (subnet_cidrs public/private/database, optional secondary_ranges, nat default true for a Cloud Router and NAT in the region; empty = single-region)."
+  description = "Spoke VPC settings: name: the spoke VPC name (default <project_prefix>-<environment>-vpc; gcp-workload passes the gcp-projects contract value), flow_logs (aggregation_interval, sampling 0.0-1.0), flow_logs_retention_days for the BigQuery export, private_service_connect_target (all-apis | vpc-sc; null derives vpc-sc once the perimeter is enforced, else all-apis), private_service_connect_name and private_service_connect_address (the PSC endpoint's name and internal IPv4 address; null = the net-spoke defaults: the VPC name without non-alphanumerics plus psc, and the second-to-last address of the host CIDR), explicit_zones (the spoke's zones in subnet order; subnet i of each tier takes the i-th CIDR, so the order fixes the CIDRs; empty = the zones GCP returns for the region, which can change and then replaces subnets; gcp-workload requires it for a production environment), and additional_regions: opt-in extra regions of the spoke VPC keyed by region name (subnet_cidrs public/private/database, optional secondary_ranges, nat default true for a Cloud Router and NAT in the region; empty = single-region)."
   type = object({
+    name           = optional(string)
+    explicit_zones = optional(list(string), [])
     flow_logs = optional(object({
       aggregation_interval = optional(string, "INTERVAL_5_SEC")
       sampling             = optional(number, 0.1)
     }), {})
-    flow_logs_retention_days       = optional(number, 30)
-    private_service_connect_target = optional(string)
+    flow_logs_retention_days        = optional(number, 30)
+    private_service_connect_target  = optional(string)
+    private_service_connect_name    = optional(string)
+    private_service_connect_address = optional(string)
     additional_regions = optional(map(object({
       subnet_cidrs = object({
         public   = string
@@ -132,19 +142,25 @@ variable "network" {
   }
 
   validation {
+    condition     = alltrue([for z in var.network.explicit_zones : startswith(z, "${var.host_project.region}-") && can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))]) && length(distinct(var.network.explicit_zones)) == length(var.network.explicit_zones)
+    error_message = "network.explicit_zones must list distinct zones of the host project's region (${var.host_project.region}), such as ${var.host_project.region}-a."
+  }
+
+  validation {
     condition     = var.network.private_service_connect_target == null || contains(["all-apis", "vpc-sc"], coalesce(var.network.private_service_connect_target, "all-apis"))
     error_message = "network.private_service_connect_target must be all-apis or vpc-sc."
   }
 }
 
 variable "hub" {
-  description = "Hub connectivity resolved from the gcp-network-hub contract: connectivity (peering | ncc), ncc (hub_id, group), the hub VPC peerings, the DNS peering zones, and the opt-in egress proxy (preview): egress_proxy.enabled with the hub Secure Web Proxy's service_attachment. Empty maps = standalone (no hub)."
+  description = "Hub connectivity resolved from the gcp-network-hub contract: connectivity (peering | ncc), ncc (hub_id, group), the hub VPC peerings, the DNS peering zones, and the opt-in egress proxy (preview): egress_proxy.enabled with the hub Secure Web Proxy's service_attachment (in the environment's region) and its listening port (default 443). With the proxy on, every app service and job defaults to ALL_TRAFFIC egress and gets HTTPS_PROXY / HTTP_PROXY / NO_PROXY for the proxy endpoint. Empty maps = standalone (no hub)."
   type = object({
     connectivity = optional(string, "peering")
     egress_proxy = optional(object({
       enabled            = optional(bool, false)
       service_attachment = optional(string)
       global_access      = optional(bool, false)
+      port               = optional(number, 443)
     }), {})
     ncc = optional(object({
       hub_id = optional(string)
@@ -196,8 +212,9 @@ variable "vpc_service_controls" {
     perimeter_title null = "<ENVIRONMENT> Perimeter". enable_dry_run keeps the
     perimeter in dry-run; dry_run_restricted_services stages a dry-run delta on
     an enforced perimeter. ingress_policies / egress_policies are used as given;
-    empty (default) = no rule, so an enforced perimeter admits nothing across
-    its edge until the operator names identities and projects. An ingress
+    empty (default) = no rule of the caller's, so an enforced perimeter admits
+    only the environment's own pipeline (automation_identities) across its
+    edge until the operator names identities and projects. An ingress
     source.resource must be projects/<number> or a VPC network
     (//compute.googleapis.com/projects/<p>/global/networks/<n>); use
     access_level "*" for callers from outside Google Cloud (CI, TFC). An egress
@@ -268,6 +285,18 @@ variable "vpc_service_controls" {
       for p in var.vpc_service_controls.egress_policies : p.identity_type == "ANY_IDENTITY" && p.resources != null && contains(coalesce(p.resources, ["-"]), "*")
     ])
     error_message = "vpc_service_controls.egress_policies may not combine identity_type = \"ANY_IDENTITY\" with resources = [\"*\"]: that lets any identity copy data to any project. Name the identities and the target projects (projects/<number>)."
+  }
+}
+
+variable "automation_identities" {
+  description = "The environment's own Terraform plan and apply identities (serviceAccount:<email>), from gcp-projects environment_config. When set, the perimeter gets one ingress rule that lets them reach the restricted services (enforced and staged dry-run) from any source, so an enforced perimeter does not block the pipeline. Empty = no rule."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for i in var.automation_identities : can(regex("^serviceAccount:[a-z0-9-]+@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com$", i))])
+    error_message = "automation_identities entries must be serviceAccount:<name>@<project>.iam.gserviceaccount.com."
   }
 }
 
@@ -342,6 +371,19 @@ variable "vm_operations" {
   nullable = false
 }
 
+# --- Backup and DR vault -----------------------------------------------------------
+
+variable "backup_vault" {
+  description = "Backup and DR vault in the host project (modules/gcp/backup/backup-vault), off by default. enabled creates the vault and a daily plan for every app-service database. enforced_retention_days (default 35) makes each backup immutable that long. lock_effective_time (RFC 3339 UTC) is IRREVERSIBLE: after it nobody can lower the enforced retention. Null = no lock."
+  type = object({
+    enabled                 = optional(bool, false)
+    enforced_retention_days = optional(number, 35)
+    lock_effective_time     = optional(string)
+  })
+  default  = {}
+  nullable = false
+}
+
 # --- SaaS secret bridge -------------------------------------------------------------
 
 variable "saas_secret_bridge" {
@@ -390,36 +432,22 @@ variable "app_services" {
   validation {
     condition = length([for k in flatten([
       for name, s in var.app_services : concat(
-        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
+        [for k in keys(s) : "${name}.${k}" if !contains(local.allowed_keys.app_services.self, k)],
         flatten([
-          for sub, allowed in {
-            artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]
-            database          = ["database_version", "edition", "tier", "databases", "enable_high_availability", "enable_point_in_time_recovery", "backup_location", "encryption_key_name", "enable_deletion_protection"]
-            github            = ["repository_id", "repository", "ref", "environment"]
-            alerts            = ["enabled", "error_ratio_threshold", "p99_latency_ms", "duration"]
-            job               = ["task_count", "parallelism", "max_retries"]
-            slo               = ["sli_type", "goal", "rolling_period_days", "latency_threshold", "enable_burn_rate_alert", "burn_rate_threshold", "burn_rate_lookback"]
-            pubsub            = ["enabled", "ack_deadline_seconds", "max_delivery_attempts", "message_retention_duration"]
-          } : [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+          for sub, allowed in local.allowed_keys.app_services :
+          [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)] if !contains(["self", "secrets"], sub)
         ]),
-        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(["secret", "version"], k)]]),
+        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(local.allowed_keys.app_services.secrets, k)]]),
       )
     ]) : k]) == 0
     error_message = "app_services has keys the services shape does not have (misspelled or unsupported): ${join(", ", [for k in flatten([
       for name, s in var.app_services : concat(
-        [for k in keys(s) : "${name}.${k}" if !contains(["service_team", "runtime", "image", "ingress", "cpu", "memory", "min_instances", "max_instances", "concurrency", "timeout", "env_vars", "secrets", "subnetwork_id", "vpc_egress", "enable_binary_authorization", "binary_authorization_policy", "enable_unauthenticated", "invoker_members", "runtime_project_roles", "enable_deletion_protection", "labels", "project_id", "project_number", "grant_network_access", "network_access_group", "artifact_registry", "database", "github", "alerts", "job", "slo", "pubsub"], k)],
+        [for k in keys(s) : "${name}.${k}" if !contains(local.allowed_keys.app_services.self, k)],
         flatten([
-          for sub, allowed in {
-            artifact_registry = ["immutable_tags", "keep_count", "delete_untagged_older_than", "cleanup_policy_dry_run"]
-            database          = ["database_version", "edition", "tier", "databases", "enable_high_availability", "enable_point_in_time_recovery", "backup_location", "encryption_key_name", "enable_deletion_protection"]
-            github            = ["repository_id", "repository", "ref", "environment"]
-            alerts            = ["enabled", "error_ratio_threshold", "p99_latency_ms", "duration"]
-            job               = ["task_count", "parallelism", "max_retries"]
-            slo               = ["sli_type", "goal", "rolling_period_days", "latency_threshold", "enable_burn_rate_alert", "burn_rate_threshold", "burn_rate_lookback"]
-            pubsub            = ["enabled", "ack_deadline_seconds", "max_delivery_attempts", "message_retention_duration"]
-          } : [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)]
+          for sub, allowed in local.allowed_keys.app_services :
+          [for k in try(keys(s[sub]), []) : "${name}.${sub}.${k}" if !contains(allowed, k)] if !contains(["self", "secrets"], sub)
         ]),
-        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(["secret", "version"], k)]]),
+        flatten([for sk, sv in try(s.secrets, {}) : [for k in try(keys(sv), []) : "${name}.secrets.${sk}.${k}" if !contains(local.allowed_keys.app_services.secrets, k)]]),
       )
     ]) : k])}."
   }
@@ -442,7 +470,7 @@ variable "public_ingress" {
 }
 
 variable "app_platform" {
-  description = "Settings shared by every app service: subnetwork_id (null = the first private subnet), bootstrap_image (first revision), artifact_registry_kms_key_name, enable_vulnerability_scanning, the app-deploy WIF pool (enable_deploy_wif, deploy_wif_pool_id, github_repository_owner_id), alerts (enable_alerts, alert_notification_channel_ids) and the optional GKE Autopilot cluster (gke)."
+  description = "Settings shared by every app service: subnetwork_id (null = the first private subnet), bootstrap_image (first revision), artifact_registry_kms_key_name, enable_vulnerability_scanning, the app-deploy WIF pool (enable_deploy_wif, deploy_wif_pool_id, github_repository_owner_id), alerts (enable_alerts, alert_notification_channel_ids), require_database_cmek (every app-service database must set a CMEK) and the optional GKE Autopilot cluster (gke)."
   type = object({
     subnetwork_id                  = optional(string)
     bootstrap_image                = optional(string, "us-docker.pkg.dev/cloudrun/container/hello")
@@ -453,6 +481,9 @@ variable "app_platform" {
     github_repository_owner_id     = optional(string)
     enable_alerts                  = optional(bool, true)
     alert_notification_channel_ids = optional(list(string), [])
+    # Every app-service database must use a customer-managed key (CMP-12);
+    # gcp-workload sets it for compliance_class: regulated.
+    require_database_cmek = optional(bool, false)
     gke = optional(object({
       enabled                = optional(bool, false)
       master_ipv4_cidr_block = optional(string, "172.16.0.0/28")

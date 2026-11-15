@@ -1,0 +1,27 @@
+# Fixture: the compliance estate with gcp.network_log_writer_granted set after
+# a break-glass grant for a legacy audit sink identity (CMP-02).
+org:
+  prefix: acme
+  display_name: Acme
+  domain: acme.io
+  tfc:
+    organization: acme-tfc
+gcp:
+  billing_account: ABCDEF-123456-789012
+  admin_email: admin@acme.io
+  organization_admin_groups: [gcp-org-admins@acme.io]
+  billing_admin_groups: [gcp-billing-admins@acme.io]
+  allowed_regions: [europe-west1]
+  network_log_writer_granted: true
+  environments:
+    dev:
+      is_production: false
+      display_name: Development
+      region: europe-west1
+      cidr_block: 10.10.0.0/16
+      budget_monthly_limit: 100
+notifications:
+  emails: [alerts@acme.io]
+compliance:
+  frameworks: [hipaa]
+  audit_log_retention_days: 2190

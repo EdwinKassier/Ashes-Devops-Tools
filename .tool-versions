@@ -1,3 +1,9 @@
+# Renovate (renovate.json) bumps every tool below except checkov in one grouped
+# "toolchain" PR, together with each in-repo copy of the version (workflows,
+# envs/tfc-admin, scripts/setup.sh, .terraform-version). Two copies need a
+# reviewer: refresh OPA_SHA256 and SC_SHA256 in terraform-plan.yml with
+# scripts/tool-checksums.sh, and confirm HCP Terraform offers the new OPA.
+#
 # AWS provider (hashicorp/aws) is NOT managed here. It is pinned per-module in
 # each module's/root's versions.tf (>= 6.46.0, < 7.0.0), not via asdf.
 # AWS roots/modules (modules/aws/**, envs/aws/**) auto-flow through
@@ -7,10 +13,13 @@
 # root count no longer approaches GitHub's 256-leg matrix cap. CI needs
 # registry egress to download the hashicorp/aws provider.
 #
-# trivy replaces tfsec (EOL, folded into Trivy): keep it equal to the
+# trivy replaces tfsec (EOL, folded into Trivy): kept equal to the
 # trivy-action `version:` in .github/workflows/reusable-security.yml.
-# check-jsonschema 0.39.0 (pip/pipx, not asdf): `make config-check`; CI pins the same
-# version in terraform-plan.yml meta-lint.
+# checkov: CI runs the image that bridgecrewio/checkov-action pins (a Dependabot
+# update), so Renovate skips it; set this to that image tag when the action moves.
+# check-jsonschema (pip/pipx, not asdf): `make config-check`; the meta-lint pip
+# pin and the pre-commit rev move in the Renovate toolchain PR.
+# opa: equal to OPA_VERSION in the opa job of terraform-plan.yml (`make opa-test`).
 # shellcheck: the pre-commit hook pins shellcheck-py v<this>.1.
 terraform 1.17.1
 tflint 0.62.0
@@ -18,3 +27,4 @@ trivy 0.70.0
 shellcheck 0.11.0
 terraform-docs 0.19.0
 checkov 3.3.17
+opa 1.22.2

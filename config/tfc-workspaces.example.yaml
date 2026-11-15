@@ -28,28 +28,36 @@
 #     this file.
 #   - Every workspace named here must be managed by tfc-admin (enable_* flags),
 #     otherwise the plan fails.
+#   - Every key must be a variable of the workspace's root
+#     (scripts/check-consistency.sh checks this file and the committed copies).
+#     examples/presets/README.md shows each preset in this form.
 
 workspaces:
   aws-organization:
     management_account_id: "111111111111"
-    name_prefix: acme
     terraform_run_role_arn: arn:aws:iam::111111111111:role/tfc-mgmt-apply
-    break_glass_role_arn: arn:aws:iam::111111111111:role/break-glass
+    break_glass_role_arn: arn:aws:iam::111111111111:role/OrganizationBreakGlass
     log_archive_bucket_name: acme-org-log-archive
     allowed_regions: [eu-west-2]
     tfc_organization: acme
 
   aws-security:
     management_account_id: "111111111111"
-    name_prefix: acme
 
-  aws-network:
-    name_prefix: acme
-
-  aws-workload-dev:
-    name_prefix: acme
-    # environment / workload_account_key are derived by tfc-admin.
+  # aws-workload-<env>: environment / workload_account_key are derived by
+  # tfc-admin.
 
   gcp-organization:
     domain: acme.example
     project_prefix: acme
+
+  # Production workload waivers (envs/gcp/workload). Each one lets a production
+  # plan pass for a limited time; after `expires` (YYYY-MM-DD, UTC, quoted) the
+  # plan fails again. See docs/runbooks/production-hardening.md.
+  # gcp-workload-prod:
+  #   production_vpc_sc_dry_run_waiver:
+  #     reason: First rollout, reading the dry-run violation logs
+  #     expires: "2026-12-31"
+  #   production_egress_proxy_waiver:
+  #     reason: Hub egress proxy not yet proven in the sandbox
+  #     expires: "2026-12-31"

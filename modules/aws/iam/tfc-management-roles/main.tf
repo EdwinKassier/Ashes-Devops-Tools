@@ -333,6 +333,14 @@ locals {
           StringEquals = { "organizations:ServicePrincipal" = ["backup.amazonaws.com"] }
         }
       },
+      {
+        # Organization-wide cross-account backup (aws_backup_global_settings,
+        # the central copy to the backup account's locked vault).
+        Sid      = "BackupGlobalSettings"
+        Effect   = "Allow"
+        Action   = ["backup:UpdateGlobalSettings", "backup:DescribeGlobalSettings"]
+        Resource = "*"
+      },
     ]
   }
 

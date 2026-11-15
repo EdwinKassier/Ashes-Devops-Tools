@@ -88,3 +88,30 @@ run "disabling_ca_creates_pool_only" {
     error_message = "enable_ca=false should create no certificate authority."
   }
 }
+
+run "deprecated_deletion_protection_alias_is_honoured" {
+  command = plan
+
+  variables {
+    deletion_protection = false
+  }
+
+  assert {
+    condition     = google_privateca_certificate_authority.this[0].deletion_protection == false
+    error_message = "The deprecated deletion_protection = false must still turn protection off."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = true
+    deletion_protection        = false
+  }
+
+  assert {
+    condition     = google_privateca_certificate_authority.this[0].deletion_protection == true
+    error_message = "enable_deletion_protection = true must win over the deprecated deletion_protection = false."
+  }
+}

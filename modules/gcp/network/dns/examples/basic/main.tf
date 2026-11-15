@@ -16,16 +16,17 @@ module "internal_dns" {
   # Restrict visibility to the VPC network.
   private_visibility_networks = [local.network]
 
-  # Static A records for internal services.
+  # Static A records for internal services. Record names are fully qualified
+  # and end with a dot.
   records = [
     {
-      name    = "api"
+      name    = "api.internal.example.com."
       type    = "A"
       ttl     = 300
       rrdatas = ["10.0.1.10"]
     },
     {
-      name    = "db"
+      name    = "db.internal.example.com."
       type    = "A"
       ttl     = 300
       rrdatas = ["10.0.2.5"]

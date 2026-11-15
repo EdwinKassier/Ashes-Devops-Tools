@@ -55,6 +55,12 @@ locals {
               },
               env.labels
             )
+            # Organization data-classification tag (CMP-10). A missing value
+            # is left out here so that terraform_data.organization_contract_guard
+            # names the gap.
+            tag_bindings = {
+              for v in compact([try(local.org.tag_values["data-classification-${env.data_classification}"], "")]) : "data_classification" => v
+            }
           }
         }
       }
@@ -75,9 +81,10 @@ locals {
 module "projects" {
   source = "../../../modules/gcp/stages/projects"
 
-  project_prefix          = local.project_prefix
-  organization_name       = local.organization_name
-  default_billing_account = local.org.billing_account
+  project_prefix    = local.project_prefix
+  organization_name = local.organization_name
+  # The contract may carry billingAccounts/<ID>; the stage takes the bare ID.
+  default_billing_account = trimprefix(local.org.billing_account, "billingAccounts/")
   admin_project_id        = local.bootstrap.admin_project_id
   # A missing environment folder is filled with an inert placeholder so that
   # terraform_data.organization_contract_guard reports the gap.
@@ -88,6 +95,9 @@ module "projects" {
 
   # Suffix comes from the gcp-bootstrap root for project-ID consistency.
   suffix = local.bootstrap.suffix
+
+  # org.owner as the projects' owner label (the provider default label value).
+  owner = local.gcp_label_owner
 
   # Per-environment workload SAs (no org-level roles) get their rights on their
   # OWN env folder here; the network-hub SAs on the shared folder. All come from
@@ -116,6 +126,10 @@ resource "terraform_data" "organization_contract_guard" {
     precondition {
       condition     = length(setsubtract([for e in keys(local.environments) : "environment-${e}"], keys(local.org.tag_values))) == 0
       error_message = "The gcp-organization contract tag_values lack ${join(", ", sort(setsubtract([for e in keys(local.environments) : "environment-${e}"], keys(local.org.tag_values))))} (organization_contract / gcp.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output)."
+    }
+    precondition {
+      condition     = length(setsubtract([for e in values(local.environments) : "data-classification-${e.data_classification}"], keys(local.org.tag_values))) == 0
+      error_message = "The gcp-organization contract tag_values lack ${join(", ", sort(setsubtract([for e in values(local.environments) : "data-classification-${e.data_classification}"], keys(local.org.tag_values))))}, the data-classification tag values the environments' host projects are bound to (organization_contract / gcp.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output)."
     }
   }
 }

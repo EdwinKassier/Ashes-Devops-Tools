@@ -16,6 +16,9 @@
 # It composes the aws-workload stage in a SINGLE workload account. It declares
 # ONLY the aws provider — no supabase/vercel (SaaS lives in envs/saas).
 locals {
+  # enable_app_alb_deletion_protection replaces the deprecated app_alb_enable_deletion_protection input; the new name wins.
+  enable_app_alb_deletion_protection = coalesce(var.enable_app_alb_deletion_protection, var.app_alb_enable_deletion_protection, true)
+
   organization_contract = var.organization_contract != null ? var.organization_contract : local.cfg.organization_contract
   network_contract      = var.network_contract != null ? var.network_contract : local.cfg.network_contract
   # var.log_archive_bucket_name is the legacy single-field form of security_contract.
@@ -61,16 +64,20 @@ locals {
   # output existed (N-1, not yet re-applied) exposes the same keys as individual
   # outputs, so each read falls back to them; that fallback goes at v1.0 with the
   # individual outputs (UPGRADING.md).
-  org_remote      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
-  network_remote  = local.read_network ? try(data.terraform_remote_state.aws_network[0].outputs.contract, data.terraform_remote_state.aws_network[0].outputs) : null
-  security_remote = local.read_security ? try(data.terraform_remote_state.aws_security[0].outputs.contract, data.terraform_remote_state.aws_security[0].outputs) : null
+  # Re-audit 7 CMP-1: regulated account keys from the aws-organization
+  # remote state (not from a supplied contract, which a workspace variable can
+  # set), ORed with this root's config file.
+  contract_regulated_account_keys = try(tolist(local.org_remote.regulated_account_keys), [])
+  org_remote                      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  network_remote                  = local.read_network ? try(data.terraform_remote_state.aws_network[0].outputs.contract, data.terraform_remote_state.aws_network[0].outputs) : null
+  security_remote                 = local.read_security ? try(data.terraform_remote_state.aws_security[0].outputs.contract, data.terraform_remote_state.aws_security[0].outputs) : null
 
   # Wrong-account guard for both providers. No try(): a missing account_ids key
   # fails the plan loudly instead of silently dropping the guard.
   workload_account_id = (
-    local.read_organization
-    ? local.org_remote.account_ids[local.workload_account_key]
-    : local.organization_contract.account_ids[local.workload_account_key]
+    local.read_organization ?
+    local.org_remote.account_ids[local.workload_account_key] :
+    local.organization_contract.account_ids[local.workload_account_key]
   )
 
   # Network contract; null / "" in standalone mode (enable_network_hub = false).
@@ -82,14 +89,33 @@ locals {
     !var.enable_network_hub ? "" :
     local.read_network ? local.network_remote.ipam_pool_ids[local.aws_region] : lookup(local.network_contract.ipam_pool_ids, local.aws_region, "")
   )
+  # The org Route 53 Profile the spoke associates. try(): a network state from
+  # before the profile output existed associates nothing until it re-applies.
+  resolver_profile_id = (
+    !var.enable_network_hub ? null :
+    local.read_network ? try(local.network_remote.resolver_profile_id, null) : local.network_contract.resolver_profile_id
+  )
+
+  # Organization ID for the gateway endpoint policies (ARC-2). try(): an
+  # organization contract without the key leaves it null, and the
+  # gateway_endpoint_policy_inputs precondition fails the plan when it is needed.
+  organization_id = (
+    local.read_organization ?
+    try(local.org_remote.organization_id, null) :
+    try(local.organization_contract.organization_id, null)
+  )
+
+  # ARC-2: production S3 / DynamoDB gateway endpoints reach only organization
+  # resources and the documented AWS-owned buckets (explicit variable wins).
+  enable_gateway_endpoint_policies = coalesce(var.enable_gateway_endpoint_policies, local.is_production)
 
   # The central log-archive bucket name comes from aws-security (its owner) unless
   # a contract supplies it, so a rename there cannot silently leave this
   # workload writing to a stale bucket.
   log_archive_bucket_name = (
-    local.read_security
-    ? local.security_remote.log_archive_bucket_name
-    : local.security_contract.log_archive_bucket_name
+    local.read_security ?
+    local.security_remote.log_archive_bucket_name :
+    local.security_contract.log_archive_bucket_name
   )
 }
 
@@ -117,7 +143,15 @@ module "aws_workload" {
   tgw_id       = local.tgw_id
   ipam_pool_id = local.ipam_pool_id
 
+  # The spoke VPC associates the org Route 53 Profile (DNS Firewall, forward
+  # rules, central interface endpoint zones). Null = no association.
+  resolver_profile_id = local.resolver_profile_id
+
   ipam_explicit_cidr = var.ipam_explicit_cidr
+
+  # azs.tf: names, else AZ IDs (per environment, else the hub's), else the region.
+  availability_zones = local.availability_zones
+  az_count           = var.az_count
 
   # Flow logs + Config snapshots + Session Manager logs all land in the central
   # log-archive bucket (cross-root naming contract).
@@ -140,6 +174,32 @@ module "aws_workload" {
 
   enable_edge    = var.enable_edge
   workload_roles = var.workload_roles
+
+  # ARC-2: the S3 / DynamoDB gateway endpoints bypass the hub egress firewall.
+  # Passed on only with an organization ID, so a missing ID fails at
+  # terraform_data.gateway_endpoint_policy_inputs with the config key named.
+  enable_gateway_endpoint_policies = local.enable_gateway_endpoint_policies && local.organization_id != null
+  organization_id                  = local.organization_id
+  gateway_endpoint_extra_s3_arns   = var.gateway_endpoint_extra_s3_arns
+
+  # CMP-3: weekly patch install on the account's SSM-managed instances.
+  enable_patch_install     = var.enable_patch_install
+  patch_install_target_tag = var.patch_install_target_tag
+  patch_operating_systems  = var.patch_operating_systems
+}
+
+# Gateway endpoint policies need the organization ID. Fail closed: a
+# production workload (or one that sets enable_gateway_endpoint_policies) never
+# silently keeps full-access S3 and DynamoDB endpoints.
+resource "terraform_data" "gateway_endpoint_policy_inputs" {
+  input = local.enable_gateway_endpoint_policies
+
+  lifecycle {
+    precondition {
+      condition     = !local.enable_gateway_endpoint_policies || local.organization_id != null
+      error_message = "Gateway endpoint policies are on (production, or enable_gateway_endpoint_policies = true) but the organization ID is unknown. Set aws.contracts.organization.organization_id in config/landing-zone.yaml (or organization_contract.organization_id), or apply aws-organization so its contract output carries organization_id. To keep full-access endpoints, set enable_gateway_endpoint_policies = false."
+    }
+  }
 }
 
 # App ingress mode: internal (default) | public_alb | cloudfront_vpc_origin.
@@ -159,7 +219,7 @@ locals {
 }
 
 # =============================================================================
-# APP SERVICES — the application golden path 
+# APP SERVICES — the application golden path
 #
 # One entry in local.services (var.services, else aws.workload_environments.<env>.services) = an ECR repo, a Fargate service in the spoke's
 # private subnets behind the shared internal ALB, least-privilege task roles, a
@@ -185,7 +245,8 @@ module "app_services" {
   kms_key_arn         = local.kms_key_arn
   bootstrap_image     = local.app_bootstrap_image
 
-  services = local.services
+  services      = local.services
+  is_production = local.is_production
 
   enable_github_oidc          = var.enable_github_oidc
   create_github_oidc_provider = var.create_github_oidc_provider
@@ -194,7 +255,7 @@ module "app_services" {
   alb_internal                   = local.app_public_alb ? false : var.app_alb_internal
   alb_certificate_arn            = var.app_alb_certificate_arn
   alb_ingress_cidrs              = local.app_alb_ingress_cidrs
-  alb_enable_deletion_protection = var.app_alb_enable_deletion_protection
+  enable_alb_deletion_protection = local.enable_app_alb_deletion_protection
   alb_access_logs_bucket         = var.app_alb_access_logs_bucket
 
   log_retention_days  = var.app_log_retention_days
@@ -314,4 +375,53 @@ resource "aws_secretsmanager_secret_policy" "saas_bridge" {
       Resource  = "*"
     }]
   })
+}
+
+# Re-audit 5 CMP-2/CMP-3: a regulated environment (aws.workload_environments
+# .<env>.compliance_class: regulated) keeps every production control and
+# encrypts app traffic in transit. Explicit variables cannot weaken it.
+resource "terraform_data" "compliance_class_guard" {
+  count = try(local.cfg.workload_compliance_class[local.environment], null) == null ? 0 : 1
+  input = try(local.cfg.workload_compliance_class[local.environment], null)
+
+  lifecycle {
+    precondition {
+      condition     = contains(["standard", "regulated"], try(local.cfg.workload_compliance_class[local.environment], "standard"))
+      error_message = "aws.workload_environments.${local.environment}.compliance_class must be standard or regulated (a typo would silently make the environment standard here)."
+    }
+  }
+}
+
+resource "terraform_data" "regulated_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.environment
+
+  lifecycle {
+    precondition {
+      condition     = local.is_production
+      error_message = "aws-workload-${local.environment} is regulated (aws.workload_environments.${local.environment}.compliance_class: regulated), so it must be production: remove the is_production = false override (a regulated environment gets every production control)."
+    }
+
+    precondition {
+      condition     = local.enable_gateway_endpoint_policies
+      error_message = "aws-workload-${local.environment} is regulated, so its S3 and DynamoDB gateway endpoints must keep the organization-only policies: remove enable_gateway_endpoint_policies = false."
+    }
+
+    # Re-audit 6 CMP-1: a regulated internet-facing ALB keeps its WAF, and a
+    # regulated ALB writes access logs (PCI 6.4.2, 10.2).
+    precondition {
+      condition     = length(local.services) == 0 || !local.app_public_alb || var.enable_app_waf
+      error_message = "aws-workload-${local.environment} is regulated, so its internet-facing ALB must keep the regional WAF: remove enable_app_waf = false."
+    }
+
+    precondition {
+      condition     = length(local.services) == 0 || var.app_alb_access_logs_bucket != null
+      error_message = "aws-workload-${local.environment} is regulated, so its ALB must write access logs: set app_alb_access_logs_bucket (a bucket in this account that allows ELB log delivery)."
+    }
+
+    precondition {
+      condition     = length(local.services) == 0 || (var.app_alb_certificate_arn != null && !local.app_vpc_origin)
+      error_message = "aws-workload-${local.environment} is regulated, so its app traffic must be encrypted in transit to the ALB: set app_alb_certificate_arn (an HTTPS listener) and use app_ingress_mode internal or public_alb (cloudfront_vpc_origin reaches the ALB over HTTP)."
+    }
+  }
 }

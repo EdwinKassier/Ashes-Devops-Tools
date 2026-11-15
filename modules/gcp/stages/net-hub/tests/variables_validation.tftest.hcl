@@ -11,6 +11,7 @@ mock_provider "google-beta" {}
 
 variables {
   project_id     = "mock-hub-project"
+  region         = "us-central1"
   project_prefix = "mock"
   network = {
     name       = "hub-vpc-core"
@@ -20,6 +21,19 @@ variables {
 
 run "accepts_valid_inputs" {
   command = plan
+}
+
+# Two-digit GCP regions (europe-west10, europe-west12) and their zones are valid.
+run "accepts_two_digit_region_zones" {
+  command = plan
+  variables {
+    region = "europe-west10"
+    network = {
+      name           = "hub-vpc-core"
+      cidr_block     = "10.0.0.0/16"
+      explicit_zones = ["europe-west10-a", "europe-west10-b"]
+    }
+  }
 }
 
 run "rejects_invalid_project_id" {
@@ -101,7 +115,7 @@ run "rejects_published_proxy_without_consumers" {
   variables {
     secure_web_proxy = {
       enabled             = true
-      psc_nat_subnet_cidr = "10.0.253.0/24"
+      psc_nat_subnet_cidr = "10.0.252.0/24"
     }
   }
 
@@ -116,4 +130,28 @@ run "rejects_malformed_notification_channel" {
   }
 
   expect_failures = [var.alerting]
+}
+
+run "rejects_hyphenated_psc_name" {
+  command = plan
+  variables {
+    private_service_connect = { name = "hub-psc" }
+  }
+  expect_failures = [var.private_service_connect]
+}
+
+run "rejects_twenty_one_char_psc_name" {
+  command = plan
+  variables {
+    private_service_connect = { name = "a12345678901234567890" }
+  }
+  expect_failures = [var.private_service_connect]
+}
+
+run "rejects_psc_address_range" {
+  command = plan
+  variables {
+    private_service_connect = { address = "10.0.255.0/24" }
+  }
+  expect_failures = [var.private_service_connect]
 }

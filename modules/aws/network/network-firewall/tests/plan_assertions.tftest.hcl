@@ -26,6 +26,13 @@ run "firewall_enabled" {
     error_message = "No custom Suricata or allowlist rule group must be created by default."
   }
 
+  # Re-audit 5 ARC-1: no internal pass group without shared ranges or
+  # segments; HOME_NET to HOME_NET is never passed.
+  assert {
+    condition     = length(aws_networkfirewall_rule_group.internal_pass) == 0
+    error_message = "Without internal_pass_cidrs or internal_segments no internal pass group may be created."
+  }
+
   # STRICT_ORDER engine.
   assert {
     condition     = aws_networkfirewall_firewall_policy.this[0].firewall_policy[0].stateful_engine_options[0].rule_order == "STRICT_ORDER"
@@ -40,7 +47,7 @@ run "firewall_enabled" {
 
   # AWS-managed threat groups attached by ARN with ascending priority.
   assert {
-    condition = toset([for r in aws_networkfirewall_firewall_policy.this[0].firewall_policy[0].stateful_rule_group_reference : r.resource_arn]) == toset([
+    condition = toset([for r in aws_networkfirewall_firewall_policy.this[0].firewall_policy[0].stateful_rule_group_reference : r.resource_arn if r.priority < 1000]) == toset([
       "arn:aws:network-firewall:eu-west-2:aws-managed:stateful-rulegroup/AttackInfrastructureStrictOrder",
       "arn:aws:network-firewall:eu-west-2:aws-managed:stateful-rulegroup/MalwareDomainsStrictOrder",
       "arn:aws:network-firewall:eu-west-2:aws-managed:stateful-rulegroup/BotNetCommandAndControlDomainsStrictOrder",
@@ -92,6 +99,7 @@ run "custom_rules_allowlist_and_drop_default" {
     egress_domain_allowlist  = [".amazonaws.com", "github.com"]
     home_net_cidrs           = ["10.0.0.0/8"]
     stateful_default_actions = ["aws:drop_established", "aws:alert_established"]
+    internal_pass_cidrs      = ["10.65.0.0/16"]
   }
 
   override_resource {
@@ -120,14 +128,14 @@ run "custom_rules_allowlist_and_drop_default" {
     error_message = "Allowlist must be an ALLOWLIST over HTTP_HOST and TLS_SNI with the supplied domains."
   }
 
-  # Ordering: managed (100-102) < custom (1000) < allowlist (2000).
+  # Ordering: managed (100-102) < custom (1000) < internal pass (1500) < allowlist (2000).
   assert {
-    condition     = [for r in output.stateful_rule_group_references : r.priority] == [100, 101, 102, 1000, 2000]
+    condition     = [for r in output.stateful_rule_group_references : r.priority] == [100, 101, 102, 1000, 1500, 2000]
     error_message = "Rule group priorities must place managed threat groups first, then custom rules, then the allowlist."
   }
 
   assert {
-    condition     = output.stateful_rule_group_references[4].arn == "arn:aws:network-firewall:eu-west-2:123456789012:stateful-rulegroup/org-stateful-egress-allowlist"
+    condition     = output.stateful_rule_group_references[5].arn == "arn:aws:network-firewall:eu-west-2:123456789012:stateful-rulegroup/org-stateful-egress-allowlist"
     error_message = "The allowlist must be the lowest-priority (last) reference."
   }
 
@@ -197,5 +205,94 @@ run "module_tags_applied" {
   assert {
     condition     = aws_networkfirewall_firewall.this[0].tags["Owner"] == "test"
     error_message = "module-level tags must land on aws_networkfirewall_firewall.this"
+  }
+}
+
+run "deprecated_delete_protection_alias_is_honoured" {
+  command = plan
+
+  variables {
+    delete_protection = false
+  }
+
+  assert {
+    condition     = aws_networkfirewall_firewall.this[0].delete_protection == false
+    error_message = "The deprecated delete_protection = false must still turn protection off."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = true
+    delete_protection          = false
+  }
+
+  assert {
+    condition     = aws_networkfirewall_firewall.this[0].delete_protection == true
+    error_message = "enable_deletion_protection = true must win over the deprecated delete_protection = false."
+  }
+}
+
+run "internal_pass_with_onprem_peers" {
+  command = plan
+
+  variables {
+    internal_pass_cidrs = ["192.168.0.0/16", "172.16.0.0/12"]
+  }
+
+  assert {
+    condition     = strcontains(aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string, "pass ip $HOME_NET any -> [192.168.0.0/16,172.16.0.0/12] any")
+    error_message = "The internal pass group must pass HOME_NET to the internal peers."
+  }
+
+  assert {
+    condition     = strcontains(aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string, "pass ip [192.168.0.0/16,172.16.0.0/12] any -> $HOME_NET any")
+    error_message = "The internal pass group must pass the internal peers to HOME_NET."
+  }
+}
+
+run "internal_pass_disabled" {
+  command = plan
+
+  variables {
+    enable_internal_pass = false
+    internal_pass_cidrs  = ["10.65.0.0/16"]
+  }
+
+  assert {
+    condition     = length(aws_networkfirewall_rule_group.internal_pass) == 0 && !contains([for r in output.stateful_rule_group_references : r.priority], 1500)
+    error_message = "enable_internal_pass = false must not create or reference the internal pass group."
+  }
+}
+
+# Re-audit 5 ARC-1: segments pass within themselves only; never HOME_NET to
+# HOME_NET, so prod to nonprod meets the default action.
+run "internal_pass_per_segment" {
+  command = plan
+
+  variables {
+    internal_pass_cidrs = ["10.64.0.0/16", "10.65.0.0/16"]
+    internal_segments = {
+      prod    = ["10.80.0.0/16", "10.81.0.0/16"]
+      nonprod = ["10.72.0.0/16"]
+      empty   = []
+    }
+  }
+
+  assert {
+    condition = aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string == join("\n", [
+      "pass ip $HOME_NET any -> [10.64.0.0/16,10.65.0.0/16] any (msg:\"landing zone internal: HOME_NET to shared ranges\"; sid:1; rev:1;)",
+      "pass ip [10.64.0.0/16,10.65.0.0/16] any -> $HOME_NET any (msg:\"landing zone internal: shared ranges to HOME_NET\"; sid:2; rev:1;)",
+      "pass ip [10.72.0.0/16] any -> [10.72.0.0/16] any (msg:\"landing zone internal: segment nonprod\"; sid:10; rev:1;)",
+      "pass ip [10.80.0.0/16,10.81.0.0/16] any -> [10.80.0.0/16,10.81.0.0/16] any (msg:\"landing zone internal: segment prod\"; sid:11; rev:1;)",
+    ])
+    error_message = "The internal pass group must pass HOME_NET to and from the shared ranges and each segment to itself only."
+  }
+
+  assert {
+    condition     = !strcontains(aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string, "-> $HOME_NET any (msg:\"landing zone internal: HOME_NET")
+    error_message = "HOME_NET to HOME_NET must never be passed."
   }
 }

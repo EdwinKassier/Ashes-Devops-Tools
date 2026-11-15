@@ -1,6 +1,7 @@
 # Workload SAs are granted roles ONLY on their own environment folder (never
-# the org node or another env's folder), plan SAs only read-only roles, and the
-# network-hub SAs only on the shared folder.
+# the org node or another env's folder), except roles/dns.peer for each apply SA
+# on the shared folder. Plan SAs get only read-only roles, and the network-hub
+# SAs their network roles only on the shared folder.
 # All runs use mock_provider so no GCP credentials are required.
 
 mock_provider "google" {}
@@ -12,9 +13,9 @@ variables {
   admin_project_id        = "mock-admin-project"
   suffix                  = "abcd1234"
   folders = {
-    shared = { id = "folders/100", name = "folders/100", display_name = "Shared" }
-    dev    = { id = "folders/111", name = "folders/111", display_name = "Development" }
-    prod   = { id = "folders/222", name = "folders/222", display_name = "Production" }
+    shared = { id = "100", name = "folders/100", display_name = "Shared" }
+    dev    = { id = "111", name = "folders/111", display_name = "Development" }
+    prod   = { id = "222", name = "folders/222", display_name = "Production" }
   }
   environments = {
     dev = {
@@ -144,7 +145,7 @@ run "no_grants_by_default" {
   }
 
   assert {
-    condition     = length(google_folder_iam_member.workload_sa_folder_roles) == 0 && length(google_folder_iam_member.network_sa_folder_roles) == 0 && length(google_folder_iam_member.network_sa_env_viewer) == 0
+    condition     = length(google_folder_iam_member.workload_sa_folder_roles) == 0 && length(google_folder_iam_member.network_sa_folder_roles) == 0 && length(google_folder_iam_member.network_sa_env_viewer) == 0 && length(google_folder_iam_member.workload_dns_peer) == 0
     error_message = "No automation grants are made unless SAs are supplied."
   }
 }
@@ -186,5 +187,21 @@ run "rejects_owner_role" {
       plan  = []
       apply = ["roles/owner"]
     }
+  }
+}
+
+# Each gcp-workload-<env> DNS peering zone targets the hub VPC in the shared
+# folder. Creating it needs dns.networks.targetWithPeeringZone (roles/dns.peer)
+# on the target network's project, so each workload apply SA gets that one role
+# on the shared folder, and the plan SAs get nothing there.
+run "workload_apply_sas_can_target_the_hub_with_a_peering_zone" {
+  command = plan
+
+  assert {
+    condition = (
+      toset(keys(google_folder_iam_member.workload_dns_peer)) == toset(["dev", "prod"]) &&
+      alltrue([for k, m in google_folder_iam_member.workload_dns_peer : m.folder == "folders/100" && m.role == "roles/dns.peer" && m.member == "serviceAccount:my-org-wl-${k}-apply@admin.iam.gserviceaccount.com"])
+    )
+    error_message = "Each workload apply SA needs roles/dns.peer on the shared folder (target of its DNS peering zone), and nothing else there."
   }
 }

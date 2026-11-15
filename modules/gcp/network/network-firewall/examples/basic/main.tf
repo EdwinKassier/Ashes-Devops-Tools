@@ -21,7 +21,8 @@ module "allow_health_checks" {
     { protocol = "tcp", ports = ["80", "443", "8080"] }
   ]
 
-  # RFC 5737 documentation ranges used by GCP health checkers.
+  # Google's published load-balancer health-check source ranges (real ranges,
+  # not placeholders).
   source_ranges = ["35.191.0.0/16", "130.211.0.0/22"]
 
   target_tags = ["backend"]

@@ -9,9 +9,27 @@
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
+  }
 }
 
 variable "management_account_id" {
@@ -31,7 +49,7 @@ variable "aws_region" {
   default     = null
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")))
     error_message = "aws_region (or org.regions.aws in config/landing-zone.yaml) must be a valid AWS region name, e.g. eu-west-2."
   }
 }
@@ -186,7 +204,7 @@ variable "terraform_run_role_arn" {
   default     = null
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/.+$", coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "!unset")))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:iam::[0-9]{12}:role/.+$", coalesce(var.terraform_run_role_arn, local.cfg.terraform_run_role_arn, "!unset")))
     error_message = "terraform_run_role_arn is unset or invalid: set var.terraform_run_role_arn or aws.terraform_run_role_arn in config/landing-zone.yaml to an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
   }
 }
@@ -197,7 +215,7 @@ variable "break_glass_role_arn" {
   default     = null
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/.+$", coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "!unset")))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:iam::[0-9]{12}:role/.+$", coalesce(var.break_glass_role_arn, local.cfg.break_glass_role_arn, "!unset")))
     error_message = "break_glass_role_arn is unset or invalid: set var.break_glass_role_arn or aws.break_glass_role_arn in config/landing-zone.yaml to an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/...)."
   }
 }
@@ -445,6 +463,12 @@ variable "member_break_glass_require_mfa" {
   default     = true
 }
 
+variable "stackset_stack_writer_role_names" {
+  description = "Member-account role names that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own, exempt from the deny-tamper SCP statement DenyStackSetStackTampering only. An AWS Control Tower estate sets [\"AWSControlTowerExecution\"]; a self-managed StackSet or AWS Quick Setup adds its execution role. Null = aws.stackset_stack_writer_role_names from config/landing-zone.yaml, else empty. See docs/runbooks/aws-brownfield-adoption.md."
+  type        = list(string)
+  default     = null
+}
+
 variable "allow_vpc_bpa_exclusions" {
   description = "Allow member accounts to create VPC Block Public Access exclusions under the org declarative EC2 policy. Default false (no VPC can bypass the org-wide internet-gateway ingress block). Set true only if an aws-workload environment uses app_ingress_mode = \"public_alb\"; that root then excludes only its own spoke VPC. cloudfront_vpc_origin needs no exclusion."
   type        = bool
@@ -587,4 +611,32 @@ variable "member_backup_vault_name" {
   type        = string
   default     = "org-backup-vault"
   nullable    = false
+}
+
+variable "member_backup_vault_encryption" {
+  description = "Key for the member-account backup vault: aws_managed (one vault on the aws/backup key) or cmk (also a protected customer managed key and a second vault, <member_backup_vault_name>-cmk, that cross-account copy to the backup account needs; the original vault is kept). Null (default) = cmk when the config file sets compliance.backup.copy_to_central_vault: true or compliance.backup.dr_region, else aws_managed. See UPGRADING.md: after the key exists only break-glass can change its policy or delete it."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.member_backup_vault_encryption == null || contains(["aws_managed", "cmk"], coalesce(var.member_backup_vault_encryption, "aws_managed"))
+    error_message = "member_backup_vault_encryption must be aws_managed or cmk."
+  }
+}
+
+variable "member_backup_dr_region" {
+  description = "Region of the member-account DR key and vault (cross-region copy target), created in every Workloads-OU account by a second StackSet. Needs the cmk vault encryption, must be in allowed_regions and must differ from the home region (org.regions.aws). Null (default) = compliance.backup.dr_region from the config file, else none."
+  type        = string
+  default     = null
+}
+
+variable "tag_policy_required_resource_types" {
+  description = "Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL_SUPPORTED) for which the root tag policy reports CostCenter, Environment, Owner and DataClassification as required (report_required_tag_for). Empty = no key is required. The AWS provider fails or warns at plan on a listed resource that lacks a key when the workspace sets TF_AWS_TAG_POLICY_COMPLIANCE to error or warning; the plan role then needs tag:ListRequiredTags. Null = aws.tagging.required_for from config/landing-zone.yaml, else []."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = alltrue([for t in coalesce(var.tag_policy_required_resource_types, local.cfg.tag_policy_required_resource_types, []) : can(regex("^[a-z0-9-]+:[A-Za-z0-9_-]+$", t))])
+    error_message = "tag_policy_required_resource_types (or aws.tagging.required_for in config/landing-zone.yaml) entries must look like service:type, for example ec2:instance or ec2:ALL_SUPPORTED."
+  }
 }

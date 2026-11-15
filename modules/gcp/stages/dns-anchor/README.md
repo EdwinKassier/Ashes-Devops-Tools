@@ -58,6 +58,7 @@ module "example" {
 	# Required variables
 	network =
 	project_id =
+	region =
 }
 ```
 
@@ -88,7 +89,7 @@ module "example" {
 The following resources are created:
 
 
-- data source.google_compute_zones.available (modules/gcp/stages/dns-anchor/main.tf#L24)
+- data source.google_compute_zones.available (modules/gcp/stages/dns-anchor/main.tf#L27)
 
 
 ## Inputs
@@ -97,12 +98,13 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_network"></a> [network](#input\_network) | The VPC and its three-tier zonal subnet layout.<br/>name and cidr\_block are required. Pin explicit\_zones for production: when<br/>empty, zones are discovered from GCP and a change in the returned zone set<br/>re-derives the subnet CIDRs (replacing subnets). subnet\_cidrs lists are<br/>index-aligned with the zones; an empty list derives that tier from<br/>cidr\_block. The anchor VPC hosts no workloads; the subnets keep the<br/>layout uniform with the hub and spokes. flow\_logs sets the subnet flow-log<br/>sampling. | <pre>object({<br/>    name           = string<br/>    cidr_block     = string<br/>    explicit_zones = optional(list(string), [])<br/>    subnet_cidrs = optional(object({<br/>      public   = optional(list(string), [])<br/>      private  = optional(list(string), [])<br/>      database = optional(list(string), [])<br/>    }), {})<br/>    flow_logs = optional(object({<br/>      aggregation_interval = optional(string, "INTERVAL_5_SEC")<br/>      sampling             = optional(number, 0.5)<br/>    }), {})<br/>  })</pre> | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID that owns the network (6-30 characters, lowercase alphanumeric and hyphens, must start with a letter). | `string` | n/a | yes |
-| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Guard the VPC and subnet stack with a prevent\_destroy terraform\_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard. | `bool` | `false` | no |
+| <a name="input_region"></a> [region](#input\_region) | The primary GCP region of the network (e.g., 'us-central1', 'europe-west1'). | `string` | n/a | yes |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Deprecated: use enable\_deletion\_protection. Removed in v1.0. | `bool` | `null` | no |
 | <a name="input_dns_zones"></a> [dns\_zones](#input\_dns\_zones) | Private Cloud DNS zones anchored on this VPC, keyed by zone name. dns\_name<br/>must end with a dot. Every zone is bound to the anchor VPC; add other<br/>networks via additional\_visibility\_networks. DNSSEC defaults on and query<br/>logging is always on. | <pre>map(object({<br/>    dns_name                       = string<br/>    description                    = optional(string)<br/>    dnssec_enabled                 = optional(bool, true)<br/>    additional_visibility_networks = optional(list(string), [])<br/>    records = optional(list(object({<br/>      name    = string<br/>      type    = string<br/>      ttl     = optional(number, 300)<br/>      rrdatas = list(string)<br/>    })), [])<br/>  }))</pre> | `{}` | no |
+| <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Guard the VPC and subnet stack with a prevent\_destroy terraform\_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard. Null (default) uses the deprecated deletion\_protection input, else false. | `bool` | `null` | no |
 | <a name="input_firewall"></a> [firewall](#input\_firewall) | Baseline tier firewall: rule logging, the IAP SSH/RDP allow rule, and the ports opened public to compute and compute to database. | <pre>object({<br/>    enable_logging     = optional(bool, true)<br/>    enable_iap_access  = optional(bool, true)<br/>    compute_tier_ports = optional(list(string), ["8080", "8443", "3000"])<br/>    database_ports     = optional(list(string), ["3306", "5432", "6379"])<br/>  })</pre> | `{}` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels applied to every labelable resource. | `map(string)` | `{}` | no |
 | <a name="input_peerings"></a> [peerings](#input\_peerings) | VPC peerings from this network, keyed by peering name (the anchor is normally reached by DNS peering, not VPC peering). | <pre>map(object({<br/>    peer_network           = string<br/>    create_reverse_peering = optional(bool, true)<br/>    export_custom_routes   = optional(bool, false)<br/>    import_custom_routes   = optional(bool, false)<br/>  }))</pre> | `{}` | no |
-| <a name="input_region"></a> [region](#input\_region) | The primary GCP region of the network (e.g., 'us-central1', 'europe-west1'). | `string` | `"us-central1"` | no |
 
 ## Outputs
 
@@ -116,4 +118,9 @@ The following resources are created:
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | The anchor VPC network self link (the target for DNS peering zones). |
 | <a name="output_peering_states"></a> [peering\_states](#output\_peering\_states) | The state of each VPC peering connection. |
 | <a name="output_subnets"></a> [subnets](#output\_subnets) | Subnet module outputs by tier (public, private, database), each keyed by zone. |
+| <a name="output_zones"></a> [zones](#output\_zones) | The zones of the anchor VPC's zonal subnets, in subnet order: network.explicit\_zones, else the zones GCP returns for the region. Subnet i of each tier takes the i-th CIDR, so this order fixes the subnet CIDRs. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

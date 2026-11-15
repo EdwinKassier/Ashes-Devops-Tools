@@ -239,3 +239,7 @@ The following resources are created:
 | <a name="output_uptime_alert_policy_id"></a> [uptime\_alert\_policy\_id](#output\_uptime\_alert\_policy\_id) | Resource ID of the uptime alert policy, or null when disabled. |
 | <a name="output_webhook_notification_channel_ids"></a> [webhook\_notification\_channel\_ids](#output\_webhook\_notification\_channel\_ids) | Map of webhook label to notification channel resource ID. Marked sensitive: channel IDs are tied to webhook URLs that embed auth tokens. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

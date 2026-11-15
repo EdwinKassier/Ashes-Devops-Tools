@@ -20,7 +20,11 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    project_prefix            = try(tostring(local.lz.org.prefix), null)
+    project_prefix = try(tostring(local.lz.org.prefix), null)
+    # org.cost_center / org.owner: the cost-center and owner provider default
+    # labels (providers.tf), the same keys as the AWS roots' default_tags.
+    cost_center               = try(tostring(local.lz.org.cost_center), null)
+    owner                     = try(tostring(local.lz.org.owner), null)
     organization_name         = try(tostring(local.lz.org.display_name), null)
     domain                    = try(tostring(local.lz.org.domain), null)
     default_region            = try(tostring(local.lz.org.regions.gcp), null)
@@ -44,9 +48,16 @@ locals {
         budget_monthly_limit    = tonumber(try(e.budget_monthly_limit, 0))
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
         labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
-        is_production           = tobool(try(e.is_production, false))
+        # Never decides production: main.tf reads env_config, and projects_contract_guard fails on a missing flag.
+        is_production = tobool(try(e.is_production, false))
       }
     }
+    # Environment keys whose is_production is missing or not a boolean. The
+    # schema requires it; the environments validation names them.
+    environments_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
 
     # gcp.environments.<env>.services: app golden-path services per environment
     # (same shape as var.app_services; the app-services stage validates and
@@ -78,11 +89,14 @@ locals {
 
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
+    # folders: id is the bare folder number (google_folder.folder_id) and name is
+    # folders/<number>, the shape gcp-organization emits. An id given as
+    # folders/<number> is accepted, and name is derived from id when absent.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
       org_id                   = tostring(local.lz.gcp.contracts.organization.org_id)
-      billing_account          = tostring(local.lz.gcp.contracts.organization.billing_account)
+      billing_account          = trimprefix(tostring(local.lz.gcp.contracts.organization.billing_account), "billingAccounts/")
       admin_project_number     = tostring(local.lz.gcp.contracts.organization.admin_project_number)
-      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
+      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = trimprefix(tostring(f.id), "folders/"), name = tostring(try(f.name, "folders/${trimprefix(tostring(f.id), "folders/")}")), display_name = tostring(try(f.display_name, k)) } }
       tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }
       scoped_access_policy_ids = { for k, v in try(local.lz.gcp.contracts.organization.scoped_access_policy_ids, {}) : k => tostring(v) }
     }
@@ -99,6 +113,9 @@ locals {
           labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
           is_production           = try(tobool(e.is_production), null)
           vpc_sc_access_policy_id = try(tostring(e.vpc_sc_access_policy_id), null)
+          automation_identities   = [for i in try(e.automation_identities, []) : tostring(i)]
+          spoke_network_name      = try(tostring(e.spoke_network_name), null)
+          compliance_class        = try(tostring(e.compliance_class), null)
         }
       }
     }
@@ -122,6 +139,7 @@ locals {
       ncc_spoke_group = try(tostring(local.lz.gcp.contracts.network_hub.ncc_spoke_group), null)
 
       egress_proxy_service_attachment = try(tostring(local.lz.gcp.contracts.network_hub.egress_proxy_service_attachment), null)
+      egress_proxy_port               = try(tonumber(local.lz.gcp.contracts.network_hub.egress_proxy_port), null)
     }
 
     # gcp.environments.<env>.egress_proxy: opt-in central egress (preview).
@@ -136,6 +154,20 @@ locals {
     environment_connectivity = {
       for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.network_connectivity)
       if try(e.network_connectivity, null) != null
+    }
+    # gcp.environments.<env>.private_service_connect: PSC endpoint overrides.
+    environment_psc_name = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.private_service_connect.name)
+      if try(e.private_service_connect.name, null) != null
+    }
+    environment_psc_address = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => tostring(e.private_service_connect.address)
+      if try(e.private_service_connect.address, null) != null
+    }
+    # gcp.environments.<env>.zones: the spoke's zones in subnet order (IAC-1).
+    environment_zones = {
+      for env, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : env => [for z in e.zones : tostring(z)]
+      if try(e.zones, null) != null
     }
     # gcp.environments.<env>.additional_regions as JSON text (no type
     # unification across environments); the stage's variable type validates it.
@@ -156,6 +188,12 @@ locals {
   # This environment's region: gcp.environments[<env>].region, else
   # org.regions.gcp, else europe-west2 (the same default gcp-projects applies).
   region = coalesce(var.region, try(local.cfg.environments[var.environment].region, null), local.cfg.default_region, "europe-west2")
+  # PSC endpoint overrides (null = the net-spoke defaults).
+  private_service_connect_name    = var.private_service_connect_name != null ? var.private_service_connect_name : lookup(local.cfg.environment_psc_name, var.environment, null)
+  private_service_connect_address = var.private_service_connect_address != null ? var.private_service_connect_address : lookup(local.cfg.environment_psc_address, var.environment, null)
+  # The spoke's zones in subnet order: variable > gcp.environments.<env>.zones
+  # > [] (the zones GCP returns). Production requires them (main.tf).
+  zones = var.zones != null ? var.zones : try(local.cfg.environment_zones[var.environment], [])
   # Opt-in extra spoke regions (default none: single-region spoke).
   additional_regions = jsondecode(var.additional_regions != null ? jsonencode(var.additional_regions) : lookup(local.cfg.environment_additional_regions, var.environment, "{}"))
 
@@ -177,22 +215,54 @@ locals {
 # of <name>.tfvars, kept in step by tests/presets.tftest.hcl). A listed preset is
 # applied only by the root its `root:` names; every other root ignores it. This
 # root also applies gcp.workload.presets_by_environment[<environment>] (so a
-# prod-only preset does not harden dev). Precedence: explicit variable > preset
-# > config file > built-in default. Supported keys: local.preset_supported_keys.
+# prod-only preset does not harden dev), and regulated-gcp-workload last when
+# gcp.environments.<environment>.compliance_class is regulated. Precedence:
+# explicit variable > preset > config file > built-in default. Supported keys:
+# local.preset_supported_keys. The regulated guards in main.tf fail the plan
+# when an explicit variable weakens a regulated value.
 locals {
+  # gcp.environments.<environment>.compliance_class: standard (default) or
+  # regulated (CMP-7). main.tf (compliance_class_guard) rejects other values.
+  # Regulated when this root's config file or the gcp-projects contract
+  # (environment_config, from the estate gcp-projects read) says so, so a
+  # workspace that points landing_zone_config_path at another estate's file
+  # keeps the class (re-audit 6 CMP-4).
+  compliance_class = try(local.env_config.compliance_class, null) == "regulated" ? "regulated" : try(tostring(local.lz.gcp.environments[var.environment].compliance_class), "standard")
+  regulated        = local.compliance_class == "regulated"
+  # CMP-12: every app-service database of a regulated environment must set
+  # database.encryption_key_name (cloud-sql require_cmek fails the plan). It is
+  # never derived for a standard environment, so no existing database is ever
+  # replaced to add a key.
+  require_database_cmek = local.regulated
+
   preset_root = "envs/gcp/workload"
   preset_names = distinct(concat(
     try([for n in local.lz.presets : tostring(n)], []),
     try([for n in local.lz.gcp.workload.presets_by_environment[var.environment] : tostring(n)], []),
+    local.regulated ? ["regulated-gcp-workload"] : [],
   ))
-  preset_documents = [for n in local.preset_names : yamldecode(file("${path.root}/../../../examples/presets/${n}.yaml"))]
+  # SEC-1: a preset name is one path segment, so it cannot leave examples/presets.
+  preset_documents = [for n in local.preset_names : yamldecode(file("${path.root}/../../../examples/presets/${n}.yaml")) if can(regex("^[a-z0-9-]+$", n))]
   preset = merge([
     for d in local.preset_documents : { for k, v in try(d.values, {}) : k => v } if try(d.root, "") == local.preset_root
   ]...)
-  preset_supported_keys = ["vpc_sc_enable_dry_run", "enable_cloud_armor", "enable_owasp_rules"]
+  preset_supported_keys = ["vpc_sc_enable_dry_run", "enable_cloud_armor", "enable_owasp_rules", "log_config_flow_sampling", "vpc_flow_logs_retention_days"]
 
   # Effective preset-backed values.
   vpc_sc_enable_dry_run = var.vpc_sc_enable_dry_run != null ? var.vpc_sc_enable_dry_run : tobool(lookup(local.preset, "vpc_sc_enable_dry_run", true))
   enable_cloud_armor    = var.enable_cloud_armor != null ? var.enable_cloud_armor : tobool(lookup(local.preset, "enable_cloud_armor", false))
   enable_owasp_rules    = var.enable_owasp_rules != null ? var.enable_owasp_rules : tobool(lookup(local.preset, "enable_owasp_rules", false))
+  # Backup and DR vault (CMP-8): enable_backup_vault > gcp.environments.<env>.
+  # backup_vault.enabled > on for a regulated environment. The lock time is
+  # IRREVERSIBLE, so it is read from the config file only (a committed,
+  # reviewed line) and never derived from compliance_class.
+  backup_vault_config                  = try(local.lz.gcp.environments[var.environment].backup_vault, {})
+  enable_backup_vault                  = var.enable_backup_vault != null ? var.enable_backup_vault : try(tobool(local.backup_vault_config.enabled), local.regulated)
+  backup_vault_enforced_retention_days = coalesce(var.backup_vault_enforced_retention_days, try(tonumber(local.backup_vault_config.enforced_retention_days), null), 35)
+  backup_vault_lock_effective_time     = try(tostring(local.backup_vault_config.lock_effective_time), null)
+
+  # VPC flow logs: 10% sampling and a 30-day export unless a preset
+  # (regulated-gcp-workload: 1 = every flow, 365 days) or a variable says otherwise.
+  flow_log_sampling        = var.log_config_flow_sampling != null ? var.log_config_flow_sampling : tonumber(lookup(local.preset, "log_config_flow_sampling", 0.1))
+  flow_logs_retention_days = var.vpc_flow_logs_retention_days != null ? var.vpc_flow_logs_retention_days : tonumber(lookup(local.preset, "vpc_flow_logs_retention_days", 30))
 }

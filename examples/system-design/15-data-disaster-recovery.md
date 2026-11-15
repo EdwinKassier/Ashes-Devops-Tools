@@ -217,7 +217,7 @@ So every tier gets a second, data-loss target:
 
 | Tier | Site-loss RPO / RTO | Data-loss recovery window | Mechanism for data loss |
 |---|---|---|---|
-| 0 Orders | Seconds / 15 min | Any second in 35 days (Aurora); 7 days on Cloud SQL through this repo | Aurora continuous backup (1–35 days); Cloud SQL PITR, plus vault backups every 6 h at best |
+| 0 Orders | Seconds / 15 min | Any second in 35 days (Aurora; Cloud SQL Enterprise Plus) | Aurora continuous backup (1–35 days); Cloud SQL PITR, plus vault backups every 6 h at best |
 | 1 Carts | ~1 s / 1 h | Any second in 35 days (AWS); any minute in 7 days (Firestore) | DynamoDB PITR, up to 35 days at per-second granularity; Firestore PITR, 7 days at 1-minute granularity |
 | 2 Objects | 15 min / 4 h | Soft delete or versions; vault copies | S3 versioning + Object Lock; Cloud Storage soft delete, 7–90 days |
 | 2 Streams | Minutes (raw zone lag) / 1 h | Topic retention, then raw zone | Kinesis up to 365 days; Pub/Sub topics up to 31 days |
@@ -326,8 +326,15 @@ What exists today:
 - **AWS organization backup plan.** [`modules/aws/backup/backup-org-policy`](../../modules/aws/backup/backup-org-policy/)
   attaches a `BACKUP_POLICY` to the Workloads OU: one daily rule at 05:00
   UTC, 365-day retention, selecting resources tagged `backup=true`, one
-  region, a vault named `org-backup-vault`
-  ([policy template](../../modules/aws/backup/backup-org-policy/policies/backup-policy.json)).
+  region, a vault named `org-backup-vault` (`org-backup-vault-cmk` once
+  `compliance.backup` is set)
+  ([policy document](../../modules/aws/backup/backup-org-policy/main.tf)).
+  Copy actions to a locked vault in the backup account and to a second region
+  are opt-in (`compliance.backup`, below).
+- **AWS member vaults.** The aws-backup service role StackSet in
+  `aws-organization` also creates `org-backup-vault` in every Workloads-OU
+  account (`create_member_backup_vault`, on by default), because the policy
+  writes to a vault of that name in each member account.
 - **AWS central vault.** [`modules/aws/backup/backup-vault`](../../modules/aws/backup/backup-vault/)
   creates the vault in the backup account with a **Compliance-mode Vault
   Lock** (`changeable_for_days` default 3, `min_retention_days` 7,
@@ -348,33 +355,35 @@ What exists today:
 
 Gaps this design must close, each checked against the code:
 
-1. **No vault in the member accounts.** An Organizations backup policy runs
-   in each member account, and "vaults must exist for each AWS account that
-   receives the effective policy"
-   ([AWS docs](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_backup_syntax.html),
-   checked 2026-11). The repo creates `org-backup-vault` only in the backup
-   account, so workload accounts have no target. **Verify before relying on**
-   whether something outside this repo creates it.
-2. **Single region, no cross-account copy.** No `copy_actions`
+1. **Copies are opt-in, daily and unproven.** By default each member account
+   keeps its recovery points in its own `org-backup-vault`, one region.
+   `compliance.backup` adds a copy to a locked vault in the backup account
+   and to a vault in a DR region, but the DR-region vault has no Vault Lock,
+   the policy has only the daily rule, and neither copy is proven against a
+   real apply
    ([known gaps A5](../../docs/known-gaps.md#modernization--latest-best-practice-gaps-2026-review)).
-3. **Databases not selected.** `modules/aws/stages/app-services` tags each
-   Aurora cluster with its stage-wide `tags` plus `Service`. Setting
-   `backup=true` in the stage-wide tags would select every taggable resource;
-   there is no per-service tag input to select only the orders cluster.
-4. **The vault key.** `kms_key_arn` defaults to `""`, the AWS-managed backup
-   key. Cross-account copies of resources that AWS Backup does not fully
-   manage need a customer-managed key, and a source encrypted with a CMK must
-   share that key with the destination account
+   [AWS: locked vaults and the copy](#aws-locked-vaults-and-the-copy) has the
+   config and the details.
+2. **The workload CMK.** Cross-account copies of resources that AWS Backup
+   does not fully manage need a customer-managed key, and a source encrypted
+   with a CMK must share that key with the destination account
    ([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/create-cross-account-backup.html),
-   checked 2026-11). Aurora here uses the workload CMK.
-5. **Restore testing covers EBS only** (`protected_resource_type = "EBS"`).
-6. **No cross-region database replicas.** `rds-aurora` has no global-cluster
-   input, and `cloud-sql` has no replica, backup-location, retained-backup
-   count or `retain_backups_on_delete` input. The app-services database call
-   does not forward `transaction_log_retention_days` and the config schema has
-   no such key, so Cloud SQL PITR stays at 7 days even on Enterprise Plus.
-   There is no GCP Backup and DR vault module.
-7. **DynamoDB backups cannot leave the account.** Cross-Region and
+   checked 2026-11). The member vault key (`cmk` mode) already admits the
+   backup account; the workload CMK that encrypts Aurora here does not.
+3. **Restore testing covers EBS only by default** (`restore_testing_resource_types`).
+   With the central copy on, it tests the copy vault for EBS, EC2, RDS, Aurora,
+   S3, DynamoDB and EFS.
+4. **No cross-region database replicas.** `rds-aurora` has no global-cluster
+   input, and `cloud-sql` has no replica, retained-backup count or
+   `retain_backups_on_delete` input. Cloud SQL's own backups are config: an
+   app service's `database.backup_location` (a region, or `us`, `eu`, `asia`;
+   default the instance region) and `database.transaction_log_retention_days`
+   (PITR logs, default 7; Cloud SQL allows 1 to 7 on Enterprise and 1 to 35 on
+   Enterprise Plus, so more than 7 needs `database.edition: ENTERPRISE_PLUS`,
+   which the schema and the plan check). The GCP Backup and DR vault
+   ([`modules/gcp/backup/backup-vault`](../../modules/gcp/backup/backup-vault/),
+   `backup_vault`) is regional with a daily plan.
+5. **DynamoDB backups cannot leave the account.** Cross-Region and
    cross-account copy of DynamoDB need AWS Backup's **advanced features for
    DynamoDB**; plain DynamoDB has neither
    ([feature table](https://docs.aws.amazon.com/aws-backup/latest/devguide/backup-feature-availability.html),
@@ -383,7 +392,7 @@ Gaps this design must close, each checked against the code:
    ([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/advanced-ddb-backup.html),
    checked 2026-11): `aws_backup_region_settings` with `DynamoDB = true` in
    both preference maps. Nothing in the repo sets it, so carts never reach the
-   DR vault today.
+   copy vaults today.
 
 ## Trade-offs to defend
 
@@ -462,14 +471,15 @@ Differences that change the design:
 |---|---|---|
 | Databases, tables, buckets | `aws-workload-<env>` (`envs/aws/workload`) through app-services | `gcp-workload-<env>` (`envs/gcp/workload`) through the environment stage |
 | Org backup plan | `aws-backup` (`envs/aws/backup`), management account | Not applicable |
-| Locked vaults | `aws-backup`, backup account, primary and DR region | `gcp-workload-<env>`, the host project (a dedicated backup project would be better; none exists) |
-| Member-account vault | `aws-workload-<env>` (new) | Not applicable |
+| Locked vaults | `aws-backup`, backup account, primary region (the central vault and the copy vault) | `gcp-workload-<env>` (`backup_vault`), the host project (a dedicated backup project would be better; none exists) |
+| Member-account vaults | `aws-organization` StackSet, every Workloads-OU account, home region and `compliance.backup.dr_region` | Not applicable |
 | Apply order | `aws-organization` → `aws-security` → `aws-network` → … → `aws-backup` → `aws-workload-<env>` | `gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>` |
 
 Tiers follow [VPC-tier placement](00-primer.md#vpc-tier-placement)
-([#14](14-n-tier-network.md)). Also needed: cross-account backup enabled once in the management account
-(`aws_backup_global_settings`); a statement in `envs/aws/workload/kms.tf`
-letting the backup account use the workload CMK for copies; and gap 7.
+([#14](14-n-tier-network.md)). Also needed: a statement in
+`envs/aws/workload/kms.tf` letting the backup account use the workload CMK for
+copies (gap 2), and gap 5. `aws-backup` turns on cross-account backup in the
+management account itself when the central copy is on.
 
 ### Config
 
@@ -496,139 +506,122 @@ gcp:
       services:
         orders:
           database:
-            edition: ENTERPRISE_PLUS # needed for advanced DR and 35-day PITR
+            edition: ENTERPRISE_PLUS # needed for advanced DR and PITR logs beyond 7 days
             tier: db-perf-optimized-N-2 # the module requires this family for Enterprise Plus
             enable_high_availability: true
+            transaction_log_retention_days: 35 # PITR window, the Enterprise Plus maximum
+            backup_location: us-east4 # automated backups outside the primary region
+compliance:
+  backup:
+    copy_to_central_vault: true # IRREVERSIBLE lock on the copy vault (UPGRADING.md)
+    copy_retention_days: 365
+    dr_region: eu-west-1 # must be in aws.allowed_regions and differ from org.regions.aws
 ```
 
 ### AWS: locked vaults and the copy
 
-In `envs/aws/backup`, using its `aws.backup` provider and `local.org`. The
-`region` argument is the aws 6.x per-resource Region. Arguments checked
-against aws v6.72.0
-([`aws_backup_vault`](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/backup_vault),
-[`aws_backup_vault_lock_configuration`](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/backup_vault_lock_configuration),
-[`aws_backup_vault_policy`](https://registry.terraform.io/providers/hashicorp/aws/6.72.0/docs/resources/backup_vault_policy),
-checked 2026-11).
+The copies are config, not raw resources. `compliance.backup` (above) drives
+three roots:
 
-```hcl
-# Gap: no DR-region vault or vault CMK in the repo; raw resources in the landing zone's conventions.
-resource "aws_kms_key" "backup_dr" {
-  provider            = aws.backup
-  region              = var.dr_region # new variable, e.g. "eu-west-1"
-  enable_key_rotation = true
-}
+- **`aws-organization`** switches the member vault StackSet to a protected
+  customer managed key and a second vault, `org-backup-vault-cmk`, in every
+  Workloads-OU account (`member_backup_vault_encryption` becomes `cmk`), and
+  with `dr_region` adds the same key and vault in that region
+  (`member_backup_dr_region`). The key policy lets the backup account use it
+  for copy jobs.
+- **`aws-backup`** (`envs/aws/backup`) turns on cross-account backup in the
+  management account, creates the Compliance-locked copy vault
+  `org-backup-copy-vault` in the backup account with its own key, and adds
+  `copy_actions` to the policy: each recovery point goes to the copy vault
+  (kept `copy_retention_days`) and to the member's DR-region vault (kept 35
+  days; the stage's `dr_copy_retention_days` is not exposed by
+  `aws-backup`). Restore testing
+  moves to the copy vault.
+- **`aws-workload-<env>`** keeps the orders cluster in the policy:
+  `rds-aurora` tags it `backup = "true"` unless its app-services entry sets
+  `database.enable_org_backup: false`.
 
-resource "aws_backup_vault" "dr" {
-  provider    = aws.backup
-  region      = var.dr_region
-  name        = "org-backup-vault-dr"
-  kms_key_arn = aws_kms_key.backup_dr.arn # a CMK: cross-account copies need one
-}
+Apply `aws-organization` before `aws-backup`; the copy vault lock is
+**irreversible** after its grace time (`UPGRADING.md`). Both copies are
+preview and not yet proven against a real apply
+([known gaps A5](../../docs/known-gaps.md#modernization--latest-best-practice-gaps-2026-review)).
 
-resource "aws_backup_vault_lock_configuration" "dr" {
-  provider            = aws.backup
-  region              = var.dr_region
-  backup_vault_name   = aws_backup_vault.dr.name
-  changeable_for_days = 3 # Compliance mode: immutable after 3 days
-  min_retention_days  = 7
-  max_retention_days  = 400
-}
+What config cannot express (gaps):
 
-resource "aws_backup_vault_policy" "dr" {
-  provider          = aws.backup
-  region            = var.dr_region
-  backup_vault_name = aws_backup_vault.dr.name
-  policy = jsonencode({ Version = "2012-10-17", Statement = [{
-    Sid = "OrgCopyIn", Effect = "Allow", Principal = "*",
-    Action = "backup:CopyIntoBackupVault", Resource = "*",
-    Condition = { StringEquals = { "aws:PrincipalOrgID" = local.org.organization_id } }
-  }] })
-}
-```
-
-The policy document needs `copy_actions`. The stage does not forward the leaf
-module's `content` input, so add a passthrough to
-`modules/aws/stages/backup` (gap) and pass this document:
-
-```hcl
-locals {
-  dr_vault_arn = aws_backup_vault.dr.arn
-  hot          = { delete_after_days = { "@@assign" = "35" } }
-  year = { # cold after 35 days; delete 365 (cold needs at least 90 days)
-    move_to_cold_storage_after_days = { "@@assign" = "35" }
-    delete_after_days               = { "@@assign" = "365" }
-  }
-  backup_policy = jsonencode({ plans = { default = {
-    regions = { "@@assign" = [local.aws_region] }
-    rules = { for name, r in {
-      hourly = { cron = "cron(0 * ? * * *)", lifecycle = local.hot }  # ~1 h RPO in the DR vault
-      daily  = { cron = "cron(0 5 ? * * *)", lifecycle = local.year } # the repo's 365-day rule
-      } : name => {
-      schedule_expression      = { "@@assign" = r.cron }
-      target_backup_vault_name = { "@@assign" = "org-backup-vault" }
-      lifecycle                = r.lifecycle
-      copy_actions = { (local.dr_vault_arn) = {
-        target_backup_vault_arn = { "@@assign" = local.dr_vault_arn }
-        lifecycle               = r.lifecycle
-      } }
-    } }
-    selections = { tags = { backup = {
-      iam_role_arn = { "@@assign" = "arn:${local.partition}:iam::$account:role/aws-backup-org-role" }
-      tag_key      = { "@@assign" = "backup" }
-      tag_value    = { "@@assign" = ["true"] }
-    } } }
-  } } })
-}
-```
-
-The daily rule keeps the requirement's year, which the DR lock's
-`max_retention_days = 400` allows. Cold storage needs 90 days there before
-deletion, and AWS Backup ignores the transition for types without cold
-storage, such as Aurora, which stays warm
-([AWS docs](https://docs.aws.amazon.com/aws-backup/latest/devguide/API_Lifecycle.html),
-checked 2026-11).
-
-And in `envs/aws/workload`, the vault the policy expects in every member
-account:
-
-```hcl
-# Gap: the repo creates org-backup-vault only in the backup account.
-resource "aws_backup_vault" "org_local" {
-  name        = "org-backup-vault" # must match the policy's target_backup_vault_name
-  kms_key_arn = local.kms_key_arn
-  tags        = { Service = "backup" }
-}
-```
-
-Tag the orders cluster `backup = "true"` through a new per-service tag input
-on app-services (gap; the stage-wide `tags` would select everything).
+- **An hourly rule.** The policy has one daily rule at 05:00 UTC, so a vault
+  copy is up to a day old. `modules/aws/backup/backup-org-policy` takes a full
+  policy document (`content`), but `modules/aws/stages/backup` does not
+  forward it. Tier 0's RPO of seconds comes from the replica and PITR, not
+  from the vault.
+- **A locked vault in the DR region.** The DR-region copy lands in the member
+  account's own `org-backup-vault-cmk`, which has no Vault Lock, and the
+  locked copy vault sits in the primary region. A region loss together with a
+  compromised workload account is not covered.
+- **The workload CMK.** Aurora here uses the workload CMK. A cross-account copy
+  of a resource that AWS Backup does not fully manage needs the source key
+  shared with the destination account, and `envs/aws/workload/kms.tf` has no
+  statement for the backup account. **Verify before relying on** copy jobs for
+  this cluster until it does.
 
 ### GCP: a locked backup vault for Cloud SQL
 
-In `envs/gcp/workload`. Arguments checked against google v8.10.0
-([`google_backup_dr_backup_vault`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_vault),
-[`google_backup_dr_backup_plan`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_plan),
-[`google_backup_dr_backup_plan_association`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_plan_association),
-checked 2026-11). Limits that shape it, all checked 2026-11:
+`gcp.environments.<env>.backup_vault` (preview) creates
+[`modules/gcp/backup/backup-vault`](../../modules/gcp/backup/backup-vault/) in
+the host project: a Backup and DR vault in the environment's region with a
+minimum enforced retention (default 35 days) and `WITHIN_ORGANIZATION` access,
+and a **daily** plan for every app-service database. `lock_effective_time`
+locks the retention so it can only go up. A `compliance_class: regulated`
+environment turns it on and refuses to turn it off.
+
+```yaml
+# Illustrative. Keys are real (config/landing-zone.schema.json); values are placeholders.
+gcp:
+  environments:
+    prod:
+      backup_vault:
+        enabled: true
+        enforced_retention_days: 35
+        lock_effective_time: "2027-01-01T00:00:00Z" # IRREVERSIBLE
+```
+
+A CMEK-encrypted instance also needs the vault's service agent (module output
+`service_account`) granted Encrypter/Decrypter on the instance's key; the
+module does not grant it. Limits that shape the rest, all checked 2026-11:
 
 - A Cloud SQL plan runs every **6 to 23 hours** with a window of at least 6
   hours ([docs](https://docs.cloud.google.com/backup-disaster-recovery/docs/cloud-console/backup-plan)),
   so vault backups give **at best a 6-hour RPO**; the instance's PITR logs
-  (and `log_retention_days`) cover the gap.
+  cover the gap.
 - The plan sits in the instance's region. For Cloud SQL the vault is regional
   or a **multi-region** (`asia`, `eu`, `us`); cross-region vaults are not
   listed for Cloud SQL
   ([docs](https://docs.cloud.google.com/backup-disaster-recovery/docs/concepts/backup-vault)).
-  A `us` vault survives the loss of `us-central1`.
+  The module's vault is in the instance's region, so it does not survive that
+  region's loss; a `us` vault survives the loss of `us-central1`.
 - The vault key must be in the vault's location. Cloud SQL backups are
   encrypted with the **instance's** key, which the Backup and DR service agent
   must be able to use
   ([CMEK](https://docs.cloud.google.com/backup-disaster-recovery/docs/concepts/cmek),
   [Cloud SQL](https://docs.cloud.google.com/backup-disaster-recovery/docs/cloud-console/sql/csql-backup)).
 
+The module covers neither a 6-hour plan nor a multi-region vault. Cloud SQL's
+own automated backups can go to another location: set the service's
+`database.backup_location` (a region or `us`, `eu`, `asia`;
+[Cloud SQL locations](https://docs.cloud.google.com/sql/docs/postgres/locations),
+checked 2026-11), as in [Config](#config). For the 6-hour, multi-region vault, raw
+resources remain. An instance takes one backup plan (**verify before relying
+on**), and `backup_vault` associates every app-service database, so this
+replaces `backup_vault` in the environment rather than adding to it. A
+regulated environment refuses `backup_vault.enabled: false`, so there the
+module's daily plan is the limit. Arguments checked against google v8.10.0
+([`google_backup_dr_backup_vault`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_vault),
+[`google_backup_dr_backup_plan`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_plan),
+[`google_backup_dr_backup_plan_association`](https://registry.terraform.io/providers/hashicorp/google/8.10.0/docs/resources/backup_dr_backup_plan_association),
+checked 2026-11), in `envs/gcp/workload`:
+
 ```hcl
-# Gap: no per-environment workload CMEK (see CMEK source) and no Backup and DR module.
+# Gap: no per-environment workload CMEK (see CMEK source), and backup-vault has no
+# multi-region vault or sub-daily plan. Keep backup_vault.enabled false with this.
 locals {
   sql_agent      = "serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-cloud-sql.iam.gserviceaccount.com"
   backupdr_agent = "serviceAccount:service-${local.env_config.host_project_number}@gcp-sa-backupdr.iam.gserviceaccount.com"
@@ -737,7 +730,7 @@ site loss.
 4. Replay events committed after the restore point from the raw zone, with
    idempotent writes, so later valid orders are not lost.
 5. If compromise may have tainted production backups, restore from the
-   locked DR vault's copy.
+   locked copy vault in the backup account.
 
 **Verification.** Row counts and checksums match expectations, the
 reconciliation job passes, and the payment provider's settlement report

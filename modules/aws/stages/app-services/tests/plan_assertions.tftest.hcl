@@ -698,3 +698,127 @@ run "queue_with_cmk" {
     error_message = "with a queue CMK the task role must get kms:Decrypt/GenerateDataKey on that key via SQS only."
   }
 }
+
+# The AVD-AWS-0104 suppression on service_https is safe only while this rule
+# stays TCP 443.
+run "service_https_egress_is_port_443_only" {
+  command = plan
+
+  variables {
+    services = {
+      orders = {}
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      for r in aws_vpc_security_group_egress_rule.service_https :
+      r.from_port == 443 && r.to_port == 443 && r.ip_protocol == "tcp"
+    ])
+    error_message = "service_https may only open TCP 443; anything wider voids the AVD-AWS-0104 suppression."
+  }
+
+  assert {
+    condition     = length(aws_vpc_security_group_egress_rule.service_https) == 1
+    error_message = "the egress rule must exist for the service, otherwise this test checks nothing."
+  }
+}
+
+# ── Aurora is tagged for the org backup policy, and a service can opt out ───
+
+run "database_org_backup_tag_default_and_opt_out" {
+  command = plan
+
+  variables {
+    services = {
+      orders = {
+        database = {}
+      }
+      billing = {
+        database = { enable_org_backup = false }
+      }
+    }
+  }
+
+  assert {
+    condition     = lookup(module.database["orders"].cluster_tags, "backup", null) == "true"
+    error_message = "a service database must carry backup = true by default."
+  }
+
+  assert {
+    condition     = !contains(keys(module.database["billing"].cluster_tags), "backup")
+    error_message = "database.enable_org_backup = false must leave the backup tag off."
+  }
+}
+
+# ── ARC-16: production services autoscale by default ─────────────────────────
+
+run "production_services_autoscale_by_default" {
+  command = plan
+
+  variables {
+    is_production = true
+    services      = { api = {} }
+  }
+
+  assert {
+    condition     = length(module.service["api"].autoscaling_target_ids) == 1
+    error_message = "A production ECS service without enable_autoscaling must scale on CPU (ARC-16)."
+  }
+}
+
+run "production_service_can_opt_out_of_autoscaling" {
+  command = plan
+
+  variables {
+    is_production = true
+    services      = { api = { enable_autoscaling = false } }
+  }
+
+  assert {
+    condition     = length(module.service["api"].autoscaling_target_ids) == 0
+    error_message = "An explicit enable_autoscaling = false must keep a fixed task count in production."
+  }
+}
+
+run "non_production_autoscaling_stays_opt_in" {
+  command = plan
+
+  variables {
+    services = { api = {} }
+  }
+
+  assert {
+    condition     = length(module.service["api"].autoscaling_target_ids) == 0
+    error_message = "Non-production services keep a fixed task count unless enable_autoscaling is set."
+  }
+}
+
+run "deprecated_alb_enable_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    alb_enable_deletion_protection = false
+    services                       = { orders = {} }
+  }
+
+  assert {
+    condition     = length(module.alb) == 1
+    error_message = "The deprecated alb_enable_deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_alb_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_alb_deletion_protection = true
+    alb_enable_deletion_protection = false
+    services                       = { orders = {} }
+  }
+
+  assert {
+    condition     = length(module.alb) == 1
+    error_message = "Setting enable_alb_deletion_protection together with the deprecated alias must still plan."
+  }
+}

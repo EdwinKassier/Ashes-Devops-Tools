@@ -110,3 +110,7 @@ The following resources are created:
 | <a name="output_preset_topology"></a> [preset\_topology](#output\_preset\_topology) | The hub's preset topology (STAR or MESH). |
 | <a name="output_spoke_group"></a> [spoke\_group](#output\_spoke\_group) | The group name a spoke VPC joins: edge for STAR, default for MESH. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

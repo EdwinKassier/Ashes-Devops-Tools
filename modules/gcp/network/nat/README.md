@@ -194,3 +194,7 @@ The following resources are created:
 | <a name="output_router_name"></a> [router\_name](#output\_router\_name) | The name of the Cloud Router |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The self\_link of the NAT gateway (same as id for this resource) |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

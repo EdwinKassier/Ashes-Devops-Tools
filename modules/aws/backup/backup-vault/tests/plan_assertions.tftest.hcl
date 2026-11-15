@@ -23,12 +23,12 @@ run "vault_lock_and_restore_testing_configured" {
   }
 
   assert {
-    condition     = aws_backup_restore_testing_plan.this.name == var.restore_testing_plan_name
+    condition     = aws_backup_restore_testing_plan.this[0].name == var.restore_testing_plan_name
     error_message = "A restore testing plan with the configured name must exist"
   }
 
   assert {
-    condition     = aws_backup_restore_testing_selection.this.protected_resource_type == "EBS"
+    condition     = aws_backup_restore_testing_selection.this["EBS"].protected_resource_type == "EBS"
     error_message = "Restore testing selection must target EBS recovery points"
   }
 }
@@ -57,7 +57,7 @@ run "explicit_restore_testing_role_creates_nothing" {
   }
 
   assert {
-    condition     = length(aws_iam_role.restore_testing) == 0 && aws_backup_restore_testing_selection.this.iam_role_arn == "arn:aws:iam::123456789012:role/BackupRestoreTestRole"
+    condition     = length(aws_iam_role.restore_testing) == 0 && aws_backup_restore_testing_selection.this["EBS"].iam_role_arn == "arn:aws:iam::123456789012:role/BackupRestoreTestRole"
     error_message = "An explicit restore_testing_role_arn must be used as-is and no role created."
   }
 }
@@ -88,5 +88,110 @@ run "module_tags_applied" {
   assert {
     condition     = aws_backup_vault.this.tags["Owner"] == "test"
     error_message = "module-level tags must land on aws_backup_vault.this"
+  }
+}
+
+# The default keeps today's single EBS selection, with its existing name, so an
+# existing estate's selection moves in state (moved block) instead of being
+# replaced.
+run "default_ebs_selection_keeps_its_name" {
+  command = plan
+
+  assert {
+    condition = (
+      toset(keys(aws_backup_restore_testing_selection.this)) == toset(["EBS"]) &&
+      aws_backup_restore_testing_selection.this["EBS"].name == "ebs_restore_test" &&
+      aws_backup_restore_testing_selection.this["EBS"].protected_resource_conditions[0].string_equals[0].key == "aws:ResourceTag/backup"
+    )
+    error_message = "the default selection must stay the tag-selected EBS selection named ebs_restore_test."
+  }
+
+  assert {
+    condition     = length(aws_backup_vault_policy.copy_in) == 0
+    error_message = "no vault access policy unless allow_copy_from_organization_id is set."
+  }
+}
+
+run "copy_in_policy_and_restore_types" {
+  command = plan
+
+  variables {
+    vault_name                      = "org-backup-copy-vault"
+    allow_copy_from_organization_id = "o-abc1234567"
+    restore_testing_resource_types  = ["EBS", "Aurora", "RDS", "S3", "DynamoDB", "EFS"]
+    restore_testing_plan_name       = "org_restore_test_copy"
+    kms_key_arn                     = "arn:aws:kms:eu-west-2:444444444444:key/11111111-2222-3333-4444-555555555555"
+  }
+
+  assert {
+    condition     = aws_backup_vault.this.kms_key_arn == "arn:aws:kms:eu-west-2:444444444444:key/11111111-2222-3333-4444-555555555555"
+    error_message = "the vault must be encrypted with the caller's customer managed key."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_backup_vault_policy.copy_in[0].policy).Statement[0].Action == "backup:CopyIntoBackupVault" &&
+      jsondecode(aws_backup_vault_policy.copy_in[0].policy).Statement[0].Condition.StringEquals["aws:PrincipalOrgID"] == "o-abc1234567"
+    )
+    error_message = "the copy vault must accept CopyIntoBackupVault from the organization only."
+  }
+
+  assert {
+    condition     = toset(keys(aws_backup_restore_testing_selection.this)) == toset(["EBS", "Aurora", "RDS", "S3", "DynamoDB", "EFS"])
+    error_message = "restore testing must select every listed resource type, not only EBS."
+  }
+
+  assert {
+    condition     = aws_backup_restore_testing_selection.this["Aurora"].protected_resource_arns == toset(["*"]) && aws_backup_restore_testing_selection.this["Aurora"].name == "ebs_restore_test_aurora"
+    error_message = "non-EBS restore selections must select all protected resources of the type in the vault."
+  }
+}
+
+run "no_restore_testing_when_disabled" {
+  command = plan
+
+  variables {
+    create_restore_testing = false
+  }
+
+  assert {
+    condition     = length(aws_backup_restore_testing_plan.this) == 0 && length(aws_backup_restore_testing_selection.this) == 0 && length(aws_iam_role.restore_testing) == 0
+    error_message = "create_restore_testing = false must drop the plan, the selections and the created role."
+  }
+
+  assert {
+    condition     = output.restore_testing_plan_arn == null && output.restore_testing_role_arn == null
+    error_message = "with restore testing off the restore-testing outputs must be null."
+  }
+}
+
+# Failed backup, copy and restore jobs (restore-testing restores included) and
+# changed recovery points publish to the caller's SNS topic.
+run "vault_notifications_for_failed_jobs" {
+  command = plan
+
+  variables {
+    notification_topic_arn = "arn:aws:sns:eu-west-2:444444444444:backup-events"
+  }
+
+  assert {
+    condition = toset(aws_backup_vault_notifications.this[0].backup_vault_events) == toset([
+      "BACKUP_JOB_FAILED", "COPY_JOB_FAILED", "RESTORE_JOB_FAILED", "S3_BACKUP_OBJECT_FAILED", "S3_RESTORE_OBJECT_FAILED", "RECOVERY_POINT_MODIFIED",
+    ])
+    error_message = "the vault must publish failed backup, copy and restore events (restore testing results included)."
+  }
+
+  assert {
+    condition     = aws_backup_vault_notifications.this[0].sns_topic_arn == "arn:aws:sns:eu-west-2:444444444444:backup-events" && output.notification_topic_arn == "arn:aws:sns:eu-west-2:444444444444:backup-events"
+    error_message = "the notifications must go to notification_topic_arn."
+  }
+}
+
+run "no_vault_notifications_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_backup_vault_notifications.this) == 0 && output.notification_topic_arn == null
+    error_message = "without notification_topic_arn the vault must publish no notifications."
   }
 }

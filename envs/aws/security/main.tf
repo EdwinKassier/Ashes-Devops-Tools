@@ -15,7 +15,11 @@ locals {
   # output existed (N-1, not yet re-applied) exposes the same keys as
   # individual outputs, so the read falls back to them; that fallback goes at
   # v1.0 with the individual outputs (UPGRADING.md).
-  org_remote = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  # Re-audit 7 CMP-1/CMP-2: regulated account keys from the aws-organization
+  # remote state (a workspace variable cannot change it), ORed with this
+  # root's config file for the log-archive lock mode.
+  contract_regulated_account_keys = try(tolist(local.org_remote.regulated_account_keys), [])
+  org_remote                      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
   # The organization contract, whichever source supplied it, as one type (the
   # variable's). Fields this root needs are read strictly (a missing key fails
   # the plan); the rest default.
@@ -87,11 +91,74 @@ module "aws_security" {
 }
 
 # The dedicated least-privilege aws-security management role (tfc-management-
-# roles) has no IAM write and is denied the break-glass role: creating it here
-# only works when this workspace applies as the phase-0 management role.
+# roles) has no IAM write and is denied the break-glass role. The phase-0 roles
+# tfc-mgmt-plan and tfc-mgmt-apply are denied editing OrganizationBreakGlass
+# too (deny-self-tampering in templates/aws/bootstrap/phase0-management.yaml),
+# so that role changes only through a human-run update of the phase-0 stack.
+# create_break_glass can only create a role with another name, applied as
+# tfc-mgmt-apply, which leaves a second break-glass role to keep in step.
 check "break_glass_created_by_phase0_stack" {
   assert {
     condition     = !coalesce(try(local.aws.create_break_glass, null), false)
-    error_message = "aws_overrides.create_break_glass = true: the dedicated tfc-mgmt-aws-security role cannot create or edit the management break-glass role (AccessDenied). Use the OrganizationBreakGlass role from templates/aws/bootstrap/phase0-management.yaml and keep aws_overrides.create_break_glass unset (false), or apply this workspace as the phase-0 role."
+    error_message = "aws_overrides.create_break_glass = true: the dedicated tfc-mgmt-aws-security role cannot create or edit the management break-glass role (AccessDenied). Use the OrganizationBreakGlass role from templates/aws/bootstrap/phase0-management.yaml and keep aws_overrides.create_break_glass unset (false). That role changes only through a human-run update of the phase-0 stack: the phase-0 roles are denied editing it too."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# CMP-6: security notifications must reach a real, staffed address.
+# ---------------------------------------------------------------------------
+
+locals {
+  # The host of each subscriber endpoint: the domain of an email address, the
+  # host of a URL, "" for an ARN or a phone number.
+  subscriber_hosts = {
+    for k, s in local.notification_subscribers : k => lower(try(
+      regex("@([^@]+)$", s.endpoint)[0],
+      regex("^[A-Za-z][A-Za-z0-9+.-]*://([^/:?#@]+)", s.endpoint)[0],
+      ""
+    ))
+  }
+  # Subscribers on a reserved, never-delivered domain (RFC 2606 / RFC 6761):
+  # example.com/.net/.org and their subdomains, *.example, *.invalid,
+  # *.localhost, *.test.
+  placeholder_subscribers = sort([
+    for k, h in local.subscriber_hosts : k
+    if can(regex("(^|\\.)(example\\.(com|net|org)|example|invalid|localhost|test)$", h))
+  ])
+  # Production: org.profile = production, or any aws.workload_environments entry
+  # with is_production: true.
+  security_contact_required = local.profile == "production" || length(local.cfg.workload_production) > 0
+}
+
+resource "terraform_data" "security_contact_guard" {
+  input = sort(keys(local.notification_subscribers))
+
+  lifecycle {
+    precondition {
+      condition     = !local.security_contact_required || (length(local.notification_subscribers) > 0 && length(local.placeholder_subscribers) == 0)
+      error_message = "Production security notifications have no real subscriber${length(local.placeholder_subscribers) > 0 ? " (placeholder domain: ${join(", ", local.placeholder_subscribers)})" : ""}. Set notifications.emails in config/landing-zone.yaml, or aws_overrides.notification_subscribers. Example, .invalid, .localhost and .test domains are rejected. Production means org.profile = production or an aws.workload_environments entry with is_production: true."
+    }
+  }
+}
+
+# Non-production: warn only.
+check "security_contact_set" {
+  assert {
+    condition     = length(local.notification_subscribers) > 0 && length(local.placeholder_subscribers) == 0
+    error_message = "No real security notification subscriber is set (notifications.emails or aws_overrides.notification_subscribers): GuardDuty, Security Hub and break-glass alerts will fire without notifying anyone."
+  }
+}
+
+# Re-audit 7 review: the variable validation sees only this root's config
+# file; this precondition also follows the aws-organization contract.
+resource "terraform_data" "regulated_log_archive_lock" {
+  count = length(local.contract_regulated_account_keys) > 0 ? 1 : 0
+  input = coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE")
+
+  lifecycle {
+    precondition {
+      condition     = coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE") == "COMPLIANCE"
+      error_message = "The aws-organization contract marks ${join(", ", local.contract_regulated_account_keys)} regulated, so aws_overrides.log_archive_object_lock_mode must stay COMPLIANCE."
+    }
   }
 }

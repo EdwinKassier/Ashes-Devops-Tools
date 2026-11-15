@@ -146,10 +146,11 @@ module "example" {
 The following resources are created:
 
 
-- resource.google_folder_iam_member.network_sa_env_viewer (modules/gcp/stages/projects/main.tf#L138)
-- resource.google_folder_iam_member.network_sa_folder_roles (modules/gcp/stages/projects/main.tf#L130)
-- resource.google_folder_iam_member.workload_sa_folder_roles (modules/gcp/stages/projects/main.tf#L121)
-- resource.google_monitoring_monitored_project.projects (modules/gcp/stages/projects/main.tf#L66)
+- resource.google_folder_iam_member.network_sa_env_viewer (modules/gcp/stages/projects/main.tf#L155)
+- resource.google_folder_iam_member.network_sa_folder_roles (modules/gcp/stages/projects/main.tf#L147)
+- resource.google_folder_iam_member.workload_dns_peer (modules/gcp/stages/projects/main.tf#L163)
+- resource.google_folder_iam_member.workload_sa_folder_roles (modules/gcp/stages/projects/main.tf#L138)
+- resource.google_monitoring_monitored_project.projects (modules/gcp/stages/projects/main.tf#L70)
 
 
 ## Inputs
@@ -158,8 +159,8 @@ The following resources are created:
 |------|-------------|------|---------|:--------:|
 | <a name="input_admin_project_id"></a> [admin\_project\_id](#input\_admin\_project\_id) | Project ID of the bootstrap admin project used as the metrics scope for monitoring | `string` | n/a | yes |
 | <a name="input_default_billing_account"></a> [default\_billing\_account](#input\_default\_billing\_account) | Default GCP billing account ID in format XXXXXX-XXXXXX-XXXXXX, used when a project does not specify its own billing account | `string` | n/a | yes |
-| <a name="input_environments"></a> [environments](#input\_environments) | Map of environment definitions keyed by environment name. Each environment must have at least one project. | <pre>map(object({<br/>    display_name = string<br/>    description  = string<br/>    projects = map(object({<br/>      name            = string<br/>      billing_account = optional(string)<br/>      labels          = map(string)<br/>    }))<br/>  }))</pre> | n/a | yes |
-| <a name="input_folders"></a> [folders](#input\_folders) | Map of folder objects keyed by environment name, as output by the organization stage | <pre>map(object({<br/>    id           = string<br/>    name         = string<br/>    display_name = string<br/>  }))</pre> | n/a | yes |
+| <a name="input_environments"></a> [environments](#input\_environments) | Map of environment definitions keyed by environment name. Each environment must have at least one project. | <pre>map(object({<br/>    display_name = string<br/>    description  = string<br/>    projects = map(object({<br/>      name            = string<br/>      billing_account = optional(string)<br/>      labels          = map(string)<br/>      # Resource-manager tag bindings on this project: static key => tag<br/>      # value ID (tagValues/<n>). gcp-projects binds data-classification to<br/>      # each environment host project.<br/>      tag_bindings = optional(map(string), {})<br/>    }))<br/>  }))</pre> | n/a | yes |
+| <a name="input_folders"></a> [folders](#input\_folders) | Map of folder objects keyed by environment name, as output by the organization stage: id is the bare folder number, name the resource name folders/<number>. Projects are created under name, and the folder grants are made on name. | <pre>map(object({<br/>    id           = string<br/>    name         = string<br/>    display_name = string<br/>  }))</pre> | n/a | yes |
 | <a name="input_organization_name"></a> [organization\_name](#input\_organization\_name) | Organization name applied as a label on all created projects | `string` | n/a | yes |
 | <a name="input_project_prefix"></a> [project\_prefix](#input\_project\_prefix) | Short prefix applied to all project IDs for global uniqueness (e.g., 'my-org') | `string` | n/a | yes |
 | <a name="input_suffix"></a> [suffix](#input\_suffix) | Random suffix from bootstrap module appended to project IDs for uniqueness | `string` | n/a | yes |
@@ -167,7 +168,8 @@ The following resources are created:
 | <a name="input_network_folder_key"></a> [network\_folder\_key](#input\_network\_folder\_key) | Key in var.folders of the folder holding the hub/DNS projects (network-hub SAs are granted roles there). | `string` | `"shared"` | no |
 | <a name="input_network_folder_roles"></a> [network\_folder\_roles](#input\_network\_folder\_roles) | Roles granted to the network-hub SAs on the shared/network folder ({ plan, apply }); read from the gcp-bootstrap output network\_folder\_roles. | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [],<br/>  "plan": []<br/>}</pre> | no |
 | <a name="input_network_service_accounts"></a> [network\_service\_accounts](#input\_network\_service\_accounts) | The network-hub stage { plan, apply } SA emails (gcp-bootstrap output stage\_service\_accounts["network-hub"]). Granted var.network\_folder\_roles on the var.network\_folder\_key folder. Null = no grants. | <pre>object({<br/>    plan  = string<br/>    apply = string<br/>  })</pre> | `null` | no |
-| <a name="input_non_delegable_workload_folder_roles"></a> [non\_delegable\_workload\_folder\_roles](#input\_non\_delegable\_workload\_folder\_roles) | Workload folder roles this stage never grants: gcp-organization grants them to the workload SAs directly, because a delegate that may grant one of them could grant it to itself. Keep in step with the gcp-organization input of the same name. | `list(string)` | <pre>[<br/>  "roles/resourcemanager.projectIamAdmin",<br/>  "roles/iam.serviceAccountAdmin",<br/>  "roles/iam.serviceAccountKeyAdmin",<br/>  "roles/iam.serviceAccountTokenCreator",<br/>  "roles/iam.workloadIdentityPoolAdmin"<br/>]</pre> | no |
+| <a name="input_non_delegable_workload_folder_roles"></a> [non\_delegable\_workload\_folder\_roles](#input\_non\_delegable\_workload\_folder\_roles) | Workload folder roles this stage never grants: gcp-organization grants them to the workload SAs directly, because a delegate that may grant one of them could grant it to itself. Keep in step with the gcp-organization input of the same name. | `list(string)` | <pre>[<br/>  "roles/resourcemanager.projectIamAdmin",<br/>  "roles/iam.serviceAccountAdmin",<br/>  "roles/iam.serviceAccountKeyAdmin",<br/>  "roles/iam.serviceAccountTokenCreator",<br/>  "roles/iam.workloadIdentityPoolAdmin",<br/>  "roles/iam.serviceAccountUser",<br/>  "roles/secretmanager.admin",<br/>  "roles/cloudkms.admin",<br/>  "roles/storage.admin",<br/>  "roles/run.admin",<br/>  "roles/bigquery.admin",<br/>  "roles/pubsub.admin",<br/>  "roles/artifactregistry.admin",<br/>  "roles/backupdr.admin",<br/>  "roles/resourcemanager.projectCreator"<br/>]</pre> | no |
+| <a name="input_owner"></a> [owner](#input\_owner) | Value of the owner label on every project (GCP label form: lowercase letters, digits, '\_' and '-', at most 63 characters). The gcp-projects root passes org.owner. | `string` | `"platform-team"` | no |
 | <a name="input_project_services"></a> [project\_services](#input\_project\_services) | List of GCP APIs to enable on every created project | `list(string)` | <pre>[<br/>  "cloudresourcemanager.googleapis.com",<br/>  "compute.googleapis.com",<br/>  "serviceusage.googleapis.com",<br/>  "iam.googleapis.com",<br/>  "cloudbilling.googleapis.com",<br/>  "monitoring.googleapis.com"<br/>]</pre> | no |
 | <a name="input_workload_folder_roles"></a> [workload\_folder\_roles](#input\_workload\_folder\_roles) | Roles granted to each workload SA on its environment folder ({ plan, apply }). Must match the gcp-bootstrap delegation allow-list (read it from the gcp-bootstrap output workload\_folder\_roles). | <pre>object({<br/>    plan  = list(string)<br/>    apply = list(string)<br/>  })</pre> | <pre>{<br/>  "apply": [],<br/>  "plan": []<br/>}</pre> | no |
 | <a name="input_workload_service_accounts"></a> [workload\_service\_accounts](#input\_workload\_service\_accounts) | Map of environment key -> { plan, apply } SA emails (gcp-bootstrap output workload\_service\_accounts). Each pair is granted var.workload\_folder\_roles on its OWN environment folder (var.folders[<env>]). Default {} = no grants. | <pre>map(object({<br/>    plan  = string<br/>    apply = string<br/>  }))</pre> | `{}` | no |
@@ -176,8 +178,12 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
-| <a name="output_automation_folder_grants"></a> [automation\_folder\_grants](#output\_automation\_folder\_grants) | Folder IAM grants made to the workload / network-hub automation SAs, keyed "<env>\|<phase>\|<role>" (workload), "network\|<phase>\|<role>" (network-hub on the shared folder) and "network-env\|<env>\|<phase>" (network-hub compute.viewer on each environment folder). |
+| <a name="output_automation_folder_grants"></a> [automation\_folder\_grants](#output\_automation\_folder\_grants) | Folder IAM grants made to the workload / network-hub automation SAs, keyed "<env>\|<phase>\|<role>" (workload), "network\|<phase>\|<role>" (network-hub on the shared folder), "network-env\|<env>\|<phase>" (network-hub compute.viewer on each environment folder) and "workload-dns-peer\|<env>" (the workload apply SA's roles/dns.peer on the shared folder). |
 | <a name="output_project_ids"></a> [project\_ids](#output\_project\_ids) | Map of Project IDs |
 | <a name="output_project_numbers"></a> [project\_numbers](#output\_project\_numbers) | Map of Project Numbers |
 | <a name="output_projects"></a> [projects](#output\_projects) | Map of created projects, keyed "<env>-<project>": { id, project\_id, number, name, parent, labels, billing\_account }. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

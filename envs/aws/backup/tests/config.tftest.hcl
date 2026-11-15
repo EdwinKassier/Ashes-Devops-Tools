@@ -14,6 +14,9 @@ override_data {
   values = {
     outputs = {
       contract = {
+        # A real aws-organization contract always carries the organization ID;
+        # the production scaffold's central copy (decision D3) needs it.
+        organization_id = "o-abc1234567"
         ou_ids = {
           Workloads = "ou-abcd-workloads0"
         }
@@ -47,6 +50,11 @@ run "scaffold_aws_plans" {
     condition     = local.management_account_id == "123456789012"
     error_message = "aws.management_account_id from the config file must resolve into the root locals."
   }
+
+  assert {
+    condition     = local.enable_central_copy == true
+    error_message = "the production scaffold sets compliance.backup.copy_to_central_vault: true (decision D3), so the backup root must turn on the central copy."
+  }
 }
 
 run "scaffold_gcp_aws_plans" {
@@ -69,6 +77,11 @@ run "scaffold_gcp_aws_plans" {
   assert {
     condition     = local.management_account_id == "123456789012"
     error_message = "aws.management_account_id from the config file must resolve into the root locals."
+  }
+
+  assert {
+    condition     = local.enable_central_copy == true
+    error_message = "the production scaffold sets compliance.backup.copy_to_central_vault: true (decision D3), so the backup root must turn on the central copy."
   }
 }
 
@@ -93,4 +106,97 @@ run "scaffold_gcp_aws_saas_plans" {
     condition     = local.management_account_id == "123456789012"
     error_message = "aws.management_account_id from the config file must resolve into the root locals."
   }
+
+  assert {
+    condition     = local.enable_central_copy == true
+    error_message = "the production scaffold sets compliance.backup.copy_to_central_vault: true (decision D3), so the backup root must turn on the central copy."
+  }
+}
+
+run "compliance_backup_section_turns_on_copy" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.enable_central_copy == true && local.dr_region == "eu-west-1" && local.copy_retention_days == 400
+    error_message = "compliance.backup.* must feed the backup root."
+  }
+
+  assert {
+    condition     = module.aws_backup.copy_destination_vault_arns == ["arn:aws:backup:eu-west-2:044444444444:backup-vault:org-backup-copy-vault", "arn:aws:backup:eu-west-1:$account:backup-vault:org-backup-vault-cmk"]
+    error_message = "the root must pass the backup account and the DR region to the stage."
+  }
+}
+
+# dr_region must be in aws.allowed_regions (the region SCP of aws-organization
+# denies any other region) and differ from the home region. The root checks it
+# with the same fallback as aws-organization: ["eu-west-2"] when the key is unset.
+run "dr_region_outside_allowed_regions_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    dr_region                = "ap-south-1"
+  }
+
+  expect_failures = [var.dr_region]
+}
+
+run "dr_region_equal_to_home_region_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+    dr_region                = "eu-west-2"
+  }
+
+  expect_failures = [var.dr_region]
+}
+
+run "dr_region_without_allowed_regions_uses_default_list" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+    dr_region                = "eu-central-1"
+  }
+
+  expect_failures = [var.dr_region]
+}
+
+run "compliance_backup_absent_keeps_copy_off" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.yaml"
+  }
+
+  assert {
+    condition     = local.enable_central_copy == false && local.dr_region == null && module.aws_backup.copy_destination_vault_arns == []
+    error_message = "without compliance.backup the root must not copy."
+  }
+}
+
+# The copy vault policy admits copies from the organization ID: a contract
+# without organization_id must fail the plan, naming the key, when central copy
+# is on.
+run "central_copy_needs_organization_id" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    landing_zone_name        = "acme"
+    management_account_id    = "111111111111"
+    enable_central_copy      = true
+    organization_contract = {
+      ou_ids            = { Workloads = "ou-abcd-workloads0" }
+      account_ids       = { backup = "444444444444" }
+      account_role_arns = { backup = "arn:aws:iam::444444444444:role/cross-account" }
+    }
+  }
+
+  expect_failures = [terraform_data.backup_copy_guard]
 }

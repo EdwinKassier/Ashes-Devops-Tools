@@ -10,6 +10,7 @@ org:
 gcp:
   environments:
     dev:
+      is_production: false
       cidr_block: 10.10.0.0/16
       budget_monthly_limit: 100
       labels:

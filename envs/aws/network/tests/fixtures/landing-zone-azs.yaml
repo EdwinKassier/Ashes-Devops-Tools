@@ -1,0 +1,18 @@
+# Test fixture: aws.network.availability_zone_ids for the aws-network root
+# (availability_zones.tftest.hcl).
+version: 1
+org:
+  name: azco
+  regions:
+    aws: eu-west-2
+aws:
+  log_archive_bucket_name: azco-org-log-archive
+  enabled_regions: [eu-west-2]
+  network:
+    availability_zone_ids: [euw2-az1, euw2-az3]
+  contracts:
+    organization:
+      organization_id: o-azazazaz00
+      management_account_id: "012345678901"
+      account_ids:
+        network: "066666666666"

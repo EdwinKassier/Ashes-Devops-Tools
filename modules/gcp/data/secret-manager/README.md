@@ -121,3 +121,7 @@ module "app_secrets" {
   # Values set out of band in production; omit secret_values entirely.
 }
 ```
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

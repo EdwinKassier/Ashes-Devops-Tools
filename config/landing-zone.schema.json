@@ -45,7 +45,8 @@
               "type": "string"
             },
             "aws": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$"
             }
           },
           "additionalProperties": false
@@ -85,6 +86,26 @@
                 "standard",
                 "premium"
               ]
+            },
+            "policy_sets_waiver": {
+              "type": "object",
+              "description": "Let an estate with a production environment (any gcp.environments or aws.workload_environments entry with is_production: true) plan tfc-admin while the OPA policy sets are off (no vcs_repo, a plan below standard, or enable_policy_sets = false) until expires. reason: why, for the risk register. expires: the last day it waives, YYYY-MM-DD (UTC), quoted; after it the tfc-admin plan fails again.",
+              "required": [
+                "reason",
+                "expires"
+              ],
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "pattern": "\\S"
+                },
+                "expires": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                }
+              },
+              "additionalProperties": false
             },
             "gcp_workloads_project": {
               "type": "string"
@@ -160,7 +181,60 @@
           "format": "date-time"
         },
         "enable_audit_bucket_lock": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "WORM-lock the org audit bucket's retention policy (gcp-organization). IRREVERSIBLE. Required, with logging_project_id, when any gcp.environments entry is compliance_class: regulated (unless audit_store_waiver)."
+        },
+        "enable_network_log_export": {
+          "type": "boolean",
+          "description": "Copy firewall rule logs, Cloud NAT logs, Application Load Balancer request logs (with the Cloud Armor verdict), Secure Web Proxy request logs and Cloud NGFW threat logs from every project into the org audit bucket through an aggregated org sink, org-network-logs (gcp-organization). They then have the audit bucket's retention (compliance.audit_log_retention_days), lifecycle, lock and CMEK. Unset = on when any gcp.environments entry is compliance_class: regulated or compliance.frameworks lists a framework, else off. Storage cost grows with traffic (docs/compliance/control-matrix.md LOG-06)."
+        },
+        "network_log_writer_granted": {
+          "type": "boolean",
+          "description": "Set true only after a break-glass grant of roles/storage.objectCreator on the audit bucket to the org-network-logs sink's writer identity (gcp-organization). Needed only when org-audit-sink was created before 2023-05-22 and keeps a legacy dedicated identity, so the network log sink's identity check fails. Default false."
+        },
+        "logging_project_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$",
+          "description": "Dedicated logging project for the org audit bucket, BigQuery audit dataset, audit CMEK keyring and control-plane alerts (gcp-organization). Created outside Terraform, directly under the organization node, and not owned by the automation identities. Decide before the first apply: the audit KMS keys cannot be deleted or moved. Requires logging_project_number."
+        },
+        "logging_project_number": {
+          "type": "string",
+          "pattern": "^[0-9]+$",
+          "description": "Numeric project number of logging_project_id (quote it in YAML)."
+        },
+        "audit_key_protection_level": {
+          "type": "string",
+          "enum": [
+            "SOFTWARE",
+            "HSM"
+          ],
+          "description": "Cloud KMS protection level of the audit CMEK keys (gcp-organization). Default SOFTWARE. HSM (Cloud HSM) costs more per key version. It cannot change on existing keys (ForceNew; the plan fails): set it for a new estate or a new logging project only."
+        },
+        "audit_store_waiver": {
+          "type": "object",
+          "description": "Let a regulated estate (any gcp.environments entry with compliance_class: regulated) plan without logging_project_id and enable_audit_bucket_lock until expires (gcp-organization). reason: why, for the risk register. expires: the last day it waives, YYYY-MM-DD (UTC), quoted; after it the plan fails again.",
+          "required": [
+            "reason",
+            "expires"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            "expires": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "audit_store_waived": {
+          "description": "REMOVED: use gcp.audit_store_waiver { reason, expires }. Any value fails validation and the gcp-organization plan.",
+          "enum": [
+            "REMOVED: replace gcp.audit_store_waived with gcp.audit_store_waiver { reason, expires }"
+          ]
         },
         "allowed_regions": {
           "type": "array",
@@ -176,6 +250,21 @@
             },
             "dns_hub_cidr_block": {
               "type": "string"
+            },
+            "zones": {
+              "type": "array",
+              "description": "Zones of the hub VPC and the DNS anchor VPC (gcp-network-hub), in subnet order: subnet i of each tier takes the i-th CIDR, so the order fixes the CIDRs. Required when any gcp.environments entry is_production. Unset = the zones GCP returns for the region, which can change and then replaces subnets.",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+              }
+            },
+            "internal_domain": {
+              "type": "string",
+              "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+              "description": "Name of the private root DNS zone served by gcp-network-hub, for example corp.example.com (lowercase, at least two labels, no trailing dot). Default internal.local. The zone name is immutable: changing it on an existing estate replaces the zone and drops its records (UPGRADING.md)."
             },
             "additional_regions": {
               "type": "object",
@@ -233,6 +322,21 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "private_service_connect": {
+              "type": "object",
+              "description": "Private Service Connect endpoint for Google APIs on the hub VPC (gcp-network-hub). name: Google's rule, 1-20 lower-case letters and numbers, starting with a letter (default: the VPC name without non-alphanumerics, first 17 characters, plus psc). address: the endpoint's internal IPv4 address, outside every subnet range of this VPC and of the networks peered with it (default: the second-to-last address of the VPC CIDR).",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]{0,19}$"
+                },
+                "address": {
+                  "type": "string",
+                  "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$"
+                }
+              },
+              "additionalProperties": false
             },
             "vpc_sc_access_policy": {
               "type": [
@@ -321,6 +425,16 @@
                     ],
                     "additionalProperties": false
                   }
+                },
+                "advertised_groups": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ALL_SUBNETS"
+                    ]
+                  },
+                  "description": "CUSTOM mode only: ALL_SUBNETS adds every hub subnet next to advertised_ip_ranges."
                 }
               },
               "additionalProperties": false
@@ -410,6 +524,44 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "hybrid_dns": {
+              "type": "object",
+              "description": "Hybrid DNS on the hub VPC, used only with the VPN or an Interconnect. enable_inbound_forwarding (default true) adds an inbound DNS server policy; forward_zones forwards on-premises domains to on-premises resolvers.",
+              "properties": {
+                "enable_inbound_forwarding": {
+                  "type": "boolean"
+                },
+                "forward_zones": {
+                  "type": "object",
+                  "propertyNames": {
+                    "pattern": "^[a-z]([-a-z0-9]{0,57}[a-z0-9])?$"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "dns_name": {
+                        "type": "string",
+                        "pattern": "\\.$"
+                      },
+                      "target_ips": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "string",
+                          "pattern": "^(\\d{1,3}\\.){3}\\d{1,3}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "dns_name",
+                      "target_ips"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -421,6 +573,9 @@
           },
           "additionalProperties": {
             "type": "object",
+            "required": [
+              "is_production"
+            ],
             "properties": {
               "display_name": {
                 "type": "string"
@@ -436,6 +591,16 @@
               },
               "is_production": {
                 "type": "boolean"
+              },
+              "zones": {
+                "type": "array",
+                "description": "Zones of this environment's spoke VPC (gcp-workload-<env>), in subnet order: subnet i of each tier takes the i-th CIDR, so the order fixes the CIDRs. Required when is_production. Unset = the zones GCP returns for the region, which can change and then replaces subnets.",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z]+-[a-z]+[0-9]+-[a-z]$"
+                }
               },
               "network_connectivity": {
                 "type": "string",
@@ -501,6 +666,21 @@
                   "additionalProperties": false
                 }
               },
+              "private_service_connect": {
+                "type": "object",
+                "description": "Private Service Connect endpoint for Google APIs on this environment's spoke VPC (gcp-workload-<env>). name: Google's rule, 1-20 lower-case letters and numbers, starting with a letter (default: the VPC name without non-alphanumerics, first 17 characters, plus psc). address: the endpoint's internal IPv4 address, outside every subnet range of this VPC and of the networks peered with it (default: the second-to-last address of the VPC CIDR).",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]{0,19}$"
+                  },
+                  "address": {
+                    "type": "string",
+                    "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$"
+                  }
+                },
+                "additionalProperties": false
+              },
               "labels": {
                 "type": "object",
                 "additionalProperties": {
@@ -556,6 +736,10 @@
                     "min_instances": {
                       "type": "number"
                     },
+                    "health_check_path": {
+                      "type": "string",
+                      "pattern": "^(/.*)?$"
+                    },
                     "max_instances": {
                       "type": "number"
                     },
@@ -594,6 +778,12 @@
                     },
                     "vpc_egress": {
                       "type": "string"
+                    },
+                    "no_proxy": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     },
                     "enable_binary_authorization": {
                       "type": "boolean"
@@ -677,6 +867,17 @@
                         "enable_point_in_time_recovery": {
                           "type": "boolean"
                         },
+                        "backup_location": {
+                          "type": "string",
+                          "pattern": "^([a-z]+-[a-z]+[0-9]+|us|eu|asia)$",
+                          "description": "Location of the Cloud SQL automated backups: a region (e.g. europe-west2) or a multi-region (us, eu, asia). Unset = the instance region."
+                        },
+                        "transaction_log_retention_days": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 35,
+                          "description": "Days of transaction (WAL) logs kept for point-in-time recovery: 1 to 7 on ENTERPRISE (the default edition), 1 to 35 with edition: ENTERPRISE_PLUS. Unset = 7."
+                        },
                         "encryption_key_name": {
                           "type": "string"
                         },
@@ -684,7 +885,26 @@
                           "type": "boolean"
                         }
                       },
-                      "additionalProperties": false
+                      "additionalProperties": false,
+                      "if": {
+                        "not": {
+                          "properties": {
+                            "edition": {
+                              "const": "ENTERPRISE_PLUS"
+                            }
+                          },
+                          "required": [
+                            "edition"
+                          ]
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "transaction_log_retention_days": {
+                            "maximum": 7
+                          }
+                        }
+                      }
                     },
                     "github": {
                       "type": "object",
@@ -859,9 +1079,69 @@
               "egress_proxy": {
                 "type": "boolean",
                 "description": "Send the environment's private-tier egress through the hub Secure Web Proxy (preview). Needs gcp-network-hub secure_web_proxy."
+              },
+              "compliance_class": {
+                "type": "string",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or an unexpired gcp.audit_store_waiver is set. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), Cloud Armor and its OWASP rules are on, flow-log sampling is 1, flow-log retention is at least 365 days and the Backup and DR vault (backup_vault) is on. A regulated environment must set is_production: true (CMP-1): it gets every production control.",
+                "enum": [
+                  "standard",
+                  "regulated"
+                ]
+              },
+              "backup_vault": {
+                "type": "object",
+                "description": "Backup and DR vault in the host project with a daily plan for every app-service database (gcp-workload-<env>, CMP-8). PREVIEW.",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Create the vault. Default: true for compliance_class: regulated (which refuses false), else false."
+                  },
+                  "enforced_retention_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3653,
+                    "description": "Minimum enforced retention in days (default 35). Every backup is immutable this long."
+                  },
+                  "lock_effective_time": {
+                    "type": "string",
+                    "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+                    "description": "IRREVERSIBLE. RFC 3339 UTC time after which nobody can lower the enforced retention. Absent = no lock."
+                  }
+                },
+                "additionalProperties": false
+              },
+              "data_classification": {
+                "type": "string",
+                "description": "Data sensitivity of the environment (default internal). gcp-projects binds the organization data-classification tag value of this name to the environment's host project and publishes its ID as environment_config.<env>.tag_value_ids.data_classification.",
+                "enum": [
+                  "public",
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ]
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "if": {
+              "properties": {
+                "compliance_class": {
+                  "const": "regulated"
+                }
+              },
+              "required": [
+                "compliance_class"
+              ]
+            },
+            "then": {
+              "properties": {
+                "is_production": {
+                  "const": true
+                }
+              },
+              "required": [
+                "is_production"
+              ]
+            }
           }
         },
         "bootstrap_image": {
@@ -1024,6 +1304,18 @@
                 },
                 "guardrail_owner_mode": {
                   "type": "string"
+                },
+                "organization_apply_grantable_roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "organization_admin_members": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
                 }
               },
               "additionalProperties": false
@@ -1094,6 +1386,11 @@
                 },
                 "egress_proxy_service_attachment": {
                   "type": "string"
+                },
+                "egress_proxy_port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
                 }
               },
               "additionalProperties": false
@@ -1110,19 +1407,48 @@
         "enabled": {
           "type": "boolean"
         },
+        "layers": {
+          "type": "array",
+          "description": "Optional AWS layer workspaces to create besides aws-organization and aws-security (tfc-admin), and whose OIDC trust bindings aws-organization creates. Absent = all four. Without network, aws-workload-<env> runs a standalone VPC unless aws.contracts.network is set.",
+          "items": {
+            "enum": [
+              "network",
+              "identity",
+              "shared-services",
+              "backup"
+            ]
+          },
+          "uniqueItems": true
+        },
         "management_account_id": {
           "type": "string"
+        },
+        "tagging": {
+          "type": "object",
+          "properties": {
+            "required_for": {
+              "type": "array",
+              "description": "Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL_SUPPORTED) for which the organization tag policy reports CostCenter, Environment, Owner and DataClassification as required (aws-organization). Absent or empty = no key is required. A workspace with TF_AWS_TAG_POLICY_COMPLIANCE=error then fails the plan on a listed resource that lacks a key.",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]+:[A-Za-z0-9_-]+$"
+              }
+            }
+          },
+          "additionalProperties": false
         },
         "allowed_regions": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$"
           }
         },
         "enabled_regions": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$"
           }
         },
         "guard_alert_emails": {
@@ -1138,6 +1464,14 @@
         "enable_config_recorder_scp": {
           "type": "boolean",
           "description": "aws-organization: deny-tamper DenyConfigRecorderChanges. Turn on only after the org-wide recorders replaced every legacy recorder (migration runbook, last step)."
+        },
+        "stackset_stack_writer_role_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+=,.@_/-]{3}[A-Za-z0-9+=,.@_/*-]{0,509}$"
+          },
+          "description": "aws-organization: member-account roles that write StackSet-* stacks for StackSets this repo does not own, exempt from the deny-tamper statement DenyStackSetStackTampering only. AWS Control Tower estates set [AWSControlTowerExecution]."
         },
         "enable_cloudtrail_delegated_admin": {
           "type": "boolean",
@@ -1216,12 +1550,25 @@
           "type": "object",
           "additionalProperties": {
             "type": "object",
+            "required": [
+              "is_production"
+            ],
             "properties": {
               "account_key": {
                 "type": "string"
               },
               "vpc_cidr": {
                 "type": "string"
+              },
+              "availability_zone_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z]+[0-9]+-az[0-9]+$"
+                },
+                "minItems": 1,
+                "maxItems": 3,
+                "description": "Availability zone IDs for this environment's spoke VPC, mapped to zone names in its workload account. Unset = aws.network.availability_zone_ids, else the region's first three available zones. Use it to pin a workload to the zones it already uses: see UPGRADING.md."
               },
               "is_production": {
                 "type": "boolean"
@@ -1359,6 +1706,9 @@
                         },
                         "skip_final_snapshot": {
                           "type": "boolean"
+                        },
+                        "enable_org_backup": {
+                          "type": "boolean"
                         }
                       },
                       "additionalProperties": false
@@ -1405,9 +1755,47 @@
                   },
                   "additionalProperties": false
                 }
+              },
+              "compliance_class": {
+                "type": "string",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). Any regulated entry hardens the shared aws-network hub: the Network Firewall is on and the egress gate fails closed on every profile, and aws.network.egress_alert_only_waived is refused. aws-security then fails the plan when the log-archive retention (which holds the VPC flow logs) is below 365 days. A regulated environment must set is_production: true (CMP-1): it gets every production control.",
+                "enum": [
+                  "standard",
+                  "regulated"
+                ]
+              },
+              "data_classification": {
+                "type": "string",
+                "description": "Data sensitivity of the environment (default internal). aws-workload-<env> writes it as the DataClassification tag through the provider default_tags; the organization tag policy allows only these four values.",
+                "enum": [
+                  "public",
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ]
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "if": {
+              "properties": {
+                "compliance_class": {
+                  "const": "regulated"
+                }
+              },
+              "required": [
+                "compliance_class"
+              ]
+            },
+            "then": {
+              "properties": {
+                "is_production": {
+                  "const": true
+                }
+              },
+              "required": [
+                "is_production"
+              ]
+            }
           }
         },
         "network": {
@@ -1426,6 +1814,25 @@
                 "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
               }
             },
+            "regional_additional_cidrs": {
+              "type": "object",
+              "description": "Region => extra CIDRs provisioned into that region's IPAM pool next to regional_cidrs (aws-network). Use when the first regional CIDR is full. Each must sit inside top_cidr and overlap no other pool CIDR; a workload vpc_cidr may sit in any pool CIDR of the home region. Default none.",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+                }
+              }
+            },
+            "ipam_share_ou_keys": {
+              "type": "array",
+              "description": "Keys of aws.contracts.organization.ou_ids (OU names) whose accounts may allocate from the regional IPAM pools (aws-network). Unset = the whole organization. Every account that allocates from a pool must sit in a listed OU, or it loses access to the pool for new VPCs; see UPGRADING.md.",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
             "inspection_cidr": {
               "type": "string",
               "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
@@ -1435,6 +1842,16 @@
               "type": "string",
               "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
               "description": "Egress VPC CIDR (aws-network). Default 10.65.0.0/16."
+            },
+            "availability_zone_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]+[0-9]+-az[0-9]+$"
+              },
+              "minItems": 1,
+              "maxItems": 3,
+              "description": "Availability zone IDs (aws ec2 describe-availability-zones), the same physical zones in every account. aws-network maps them to zone names in the network account, and every aws-workload-<env> without its own availability_zone_ids maps them in its own account, so the spokes land in the hub's physical zones. Unset = the region's first three available zones. Setting them on an existing estate can replace subnets: see UPGRADING.md."
             },
             "egress_domain_allowlist": {
               "type": "array",
@@ -1448,8 +1865,28 @@
                 "type": "string"
               }
             },
+            "suricata_rules": {
+              "type": "string",
+              "description": "Custom Suricata rules (STRICT_ORDER) for the hub Network Firewall, evaluated after the AWS-managed threat groups and before the internal pass group and the egress allowlist. Use them to drop a specific internal flow or to pass a non-HTTP/TLS external flow."
+            },
+            "internal_pass_cidrs": {
+              "type": "array",
+              "description": "Extra internal ranges outside aws.network.top_cidr that the hub Network Firewall passes in both directions, for example on-premises prefixes over Direct Connect. The VPN on-premises prefixes (aws.network.vpn.onprem_cidrs) are added automatically.",
+              "items": {
+                "type": "string"
+              }
+            },
             "egress_alert_only_waived": {
-              "type": "boolean"
+              "type": "boolean",
+              "description": "Waive the production egress gate (alert-only inspection). Refused when any aws.workload_environments entry is compliance_class: regulated."
+            },
+            "vpc_endpoint_policy_mode": {
+              "type": "string",
+              "description": "Policy of the hub interface endpoints (aws-network). org_principals (default): the caller must be in the organization. org_principals_and_resources: the resource must also belong to the organization (aws:ResourceOrgID), except on services whose resources are AWS-owned. PREVIEW: prove it in a sandbox first.",
+              "enum": [
+                "org_principals",
+                "org_principals_and_resources"
+              ]
             },
             "spoke_attachments": {
               "type": "object",
@@ -1468,6 +1905,10 @@
                   },
                   "accept": {
                     "type": "boolean"
+                  },
+                  "cidr": {
+                    "type": "string",
+                    "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
                   }
                 },
                 "required": [
@@ -1513,6 +1954,16 @@
                     "SecretsManager",
                     "Standard"
                   ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "resolver_endpoints": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Create the Route 53 Resolver inbound and outbound endpoints in the egress VPC (aws-network, about USD 365 per month). Unset = on only when vpn.enabled is true."
                 }
               },
               "additionalProperties": false
@@ -1617,6 +2068,11 @@
                 },
                 "ipam_pool_ids": {
                   "type": "object"
+                },
+                "resolver_profile_id": {
+                  "type": "string",
+                  "pattern": "^rp-[0-9a-z]+$",
+                  "description": "ID of the org Route 53 Profile (aws-network output contract.resolver_profile_id). Each aws-workload-<env> spoke VPC associates it. Unset = no association."
                 }
               },
               "additionalProperties": false
@@ -1685,6 +2141,13 @@
         "bridge_rotation": {
           "type": "integer",
           "minimum": 1
+        },
+        "allowed_regions": {
+          "description": "AWS region names where the saas root may process data (Supabase region, Vercel function region mapped to its AWS region). Absent = aws.allowed_regions; neither = no residency check.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "defaults": {
           "type": "object",
@@ -1787,6 +2250,60 @@
         },
         "hcp_email_user_ids": {
           "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "compliance": {
+      "type": "object",
+      "description": "Estate-wide compliance settings. Absent = today's behaviour.",
+      "properties": {
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "soc2",
+              "iso27001",
+              "nist_800_53",
+              "pci_dss",
+              "hipaa",
+              "dora",
+              "nis2",
+              "gdpr",
+              "fedramp_moderate"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "audit_log_retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 36500
+        },
+        "backup": {
+          "type": "object",
+          "properties": {
+            "copy_to_central_vault": {
+              "type": "boolean"
+            },
+            "copy_retention_days": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "dr_region": {
+              "type": "string",
+              "pattern": "^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "breach_notification_contacts": {
+          "type": "array",
+          "description": "Email addresses that must see the first signal of a breach (for example the data protection officer). aws-security adds one email subscriber each (notify-dpo-<i>) to the security-notifications topic; gcp-organization adds them to the control-plane alert channels. An explicit aws_overrides.notification_subscribers or gcp_overrides.alert_notification_emails replaces the config list, these addresses included.",
           "items": {
             "type": "string"
           }

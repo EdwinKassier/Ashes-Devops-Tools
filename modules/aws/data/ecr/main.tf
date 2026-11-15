@@ -71,6 +71,7 @@ resource "aws_ecr_repository_policy" "org" {
   for_each   = var.org_id != null ? var.repositories : {}
   repository = aws_ecr_repository.this[each.key].name
 
+  #trivy:ignore:AVD-AWS-0032 Principal "*" is bounded by the aws:PrincipalOrgID condition below, so only principals in this AWS organization can pull. Trivy does not evaluate conditions.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

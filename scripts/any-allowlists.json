@@ -1,0 +1,209 @@
+{
+  "_comment": "Read by scripts/check-any-allowlists.py. allowlists: one row per list in <owner>/allowed_keys.tf (allowed_keys.<variable>.<path>), checked against the attributes of <stage>/variables.tf <stage_variable> at <path> (or stage_path); root_only keys are consumed by the owner and not forwarded. exempt: type = any inputs without their own allowlist, each with the reason.",
+  "allowlists": [
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "additional_regions",
+      "path": "self",
+      "stage": "modules/gcp/stages/net-spoke",
+      "stage_variable": "additional_regions"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "additional_regions",
+      "path": "subnet_cidrs",
+      "stage": "modules/gcp/stages/net-spoke",
+      "stage_variable": "additional_regions"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "additional_regions",
+      "path": "secondary_ranges",
+      "stage": "modules/gcp/stages/net-spoke",
+      "stage_variable": "additional_regions"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "vm_backup_schedules",
+      "path": "self",
+      "stage": "modules/gcp/backup/backup-plan",
+      "stage_variable": "schedules"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "vm_backup_schedules",
+      "path": "daily_schedule",
+      "stage": "modules/gcp/backup/backup-plan",
+      "stage_variable": "schedules"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "vm_backup_schedules",
+      "path": "weekly_schedule",
+      "stage": "modules/gcp/backup/backup-plan",
+      "stage_variable": "schedules"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "vm_backup_schedules",
+      "path": "hourly_schedule",
+      "stage": "modules/gcp/backup/backup-plan",
+      "stage_variable": "schedules"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "vm_backup_schedules",
+      "path": "retention_policy",
+      "stage": "modules/gcp/backup/backup-plan",
+      "stage_variable": "schedules"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "vm_backup_schedules",
+      "path": "snapshot_properties",
+      "stage": "modules/gcp/backup/backup-plan",
+      "stage_variable": "schedules"
+    },
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "os_patch_deployments",
+      "path": "self",
+      "stage": "modules/gcp/ops/os-config",
+      "stage_variable": "patch_deployments"
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "self",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services",
+      "root_only": [
+        "service_team"
+      ]
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "artifact_registry",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services"
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "database",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services"
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "github",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services"
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "alerts",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services"
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "job",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services"
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "slo",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services"
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "pubsub",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services"
+    },
+    {
+      "owner": "modules/gcp/stages/environment",
+      "variable": "app_services",
+      "path": "secrets",
+      "stage": "modules/gcp/stages/app-services",
+      "stage_variable": "services"
+    },
+    {
+      "owner": "envs/aws/network",
+      "variable": "vpn",
+      "path": "self",
+      "stage": "modules/aws/stages/network-hub",
+      "stage_variable": "vpn"
+    },
+    {
+      "owner": "envs/gcp/network-hub",
+      "variable": "vpn",
+      "path": "self",
+      "stage": "modules/gcp/stages/network-hub",
+      "stage_variable": "vpn"
+    },
+    {
+      "owner": "envs/gcp/network-hub",
+      "variable": "vpn",
+      "path": "advertised_ip_ranges",
+      "stage": "modules/gcp/stages/network-hub",
+      "stage_variable": "vpn"
+    },
+    {
+      "owner": "envs/gcp/network-hub",
+      "variable": "interconnects",
+      "path": "self",
+      "stage": "modules/gcp/stages/network-hub",
+      "stage_variable": "interconnects"
+    },
+    {
+      "owner": "envs/gcp/network-hub",
+      "variable": "interconnects",
+      "path": "advertised_ip_ranges",
+      "stage": "modules/gcp/stages/network-hub",
+      "stage_variable": "interconnects"
+    },
+    {
+      "owner": "envs/gcp/network-hub",
+      "variable": "hub_additional_regions",
+      "path": "self",
+      "stage": "modules/gcp/stages/network-hub",
+      "stage_variable": "hub_additional_regions"
+    },
+    {
+      "owner": "envs/gcp/network-hub",
+      "variable": "hub_additional_regions",
+      "path": "subnet_cidrs",
+      "stage": "modules/gcp/stages/network-hub",
+      "stage_variable": "hub_additional_regions"
+    },
+    {
+      "owner": "envs/gcp/network-hub",
+      "variable": "hub_additional_regions",
+      "path": "secondary_ranges",
+      "stage": "modules/gcp/stages/network-hub",
+      "stage_variable": "hub_additional_regions"
+    }
+  ],
+  "exempt": [
+    {
+      "owner": "envs/gcp/workload",
+      "variable": "app_services",
+      "reason": "Forwarded unchanged (variable or config file) to modules/gcp/stages/environment app_services, whose validation rejects keys outside allowed_keys.app_services (the rows above)."
+    },
+    {
+      "owner": "modules/aws/ops/cloudwatch",
+      "variable": "dashboard_widgets",
+      "reason": "CloudWatch dashboard widgets differ in shape by widget type (text, metric, alarm, log), so no single object type fits; the list is passed to jsonencode() as the dashboard body and CloudWatch validates each widget."
+    }
+  ]
+}

@@ -89,3 +89,63 @@ locals {
 
   effective_vercel_shared_env_vars = concat(var.vercel_shared_env_vars, local.cross_cloud_env_vars)
 }
+
+# ── Data residency check (CMP-11) ─────────────────────────────────────────────
+#
+# saas.allowed_regions (else aws.allowed_regions) lists the AWS regions where
+# this stack may process data. Both vendors run on AWS:
+#   - Supabase region slugs are AWS region names
+#     (https://supabase.com/docs/guides/platform/regions), so they are compared
+#     as they are.
+#   - Vercel function region codes map to one AWS region each, from the
+#     "Region list" table at https://vercel.com/docs/regions. Keep this map, the
+#     stage's vercel_serverless_region list and the vercel/project module's
+#     serverless_function_region list in step.
+# A code with no entry here becomes "unmapped:<code>", which is never in an
+# allow list: when an allow list is set, an unmapped region fails the plan
+# (fail closed). With no allow list there is no check, as before.
+# Only the function region is checked. The Vercel CDN (points of presence,
+# edge cache) is global and is not governed by this check.
+locals {
+  vercel_to_aws_region = {
+    arn1 = "eu-north-1"
+    bom1 = "ap-south-1"
+    cdg1 = "eu-west-3"
+    cle1 = "us-east-2"
+    cpt1 = "af-south-1"
+    dub1 = "eu-west-1"
+    fra1 = "eu-central-1"
+    gru1 = "sa-east-1"
+    hkg1 = "ap-east-1"
+    hnd1 = "ap-northeast-1"
+    iad1 = "us-east-1"
+    icn1 = "ap-northeast-2"
+    kix1 = "ap-northeast-3"
+    lhr1 = "eu-west-2"
+    pdx1 = "us-west-2"
+    sfo1 = "us-west-1"
+    sin1 = "ap-southeast-1"
+    syd1 = "ap-southeast-2"
+    yul1 = "ca-central-1"
+  }
+
+  saas_allowed_regions = coalesce(local.cfg.saas_allowed_regions, local.cfg.aws_allowed_regions, [])
+  saas_regions_in_use = compact([
+    local.enable_supabase ? local.supabase_region : "",
+    local.enable_vercel ? lookup(local.vercel_to_aws_region, var.vercel_serverless_region, "unmapped:${var.vercel_serverless_region}") : "",
+  ])
+  saas_regions_outside_allowed = length(local.saas_allowed_regions) == 0 ? [] : distinct([
+    for r in local.saas_regions_in_use : r if !contains(local.saas_allowed_regions, r)
+  ])
+}
+
+resource "terraform_data" "saas_residency_guard" {
+  input = local.saas_regions_in_use
+
+  lifecycle {
+    precondition {
+      condition     = length(local.saas_regions_outside_allowed) == 0
+      error_message = "SaaS data would be processed outside the allowed regions (saas.allowed_regions, else aws.allowed_regions in config/landing-zone.yaml): ${join(", ", local.saas_regions_outside_allowed)}. Move supabase_region / vercel_serverless_region into the list, or add the region to saas.allowed_regions. An \"unmapped:<code>\" entry is a Vercel region this root cannot map to an AWS region; it fails closed."
+    }
+  }
+}

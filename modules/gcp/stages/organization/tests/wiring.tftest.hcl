@@ -38,7 +38,7 @@ variables {
 
 override_module {
   target  = module.organization
-  outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+  outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
 }
 
 run "org_cmek_feeds_audit_store_scc_and_billing" {
@@ -73,5 +73,43 @@ run "audit_cmek_in_logging_project" {
   assert {
     condition     = module.audit_logs.storage_bucket_name == "acme-logging-audit-logs"
     error_message = "the audit store must plan in the logging project with the audit CMEK."
+  }
+}
+
+# CMP-02: the network and edge log sink is off unless the root asks for it.
+run "network_log_export_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = module.audit_logs.network_log_sink == null && output.network_log_sink == null
+    error_message = "without gcp.enable_network_log_export the stage must plan no network log sink."
+  }
+}
+
+# On, it writes to the same audit bucket (here in the logging project). It
+# shares the org Logging service account, so organization-apply grants no new
+# role: with control-plane alerting off, logging.logWriter stays off the list
+# and an allow-list without it still plans.
+run "network_log_export_to_audit_store" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      logging_project_id            = "acme-logging"
+      logging_project_number        = "999999999999"
+      enable_network_log_export     = true
+      enable_control_plane_alerting = false
+    })
+    organization_apply_grantable_roles = ["roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter", "roles/storage.objectCreator"]
+  }
+
+  assert {
+    condition     = output.network_log_sink.destination == "storage.googleapis.com/acme-logging-audit-logs"
+    error_message = "the network log sink must write to the protected audit bucket in the logging project."
+  }
+
+  assert {
+    condition     = !contains(local.organization_apply_granted_roles, "roles/logging.logWriter") && length(local.organization_apply_missing_roles) == 0
+    error_message = "the network log sink must not add a role to organization-apply's grants."
   }
 }

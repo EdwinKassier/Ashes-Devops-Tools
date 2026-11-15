@@ -80,14 +80,24 @@ org:
     # gcp_workloads_project: landing-zone-gcp-workloads
     # aws_workloads_project: landing-zone-aws-workloads
     # Production workloads (gcp.environments[*].is_production,
-    # aws.workload_environments[*].is_production; unset = keys prod/production)
-    # get no speculative PR plans (tfc-admin disable_speculative_on_production).
+    # aws.workload_environments[*].is_production; is_production is required on
+    # every environment) get no speculative PR plans (tfc-admin disable_speculative_on_production).
     # HCP Terraform plan: free | essentials | standard | premium. With vcs_repo
     # set, standard and premium turn on the OPA policy sets by default
     # (policies/opa guardrails + the mandatory destroy_guard in
     # policies/opa-destructive); otherwise a tfc-admin check warns that
     # destructive changes are unguarded. Override: tfc-admin enable_policy_sets.
+    # With any production environment (is_production: true) and the policy
+    # sets off, the tfc-admin plan fails unless policy_sets_waiver is set.
+    # The scaffolder writes plan: standard for the production profile
+    # (--tfc-plan).
     # plan: standard
+    # Explicit, time-boxed waiver for a production estate without policy sets
+    # (for example on the free or essentials plan). reason: why, for the risk
+    # register. expires: the last day it waives, YYYY-MM-DD (UTC), quoted.
+    # policy_sets_waiver:
+    #   reason: essentials plan until the Standard upgrade
+    #   expires: "2027-03-31"
     # Optional VCS connection for every tfc-admin workspace (IDs, not secrets).
     # vcs_repo:
     #   identifier: my-org/landing-zone
@@ -132,6 +142,34 @@ gcp:
   # Opt-in WORM lock on the org audit-log bucket (gcp-organization). IRREVERSIBLE:
   # leave false unless a compliance regime requires tamper-proof retention.
   # enable_audit_bucket_lock: false
+  # Copy firewall, Cloud NAT, load balancer request (with the Cloud Armor
+  # verdict), Secure Web Proxy and Cloud NGFW threat logs from every project
+  # into the audit bucket, with its retention and lock (gcp-organization).
+  # Unset = on when an
+  # environment is compliance_class: regulated or compliance.frameworks is
+  # set. Storage cost grows with traffic (control-matrix.md LOG-06).
+  # enable_network_log_export: true
+  # Only for an org-audit-sink created before 2023-05-22 (legacy writer
+  # identity): grant roles/storage.objectCreator on the audit bucket to the
+  # network log sink's identity by break-glass, then set this (UPGRADING.md).
+  # network_log_writer_granted: true
+  # Dedicated logging project for the audit bucket, audit CMEK keys and
+  # control-plane alerts (gcp-organization). Create it outside Terraform,
+  # directly under the organization node, owned by a group other than the
+  # automation identities. Decide before the first apply: the audit KMS keys
+  # cannot be deleted or moved. Any environment with compliance_class: regulated
+  # fails the plan until this project and the lock are set, or until
+  # audit_store_waiver names a reason and a quoted expiry date (YYYY-MM-DD,
+  # UTC). After that date the plan fails again.
+  # logging_project_id: my-org-logging
+  # logging_project_number: "123456789012"
+  # audit_store_waiver:
+  #   reason: Logging project pending; risk register entry R-12
+  #   expires: "2027-03-31"
+  # Protection level of the two audit CMEK keys: SOFTWARE (default) or HSM
+  # (Cloud HSM, FIPS 140-2 Level 3; costs more per key version). It cannot
+  # change on existing keys: set it with a new logging project or a new estate.
+  # audit_key_protection_level: HSM
   # Regions allowed by the resource-location org policy (gcp-organization).
   allowed_regions:
     - europe-west2
@@ -139,6 +177,17 @@ gcp:
   network:
     hub_cidr_block: 10.0.0.0/16
     dns_hub_cidr_block: 10.1.0.0/16
+    # Zones of the hub VPC and the DNS anchor VPC (both in org.regions.gcp), in
+    # subnet order: subnet i of each tier takes the i-th CIDR, so the order
+    # fixes the CIDRs. Required when any environment is_production. Unset, the
+    # zones GCP returns are used, and a change in that list replaces subnets.
+    # Check the names: gcloud compute zones list --filter=region:europe-west2
+    zones: [europe-west2-a, europe-west2-b, europe-west2-c]
+    # Name of the private root DNS zone (gcp-network-hub internal-root); every
+    # environment peers to it. Default internal.local. Set it before the first
+    # apply of gcp-network-hub: the zone name cannot change in place, so a later
+    # change replaces the zone and drops its records (UPGRADING.md).
+    # internal_domain: corp.example.com
     # Numeric ID of the org Access Context Manager policy for the hub VPC-SC
     # perimeter (gcloud access-context-manager policies list --organization=ID).
     # Unset, no hub perimeter is created and a production environment warns.
@@ -166,14 +215,29 @@ gcp:
     #   local_ips: [169.254.0.1, 169.254.0.3]
     #   peer_ips: [169.254.0.2, 169.254.0.4]
     #   site_to_site_data_transfer: false
+    #   # Unset (default): the router announces every hub subnet (ALL_SUBNETS)
+    #   # plus every gcp.environments CIDR. Set it to announce exactly this list
+    #   # (add advertised_groups: [ALL_SUBNETS] to keep the hub subnets too).
     #   advertised_ip_ranges:
-    #     - { range: 10.0.0.0/16, description: hub VPC }
+    #     - { range: 10.0.0.0/12, description: GCP block }
     # Cloud Interconnect VLAN attachments, keyed by attachment name.
     # interconnect:
     #   hub-partner-1:
     #     region: europe-west2
     #     router_name: hub-ic-router
     #     interconnect_type: PARTNER    # PARTNER | DEDICATED
+    # Hybrid DNS on the hub VPC, used only with the VPN or an Interconnect.
+    # enable_inbound_forwarding (default true): an inbound DNS server policy, so
+    # on-premises resolvers can forward the internal domain to the hub. Its
+    # addresses: gcloud compute addresses list --filter=purpose=DNS_RESOLVER.
+    # forward_zones: on-premises domains the hub forwards to on-premises
+    # resolvers (not the internal domain or a subdomain of it).
+    # hybrid_dns:
+    #   enable_inbound_forwarding: true
+    #   forward_zones:
+    #     corp:
+    #       dns_name: corp.example.com.
+    #       target_ips: [192.168.0.10, 192.168.0.11]
     # Extra regions of the hub VPC, keyed by region (off by default: the hub
     # is single-region in org.regions.gcp). Each gets one regional subnet per
     # tier; the CIDRs must not overlap the primary hub subnets or each other.
@@ -183,6 +247,14 @@ gcp:
     #   europe-west4:
     #     subnet_cidrs: {public: 10.2.0.0/24, private: 10.2.16.0/24, database: 10.2.32.0/24}
     #     nat: true
+    # Private Service Connect endpoint for Google APIs on the hub VPC (on by
+    # default). name: 1-20 lower-case letters and numbers, starting with a
+    # letter (Google's rule; default hubvpccorepsc). address: an IPv4 address
+    # outside every hub subnet and every peered environment subnet (default:
+    # the second-to-last address of hub_cidr_block, 10.0.255.254).
+    # private_service_connect:
+    #   name: hubvpccorepsc
+    #   address: 10.0.255.254
   # Application environments, consumed by gcp-bootstrap, gcp-organization,
   # gcp-projects, gcp-network-hub, gcp-workload-<env> and tfc-admin (one
   # gcp-workload-<env> workspace per key). Keys: ^[a-z][a-z0-9-]{0,14}$, not
@@ -195,12 +267,28 @@ gcp:
       is_production: false
       labels:
         tier: non-production
+      # Data sensitivity: public, internal (default), confidential or
+      # restricted. gcp-projects binds the matching data-classification tag
+      # value to this environment's host project.
+      # data_classification: internal
+      # Zones of this environment's spoke VPC (gcp-workload-<env>), in subnet
+      # order, as gcp.network.zones. Required when is_production.
+      # zones: [europe-west2-a, europe-west2-b, europe-west2-c]
       # Extra regions of this environment's spoke VPC (gcp-workload-<env>),
       # same shape as gcp.network.additional_regions; off by default. Under
       # network_connectivity: ncc the NCC spoke exports every subnet range.
       # additional_regions:
       #   europe-west4:
       #     subnet_cidrs: {public: 10.11.0.0/24, private: 10.11.16.0/24, database: 10.11.32.0/24}
+      # Private Service Connect endpoint for Google APIs on this spoke VPC
+      # (on by default). name: 1-20 lower-case letters and numbers, starting
+      # with a letter (default: the VPC name without hyphens, first 17
+      # characters, plus psc). address: an IPv4 address outside every subnet
+      # of this VPC and of the hub VPC (default: the second-to-last address of
+      # cidr_block, 10.10.255.254 here).
+      # private_service_connect:
+      #   name: devapis
+      #   address: 10.10.255.254
       # Application services (Cloud Run, optional Cloud SQL, GitHub deploy
       # identity). Same fields as the modules/gcp/stages/app-services `services`
       # variable; the key is the service name. A service runs in the host project
@@ -216,6 +304,7 @@ gcp:
       #   api:
       #     service_team: platform
       #     min_instances: 1
+      #     health_check_path: /healthz
       #     github: {repository_id: "123456789"}
       # Service teams: a team = a GCP project in this environment's folder,
       # attached to the Shared VPC, with its admin group granted least-privilege
@@ -239,6 +328,29 @@ gcp:
       cidr_block: 10.12.0.0/16
       budget_monthly_limit: 2000
       is_production: true
+      # Zones of the spoke VPC in subnet order (required when is_production;
+      # see gcp.network.zones).
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c]
+      # Production egress: the gcp-workload-prod plan fails until you choose.
+      # Either send the private tier through the hub Secure Web Proxy (PREVIEW;
+      # needs secure_web_proxy on gcp-network-hub), or set
+      # production_egress_proxy_waiver { reason, expires } on gcp-workload-prod
+      # in config/tfc-workspaces.yaml (docs/runbooks/production-hardening.md).
+      # egress_proxy: true
+      # Opt-in regulated class (docs/architecture/regulated-environments.md):
+      # enforced VPC-SC with no waiver, Cloud Armor and OWASP rules, every flow
+      # logged and kept 365 days, and a Backup and DR vault. gcp-organization
+      # then needs a hardened audit store (logging_project_id and
+      # enable_audit_bucket_lock above).
+      # compliance_class: regulated
+      # data_classification: confidential
+      # Backup and DR vault for the app-service databases (on when regulated).
+      # lock_effective_time is IRREVERSIBLE: after it nobody can lower the
+      # enforced retention.
+      # backup_vault:
+      #   enabled: true
+      #   enforced_retention_days: 35
+      #   lock_effective_time: "2027-01-01T00:00:00Z"
       iam_group_role_bindings: {}
 
   # Application golden path (gcp-workload-<env>). All optional.
@@ -262,9 +374,24 @@ gcp:
 aws:
   # tfc-admin declares the aws-* workspaces only when true.
   enabled: false
+  # Optional AWS layer workspaces besides aws-organization and aws-security
+  # (always created): network, identity, shared-services, backup. Absent = all
+  # four. [] is the minimum footprint. Then keep only the accounts the chosen
+  # layers need (docs/architecture/provider-selection.md). Without network,
+  # tfc-admin sets enable_network_hub = false on every aws-workload-<env>.
+  # layers: [network, identity, shared-services, backup]
   # 12-digit management (payer) account ID, QUOTED (aws-organization,
   # aws-security, aws-backup).
   management_account_id: "REPLACE_WITH_12_DIGIT_ID"
+  # Organization tag policy (aws-organization). It always defines the key case
+  # of CostCenter, Environment, Owner and DataClassification and the allowed
+  # DataClassification values. required_for lists the resource types for which
+  # it reports the four keys as required. A workspace with the environment
+  # variable TF_AWS_TAG_POLICY_COMPLIANCE=error (config/tfc-workspaces.yaml)
+  # then fails the plan on a listed resource that lacks a key; its plan role
+  # needs tag:ListRequiredTags. Absent = no key is required.
+  # tagging:
+  #   required_for: [ec2:instance, s3:bucket, rds:db, lambda:function]
   # Regions permitted by the region-restriction SCP (aws-organization) and the
   # Regions baselined by aws-security / aws-network / aws-workload.
   allowed_regions:
@@ -284,14 +411,21 @@ aws:
   # docs/runbooks/aws-config-recorder-migration.md.
   enable_org_config_recorders: false
   enable_config_recorder_scp: false
+  # Roles that write StackSet-* stacks for StackSets this repo does not own.
+  # The deny-tamper SCP denies every other member principal those writes. An
+  # AWS Control Tower estate must set AWSControlTowerExecution before the
+  # first aws-organization apply (docs/runbooks/aws-brownfield-adoption.md).
+  # stackset_stack_writer_role_names: [AWSControlTowerExecution]
   # GitHub users/orgs whose Actions OIDC tokens may assume roles in any account
   # (RCP pin: sub must be repo:<owner>/*). List every owner whose repos deploy
   # here through app-services. Empty or absent leaves GitHub federation unpinned.
   # github_federation_owners:
   #   - my-github-org
-  # Phase-0 management-account roles (aws-bootstrap runbook Step 2).
+  # Phase-0 management-account roles (aws-bootstrap runbook Step 2). Replace
+  # each with the phase-0 stack output: TerraformRunRoleArn and
+  # BreakGlassRoleArn (templates/aws/bootstrap/phase0-management.yaml).
   terraform_run_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/tfc-mgmt-apply
-  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/break-glass
+  break_glass_role_arn: arn:aws:iam::REPLACE_WITH_12_DIGIT_ID:role/OrganizationBreakGlass
   # Central log-archive bucket (aws-organization, aws-security, aws-network).
   log_archive_bucket_name: my-org-org-log-archive
   # Foundational SRA accounts: key => {email, ou}. Root emails must be real,
@@ -310,12 +444,21 @@ aws:
   # Workload environments => the account key they deploy into. tfc-admin
   # declares one aws-workload-<env> workspace per key and sets its
   # workload_account_key; aws-organization adds the matching OIDC trust binding
-  # (account key => aws-workload-<env>). vpc_cidr is optional.
+  # (account key => aws-workload-<env>). Give each workload its own vpc_cidr
+  # inside the regional pool (aws.network.regional_cidrs): a workload without
+  # one counts as 10.72.0.0/16, and tfc-admin fails when two workloads share it.
   workload_environments:
     dev:
       account_key: workload_dev
       vpc_cidr: 10.72.0.0/16
       is_production: false
+      # Data sensitivity, written as the DataClassification tag by
+      # aws-workload-<env>: public, internal (default), confidential or
+      # restricted.
+      # data_classification: internal
+      # AZ IDs for this spoke only. Unset = aws.network.availability_zone_ids,
+      # else the region's first three available zones.
+      # availability_zone_ids: [euw2-az2, euw2-az3]
       # Services deployed to this environment (ECS Fargate behind the shared
       # ALB, optional Aurora and GitHub deploy role). Fields:
       # envs/aws/workload (variable services).
@@ -327,6 +470,18 @@ aws:
       account_key: workload_prod
       vpc_cidr: 10.73.0.0/16
       is_production: true
+      # Opt-in regulated class (docs/architecture/regulated-environments.md).
+      # A regulated environment with services also needs an HTTPS ALB
+      # (app_alb_certificate_arn), ALB access logs (the aws-workload-<env>
+      # workspace variable app_alb_access_logs_bucket:
+      # an S3 bucket in the workload account whose policy allows ELB log
+      # delivery, ideally Object-Locked for 365 days) and, on public_alb, the WAF,
+      # and its backups need compliance.backup.copy_to_central_vault: true.
+      # One regulated environment hardens the shared aws-network hub: Network
+      # Firewall on and egress fail-closed on every profile, no alert-only waiver,
+      # and at least 365 days of log-archive retention (the VPC flow logs).
+      # compliance_class: regulated
+      # data_classification: confidential
 
   # IAM Identity Center access by name (aws-identity): Identity Store group
   # DISPLAY NAME => list of {permission_set, accounts}. Accounts are keys of the
@@ -344,53 +499,113 @@ aws:
   #         accounts: [log_archive, security_tooling]
 
   # Network Firewall egress posture (aws-network). A production estate (profile
-  # production AND a workload environment with is_production, or keyed
-  # prod/production) fails the plan unless unmatched traffic is dropped AND the
+  # production AND a workload environment with is_production: true; the flag
+  # is required on every environment) fails the plan unless unmatched traffic is dropped AND the
   # allowlist is non-empty. A leading dot matches subdomains. Extend the list
   # with every domain your workloads call (package mirrors, SaaS APIs); matching
   # is on HTTP Host / TLS SNI, and everything else is dropped.
   network:
     # Addressing (aws-network). docs/architecture/cidr-plan.md gives AWS
     # 10.64.0.0/10 and GCP 10.0.0.0/12; tfc-admin fails its plan when an AWS
-    # range overlaps a GCP one, or a workload vpc_cidr falls outside top_cidr.
+    # range overlaps a GCP one, or a workload vpc_cidr falls outside top_cidr or the regional pool.
     # The values below are the defaults.
     # top_cidr: 10.64.0.0/10
     # regional_cidrs: {eu-west-2: 10.64.0.0/12}
+    # One /12 pool holds 16 /16 VPCs, minus the hub ranges inside it. When it is
+    # full, add a second CIDR inside top_cidr (see docs/runbooks/aws-cidr-expansion.md):
+    # regional_additional_cidrs: {eu-west-2: [10.80.0.0/12]}
+    # Who may allocate from the pools: unset = every account in the organization.
+    # Set OU names (keys of the aws-organization ou_ids) to limit it; every account
+    # that allocates must sit in a listed OU (UPGRADING.md).
+    # ipam_share_ou_keys: [Workloads]
     # inspection_cidr: 10.64.0.0/16
     # egress_cidr: 10.65.0.0/16
+    # Availability zones (aws-network and every aws-workload-<env>). AZ IDs
+    # name the same physical zone in every account; zone names (eu-west-2a)
+    # do not. Unset = the region's first three available zones (in eu-west-2:
+    # eu-west-2a/b/c, of which az_count = 2 uses a and b). Before you set IDs
+    # on an existing estate, read UPGRADING.md: a changed zone replaces subnets.
+    # availability_zone_ids: [euw2-az2, euw2-az3]
+    # Never list .amazonaws.com: it admits every S3 bucket and every AWS API
+    # in any account, so data can leave through the firewall. The hub
+    # interface endpoints already serve ec2, ssm, ssmmessages, ec2messages,
+    # kms, logs and sts, and the spoke S3 and DynamoDB gateway endpoints carry
+    # organization-only policies in production. List only the regional AWS
+    # APIs your workloads call that have no endpoint. The default app golden
+    # path (ECS on Fargate pulling from ECR, secrets from Secrets Manager)
+    # needs these three. Add sqs.eu-west-2.amazonaws.com when a service sets
+    # a queue. The default bootstrap_image pulls from public.ecr.aws, whose
+    # layers come from a CloudFront host AWS does not document: add both, or
+    # use an image in your own ECR. Host names match any account, so this list
+    # does not stop calls to another account's ECR or secrets
+    # (docs/known-gaps.md).
     egress_domain_allowlist:
-      - .amazonaws.com
+      - api.ecr.eu-west-2.amazonaws.com
+      - .dkr.ecr.eu-west-2.amazonaws.com
+      - secretsmanager.eu-west-2.amazonaws.com
       - .github.com
       - .githubusercontent.com
       - .terraform.io
+    # The firewall's internal pass rules let every spoke reach the hub VPCs
+    # (central endpoints, Resolver) and the VPN onprem_cidrs, and let spokes of
+    # one segment reach each other (their spoke_attachments cidr). Prod to
+    # nonprod is never passed, and a spoke without a cidr gets no east-west
+    # traffic under a fail-closed policy. The allowlist above covers only
+    # traffic to the internet. List other internal ranges outside top_cidr
+    # here, for example on-premises over Direct Connect (private ranges only).
+    # internal_pass_cidrs: [192.168.0.0/16]
+    # Custom Suricata rules (STRICT_ORDER), evaluated before the internal pass
+    # rules and the allowlist: drop a specific internal flow, or pass an
+    # external flow that is not HTTP or TLS (the allowlist sees only those).
+    # suricata_rules: |
+    #   pass tcp $HOME_NET any -> 203.0.113.10 22 (msg:"sftp partner"; flow:to_server; sid:100001; rev:1;)
     # Explicit waiver to run production alert-only (log-but-pass) while allow
     # rules are being built. Reviewable; remove once the allowlist is complete.
+    # A regulated workload environment refuses it.
     # egress_alert_only_waived: true
+    # Hub interface endpoint policy. org_principals (default) checks the caller
+    # only. org_principals_and_resources also requires an organization-owned
+    # resource (aws:ResourceOrgID) on services whose resources you own. PREVIEW:
+    # prove it in a sandbox before you set it (docs/known-gaps.md).
+    # vpc_endpoint_policy_mode: org_principals
     # Opt-in Site-to-Site VPN from the transit gateway to an on-premises device
     # (aws-network). The tunnel pre-shared keys are not config: AWS keeps them in
     # a Secrets Manager secret (preshared_key_storage: SecretsManager, default;
     # the aws-network output vpn_preshared_key_arn names it). On-premises traffic
-    # is inspected: it default-routes to the inspection VPC. With
+    # is inspected: it default-routes to the inspection VPC, so the VPN needs
+    # the Network Firewall (profile production; starter fails the plan). With
     # static_routes_only, onprem_cidrs lists the on-premises prefixes (BGP learns
-    # them otherwise). The BGP ASN must differ from the transit gateway's 64512.
+    # them otherwise). With BGP too, list the on-premises resolver ranges in
+    # onprem_cidrs: they are admitted to the inbound Resolver endpoint, and the
+    # egress VPC routes them through the firewall to the VPN (BGP routes do not
+    # reach VPC route tables). The BGP ASN must differ from the transit
+    # gateway's 64512.
     # vpn:
     #   enabled: false
     #   customer_gateway_ip: 203.0.113.10
     #   customer_gateway_bgp_asn: 65000
     #   static_routes_only: false
     #   onprem_cidrs: [192.168.0.0/16]
+    # Route 53 Resolver inbound and outbound endpoints in the egress VPC (about
+    # USD 365 per month). They are needed only for on-premises DNS in either
+    # direction. Unset = on only when vpn.enabled is true.
+    # resolver_endpoints:
+    #   enabled: false
     # Workload spokes wired into the hub (aws-network): accepted, associated with
     # their segment table (prod | nonprod; 0.0.0.0/0 goes to inspection) and
-    # propagated into the inspection table. Until a spoke is listed it has NO
+    # propagated into the inspection table (starter: the shared table; egress is
+    # NAT only, not inspected). Until a spoke is listed it has NO
     # routing. After an aws-workload-<env> first apply, copy its output
     # tgw_attachment_id here and apply aws-network. accept: false for an
-    # attachment someone already accepted.
+    # attachment someone already accepted. Use the environment name as the key:
+    # cidr defaults to aws.workload_environments.<key>.vpc_cidr, and the other
+    # segment's table blackholes it (prod and nonprod cannot reach each other).
     # spoke_attachments:
     #   dev:  {attachment_id: tgw-attach-0123456789abcdef0, segment: nonprod}
     #   prod: {attachment_id: tgw-attach-0fedcba9876543210, segment: prod}
     stateful_default_actions:
-      - aws:drop_established
-      - aws:alert_established
+      - aws:drop_established_app_layer_to_server
+      - aws:alert_established_app_layer_to_server
 
   # Application golden path (aws-workload-<env>). All optional: uncomment the
   # keys you need and delete the {} below them.
@@ -417,6 +632,14 @@ saas:
   # Supabase database password or service-role key, then re-apply saas-<name>
   # and each bridging workload. See docs/runbooks/saas-bootstrap.md.
   bridge_rotation: 1
+  # Data residency (CMP-11): AWS region names where Supabase and Vercel
+  # functions may run. The saas plan fails when the Supabase region, or the AWS
+  # region behind the Vercel function region (lhr1 = eu-west-2), is not listed.
+  # An unknown Vercel code fails closed. Absent = aws.allowed_regions; neither =
+  # no check. The Vercel CDN and edge cache are global and are not checked.
+  # See docs/compliance/third-parties.md.
+  # allowed_regions:
+  #   - eu-west-2
   # Per-stack settings for saas-<name> workspaces (stack = <name>): saas.stacks
   # wins over saas.defaults, and an explicit TFC variable wins over both. IDs and
   # names only. The Supabase database password stays a sensitive TFC variable
@@ -436,7 +659,13 @@ saas:
   #       github_repo: my-org/web
   #       production_branch: main
 
-# One place for alert recipients. Optional: absent = today's behaviour.
+# One place for alert recipients. Optional: absent = today's behaviour, except
+# aws-security and aws-network: a production estate (org.profile production, or
+# an AWS workload environment with is_production: true) fails both plans without
+# a real address here (or aws_overrides.notification_subscribers on
+# aws-security, alarm_subscriber_emails on aws-network). Example, .invalid,
+# .localhost and .test domains are rejected. The scaffolder writes it from
+# --notification-emails.
 # Precedence everywhere: explicit variable > the specific key (gcp.alert_emails,
 # aws.guard_alert_emails) > notifications.emails > the root's built-in default.
 # notifications:
@@ -450,6 +679,16 @@ saas:
 #   # failures, on every workspace tfc-admin manages.
 #   hcp_email_user_ids:
 #     - user-REPLACE_WITH_HCP_USER_ID
+
+# compliance: estate-wide compliance knobs. Absent = today's behaviour.
+# compliance:
+#   frameworks: [soc2, pci_dss]            # plan fails below their retention floor
+#   audit_log_retention_days: 400          # GCP audit bucket and AWS log archive
+#   backup:
+#     copy_to_central_vault: true          # IRREVERSIBLE lock on the copy vault (UPGRADING.md)
+#     copy_retention_days: 365
+#     dr_region: eu-west-1                 # must be in aws.allowed_regions
+#   breach_notification_contacts: [dpo@my-org.example.com]   # AWS security and GCP control-plane alerts
 
 # Presets: named overlays from examples/presets/<name>.yaml, applied by the
 # root the preset targets (precedence: explicit variable > preset > this file).

@@ -20,6 +20,9 @@
  */
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, false)
+
   # Network tags for tiered security
   network_tags = {
     api_gateway = "api-gateway"
@@ -66,12 +69,12 @@ locals {
 # Deletion protection guard for the VPC and subnet stack.
 #
 # Terraform's prevent_destroy meta-argument must be a static literal. This
-# guard exists only when deletion_protection = true and carries a static
+# guard exists only when enable_deletion_protection = true and carries a static
 # prevent_destroy = true, so any plan that would remove it is blocked. To
 # deprovision a protected stack deliberately, first run:
 #   terraform state rm '<module_address>.terraform_data.deletion_protection_guard[0]'
 resource "terraform_data" "deletion_protection_guard" {
-  count = var.deletion_protection ? 1 : 0
+  count = local.enable_deletion_protection ? 1 : 0
 
   input = "${var.project_id}/${var.name}"
 
@@ -103,7 +106,7 @@ module "vpc" {
 
   enable_shared_vpc_host          = var.shared_vpc_host
   delete_default_routes_on_create = true
-  enable_deletion_protection      = var.deletion_protection
+  enable_deletion_protection      = local.enable_deletion_protection
 
   network_firewall_policy_enforcement_order = local.firewall_policy_enforcement_order == "UNSET" ? null : local.firewall_policy_enforcement_order
 }

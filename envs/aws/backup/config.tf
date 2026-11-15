@@ -25,6 +25,21 @@ locals {
     aws_region            = try(tostring(local.lz.org.regions.aws), null)
     tfc_organization      = try(tostring(local.lz.org.tfc.organization), null)
     management_account_id = try(tostring(local.lz.aws.management_account_id), null)
+    # compliance.backup: central copy to the locked copy vault and the
+    # cross-region copy. compliance.audit_log_retention_days does not apply:
+    # backup retention is a separate decision.
+    backup_copy_to_central_vault = try(tobool(local.lz.compliance.backup.copy_to_central_vault), null)
+    # Re-audit 7 CMP-4: regulated AWS workload environments need the central,
+    # Vault-Locked copy of every recovery point.
+    workload_regulated = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tostring(e.compliance_class), "standard") == "regulated"
+    ])
+    backup_copy_retention_days = try(tonumber(local.lz.compliance.backup.copy_retention_days), null)
+    backup_dr_region           = try(tostring(local.lz.compliance.backup.dr_region), null)
+    # aws.allowed_regions: the region SCP allow-list (aws-organization). The
+    # dr_region validation uses the same fallback, ["eu-west-2"].
+    allowed_regions = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)
     # aws.contracts.organization: stage contract override (same type as
     # var.organization_contract, identical in every aws root). Present => the
     # aws-organization read is skipped.
@@ -46,4 +61,7 @@ locals {
   aws_region            = coalesce(var.aws_region, local.cfg.aws_region, "eu-west-2")
   tfc_organization      = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   management_account_id = coalesce(var.management_account_id, local.cfg.management_account_id, "000000000000")
+  enable_central_copy   = coalesce(var.enable_central_copy, local.cfg.backup_copy_to_central_vault, false)
+  copy_retention_days   = coalesce(var.copy_retention_days, local.cfg.backup_copy_retention_days, 365)
+  dr_region             = var.dr_region != null ? var.dr_region : local.cfg.backup_dr_region
 }

@@ -54,17 +54,32 @@ variable "patch_baseline_name" {
   }
 }
 
-variable "patch_operating_system" {
-  description = "Operating system the patch baseline targets. Also used to set the account default patch baseline for that OS."
-  type        = string
-  default     = "AMAZON_LINUX_2"
+variable "patch_operating_systems" {
+  description = "Operating systems that get a custom patch baseline, each set as the account default baseline for that OS. Supported: the Amazon Linux family, REDHAT_ENTERPRISE_LINUX, ROCKY_LINUX, ALMA_LINUX and WINDOWS. Amazon Linux 2 reached end of support on 2026-06-30: keep AMAZON_LINUX_2 here only while you still run it. Patch Manager uses the AWS predefined baseline for any OS not listed; the install association still patches those instances."
+  type        = set(string)
+  default     = ["AMAZON_LINUX_2023"]
+  nullable    = false
 
   validation {
-    condition = contains(
-      ["AMAZON_LINUX", "AMAZON_LINUX_2", "AMAZON_LINUX_2023", "UBUNTU", "REDHAT_ENTERPRISE_LINUX", "WINDOWS"],
-      var.patch_operating_system
+    condition = length(var.patch_operating_systems) > 0 && alltrue([for os in var.patch_operating_systems : contains([
+      "AMAZON_LINUX", "AMAZON_LINUX_2", "AMAZON_LINUX_2023", "REDHAT_ENTERPRISE_LINUX", "ROCKY_LINUX", "ALMA_LINUX", "WINDOWS",
+    ], os)])
+    error_message = "patch_operating_systems must be a non-empty set of: AMAZON_LINUX, AMAZON_LINUX_2, AMAZON_LINUX_2023, REDHAT_ENTERPRISE_LINUX, ROCKY_LINUX, ALMA_LINUX, WINDOWS."
+  }
+}
+
+variable "patch_operating_system" {
+  description = "Single operating system for the patch baseline. Null (default) uses patch_operating_systems; a non-null value replaces that set with this one OS."
+  type        = string
+  default     = null
+  deprecated  = "Use patch_operating_systems. patch_operating_system will be removed in a future major release."
+
+  validation {
+    condition = var.patch_operating_system == null || contains(
+      ["AMAZON_LINUX", "AMAZON_LINUX_2", "AMAZON_LINUX_2023", "REDHAT_ENTERPRISE_LINUX", "ROCKY_LINUX", "ALMA_LINUX", "WINDOWS"],
+      coalesce(var.patch_operating_system, "AMAZON_LINUX_2023")
     )
-    error_message = "patch_operating_system must be one of: AMAZON_LINUX, AMAZON_LINUX_2, AMAZON_LINUX_2023, UBUNTU, REDHAT_ENTERPRISE_LINUX, WINDOWS."
+    error_message = "patch_operating_system must be null or one of: AMAZON_LINUX, AMAZON_LINUX_2, AMAZON_LINUX_2023, REDHAT_ENTERPRISE_LINUX, ROCKY_LINUX, ALMA_LINUX, WINDOWS."
   }
 }
 
@@ -76,6 +91,55 @@ variable "patch_approve_after_days" {
   validation {
     condition     = var.patch_approve_after_days >= 0 && var.patch_approve_after_days <= 360
     error_message = "patch_approve_after_days must be between 0 and 360."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Patch scan and install (AWS-RunPatchBaseline associations)
+# -----------------------------------------------------------------------------
+
+variable "enable_patch_install" {
+  description = "Install approved patches on patch_install_schedule (AWS-RunPatchBaseline Operation=Install), on every SSM-managed instance in this account and region, or only on the instances that carry patch_install_target_tag. Instances reboot when a patch needs it (patch_reboot_option). False keeps the daily scan only."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "patch_install_schedule" {
+  description = "Cron expression (UTC) for the install association. The association runs only at this time, never at apply time (apply_only_at_cron_interval), so a rate() expression is rejected. Default: Sunday 03:00 UTC."
+  type        = string
+  default     = "cron(0 3 ? * SUN *)"
+  nullable    = false
+
+  validation {
+    condition     = can(regex("^cron\\(.+\\)$", var.patch_install_schedule))
+    error_message = "patch_install_schedule must be a cron(...) expression; the install association runs only at its cron time."
+  }
+}
+
+variable "patch_reboot_option" {
+  description = "RebootIfNeeded (default) or NoReboot. NoReboot leaves instances in a pending-reboot state that Patch Manager reports as non-compliant."
+  type        = string
+  default     = "RebootIfNeeded"
+  nullable    = false
+
+  validation {
+    condition     = contains(["RebootIfNeeded", "NoReboot"], var.patch_reboot_option)
+    error_message = "patch_reboot_option must be RebootIfNeeded or NoReboot."
+  }
+}
+
+variable "patch_install_target_tag" {
+  description = "Narrows the install association to the managed instances that carry this tag (key and value). Null (default) installs on every SSM-managed instance in this account and region. The daily scan always covers every managed instance."
+  type = object({
+    key   = string
+    value = string
+  })
+  default = null
+
+  validation {
+    condition     = var.patch_install_target_tag == null || (length(trimspace(try(var.patch_install_target_tag.key, ""))) > 0 && length(trimspace(try(var.patch_install_target_tag.value, ""))) > 0)
+    error_message = "patch_install_target_tag must be null or have a non-empty key and value."
   }
 }
 

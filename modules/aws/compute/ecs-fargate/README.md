@@ -112,6 +112,7 @@ The following resources are created:
 
 | Name | Description |
 |------|-------------|
+| <a name="output_autoscaling_target_ids"></a> [autoscaling\_target\_ids](#output\_autoscaling\_target\_ids) | IDs of the Application Auto Scaling targets (empty when enable\_autoscaling is false). |
 | <a name="output_cluster_arn"></a> [cluster\_arn](#output\_cluster\_arn) | ARN of the cluster the service runs in (created here or passed in). |
 | <a name="output_container_name"></a> [container\_name](#output\_container\_name) | Name of the primary container (the container CI rewrites the image of). |
 | <a name="output_log_group_name"></a> [log\_group\_name](#output\_log\_group\_name) | Name of the CloudWatch log group container logs are shipped to. |

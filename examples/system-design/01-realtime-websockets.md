@@ -495,7 +495,7 @@ slows the recovery. Deploy canary-then-batch; the runbook covers the rest.
 | Gateway and `chat-api` | Fargate tasks in the `private` tier behind the shared ALB | Cloud Run with Direct VPC egress into the `private` tier |
 | Valkey | `isolated` tier | Private Service Connect endpoints in the `database` tier subnet |
 | Message store | DynamoDB, reached through the spoke's gateway endpoint | Bigtable, reached through Private Google Access |
-| Egress | Through the Transit Gateway to the inspection VPC | The environment's own Cloud NAT, not inspected through the hub |
+| Egress | Through the Transit Gateway to the inspection VPC | The environment's own Cloud NAT, not inspected (egress proxy off or waived); with `egress_proxy` on, the hub Secure Web Proxy ([inspected egress](00-primer.md#inspected-egress)) |
 
 Tiers follow [VPC-tier placement](00-primer.md#vpc-tier-placement) ([#14](14-n-tier-network.md)). Apply order
 is the usual chain, `aws-network` → `aws-workload-prod` and `gcp-network-hub` →

@@ -1,0 +1,28 @@
+# Fixture: the compliance estate of landing-zone.compliance.yaml with the
+# network log export turned off in config (CMP-02: the config key wins over
+# the framework default).
+org:
+  prefix: acme
+  display_name: Acme
+  domain: acme.io
+  tfc:
+    organization: acme-tfc
+gcp:
+  billing_account: ABCDEF-123456-789012
+  admin_email: admin@acme.io
+  organization_admin_groups: [gcp-org-admins@acme.io]
+  billing_admin_groups: [gcp-billing-admins@acme.io]
+  allowed_regions: [europe-west1]
+  enable_network_log_export: false
+  environments:
+    dev:
+      is_production: false
+      display_name: Development
+      region: europe-west1
+      cidr_block: 10.10.0.0/16
+      budget_monthly_limit: 100
+notifications:
+  emails: [alerts@acme.io]
+compliance:
+  frameworks: [hipaa]
+  audit_log_retention_days: 2190

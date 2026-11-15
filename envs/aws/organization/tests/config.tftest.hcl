@@ -156,8 +156,8 @@ run "tfc_project_default_without_config_prefix" {
   }
 
   assert {
-    condition     = local.tfc_project == "landing-zone-aws" && length(local.tfc_workspace_bindings) == 6
-    error_message = "with no config file tfc_project defaults to landing-zone-aws (tfc-admin's default AWS project) and only the foundational bindings exist."
+    condition     = local.tfc_project == "landing-zone-aws" && keys(local.tfc_workspace_bindings) == tolist(["log_archive"])
+    error_message = "with no config file tfc_project defaults to landing-zone-aws (tfc-admin's default AWS project) and only the foundational bindings of accounts that exist are kept."
   }
 }
 
@@ -184,7 +184,7 @@ run "missing_config_and_variables_fails" {
   command = plan
 
   variables {
-    landing_zone_config_path = "tests/fixtures/does-not-exist.yaml"
+    landing_zone_config_path = ""
   }
 
   expect_failures = [
@@ -334,6 +334,13 @@ run "scaffold_aws_plans" {
   variables {
     landing_zone_config_path = "../../../tests/fixtures/scaffold/landing-zone.aws.yaml"
   }
+
+  # Decision D3: the production scaffold sets compliance.backup
+  # .copy_to_central_vault: true, so the member vaults get the CMK copy source.
+  assert {
+    condition     = local.member_backup_vault_encryption == "cmk" && local.member_backup_dr_region == null
+    error_message = "the production scaffold must select the CMK member vault (central copy on, no DR region)."
+  }
 }
 
 run "scaffold_gcp_aws_plans" {
@@ -393,5 +400,166 @@ run "cloudtrail_delegated_admin_absent_is_off" {
   assert {
     condition     = !local.enable_cloudtrail_delegated_admin && local.adopt_existing.cloudtrail_delegated_admin_account_id == null
     error_message = "With the keys absent the CloudTrail delegated admin must stay off and nothing is imported."
+  }
+}
+
+# CMP-1: compliance.backup selects the CMK member vault and the DR-region vault.
+run "compliance_backup_selects_cmk_vaults" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = local.member_backup_vault_encryption == "cmk" && local.member_backup_dr_region == "eu-west-2"
+    error_message = "compliance.backup.copy_to_central_vault and dr_region must reach the organization stage."
+  }
+}
+
+run "compliance_backup_absent_keeps_aws_managed_vault" {
+  command = plan
+
+  assert {
+    condition     = local.member_backup_vault_encryption == "aws_managed" && local.member_backup_dr_region == null
+    error_message = "without compliance.backup the member vault must stay on the AWS managed key with no DR vault."
+  }
+}
+
+run "explicit_vault_encryption_wins_over_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path       = "tests/fixtures/landing-zone.compliance.yaml"
+    member_backup_vault_encryption = "aws_managed"
+  }
+
+  assert {
+    condition     = local.member_backup_vault_encryption == "aws_managed"
+    error_message = "an explicit member_backup_vault_encryption must win over compliance.backup."
+  }
+}
+
+# aws.tagging.required_for feeds the tag policy's required-tag reporting
+# (CMP-10); absent = none; the variable wins; a malformed entry is rejected.
+run "tag_policy_required_types_from_config" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.compliance.yaml"
+  }
+
+  assert {
+    condition     = jsonencode(local.tag_policy_required_resource_types) == jsonencode(["ec2:instance", "s3:bucket"])
+    error_message = "aws.tagging.required_for must feed tag_policy_required_resource_types."
+  }
+}
+
+run "tag_policy_required_types_absent_is_empty" {
+  command = plan
+
+  assert {
+    condition     = length(local.tag_policy_required_resource_types) == 0
+    error_message = "without aws.tagging.required_for the tag policy must require no key."
+  }
+}
+
+run "tag_policy_required_types_variable_wins" {
+  command = plan
+
+  variables {
+    landing_zone_config_path           = "tests/fixtures/landing-zone.compliance.yaml"
+    tag_policy_required_resource_types = []
+  }
+
+  assert {
+    condition     = length(local.tag_policy_required_resource_types) == 0
+    error_message = "an explicit tag_policy_required_resource_types must win over the config file, even when empty."
+  }
+}
+
+run "tag_policy_required_types_rejects_bad_entry" {
+  command = plan
+
+  variables {
+    tag_policy_required_resource_types = ["s3"]
+  }
+
+  expect_failures = [var.tag_policy_required_resource_types]
+}
+
+# Minimum AWS footprint: aws.layers: [] and no network / backup accounts. The
+# OIDC trust bindings keep only accounts that exist and workspaces that
+# tfc-admin creates, and no management role pair is made for aws-backup.
+run "minimum_footprint_binds_only_present_layers" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-minimal.yaml"
+  }
+
+  assert {
+    condition     = !contains(keys(local.tfc_workspace_bindings), "network") && !contains(keys(local.tfc_workspace_bindings), "backup")
+    error_message = "Accounts that do not exist must get no tfc_workspace_bindings entry."
+  }
+
+  assert {
+    condition     = !contains(keys(local.tfc_workspace_bindings), "shared_services")
+    error_message = "Without the identity and shared-services layers the shared_services account must bind no workspace."
+  }
+
+  assert {
+    condition     = join(",", local.tfc_workspace_bindings["security_tooling"].workspaces) == "aws-security" && join(",", local.tfc_workspace_bindings["workload_prod"].workspaces) == "aws-workload-prod"
+    error_message = "aws-security and the workload bindings must stay."
+  }
+
+  assert {
+    condition     = join(",", keys(local.tfc_management_workspaces)) == "aws-security"
+    error_message = "Without the backup layer only aws-security gets a dedicated management role pair."
+  }
+}
+
+run "absent_layers_keep_every_binding" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for a in ["network", "shared_services", "backup"] : contains(keys(local.tfc_workspace_bindings), a)]) && join(",", local.tfc_workspace_bindings["shared_services"].workspaces) == "aws-identity,aws-shared-services" && join(",", keys(local.tfc_management_workspaces)) == "aws-backup,aws-security"
+    error_message = "Without aws.layers every foundational binding and both management role pairs must stay."
+  }
+}
+
+# StackSet stack writers (AWS Control Tower): variable > aws.stackset_stack_writer_role_names > [].
+run "stackset_stack_writers_come_from_config_file" {
+  command = plan
+
+  assert {
+    condition     = local.stackset_stack_writer_role_names == tolist(["AWSControlTowerExecution"])
+    error_message = "stackset_stack_writer_role_names must fall back to aws.stackset_stack_writer_role_names."
+  }
+}
+
+run "stackset_stack_writers_variable_wins" {
+  command = plan
+
+  variables {
+    stackset_stack_writer_role_names = []
+  }
+
+  assert {
+    condition     = length(local.stackset_stack_writer_role_names) == 0
+    error_message = "an explicit stackset_stack_writer_role_names (even empty) must win over the config file."
+  }
+}
+
+run "stackset_stack_writers_absent_are_empty" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-split.yaml"
+  }
+
+  assert {
+    condition     = length(local.stackset_stack_writer_role_names) == 0
+    error_message = "with the key absent there must be no stack writer roles."
   }
 }

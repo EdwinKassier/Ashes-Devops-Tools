@@ -33,6 +33,29 @@ run "inert_by_default" {
 run "containment_denies_mutation_and_tag_scopes_audit_store" {
   command = plan
 
+  # Re-audit 5 IAC-1: assert the PLANNED deny policy (read back from the
+  # resource through module.iam_deny), not an output built from the input.
+  assert {
+    condition = alltrue([
+      for r in module.iam_deny.deny_policy_rules["contain-admin-identity"] :
+      toset(r.exception_principals) == toset(["principalSet://goog/group/break-glass@acme.io"]) &&
+      length(setintersection(toset(r.denied_principals), toset(r.exception_principals))) == 0 &&
+      contains(r.denied_principals, "principalSet://goog/public:all") &&
+      length(coalesce(r.exception_permissions, [])) == 0 &&
+      length(r.denied_principals) > 0 && length(r.denied_permissions) > 0
+    ]) && length(module.iam_deny.deny_policy_rules["contain-admin-identity"]) == 2
+    error_message = "every planned containment rule must deny everyone (principalSet://goog/public:all) a non-empty permission set and exempt exactly the break-glass principal, which must not also be denied."
+  }
+
+  assert {
+    condition = (
+      module.iam_deny.deny_policy_rules["contain-admin-identity"][0].condition_expression == null &&
+      module.iam_deny.deny_policy_rules["contain-admin-identity"][1].condition_expression == "resource.matchTagId('tagKeys/111', 'tagValues/222')" &&
+      contains(module.iam_deny.deny_policy_rules["contain-admin-identity"][1].denied_principals, "principalSet://goog/public:all")
+    )
+    error_message = "the planned audit-store rule must deny everyone except break-glass, scoped to exactly the containment tag; the identity rule must be unconditional."
+  }
+
   assert {
     condition     = jsonencode(output.deny_policy_names) == jsonencode(["contain-admin-identity"])
     error_message = "the containment deny policy must be created at the org node."

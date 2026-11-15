@@ -20,7 +20,11 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    project_prefix            = try(tostring(local.lz.org.prefix), null)
+    project_prefix = try(tostring(local.lz.org.prefix), null)
+    # org.cost_center / org.owner: the cost-center and owner provider default
+    # labels (providers.tf), the same keys as the AWS roots' default_tags.
+    cost_center               = try(tostring(local.lz.org.cost_center), null)
+    owner                     = try(tostring(local.lz.org.owner), null)
     organization_name         = try(tostring(local.lz.org.display_name), null)
     domain                    = try(tostring(local.lz.org.domain), null)
     default_region            = try(tostring(local.lz.org.regions.gcp), null)
@@ -33,6 +37,7 @@ locals {
     hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
     vpc_sc_access_policy      = try(tostring(local.lz.gcp.network.vpc_sc_access_policy), null)
     dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    internal_domain           = try(tostring(local.lz.gcp.network.internal_domain), null)
     enable_ncc_hub            = try(tobool(local.lz.gcp.network.ncc_hub.enabled), null)
     ncc_preset_topology       = try(tostring(local.lz.gcp.network.ncc_hub.preset_topology), null)
     # Hybrid connectivity as JSON text (so the explicit-variable fallback can
@@ -40,6 +45,13 @@ locals {
     # No secret lives here: the VPN pre-shared key is a write-only variable.
     vpn          = try(jsonencode(local.lz.gcp.network.vpn), null)
     interconnect = try(jsonencode(local.lz.gcp.network.interconnect), null)
+    # Hybrid DNS on the hub VPC (JSON text, same reason as vpn above).
+    hybrid_dns = try(jsonencode(local.lz.gcp.network.hybrid_dns), null)
+    # gcp.network.zones: the hub and DNS anchor zones in subnet order (IAC-1).
+    hub_zones = try([for z in local.lz.gcp.network.zones : tostring(z)], null)
+    # Hub PSC endpoint overrides (gcp.network.private_service_connect).
+    hub_psc_name    = try(tostring(local.lz.gcp.network.private_service_connect.name), null)
+    hub_psc_address = try(tostring(local.lz.gcp.network.private_service_connect.address), null)
     # Opt-in extra hub regions (JSON text, same reason as vpn above).
     additional_regions = try(jsonencode(local.lz.gcp.network.additional_regions), null)
     # Hub connectivity per environment: gcp.environments.<env>.network_connectivity,
@@ -64,16 +76,25 @@ locals {
         is_production           = tobool(try(e.is_production, false))
       }
     }
+    # Environment keys whose is_production is missing or not a boolean. The
+    # schema requires it; the environments validation names them.
+    environments_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
 
     # gcp.contracts.<layer>: stage contract overrides (same shape as the
     # <layer>_contract variables). Present => that remote-state read is skipped.
+    # folders: id is the bare folder number (google_folder.folder_id) and name is
+    # folders/<number>, the shape gcp-organization emits. An id given as
+    # folders/<number> is accepted, and name is derived from id when absent.
     organization_contract = try(local.lz.gcp.contracts.organization, null) == null ? null : {
       org_id                   = tostring(local.lz.gcp.contracts.organization.org_id)
-      billing_account          = try(tostring(local.lz.gcp.contracts.organization.billing_account), null)
+      billing_account          = try(trimprefix(tostring(local.lz.gcp.contracts.organization.billing_account), "billingAccounts/"), null)
       admin_project_number     = try(tostring(local.lz.gcp.contracts.organization.admin_project_number), null)
       tag_values               = { for k, v in try(local.lz.gcp.contracts.organization.tag_values, {}) : k => tostring(v) }
       scoped_access_policy_ids = { for k, v in try(local.lz.gcp.contracts.organization.scoped_access_policy_ids, {}) : k => tostring(v) }
-      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = tostring(f.id), name = tostring(try(f.name, f.id)), display_name = tostring(try(f.display_name, k)) } }
+      folders                  = { for k, f in try({ for k, f in local.lz.gcp.contracts.organization.folders : k => f }, {}) : k => { id = trimprefix(tostring(f.id), "folders/"), name = tostring(try(f.name, "folders/${trimprefix(tostring(f.id), "folders/")}")), display_name = tostring(try(f.display_name, k)) } }
     }
     projects_contract = try(local.lz.gcp.contracts.projects.project_ids, null) == null ? null : {
       project_ids     = { for k, v in local.lz.gcp.contracts.projects.project_ids : k => tostring(v) }
@@ -88,6 +109,9 @@ locals {
           labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
           is_production           = try(tobool(e.is_production), null)
           vpc_sc_access_policy_id = try(tostring(e.vpc_sc_access_policy_id), null)
+          automation_identities   = [for i in try(e.automation_identities, []) : tostring(i)]
+          spoke_network_name      = try(tostring(e.spoke_network_name), null)
+          compliance_class        = try(tostring(e.compliance_class), null)
         }
       }
     }
@@ -103,14 +127,31 @@ locals {
   # Org Access Context Manager policy for the hub perimeter (numeric ID).
   vpc_sc_access_policy_name = var.vpc_sc_access_policy_name != null ? var.vpc_sc_access_policy_name : local.cfg.vpc_sc_access_policy
   dns_hub_vpc_cidr_block    = coalesce(var.dns_hub_vpc_cidr_block, local.cfg.dns_hub_vpc_cidr_block, "0.0.0.0/32")
-  tfc_organization          = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
-  create_spoke_peerings     = coalesce(var.create_spoke_peerings, true)
+  # Private root DNS zone name. internal.local keeps an existing estate's zone.
+  internal_domain       = coalesce(var.internal_domain, local.cfg.internal_domain, "internal.local")
+  tfc_organization      = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
+  create_spoke_peerings = coalesce(var.create_spoke_peerings, true)
   # Opt-in NCC hub (default off: environment VPCs peer with the hub VPC).
   enable_ncc_hub      = coalesce(var.enable_ncc_hub, local.cfg.enable_ncc_hub, false)
   ncc_preset_topology = coalesce(var.ncc_preset_topology, local.cfg.ncc_preset_topology, "STAR")
   # Opt-in hybrid connectivity (default off: no VPN, no Interconnect).
   vpn           = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
   interconnects = jsondecode(var.interconnects != null ? jsonencode(var.interconnects) : coalesce(local.cfg.interconnect, "{}"))
+  hybrid_dns    = jsondecode(var.hybrid_dns != null ? jsonencode(var.hybrid_dns) : coalesce(local.cfg.hybrid_dns, "{}"))
+  # Every environment CIDR, announced on-premises over the VPN/Interconnect:
+  # DEFAULT BGP mode never announces the peered environments (ARC-12).
+  hybrid_advertised_ranges = [
+    for k in sort(keys(local.environments)) : { range = local.environments[k].cidr_block, description = "environment ${k}" }
+    if try(local.environments[k].cidr_block, "") != ""
+  ]
+  # Hub and DNS anchor zones: variable > gcp.network.zones > [] (the zones GCP
+  # returns). Required when any environment is production (main.tf).
+  hub_zones = var.hub_zones != null ? var.hub_zones : coalesce(local.cfg.hub_zones, [])
+  # Hub PSC endpoint overrides (null = the net-hub defaults).
+  hub_private_service_connect = {
+    name    = var.hub_private_service_connect_name != null ? var.hub_private_service_connect_name : local.cfg.hub_psc_name
+    address = var.hub_private_service_connect_address != null ? var.hub_private_service_connect_address : local.cfg.hub_psc_address
+  }
   # Opt-in extra hub regions (default none: single-region hub).
   hub_additional_regions = jsondecode(var.hub_additional_regions != null ? jsonencode(var.hub_additional_regions) : coalesce(local.cfg.additional_regions, "{}"))
 }

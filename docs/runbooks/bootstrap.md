@@ -10,19 +10,20 @@
 
 ## Overview
 
-Where the AWS SRA spreads its foundation across seven layered roots, GCP uses **five roots**, applied in order (see the [GCP landing zone](../architecture/gcp-landing-zone.md#layer-map--which-root-deploys-what)):
+Where the AWS SRA spreads its foundation across seven layered roots, GCP uses **six roots**: five layered roots applied in order, plus the security-team root `gcp-guardrails` (see the [GCP landing zone](../architecture/gcp-landing-zone.md#layer-map--which-root-deploys-what)):
 
 1. **`envs/gcp/bootstrap`** (workspace `gcp-bootstrap`) stands up the automation foundation: the admin project, the `terraform-admin` service account, and the WIF pools. Apply it **first**. It is the phase-0 **producer** of `admin_project_id`, `admin_project_number`, `terraform_admin_email`, `suffix`, and the OIDC pool outputs (`envs/gcp/bootstrap/outputs.tf`).
 2. **`envs/gcp/organization`** (workspace `gcp-organization`) **reads** the bootstrap remote state and runs the organization stage: folders, org policy, KMS, audit logging, billing. Producer of `org_id`, `folders`, `tag_values`/`tag_keys`, `cmek_key_names`, `billing_account`, and the re-exported WIF pool IDs.
 3. **`envs/gcp/projects`** (workspace `gcp-projects`) **reads** gcp-organization (folders, tags, billing) and gcp-bootstrap (admin project, suffix), and vends the host/spoke projects. Producer of `project_ids`, `project_numbers`, and the `environment_config` contract that gcp-workload consumes.
 4. **`envs/gcp/network-hub`** (workspace `gcp-network-hub`) **reads** gcp-projects (host project IDs) and gcp-organization (folders, org_id), and builds the hub VPC, DNS anchor, and hub VPC-SC perimeter. Producer of `hub_network`.
 5. **`envs/gcp/workload`** (workspace `gcp-workload-<env>`, one per environment) **reads** gcp-projects (`environment_config`), gcp-network-hub (`hub_network`), and gcp-organization (`org_id`, `billing_account`, `admin_project_number`), and stands up that environment's Shared VPC host network + budget.
+6. **`envs/gcp/guardrails`** (workspace `gcp-guardrails`, security team only) applies the organization IAM deny policies, including admin containment. It reads no state. It looks up the org and the `containment/protected` tag that `gcp-organization` creates, so apply it after `gcp-organization`. See [Security team and gcp-guardrails](#security-team-and-gcp-guardrails).
 
 The control plane was split into separate states (bootstrap / organization / projects / network-hub) to shrink the blast radius — see [gcp-state-decomposition.md](../architecture/gcp-state-decomposition.md) (audit H3).
 
 The wrinkle unique to GCP is in step 1: the providers **impersonate** a `terraform-admin` service account, but *that SA is created by the `gcp-bootstrap` apply itself*. So the first `gcp-bootstrap` apply cannot impersonate a SA that does not exist yet — it must run as the human `admin_email`. This runbook calls that the **two-phase first apply** and details it below.
 
-> **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Ordering across the five roots is enforced entirely by **apply order** (this runbook) plus remote-state reads: a downstream root fails at plan time with an "output not found" error if its upstream has not been applied yet.
+> **No cross-root `depends_on`.** Terraform has no dependency edge between roots. Ordering across the roots is enforced entirely by **apply order** (this runbook) plus remote-state reads: a downstream root fails at plan time with an "output not found" error if its upstream has not been applied yet.
 
 ---
 
@@ -164,8 +165,9 @@ gcloud auth application-default revoke
 
 ## What the control-plane roots create
 
-The GCP control plane is four roots (audit H3), one stage each, applied in order
-(`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub`). The
+The GCP control plane is four layered roots (audit H3), one stage each, applied in order
+(`gcp-bootstrap` → `gcp-organization` → `gcp-projects` → `gcp-network-hub`), plus the
+security-team root `gcp-guardrails` (see [Security team and gcp-guardrails](#security-team-and-gcp-guardrails)). The
 stages and what each creates:
 
 **`module.bootstrap`** — the automation foundation:
@@ -177,19 +179,19 @@ stages and what each creates:
   | SA | TFC binding | Rights |
   |---|---|---|
   | `<prefix>-bootstrap-plan` | `gcp-bootstrap:plan` | read-only (browser, org viewer, security reviewer, SA/WIF/serviceusage viewer, billing viewer) |
-  | `<prefix>-organization-plan` / `-apply` | `gcp-organization:plan` / `:apply` | plan: org read-only + policy/logging/SCC/tag/deny/contacts viewers; apply: folderAdmin, iam.securityAdmin, orgpolicy.policyAdmin, logging.configWriter, SCC notificationConfigEditor, tagAdmin/tagUser, denyAdmin, essentialcontacts.admin; KMS/GCS/PubSub/BQ/monitoring on the admin project; billing costsManager |
-  | `<prefix>-projects-plan` / `-apply` | `gcp-projects:plan` / `:apply` | apply: projectCreator, billing.projectManager + billing.user, metrics-scope admin, and a **conditional** org `folderIamAdmin` that can only grant the workload/network folder roles (IAM delegated role grants) |
+  | `<prefix>-organization-plan` / `-apply` | `gcp-organization:plan` / `:apply` | plan: org read-only + policy/logging/SCC/tag/deny/contacts viewers; apply: folderCreator + folderEditor + folderIamAdmin (no folderAdmin), a **role-conditioned** iam.securityAdmin (`modifiedGrantsByRole.hasOnly(organization_apply_grantable_roles)`: billing.admin and log-writer roles only), orgpolicy.policyAdmin, logging.configWriter, SCC notificationConfigEditor, tagAdmin/tagUser, essentialcontacts.admin (denyAdmin only in the legacy `guardrail_owner_mode = "organization"`); KMS/GCS/PubSub/BQ/monitoring on the admin project; billing costsManager |
+  | `<prefix>-projects-plan` / `-apply` | `gcp-projects:plan` / `:apply` | apply: projectCreator, billing.projectManager + billing.user, metrics-scope admin, and a **conditional** `folderIamAdmin` that gcp-organization binds per folder: on each environment folder (workload roles) and on the shared folder (network roles plus `roles/dns.peer`), with one binding per 10 roles because IAM allows at most 10 roles in one `hasOnly()` condition. The org-level binding exists only with `enable_org_level_folder_iam_delegation` |
   | `<prefix>-network-hub-plan` / `-apply` | `gcp-network-hub:plan` / `:apply` | apply: org ACM policyAdmin; network roles on the `shared` folder (granted by gcp-projects) |
-  | `<prefix>-wl-<env>-plan` / `-apply` | `gcp-workload-<env>:plan` / `:apply` | **no org-level role**: env-folder roles granted by gcp-projects, billing budget roles, and ACM rights on **its own env folder-scoped access policy** only (created by gcp-organization, `enable_scoped_access_policies`, default `true`: apply `policyEditor`, plan `policyReader`); the org-wide policy grant (`vpc_sc_access_policy_id`) applies only with the opt-in `enable_legacy_org_access_policy_grants` |
+  | `<prefix>-wl-<env>-plan` / `-apply` | `gcp-workload-<env>:plan` / `:apply` | **no org-level role**: env-folder roles granted by gcp-projects (the apply SA also gets `roles/dns.peer` on the shared folder), billing budget roles, and ACM rights on **its own env folder-scoped access policy** only (created by gcp-organization, `enable_scoped_access_policies`, default `true`: apply `policyEditor`, plan `policyReader`); the org-wide policy grant (`vpc_sc_access_policy_id`) applies only with the opt-in `enable_legacy_org_access_policy_grants` |
 
 - **TFC WIF pool** `tfc-pool` (when `enable_tfc_oidc = true` and `tfc_organization != null`). The provider condition pins `terraform_organization_name` (plus `terraform_organization_id` / `terraform_project_id` when `tfc_organization_id` / `tfc_project_ids` are set) and admits only the `plan` / `apply` phases. It maps composite attributes `workspace_phase = <name>:<phase>` and `workspace_id_phase = <id>:<phase>`; each SA is bound to exactly one of them (by workspace **ID** when `tfc_workspace_ids` supplies it), so a speculative/PR plan can only ever mint a read-only identity and a squatted workspace name gains nothing once IDs are pinned.
 - **GitHub WIF pool** — only when `enable_github_wif = true` (default **false**). Trust is pinned to `repository_owner_id` + `repository_id` on `refs/heads/main` and bound to the read-only `<prefix>-organization-plan` SA only.
 
 **`module.organization`** — hierarchy & governance: org folders (one `Shared Services` folder + one per `environments` key, `prevent_destroy`), org policies (the ~15-constraint guardrail set, stricter on the `strict_folder_policy_environment_keys` folders, default `["prod"]`), tag keys/values bound per folder, one folder-scoped VPC-SC access policy per environment folder with that environment's workload SAs granted on it only (`automation_delegation.tf`), the projects-apply delegated `folderIamAdmin` bound per target folder, org-wide audit logs → CMEK GCS sink (+ BigQuery analytics), SCC Pub/Sub notifications, org CMEK keyring, org budget, and Essential Contacts.
 
-**`module.projects`** — the shared `hub` and `dns` projects plus one `<env>-host` project per environment, all `deletion_policy = "PREVENT"`, attached to the admin metrics scope. It also grants the C2 automation identities their scoped rights: each `<prefix>-wl-<env>-plan/-apply` SA on **its own env folder** only (`workload_folder_roles`), and the network-hub SAs on the `shared` folder (`network_folder_roles`) — both lists read from gcp-bootstrap so they match the projects-apply delegation condition.
+**`module.projects`** — the shared `hub` and `dns` projects plus one `<env>-host` project per environment, all `deletion_policy = "PREVENT"`, attached to the admin metrics scope. It also grants the C2 automation identities their scoped rights: each `<prefix>-wl-<env>-plan/-apply` SA on **its own env folder** only (`workload_folder_roles`), and the network-hub SAs on the `shared` folder (`network_folder_roles`). It also grants each workload apply SA `roles/dns.peer` on the `shared` folder. The role lists are read from gcp-bootstrap so they match the projects-apply delegation condition.
 
-**`module.network_hub`** — the hub VPC (`hub-vpc-core`), the DNS hub (`dns-vpc-core` + private root zone), and — **only if `vpc_sc_access_policy_name` is non-null** — the hub VPC-SC perimeter protecting the spoke project numbers.
+**`module.network_hub`** — the hub VPC (`hub-vpc-core`), the DNS hub (`dns-vpc-core` plus the private root zone, which is also bound to `hub-vpc-core`), and — **only if `vpc_sc_access_policy_name` is non-null** — the hub VPC-SC perimeter protecting the spoke project numbers.
 
 ---
 
@@ -199,7 +201,7 @@ Do **not** hand-create the GCP workspaces or hand-type dynamic-credential env va
 
 Because the WIF pool and the per-workspace plan/apply service accounts are created by `gcp-bootstrap`, which itself runs in a workspace tfc-admin creates, wiring is **two-pass**:
 
-1. **Pass 1 — workspaces only.** Create the `tfc-admin` workspace by hand once (working directory `envs/tfc-admin`, `TFE_TOKEN` as a sensitive env var holding a temporary phase-0 owner token), then apply it. **Revoke the phase-0 owner token after that first apply** and switch tfc-admin to the expiring non-owner `tfc-admin` team token described in [tfc-admin-token-rotation.md](tfc-admin-token-rotation.md); set `tfc_admin_team_id` to that team. With `gcp.enabled: true` in the committed `config/landing-zone.yaml`, tfc-admin derives the cloud flags, one `gcp-workload-<env>` per `gcp.environments` key, and the project names from that file. The explicit `enable_gcp` / `environments` variables still override it. Every cloud defaults to disabled, and at least one must be enabled. Every `gcp-*` workspace now exists with triggers, settings and remote-state sharing, but **no** `TFC_GCP_*` env vars (they are only set when their inputs are non-null). `gcp-bootstrap` is created in execution mode `local`; every other workspace is `remote`.
+1. **Pass 1 — workspaces only.** Create the `tfc-admin` workspace by hand once (working directory `envs/tfc-admin`, `TFE_TOKEN` as a sensitive env var holding a temporary phase-0 owner token), then apply it. **Revoke the phase-0 owner token after that first apply** and switch tfc-admin to the expiring non-owner `tfc-admin` team token described in [tfc-admin-token-rotation.md](tfc-admin-token-rotation.md); set `tfc_admin_team_id` to that team. With `gcp.enabled: true` in the committed `config/landing-zone.yaml`, tfc-admin derives the cloud flags, one `gcp-workload-<env>` per `gcp.environments` key, and the project names from that file. The explicit `enable_gcp` / `environments` variables still override it. Every cloud defaults to disabled, and at least one must be enabled. Every `gcp-*` workspace now exists with triggers, settings and remote-state sharing, but **no** `TFC_GCP_*` env vars (they are only set when their inputs are non-null). `gcp-bootstrap` is created in execution mode `local`; every other workspace is `remote`. If the policy sets already judge tfc-admin (any tfc-admin apply after the one that creates them), expect a `tfc_admin_guard` override on this apply (security team), because it creates a workspace in `local` mode.
 2. **Apply `gcp-bootstrap`** (the phase-0 human apply described above, from your machine with ADC and `terraform_admin_email` unset). It publishes `tfc_workload_provider_name` (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`) and the per-workspace maps `tfc_plan_service_accounts` / `tfc_apply_service_accounts` (keyed by workspace name).
 3. **Pass 2 — dynamic credentials.** Either copy those outputs into the tfc-admin variables `gcp_workload_provider_name`, `gcp_plan_service_accounts`, `gcp_apply_service_accounts`, **or** set `gcp_bootstrap_outputs_from_tfc = true` to read them via `tfe_outputs` (tfc-admin is then added as a remote-state consumer of `gcp-bootstrap`). Re-apply tfc-admin. Each GCP workspace in the maps receives:
 
@@ -211,6 +213,8 @@ Because the WIF pool and the per-workspace plan/apply service accounts are creat
    | `TFC_GCP_APPLY_SERVICE_ACCOUNT_EMAIL` | the workspace's apply SA |
 
    In the same pass set `workspace_execution_modes = {}`. That moves `gcp-bootstrap` from `local` to `remote` execution now that it has dynamic credentials.
+
+   Expect a `tfc_admin_guard` override on this apply (security team): it writes the `TFC_GCP_*` env vars.
 
 4. Apply the remaining GCP roots in order (`gcp-organization` → `gcp-projects` → `gcp-network-hub` → `gcp-workload-<env>`) from TFC. Because control-plane workspaces have speculative plans disabled, review their plans from a run queued on `main` (or a CLI-driven plan by an operator), not from PR checks.
 
@@ -224,11 +228,25 @@ The same flow applies to AWS (`aws.enabled: true`): see the [AWS bootstrap runbo
 |------|------|-------|
 | `TFC_ORGANIZATION` | Variable | Your TFC org name |
 | `TFC_TOKEN` | Secret | Read-only TFC team token (release run-status checks) |
-| `TFC_TOKEN_DRIFT` | Secret | Queue-plans TFC team token for drift detection (no fallback to `TFC_TOKEN`) |
+| `TFC_TOKEN_DRIFT` | Secret | Token of the team set as tfc-admin `drift_team_id` (codified grants; token made by hand with `expired_at` 90 days out). Never a token with rights on a secret-bearing project. No fallback to `TFC_TOKEN`. |
 
 See [CI_SECRETS.md](../guides/CI_SECRETS.md).
 
 > **Escape hatch — run #1 with local state.** If you want the bootstrap applied before any TFC workspace exists, run phase 1 with `terraform -chdir=envs/gcp/bootstrap init -backend=false` and a local apply, then (after tfc-admin pass 1 creates `gcp-bootstrap`) re-`init` **with** the `cloud` backend to migrate the local state into it. The default path — tfc-admin creates `gcp-bootstrap` in `local` execution mode and you apply from your machine with TFC holding state — avoids the migration.
+
+---
+
+## Security team and gcp-guardrails
+
+Setting `gcp.break_glass_group` (the scaffolder does) or marking any environment `is_production: true` turns admin containment **on**. But `gcp-organization` only creates the `containment/protected` tag. The deny policy itself is applied by `gcp-guardrails`, and nothing applies it until the security team does:
+
+1. An HCP Terraform organization owner creates a team for the security staff (**Settings > Teams > Create a team**) with no organization-level permissions, adds its members, and copies its ID (`team-...`).
+2. Set `security_team_id = "team-..."` on tfc-admin. It must differ from `platform_team_id` and `control_plane_approvers_team_id`. Keep `enable_projects = true`. Apply tfc-admin. It puts `gcp-guardrails` in its own `<prefix>guardrails` project and grants only that team. A check warns while `security_team_id` is null.
+3. Production estates: `gcp-bootstrap` binds the guardrails plan and apply service accounts to the workspace by its immutable ID, so `tfc_workspace_ids` must include `gcp-guardrails`. Run `make bootstrap-ids` again if you ran it before tfc-admin created that workspace, then apply `gcp-bootstrap`.
+4. After `gcp-organization` has applied, a security-team member queues a run on `gcp-guardrails` and confirms the apply. The workspace never auto-applies.
+5. Verify: `gcloud iam policies list --kind=denypolicies --attachment-point=cloudresourcemanager.googleapis.com%2Forganizations%2F<org-id>` lists the containment policy.
+
+Details and the break-glass path: [production hardening](production-hardening.md). The default `guardrail_owner_mode = "separate"` is assumed here. With `guardrail_owner_mode = "organization"` do not apply `gcp-guardrails`. The organization apply SA owns the deny policy.
 
 ---
 
@@ -239,7 +257,7 @@ Once `gcp-organization` is applied and its outputs are published, each applicati
 1. Add **one** entry under `gcp.environments` in `config/landing-zone.yaml` (plus any workload tfvars and their `-var-file` wiring) in one PR, and merge it.
 2. Confirm the **tfc-admin** apply. It creates `gcp-workload-<env>` with its `environment` variable and, after the handover (pass 2 above, `gcp_bootstrap_outputs_from_tfc = true`), its `TFC_GCP_*` env vars: the SA emails are derived as `<org.prefix>-wl-<env>-{plan,apply}@<admin_project_id>.iam.gserviceaccount.com`, so no second tfc-admin pass is needed. Its apply triggers `gcp-bootstrap` and `aws-organization`, the DAG roots.
 3. Confirm each shared workspace as its triggered run queues: **gcp-bootstrap** (creates the `<prefix>-wl-<env>-plan/-apply` SAs and their `gcp-workload-<env>:plan/:apply` WIF bindings), **gcp-organization** (the env folder), **gcp-projects** (host project and env-folder grants) and **gcp-network-hub**.
-4. A workload with `is_production: false` set explicitly then applies itself from `gcp-network-hub`'s run trigger (`auto_apply_run_trigger`); any other one (production, or the flag omitted) waits for confirmation. A new AWS workload also needs a second tfc-admin pass after `aws-organization` applies, for its role ARNs. The workload reads `environment_config[<env>]` (CIDR, region, folder, host project) from the org remote state; the per-env CIDR is **not** set in the workload tfvars.
+4. A workload with `is_production: false` set explicitly then applies itself from `gcp-network-hub`'s run trigger (`auto_apply_run_trigger`); any other one (production) waits for confirmation. A new AWS workload also needs a second tfc-admin pass after `aws-organization` applies, for its role ARNs. The workload reads `environment_config[<env>]` (CIDR, region, folder, host project) from the org remote state; the per-env CIDR is **not** set in the workload tfvars.
 
 Greenfield is different: the first environment exists before any gcp-bootstrap output, so it follows the phase-0 two-pass flow above.
 
@@ -251,29 +269,32 @@ See [add-environment.md](add-environment.md) for the exact steps, expected plan 
 
 After the first `gcp-organization` apply:
 
+Read the `contract` output of each root. The individual outputs are deprecated aliases, removed in v1.0.
+
 ```bash
 # Automation foundation exists
-terraform -chdir=envs/gcp/organization output -raw terraform_service_account_email
-terraform -chdir=envs/gcp/organization output -json | jq '{
-  github_oidc_pool_id: .github_oidc_pool_id.value,
-  tfc_oidc_pool_id:    .tfc_oidc_pool_id.value
+terraform -chdir=envs/gcp/organization output -json contract | jq '{
+  terraform_service_account_email,
+  tfc_oidc_pool_id,
+  github_oidc_pool_id
 }'
 
 # Admin project is present
-gcloud projects describe "$(terraform -chdir=envs/gcp/organization output -raw admin_project)"
+gcloud projects describe "$(terraform -chdir=envs/gcp/organization output -json contract | jq -r '.admin_project.project_id')"
 
 # Folders + org policies landed
-gcloud resource-manager folders list --organization="$(terraform -chdir=envs/gcp/organization output -raw org_id)"
+gcloud resource-manager folders list --organization="$(terraform -chdir=envs/gcp/organization output -json contract | jq -r '.org_id')"
 
 # Cross-root contract is published (workload roots depend on this)
-terraform -chdir=envs/gcp/projects output -json environment_config | jq 'keys'
-terraform -chdir=envs/gcp/network-hub output -json hub_network
+terraform -chdir=envs/gcp/projects output -json contract | jq '.environment_config | keys'
+terraform -chdir=envs/gcp/network-hub output -json contract | jq '.hub_network'
 ```
 
 Checklist:
 
 - [ ] `terraform_service_account_email` resolves to `terraform-admin@<admin-project>.iam.gserviceaccount.com`.
-- [ ] `github_oidc_pool_id` and `tfc_oidc_pool_id` are non-empty.
+- [ ] `tfc_oidc_pool_id` is non-empty (with the default `enable_tfc_oidc = true`).
+- [ ] Only when the `gcp-bootstrap` input `enable_github_wif = true`: `github_oidc_pool_id` is non-empty. With the default (`false`) it is `null`, and that is correct.
 - [ ] The admin project exists and has `deletion_policy = PREVENT`.
 - [ ] One folder exists per `environments` key plus `Shared Services`.
 - [ ] `environment_config` keys match your `environments` keys.
@@ -293,6 +314,45 @@ Existing estates bound every workspace to `terraform-admin`. Re-applying gcp-boo
 5. `tfc_workspace_ids` is set automatically. `tfc-admin` writes it onto the gcp-bootstrap workspace (`set_gcp_bootstrap_workspace_ids`), so remote runs bind WIF by immutable ID. Optionally also set `tfc_project_ids` and `tfc_organization_id`.
 
 The unused GitHub pool is **destroyed** by default (`enable_github_wif = false`). GCP soft-deletes pools for 30 days; to re-enable within that window set a new `github_wif_pool_id`.
+
+## Moving the org-admin grant to gcp-bootstrap (role-conditioned organization-apply)
+
+An estate applied before organization-apply's `iam.securityAdmin` became
+role-conditioned has the org admin groups' `organizationAdmin` in the
+`gcp-organization` state. Move it without a gap (details in
+[UPGRADING.md](../../UPGRADING.md)):
+
+1. **Apply `gcp-bootstrap`.** It takes over the standing
+   `roles/resourcemanager.organizationAdmin` of the org admin groups
+   (`module.bootstrap.google_organization_iam_member.org_admins`). The members
+   already hold the role, so nothing changes in IAM. It also replaces
+   organization-apply's org `folderAdmin` with `folderCreator`, `folderEditor`
+   and `folderIamAdmin`, and adds the `modifiedGrantsByRole` condition to its
+   `iam.securityAdmin`. If gcp-organization runs with
+   `gcp_overrides.allow_user_principals_for_break_glass = true`, first set the
+   gcp-bootstrap variable `organization_admin_members` to the groups plus
+   `user:<admin_email>` and `user:<break_glass_user>`.
+2. **Remove the org-admin grants from the `gcp-organization` state** without
+   deleting them:
+
+   ```bash
+   make state-rm-gcp-organization ADDR='module.organization.module.organization.google_organization_iam_member.org_admins'
+   ```
+
+3. **Plan `gcp-organization`.** The plan must show no destroy of
+   `org_admins`. It fails with a named role or member when the gcp-bootstrap
+   contract does not cover what this root grants: fix the gcp-bootstrap input
+   (`organization_apply_grantable_roles` or `organization_admin_members`),
+   re-apply gcp-bootstrap, and plan again.
+4. **Apply `gcp-organization`.**
+
+Run no other `gcp-organization` apply between steps 1 and 4. The guards: a
+`gcp-organization` plan against a gcp-bootstrap state from before step 1 fails
+(`terraform_data.bootstrap_grants_org_admins`). If you skip step 2, the plan
+shows the `org_admins` bindings as destroyed: stop and run step 2. (The
+conditional `securityAdmin` should refuse that removal with 403, but this is
+not validated on a real organization.) Break-glass and the org admin groups
+keep `organizationAdmin` throughout.
 
 ---
 

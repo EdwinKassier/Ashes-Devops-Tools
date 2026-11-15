@@ -40,3 +40,26 @@ run "regional_cidr_key_outside_enabled_regions_rejected" {
 
   expect_failures = [var.regional_cidrs]
 }
+
+run "additional_cidr_for_a_disabled_region_rejected" {
+  command = plan
+
+  variables {
+    org_arn                   = "arn:aws:organizations::123456789012:organization/o-exampleorgid"
+    aws_enabled_regions       = ["eu-west-2"]
+    regional_additional_cidrs = { us-east-1 = ["10.80.0.0/12"] }
+  }
+
+  expect_failures = [var.regional_additional_cidrs]
+}
+
+run "share_principal_that_is_not_an_org_arn_rejected" {
+  command = plan
+
+  variables {
+    org_arn              = "arn:aws:organizations::123456789012:organization/o-exampleorgid"
+    share_principal_arns = ["123456789012"]
+  }
+
+  expect_failures = [var.share_principal_arns]
+}

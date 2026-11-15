@@ -782,3 +782,221 @@ run "template_fits_with_many_bindings" {
     error_message = "the template with 24 bindings must stay within the 51,200-byte inline template limit"
   }
 }
+
+# The locked backup copy vault: during the lock's changeable_for_days window the
+# apply role must not delete the lock, the vault access policy or the vault.
+# Creating them (CreateBackupVault, PutBackupVaultLockConfiguration,
+# PutBackupVaultAccessPolicy) stays allowed, so the aws-backup apply that first
+# creates the copy vault still succeeds. Break-glass is a separate role, so
+# the boundary does not touch it.
+run "boundary_denies_copy_vault_unlock" {
+  command = plan
+
+  assert {
+    condition = (
+      toset(one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]).Action) == toset([
+        "backup:DeleteBackupVault", "backup:DeleteBackupVaultAccessPolicy", "backup:DeleteBackupVaultLockConfiguration",
+      ]) &&
+      [for r in one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]).Resource : r["Fn::Sub"]] == [
+        "arn:$${AWS::Partition}:backup:*:$${AWS::AccountId}:backup-vault:org-backup-copy-vault",
+      ]
+    )
+    error_message = "the boundary must deny deleting the copy vault, its access policy and its Vault Lock configuration."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      !anytrue([for a in flatten([s.Action]) : contains(["backup:CreateBackupVault", "backup:PutBackupVaultAccessPolicy", "backup:PutBackupVaultLockConfiguration", "backup:*", "backup:Put*", "backup:Create*"], a)])
+      if s.Effect == "Deny"
+    ])
+    error_message = "the boundary must not deny creating the copy vault, its Vault Lock or its access policy (the first aws-backup apply needs them)."
+  }
+}
+
+run "boundary_fits_quota_with_long_names" {
+  # Long role, tag and vault names must keep the embedded boundary under the
+  # 6,144-character managed-policy quota: 5,779 characters after Fn::Sub
+  # substitution (6,091 with the wrappers) on 2026-11-12, with the brownfield
+  # escalation denies, the trust-update lock and the StackSet stack deny.
+  command = plan
+
+  variables {
+    break_glass_role_name        = "landing-zone/break-glass-organization-administrator-role"
+    protected_role_names         = ["OrganizationAccountAccessRole", "stacksets-exec-*", "landing-zone/security-incident-response-administrator-role"]
+    protected_backup_vault_names = ["org-backup-copy-vault-eu-west-2-organization-001", "org-backup-copy-vault-eu-west-1-organization-002"]
+    kms_protection_tag_key       = "landing-zone:protected-encryption-key"
+  }
+
+  assert {
+    condition     = local.apply_boundary_policy_size < 6144
+    error_message = "the embedded boundary must stay under the 6,144-character managed-policy quota with long names"
+  }
+
+  assert {
+    condition     = length(one([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]).Resource) == 2
+    error_message = "every protected_backup_vault_names entry must be a resource of the deny"
+  }
+}
+
+run "copy_vault_unlock_deny_omitted_without_protected_vaults" {
+  command = plan
+
+  variables {
+    protected_backup_vault_names = []
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement : s if s.Sid == "DenyProtectedBackupVaultUnlock"]) == 0
+    error_message = "an empty protected_backup_vault_names must omit the statement (an empty Resource list is invalid policy)."
+  }
+}
+
+run "boundary_blocks_brownfield_escalation_paths" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && s.Resource == "*" && alltrue([for a in ["iam:PutGroupPolicy", "iam:AttachGroupPolicy", "iam:AddUserToGroup", "iam:UpdateLoginProfile", "iam:AttachUserPolicy", "iam:PutUserPolicy"] : contains(flatten([s.Action]), a)])
+    ])
+    error_message = "the boundary must deny group policies, group membership, user policies and console password changes."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && contains(flatten([s.Action]), "iam:CreatePolicyVersion") && contains(flatten([s.Action]), "iam:SetDefaultPolicyVersion") &&
+      try(s.NotResource[0]["Fn::Sub"], "") == "arn:$${AWS::Partition}:iam::$${AWS::AccountId}:policy/tfc-managed/*"
+    ])
+    error_message = "the boundary must deny re-versioning any customer-managed policy outside /tfc-managed/."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && s.Action == ["iam:UpdateAssumeRolePolicy"] && s.Resource == "*"
+    ])
+    error_message = "with enable_apply_trust_update_lock (default true) the boundary must deny every trust-policy update."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyProtectedKeyTampering" && contains(flatten([s.Action]), "kms:UpdateAlias") && contains(flatten([s.Action]), "kms:DeleteAlias") &&
+      try(s.Condition.StringEquals["aws:ResourceTag/protected"], "") == "true"
+    ])
+    error_message = "retargeting or deleting the alias of a protected key must be denied (and only for protected keys)."
+  }
+
+  # Self-lockout guard: the pipeline still creates roles (CreateRole sets the
+  # trust), customer-managed policies, and aliases on new keys.
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && s.Resource == "*" && !can(s.Condition) && anytrue([for a in ["iam:CreateRole", "iam:CreatePolicy", "iam:DeletePolicyVersion", "kms:CreateAlias", "kms:CreateKey"] : contains(flatten([s.Action]), a)])
+    ])
+    error_message = "no unconditional deny may block CreateRole, CreatePolicy, DeletePolicyVersion, CreateAlias or CreateKey."
+  }
+
+  assert {
+    condition     = length(jsonencode(jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument)) < 6144
+    error_message = "the boundary must stay under the 6,144-character managed policy limit."
+  }
+}
+
+run "trust_update_lock_opt_out" {
+  command = plan
+
+  variables {
+    enable_apply_trust_update_lock = false
+  }
+
+  assert {
+    condition = !anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Effect == "Deny" && s.Action == ["iam:UpdateAssumeRolePolicy"] && s.Resource == "*"
+    ])
+    error_message = "enable_apply_trust_update_lock = false removes the trust-update deny."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyTamperingWithTfcBaseline" && contains(flatten([s.Action]), "iam:UpdateAssumeRolePolicy")
+    ])
+    error_message = "the opt-out must keep the trust deny on the TFC baseline roles."
+  }
+}
+
+# SEC-2: tfc-apply must not write to the stacks that service-managed StackSets
+# create in its account (StackSet-<name>-<id>): a direct UpdateStack or change
+# set there could rewrite the StackSet-owned roles and this boundary, and
+# CloudFormation does not report it as StackSet drift. The wildcards cover
+# UpdateStack, DeleteStack, CreateStack (name squatting), CancelUpdateStack,
+# RollbackStack and every change-set action. Same deny as the org SCP
+# DenyStackSetStackTampering (which also exempts break-glass and the StackSet
+# execution role; neither carries this boundary).
+run "boundary_denies_stackset_stack_writes" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(output.template_body).Resources.TfcApplyBoundary.Properties.PolicyDocument.Statement :
+      s.Sid == "DenyStackSetStackTampering" && s.Effect == "Deny" &&
+      s.Resource == "arn:*:cloudformation:*:*:stack/StackSet-*" &&
+      toset(s.Action) == toset([
+        "cloudformation:*Stack", "cloudformation:*ChangeSet", "cloudformation:*StackRefactor", "cloudformation:SetStackPolicy",
+        "cloudformation:UpdateTerminationProtection", "cloudformation:ContinueUpdateRollback",
+      ])
+    ])
+    error_message = "the embedded boundary must deny stack, change-set, stack-policy, termination-protection and rollback writes on stack/StackSet-*"
+  }
+}
+
+run "external_boundary_mode_denies_stackset_stack_writes_inline" {
+  command = plan
+
+  variables {
+    apply_permissions_boundary_arn = "arn:aws:iam::111111111111:policy/org-apply-boundary"
+  }
+
+  assert {
+    condition = alltrue([
+      for name, r in jsondecode(output.template_body).Resources :
+      !startswith(name, "TfcApplyRole") || anytrue([
+        for s in r.Properties.Policies[0].PolicyDocument.Statement :
+        s.Sid == "DenyStackSetStackTampering" && s.Resource == "arn:*:cloudformation:*:*:stack/StackSet-*"
+      ])
+    ])
+    error_message = "with an external boundary the StackSet stack deny must be inline on every apply role."
+  }
+}
+
+# The embedded boundary must fit the 6,144-character managed-policy quota after
+# CloudFormation substitutes Fn::Sub (longest partition, 12-digit account).
+# Without the plan-time guard a long protected_role_names entry would only
+# fail during the StackSet rollout.
+run "boundary_size_guard_reports_the_substituted_size" {
+  command = plan
+
+  assert {
+    condition     = local.apply_boundary_policy_size > 4000 && local.apply_boundary_policy_size < 6144
+    error_message = "the measured boundary size must be the substituted policy, under the quota with defaults"
+  }
+
+  assert {
+    condition     = !strcontains(local.apply_boundary_policy_measured, "Fn::Sub")
+    error_message = "the measured boundary must have the Fn::Sub wrappers resolved"
+  }
+}
+
+run "oversized_boundary_fails_at_plan" {
+  command = plan
+
+  variables {
+    protected_role_names = [for i in range(20) : "landing-zone/very-long-protected-role-name-number-${i}-for-the-size-guard"]
+  }
+
+  expect_failures = [aws_cloudformation_stack_set.this]
+}

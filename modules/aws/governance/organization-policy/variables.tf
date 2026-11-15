@@ -32,7 +32,7 @@ variable "terraform_run_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.terraform_run_role_arn))
     error_message = "terraform_run_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -42,7 +42,7 @@ variable "break_glass_role_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", var.break_glass_role_arn))
     error_message = "break_glass_role_arn must be an account-qualified IAM role ARN (arn:aws:iam::<12-digit>:role/<name>) with no wildcards (* or ?)."
   }
 }
@@ -111,13 +111,25 @@ variable "stackset_managed_policy_names" {
 }
 
 variable "stackset_execution_role_names" {
-  description = "Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles); themselves protected break-glass-only by DenyPrivilegedRoleTampering."
+  description = "Name patterns of the service-managed StackSet execution role in member accounts (AWS creates stacksets-exec-<hash>). Exempt from DenyStackSetRoleTampering, DenyStackSetPolicyTampering and DenyStackSetStackTampering ONLY (so the StackSets can create/update the tfc-* and member break-glass roles, the StackSet policies and the StackSet stacks); themselves protected break-glass-only by DenyPrivilegedRoleTampering. A role that only writes StackSet stacks (AWS Control Tower, a self-managed StackSet, Quick Setup) belongs in stackset_stack_writer_role_names instead."
   type        = list(string)
   default     = ["stacksets-exec-*"]
 
   validation {
     condition     = length(var.stackset_execution_role_names) > 0 && alltrue([for n in var.stackset_execution_role_names : can(regex("^[A-Za-z0-9+=,.@_/*-]{1,512}$", n)) && !can(regex("^[*/]*$", n))])
     error_message = "stackset_execution_role_names must be a non-empty list of IAM role names or name patterns; a bare \"*\" is not allowed."
+  }
+}
+
+variable "stackset_stack_writer_role_names" {
+  description = "Member-account role names (or name patterns) that write StackSet stacks (stack/StackSet-*) for a StackSet this landing zone does not own. Exempt from DenyStackSetStackTampering ONLY: not exempt from any other statement and not added to the break-glass-only role protection. An AWS Control Tower estate adds AWSControlTowerExecution (it writes StackSet-AWSControlTowerBP-* stacks); a self-managed StackSet adds its execution role (for example AWSCloudFormationStackSetExecutionRole); AWS Quick Setup adds its local execution role. Default empty."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for n in var.stackset_stack_writer_role_names : can(regex("^[A-Za-z0-9+=,.@_/-]{3}[A-Za-z0-9+=,.@_/*-]{0,509}$", n))])
+    error_message = "stackset_stack_writer_role_names entries must be IAM role names or name patterns with at least 3 literal characters before the first \"*\" (AWSControlTowerExecution, or a pattern such as AWS-QuickSetup-*). \"*\", \"AW*\" and \"*Execution\" are rejected."
   }
 }
 
@@ -133,7 +145,7 @@ variable "break_glass_role_names" {
 }
 
 variable "kms_protection_tag_key" {
-  description = "Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = \"true\" cannot be scheduled for deletion, disabled, have rotation disabled or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection_tag_key)."
+  description = "Resource-tag key marking KMS keys protected by the deny-tamper SCP. Keys tagged <key> = \"true\" cannot be scheduled for deletion, disabled, have rotation disabled, have an alias retargeted or deleted, or the tag removed except by break-glass; their key policy can only be changed by break-glass (so Terraform key-policy changes to protected keys need a break-glass apply). Must match the tag the aws/data/kms-key module applies (protection_tag_key)."
   type        = string
   default     = "protected"
 
@@ -344,5 +356,17 @@ variable "config_recorder_pipeline_role_arns" {
   validation {
     condition     = alltrue([for a in var.config_recorder_pipeline_role_arns : can(regex("^arn:aws(-[a-z]+)*:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$", a))])
     error_message = "config_recorder_pipeline_role_arns entries must be account-qualified IAM role ARNs without wildcards."
+  }
+}
+
+variable "tag_policy_required_resource_types" {
+  description = "Resource types (service:type, for example ec2:instance, s3:bucket, or service:ALL_SUPPORTED) for which the tag policy reports CostCenter, Environment, Owner and DataClassification as required (report_required_tag_for). Empty (default) = no key is required. The AWS provider fails or warns at plan on a listed resource that lacks a key when the workspace sets TF_AWS_TAG_POLICY_COMPLIANCE to error or warning; the plan role then needs tag:ListRequiredTags."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for t in var.tag_policy_required_resource_types : can(regex("^[a-z0-9-]+:[A-Za-z0-9_-]+$", t))])
+    error_message = "tag_policy_required_resource_types entries must look like service:type (for example ec2:instance or ec2:ALL_SUPPORTED)."
   }
 }

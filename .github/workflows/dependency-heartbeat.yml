@@ -1,0 +1,64 @@
+name: Dependency heartbeat
+
+# "Renovate never ran" must show as a red check, not as silence. Weekly, this
+# workflow checks that renovate[bot] updated an issue or a pull request in this
+# repository (its Dependency Dashboard issue, a lockfile-maintenance PR, a
+# toolchain PR) within the last 8 days: scripts/check-renovate-heartbeat.sh,
+# read-only (one GET call with the job's read-only GITHUB_TOKEN).
+#
+# Fails on the upstream repository and on any repository that sets the
+# repository variable RENOVATE_HEARTBEAT_REQUIRED=true. A fork that does not
+# use Renovate gets a warning and a green run instead.
+
+on:
+  schedule:
+    - cron: "41 6 * * 2"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: dependency-heartbeat
+  cancel-in-progress: false
+
+# `shell: bash` runs every `run:` step as `bash -eo pipefail`: GitHub's
+# default (no shell set) is `bash -e` without pipefail, so `cmd | tee log`
+# would pass when cmd fails (scripts/check-workflow-pipefail.py).
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  heartbeat:
+    name: Renovate heartbeat
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read       # checkout
+      issues: read         # Dependency Dashboard issue
+      pull-requests: read  # Renovate pull requests
+    steps:
+      # Checkout and the check talk only to GitHub.
+      - name: Harden runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check that Renovate ran recently
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRED: >-
+            ${{ github.repository == 'EdwinKassier/Ashes-Devops-Tools'
+            || vars.RENOVATE_HEARTBEAT_REQUIRED == 'true' }}
+        run: |
+          args=(--max-age-days 8)
+          [ "${REQUIRED}" = "true" ] && args+=(--required)
+          ./scripts/check-renovate-heartbeat.sh "${args[@]}" "${GITHUB_REPOSITORY}"

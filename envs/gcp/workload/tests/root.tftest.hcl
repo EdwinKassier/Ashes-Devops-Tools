@@ -78,10 +78,11 @@ override_data {
       contract = {
         environment_config = {
           dev = {
-            folder_id           = "folders/111"
+            folder_id           = "111"
             folder_name         = "Development"
             host_project_id     = "acme-dev-host-abcd"
             host_project_number = "222222222222"
+            is_production       = false
             region              = "europe-west1"
             cidr_block          = "10.10.0.0/16"
             labels              = {}
@@ -131,7 +132,7 @@ run "workload_consumes_cross_root_contract" {
 
   # The host project is looked up from gcp-projects' environment_config.
   assert {
-    condition     = output.host_project_id == "acme-dev-host-abcd" && output.folder_id == "folders/111"
+    condition     = output.host_project_id == "acme-dev-host-abcd" && output.folder_id == "111"
     error_message = "workload must resolve the host project from gcp-projects' environment_config[<env>].host_project_id"
   }
 
@@ -151,6 +152,59 @@ run "workload_consumes_cross_root_contract" {
   assert {
     condition     = length(module.environment.components.service_teams) == 0 && length(output.service_team_project_ids) == 0
     error_message = "with no service_teams declared, the registry must create no service projects"
+  }
+}
+
+# ARC-13: the environment's own plan and apply SAs travel gcp-bootstrap ->
+# gcp-projects environment_config -> this root -> the environment stage, whose
+# perimeter admits them with one ingress rule.
+run "perimeter_admits_pipeline_from_projects_contract" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.projects
+    values = {
+      outputs = {
+        contract = {
+          environment_config = {
+            dev = {
+              folder_id               = "111"
+              folder_name             = "Development"
+              host_project_id         = "acme-dev-host-abcd"
+              host_project_number     = "222222222222"
+              is_production           = false
+              region                  = "europe-west1"
+              cidr_block              = "10.10.0.0/16"
+              labels                  = {}
+              tag_value_ids           = { environment = "tagValues/1" }
+              vpc_sc_access_policy_id = "555555555"
+              automation_identities = [
+                "serviceAccount:acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com",
+                "serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com",
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = module.environment.components.vpc_sc_pipeline_identities == tolist([
+      "serviceAccount:acme-wl-dev-plan@acme-admin-abcd.iam.gserviceaccount.com",
+      "serviceAccount:acme-wl-dev-apply@acme-admin-abcd.iam.gserviceaccount.com",
+    ])
+    error_message = "environment_config.<env>.automation_identities from gcp-projects must reach the environment perimeter's pipeline ingress rule."
+  }
+}
+
+# A gcp-projects state that predates automation_identities still plans: no rule.
+run "pre_arc13_projects_state_adds_no_pipeline_rule" {
+  command = plan
+
+  assert {
+    condition     = length(module.environment.components.vpc_sc_pipeline_identities) == 0
+    error_message = "An environment_config without automation_identities must add no pipeline ingress rule."
   }
 }
 
@@ -424,11 +478,34 @@ run "projects_contract_missing_environment_fails" {
     projects_contract = {
       environment_config = {
         prod = {
-          folder_id           = "folders/222"
+          folder_id           = "222"
           host_project_id     = "acme-prod-host-abcd"
           host_project_number = "444444444444"
+          is_production       = true
           region              = "europe-west1"
           cidr_block          = "10.20.0.0/16"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.projects_contract_guard]
+}
+
+# Production is the environment_config is_production flag alone: a contract
+# entry without it fails on the named guard; the environment name is not read.
+run "projects_contract_without_is_production_fails" {
+  command = plan
+
+  variables {
+    projects_contract = {
+      environment_config = {
+        dev = {
+          folder_id           = "111"
+          host_project_id     = "acme-dev-host-abcd"
+          host_project_number = "222222222222"
+          region              = "europe-west1"
+          cidr_block          = "10.10.0.0/16"
         }
       }
     }

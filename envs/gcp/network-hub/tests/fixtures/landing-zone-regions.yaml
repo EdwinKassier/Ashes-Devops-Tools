@@ -1,5 +1,5 @@
-# Test fixture: an additional hub region from the config file
-# (hybrid.tftest.hcl, additional-region runs).
+# Test fixture: an additional hub region and pinned hub zones from the config
+# file (hybrid.tftest.hcl, additional-region and zone runs).
 version: 1
 org:
   prefix: acme
@@ -9,6 +9,10 @@ gcp:
   network:
     hub_cidr_block: 10.0.0.0/16
     dns_hub_cidr_block: 10.1.0.0/16
+    zones: [europe-west1-c, europe-west1-b]
+    private_service_connect:
+      name: hubapis
+      address: 10.0.200.10
     additional_regions:
       europe-west4:
         subnet_cidrs:

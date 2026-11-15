@@ -71,7 +71,7 @@ Always verify the workspace before planning:
 
 ```bash
 echo "$TF_WORKSPACE"
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan
 ```
 
 ## `envs/gcp/workload` cannot find the organization remote state
@@ -86,11 +86,13 @@ Verify:
 
 ## Release tags do not trigger
 
-The release-metadata workflow only listens for:
+The release-metadata workflow (`terraform-apply.yml`) only listens for the patterns in its
+`on.push.tags`, for example:
 
 ```text
 gcp-organization/vX.Y.Z
 gcp-workload/<env>/vX.Y.Z
+aws-<root>/vX.Y.Z
 ```
 
 Examples:
@@ -105,6 +107,15 @@ git push origin gcp-workload/dev/v1.0.0
 
 Those tags publish release metadata after a successful Terraform Cloud run. They do not perform a live apply.
 
+## Release workflow fails with "has no source commit"
+
+The release-metadata workflow publishes a GitHub Release only when the workspace's latest run
+applied the tagged commit. It reads that commit from the ingress attributes of the run's
+configuration version, which only a VCS-driven run has. A run queued from the CLI or the API has
+none, so the workflow fails and publishes nothing. Let the workspace's VCS integration run the
+tagged commit, then re-run the workflow. A run of another commit holds the release instead
+("Release held" in the job summary).
+
 ## Pre-commit hooks fail because `core.hooksPath` is set
 
 ```bash
@@ -116,7 +127,7 @@ make pre-commit-install
 
 ```bash
 export TF_LOG=DEBUG
-TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan -var-file=../../../examples/dev.tfvars.example
+TF_WORKSPACE=gcp-workload-dev terraform -chdir=envs/gcp/workload plan
 ```
 
 ## WIF / ADC authentication failures in CI

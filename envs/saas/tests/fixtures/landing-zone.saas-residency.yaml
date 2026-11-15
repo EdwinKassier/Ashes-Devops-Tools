@@ -1,0 +1,24 @@
+# Fixture: SaaS residency check (saas.allowed_regions). Supabase in eu-west-1
+# and Vercel lhr1 (eu-west-2) pass; each test moves one of them out.
+org:
+  tfc:
+    organization: acme-tfc
+saas:
+  enabled: true
+  workspaces: [web]
+  supabase: true
+  vercel: true
+  allowed_regions: [eu-west-1, eu-west-2]
+  defaults:
+    supabase:
+      organization_id: acmeorgid1234
+      region: eu-west-1
+    vercel:
+      team_id: team_acme
+  stacks:
+    web:
+      supabase:
+        project_name: acme-web
+      vercel:
+        project_name: acme-web
+        github_repo: acme/web

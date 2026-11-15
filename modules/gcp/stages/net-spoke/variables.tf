@@ -17,7 +17,6 @@ variable "project_id" {
 variable "region" {
   description = "The primary GCP region of the network (e.g., 'us-central1', 'europe-west1')."
   type        = string
-  default     = "us-central1"
 
   validation {
     condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.region))
@@ -49,10 +48,17 @@ variable "labels" {
   default     = {}
 }
 
-variable "deletion_protection" {
-  description = "Guard the VPC and subnet stack with a prevent_destroy terraform_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard."
+variable "enable_deletion_protection" {
+  description = "Guard the VPC and subnet stack with a prevent_destroy terraform_data resource and enable VPC deletion protection. To deprovision deliberately, first run terraform state rm on the network module guard. Null (default) uses the deprecated deletion_protection input, else false."
   type        = bool
-  default     = false
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 variable "project_prefix" {
@@ -101,7 +107,7 @@ variable "network" {
     error_message = "network.cidr_block must be valid CIDR notation without host bits set (e.g. \"10.0.0.0/16\")."
   }
   validation {
-    condition     = alltrue([for z in var.network.explicit_zones : can(regex("^[a-z]+-[a-z]+[0-9]-[a-z]$", z))])
+    condition     = alltrue([for z in var.network.explicit_zones : can(regex("^[a-z]+-[a-z]+[0-9]+-[a-z]$", z))])
     error_message = "Each entry in network.explicit_zones must be a valid GCP zone name (e.g. 'us-central1-a')."
   }
 }
@@ -176,10 +182,12 @@ variable "private_service_access" {
 }
 
 variable "private_service_connect" {
-  description = "Private Service Connect endpoint for Google APIs; target is 'all-apis' or 'vpc-sc'."
+  description = "Private Service Connect endpoint for Google APIs. target is 'all-apis' or 'vpc-sc'. name (null = the network name in lower case without non-alphanumerics, cut to 17 characters, plus psc) must follow Google's rule: 1-20 lower-case letters and numbers, starting with a letter. address (null = the second-to-last address of network.cidr_block, for example 10.10.255.254 for 10.10.0.0/16) is the endpoint's internal IPv4 address; the plan fails when it is inside a subnet range of this VPC."
   type = object({
     enabled = optional(bool, true)
     target  = optional(string, "all-apis")
+    name    = optional(string)
+    address = optional(string)
   })
   default  = {}
   nullable = false
@@ -187,6 +195,17 @@ variable "private_service_connect" {
   validation {
     condition     = contains(["all-apis", "vpc-sc"], var.private_service_connect.target)
     error_message = "private_service_connect.target must be 'all-apis' or 'vpc-sc'."
+  }
+
+  validation {
+    # Source: https://docs.cloud.google.com/vpc/docs/configure-private-service-connect-apis (checked 2026-11-12).
+    condition     = var.private_service_connect.name == null || can(regex("^[a-z][a-z0-9]{0,19}$", coalesce(var.private_service_connect.name, "x")))
+    error_message = "private_service_connect.name (config: gcp.environments.<env>.private_service_connect.name) must be 1-20 characters, only lower-case letters and numbers, starting with a letter (Google's rule for a Private Service Connect endpoint for Google APIs). Hyphens are not allowed."
+  }
+
+  validation {
+    condition     = var.private_service_connect.address == null || (can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$", coalesce(var.private_service_connect.address, "x"))) && try(cidrhost("${var.private_service_connect.address}/32", 0) == var.private_service_connect.address, false))
+    error_message = "private_service_connect.address (config: gcp.environments.<env>.private_service_connect.address) must be a single IPv4 address (for example 10.10.255.254), not a range or an IPv6 address."
   }
 }
 
@@ -309,7 +328,9 @@ variable "flow_logs_export" {
     Export of VPC flow logs to BigQuery and/or Cloud Storage through a log sink,
     encrypted with a dedicated CMEK key. Off by default. When enabled, either set
     create_bigquery_dataset = true (the sink destination is then derived from
-    bigquery_dataset_id) or give an explicit destination URI.
+    bigquery_dataset_id) or give an explicit destination URI. bigquery_location
+    and storage_location default to the spoke's region (null); set them to pin
+    another location, for example "US" for an existing dataset.
   EOT
   type = object({
     enabled                 = optional(bool, false)
@@ -317,10 +338,10 @@ variable "flow_logs_export" {
     destination             = optional(string, "")
     create_bigquery_dataset = optional(bool, false)
     bigquery_dataset_id     = optional(string, "vpc_flow_logs")
-    bigquery_location       = optional(string, "US")
+    bigquery_location       = optional(string)
     create_storage_bucket   = optional(bool, false)
     storage_bucket_name     = optional(string, "")
-    storage_location        = optional(string, "US")
+    storage_location        = optional(string)
     retention_days          = optional(number, 90)
   })
   default  = {}
@@ -473,8 +494,10 @@ variable "egress_proxy" {
     Opt-in central egress (preview): a Private Service Connect endpoint in this VPC for the hub
     Secure Web Proxy (stages/net-hub secure_web_proxy with psc_nat_subnet_cidr). service_attachment
     is the hub output secure_web_proxy.service_attachment_id (this project must be in the hub's
-    consumer_accept_projects). The endpoint takes an address from the first primary-region private
-    subnet (address pins it). global_access lets other regions of this VPC use it. Enabling it also
+    consumer_accept_projects). The service attachment must be in var.region: Google creates a PSC
+    endpoint only in the region of the published service, and the plan fails otherwise. The
+    endpoint takes an address from the first primary-region private subnet (address pins it).
+    global_access lets other regions of this VPC use it. Enabling it also
     drops the private tier from Cloud NAT unless nat.include_private_subnets says otherwise, so
     private-tier workloads reach the internet only through the proxy (HTTPS_PROXY=<endpoint>:<port>).
   EOT

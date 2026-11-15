@@ -470,13 +470,18 @@ checks need a public endpoint; tasks stay in `private`.
 org:
   regions:
     aws: eu-west-1 # the hub Region; London (eu-west-2) is outside the EU
-    gcp: europe-west1
+    gcp: europe-west1 # set before the first hub apply
 gcp:
   allowed_regions: [europe-west1, europe-west4, europe-north1, us-east4, us-east1, us-central1]
+  network:
+    zones: [europe-west1-b, europe-west1-c, europe-west1-d] # hub zones follow org.regions.gcp; europe-west1 has no -a
   environments:
     prod-eu1:
       region: europe-west1
+      is_production: true
       cidr_block: 10.40.0.0/16
+      zones: [europe-west1-b, europe-west1-c, europe-west1-d] # required when is_production
+      egress_proxy: false # the second region cannot use the hub proxy; see the egress note below
       additional_regions:
         europe-west4:
           subnet_cidrs: {public: 10.41.0.0/24, private: 10.41.16.0/24, database: 10.41.32.0/24}
@@ -496,7 +501,11 @@ The cell's two workspaces share one account, the simple way to own both
 replicas of a global table. Per-workspace values go in
 `config/tfc-workspaces.yaml`, which tfc-admin sets as workspace variables: for
 `aws-workload-prod-eu1-b`, `aws_region: eu-central-1`,
-`enable_network_hub: false` and `app_alb_certificate_arn`. Whether
+`enable_network_hub: false` and `app_alb_certificate_arn`. For
+`gcp-workload-prod-eu1`, the same file holds the time-boxed
+`production_egress_proxy_waiver` and, until the perimeter is enforced,
+`production_vpc_sc_dry_run_waiver`: a production plan fails without each
+([production hardening](../../docs/runbooks/production-hardening.md#1-vpc-service-controls-promote-from-dry-run-to-enforced-audit-m2)). Whether
 `gcp.resourceLocations` admits Spanner's `eur3` from these values is **verify
 before relying on**.
 
@@ -640,7 +649,7 @@ resource "google_cloud_run_v2_service" "api_r2" {
     service_account = module.environment.app_services["api"].runtime_service_account
     encryption_key  = module.workload_cmek[local.r2].key_ids["api"]
     vpc_access {
-      egress = "PRIVATE_RANGES_ONLY" # app-services default
+      egress = "PRIVATE_RANGES_ONLY" # app-services default with the egress proxy off (waived here)
       network_interfaces {
         subnetwork = local.r2_subnet
         tags       = ["compute"]
@@ -694,6 +703,15 @@ Notes:
   region. Its image must come from a multi-region or replicated repository;
   app-services creates a regional one, which a dead primary region would take
   with it.
+- **Egress in the second region.** The hub Secure Web Proxy serves only
+  environments in the hub region, and the environment's endpoint to it has no
+  global access, so `europe-west4` cannot reach it
+  ([known gaps](../../docs/known-gaps.md)). With `egress_proxy` on, the
+  `private` tier also loses Cloud NAT in every region, so `api_r2` would have
+  no internet path under `ALL_TRAFFIC`, and its `PRIVATE_RANGES_ONLY` would
+  send internet calls around the proxy, which app-services refuses for a
+  production service with the proxy on. This cell therefore keeps
+  `egress_proxy: false` and carries the waiver, until a regional proxy exists.
 
 ## Runbook
 

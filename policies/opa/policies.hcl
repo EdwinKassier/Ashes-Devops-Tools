@@ -69,13 +69,29 @@ policy "gcp_cloud_run_no_public_url" {
   enforcement_level = "mandatory"
 }
 
+# A workload identity principalSet must pin one repository and a ref or
+# environment: no whole pool, owner, repository name or bare ref.
+policy "gcp_wif_principalset_pinned" {
+  query             = "data.terraform.policies.gcp_wif_principalset_pinned.deny"
+  enforcement_level = "mandatory"
+}
+
 # ── Mandatory: plan-time code execution ─────────────────────────────────────
-# No provisioners and no data "external" / data "http" outside
-# modules/supabase/vault-secrets (the same allowlist as
-# scripts/check-consistency.sh): they run code with the workspace's
-# credentials and environment variables.
+# No provisioners outside envs/saas -> saas_workload -> vault_secrets (exact
+# call chain and sources), no data "external" / data "http", only allowlisted
+# providers, no provider endpoint / proxy / TLS overrides. Evaluated after the
+# plan: it stops the apply and detects, but does not prevent, plan-time code.
 policy "no_plan_time_code_execution" {
   query             = "data.terraform.policies.no_plan_time_code_execution.deny"
+  enforcement_level = "mandatory"
+}
+
+# ── Mandatory: ownership and cost labels ────────────────────────────────────
+# Ownership and cost keys on listed taggable types: GCP managed-by,
+# environment, cost-center, owner; AWS ManagedBy, Environment, CostCenter,
+# Owner. Every root writes them through provider default_labels / default_tags.
+policy "require_labels" {
+  query             = "data.terraform.policies.require_labels.deny"
   enforcement_level = "mandatory"
 }
 
@@ -90,7 +106,7 @@ policy "aws_iam_federated_trust_unknown" {
   enforcement_level = "advisory"
 }
 
-policy "require_labels" {
-  query             = "data.terraform.policies.require_labels.deny"
+policy "gcp_wif_principalset_repo_wide" {
+  query             = "data.terraform.policies.gcp_wif_principalset_pinned.repo_wide"
   enforcement_level = "advisory"
 }

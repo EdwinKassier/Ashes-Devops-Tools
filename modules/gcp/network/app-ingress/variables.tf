@@ -13,7 +13,7 @@ variable "region" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z]+-[a-z]+[0-9]$", var.region))
+    condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.region))
     error_message = "region must be a valid GCP region name, e.g. europe-west1."
   }
 }
@@ -60,9 +60,31 @@ variable "security_policy_id" {
 }
 
 variable "ssl_policy_id" {
-  description = "Optional SSL policy ID (self_link) for the HTTPS proxy. Null uses Google's default negotiation; set a MODERN or RESTRICTED policy to pin a minimum TLS version."
+  description = "Optional SSL policy ID (self_link) for the HTTPS proxy, used as is. Null creates a MODERN TLS 1.2 policy (min_tls_version, ssl_policy_profile)."
   type        = string
   default     = null
+}
+
+variable "min_tls_version" {
+  description = "Minimum TLS version of the SSL policy this module creates when ssl_policy_id is null."
+  type        = string
+  default     = "TLS_1_2"
+
+  validation {
+    condition     = contains(["TLS_1_2", "TLS_1_3"], var.min_tls_version)
+    error_message = "min_tls_version must be TLS_1_2 or TLS_1_3."
+  }
+}
+
+variable "ssl_policy_profile" {
+  description = "Profile of the created SSL policy: MODERN (default) or RESTRICTED (required for TLS_1_3)."
+  type        = string
+  default     = "MODERN"
+
+  validation {
+    condition     = contains(["MODERN", "RESTRICTED"], var.ssl_policy_profile) && (var.min_tls_version != "TLS_1_3" || var.ssl_policy_profile == "RESTRICTED")
+    error_message = "ssl_policy_profile must be MODERN or RESTRICTED, and RESTRICTED when min_tls_version is TLS_1_3."
+  }
 }
 
 variable "enable_cdn" {

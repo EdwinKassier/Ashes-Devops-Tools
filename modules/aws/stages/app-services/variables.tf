@@ -17,7 +17,7 @@ variable "aws_region" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z]{2}-[a-z]+-[1-9][0-9]?$", var.aws_region))
+    condition     = can(regex("^([a-z]{2}|us-gov|eusc-[a-z]{2})-[a-z]+-[1-9][0-9]?$", var.aws_region))
     error_message = "aws_region must be a valid AWS region name, e.g. eu-west-2."
   }
 }
@@ -87,6 +87,13 @@ variable "kms_key_arn" {
 # Services — the golden path. One map entry = one deployable service.
 # -----------------------------------------------------------------------------
 
+variable "is_production" {
+  description = "Production environment: every service whose enable_autoscaling is unset scales on CPU between autoscaling_min_capacity and autoscaling_max_capacity. An explicit enable_autoscaling = false keeps a fixed task count."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "services" {
   description = <<-EOT
     Services to run, keyed by service name (lowercase, starts with a letter,
@@ -98,6 +105,9 @@ variable "services" {
 
     github OIDC subject precedence:
       1. github.subject — an exact sub for any other customised claim template.
+         It must name the repository (repo:<org>/<repo>: or repository_id:<id>)
+         and a ref: or environment: value; the mandatory OPA policy
+         aws_iam_federated_trust_pinned denies any other subject.
       2. github.repository_id + github.repository_owner_id (RECOMMENDED default
          when set) — immutable numeric IDs, so renaming/transferring a repo or
          re-creating a deleted name cannot inherit the trust:
@@ -138,7 +148,7 @@ variable "services" {
     task_role_managed_policy_arns = optional(list(string), [])
 
     enable_execute_command   = optional(bool, false)
-    enable_autoscaling       = optional(bool, false)
+    enable_autoscaling       = optional(bool) # null = on in production (var.is_production), off elsewhere
     autoscaling_min_capacity = optional(number, 2)
     autoscaling_max_capacity = optional(number, 10)
 
@@ -167,6 +177,7 @@ variable "services" {
       backup_retention_period = optional(number, 7)
       deletion_protection     = optional(bool, true)
       skip_final_snapshot     = optional(bool, false)
+      enable_org_backup       = optional(bool, true) # false keeps the cluster out of the org backup policy (no backup tag)
     }))
 
     # Per-service CloudWatch alarms (with var.enable_alarms): ECS CPU and memory,
@@ -220,6 +231,20 @@ variable "services" {
       )
     ])
     error_message = "services[*].github subject/ref/environment must not contain wildcards (* or ?) — deploy-role trust is an exact match."
+  }
+
+  validation {
+    # A custom subject must name the repository (repo:<org>/<repo>: or
+    # repository_id:<id>) and a ref: or environment: value, the rule the
+    # mandatory OPA policy aws_iam_federated_trust_pinned applies to the trust.
+    condition = alltrue([
+      for s in values(var.services) : s.github == null || s.github.subject == null || (
+        !can(regex("[*?]", coalesce(s.github.subject, "x"))) &&
+        can(regex("(^repo:[^/:]+/[^/:]+:|(^|:)repository_id:[0-9]+(:|$))", coalesce(s.github.subject, "x"))) &&
+        can(regex("(^|:)(ref|environment):[^:]+(:|$)", coalesce(s.github.subject, "x")))
+      )
+    ])
+    error_message = "services[*].github.subject must name the repository (repo:<org>/<repo>: or repository_id:<id>) and hold a ref:<ref> or environment:<env> value, for example repository_owner_id:<id>:repository_id:<id>:environment:<env>. A pull_request, owner-only or job_workflow_ref-only subject, or one with * or ?, trusts more than one repository or branch."
   }
 
   validation {
@@ -354,10 +379,17 @@ variable "alb_ingress_cidrs" {
   }
 }
 
-variable "alb_enable_deletion_protection" {
-  description = "Deletion protection on the shared ALB. Set false only for ephemeral environments."
+variable "enable_alb_deletion_protection" {
+  description = "Deletion protection on the shared ALB. Set false only for ephemeral environments. Null (default) uses the deprecated alb_enable_deletion_protection input, else true."
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "alb_enable_deletion_protection" {
+  description = "Deprecated: use enable_alb_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_alb_deletion_protection; alb_enable_deletion_protection is removed in v1.0."
 }
 
 variable "alb_access_logs_bucket" {

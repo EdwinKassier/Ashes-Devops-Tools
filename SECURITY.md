@@ -4,15 +4,17 @@
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Report vulnerabilities via the repository's **Security** tab → **"Report a vulnerability"**
-(GitHub private vulnerability reporting). **This is the only guaranteed channel** and
-reaches the maintainers directly and confidentially. We aim to acknowledge within 48
-hours and keep you informed of progress.
+Report vulnerabilities through the repository's **Security** tab, **Report a vulnerability**
+(GitHub private vulnerability reporting). It is the only channel; there is no security
+email address. It reaches the maintainers directly and confidentially. We aim to
+acknowledge within 48 hours and keep you informed of progress.
 
-> **Email backstop not yet configured.** A role-based alias (`security@…`) is intended
-> as a fallback but is **not live yet** — do not rely on email until this notice is
-> removed. Until then, use GitHub private vulnerability reporting above. Maintainers:
-> configure a real alias and replace this notice before any public release.
+**Maintainers:** this channel works only while the repository setting is on (Settings,
+Code security, Private vulnerability reporting). A repository admin must switch it on.
+`make security-contact-live` checks the setting (read-only, needs `gh` access).
+
+**Forks:** private vulnerability reporting is a per-repository setting. Switch it on in your
+fork, or replace this section with your own channel.
 
 ### What to Include
 
@@ -34,6 +36,12 @@ We will coordinate public disclosure with you. If you prefer to remain anonymous
 
 ---
 
+## Operators: Regulatory Notification
+
+If you run this landing zone and an incident involves personal data, health data, card data or a regulated service, notification deadlines can start before the investigation ends. See the [regulatory notification runbook](docs/runbooks/regulatory-notification.md). It is a working summary, not legal advice.
+
+---
+
 ## Security Architecture
 
 This landing zone implements defense-in-depth across every layer:
@@ -41,7 +49,7 @@ This landing zone implements defense-in-depth across every layer:
 ### Identity & Access
 
 - **Workload Identity Federation** — keyless authentication for CI/CD (no long-lived service account keys)
-- **IAM least privilege** — all module roles validated against a blocklist of primitive roles (`roles/owner`, `roles/editor`, `roles/viewer`)
+- **No basic roles at organization or folder scope**: the mandatory OPA policy `gcp_no_basic_roles_high_scope` (`policies/opa`) fails an HCP Terraform run that grants `roles/owner` or `roles/editor` on an organization or folder (`google_organization_iam_*` and `google_folder_iam_*` member, binding and policy resources). It applies only when tfc-admin attaches the policy sets (`enable_policy_sets`, on by default with a VCS repo on the Standard or Premium plan). It does not check project-level grants or `roles/viewer`. A few module inputs also reject basic roles: `project_admin_roles` in `modules/gcp/stages/workload` (owner, editor and viewer) and the bootstrap plan-role and grantable-role lists.
 - **Separate service accounts** per stage (bootstrap, network, workload)
 
 ### Data Protection
@@ -49,25 +57,26 @@ This landing zone implements defense-in-depth across every layer:
 - **CMEK (Customer-Managed Encryption Keys)** via Cloud KMS — available across storage primitives. Storage is always encrypted at rest; buckets default to Google-managed keys (GMEK) and accept a CMEK via `kms_key_name`, with the composing stages wiring a CMK for regulated data. Require a CMEK at the module boundary for compliance environments.
 - **Key rotation enforced** — rotation period validated between 1–365 days at plan time
 - **Uniform bucket-level access** — no per-object ACLs on Cloud Storage
-- **Opt-in WORM retention** — audit-log buckets support a locked retention policy via `enable_bucket_lock` (default off; the org-level Cloud Logging sink is the authoritative tamper-evident copy)
+- **Opt-in WORM retention**: `gcp.enable_audit_bucket_lock` locks the audit bucket's retention policy (irreversible). Without it, the bucket is versioned and access-controlled but not immutable. Required for regulated environments (`compliance_class: regulated`), together with a separate logging project (`gcp.logging_project_id`): the `gcp-organization` plan fails without both unless an unexpired `gcp.audit_store_waiver` (reason and expiry date) is set.
 
 ### Network Security
 
 - **VPC Service Controls** — data perimeter around sensitive projects. **Ships in dry-run mode by default** (audit-only; it logs would-be violations but does not block them). Promote to enforced per environment once ingress/egress rules are validated — see [known-gaps.md](docs/known-gaps.md).
-- **Private Service Access** — RFC 1918 connectivity to Google APIs (no public egress for managed services)
-- **Cloud Armor** — WAF with OWASP rule sets for internet-facing workloads
-- **VPC Flow Logs** — full network telemetry retained in Cloud Storage
+- **Private Google Access and Private Service Connect for Google APIs**: every `tiered-vpc` subnet has Private Google Access on, and the hub and each spoke VPC get a Private Service Connect endpoint for Google APIs (`private_service_connect.enabled`, default true), so VMs without external IPs reach Google APIs on internal addresses. Private Service Access (`private_service_access`) is a different feature: it peers the VPC with Google-managed producer services such as Cloud SQL private IP. It is not the path to Google APIs.
+- **Cloud Armor**: a WAF policy with the OWASP managed rules for internet-facing workloads. It is **off by default**. The `prod-gcp-workload` preset turns it on, and a `compliance_class: regulated` environment requires it (control matrix NET-03, NET-11).
+- **VPC Flow Logs**: on every subnet, exported to a CMEK BigQuery dataset per environment (default 10% sampling, 30-day retention). A `compliance_class: regulated` environment already gets sampling 1.0 and 365-day retention from the regulated preset, and its plan fails on a lower sampling rate or a retention under 365 days. For other environments, raise `log_config_flow_sampling` and `vpc_flow_logs_retention_days` by hand.
 
 ### Audit & Compliance
 
-- **Cloud Audit Logs** — Data Access logs enabled for all services; retention configurable via `audit_log_retention_days` (default 365 days; increase for PCI-DSS/HIPAA/FedRAMP)
-- **Security Command Center** — notifications for HIGH and CRITICAL findings
+- **Cloud Audit Logs**: Data Access logs on for all services. The audit bucket retention is `compliance.audit_log_retention_days` in `config/landing-zone.yaml` (or the `gcp-organization` root variable `audit_log_retention_days`), default 365 days. When `compliance.frameworks` lists `pci_dss`, `hipaa` or `fedramp_moderate`, the plan fails for a retention below that framework's floor (365, 2190 or 913 days). The floors are minimums; they do not prove that a framework is met. With the WORM lock on, the retention must be at least 365 days and can only be increased.
+- **AWS log archive**: S3 Object Lock in COMPLIANCE mode by default. The default retention is the same `compliance.audit_log_retention_days` (or the `aws-security` override `aws_overrides.log_archive_retention_days`), default 365 days, with the same framework floors. It applies to new objects only; objects already written keep their retain-until date. With `compliance.frameworks` set, the plan refuses `log_archive_object_lock_mode = "GOVERNANCE"`.
+- **Security Command Center**: a Pub/Sub notification of every ACTIVE finding (CMEK topic). The SCC tier is activated outside Terraform.
 - **Org Policies** — domain-restricted sharing, uniform bucket access, disable SA key creation
 
 ### CI/CD Security
 
 - **All GitHub Actions SHA-pinned** — no mutable tag references
-- **Branch protection** — required reviews and status checks before merge
+- **Branch protection**: not codified in this repository. Required reviews and status checks are GitHub repository settings that the maintainers configure (see `docs/guides/BRANCH_PROTECTION.md` and `docs/runbooks/promotion.md`). Verify them in the repository settings.
 - **Secret scanning** — Gitleaks runs on push to `main`/`develop` and weekly (not on every PR; the PR gate runs Trivy + Checkov)
 - **Static analysis** — Trivy (config) and Checkov on every PR, and again on push to `main`/`develop` and weekly (TFSec is EOL and folded into Trivy)
 
@@ -75,17 +84,18 @@ This landing zone implements defense-in-depth across every layer:
 
 ## Supported Versions
 
-This is a **pre-1.0 boilerplate with no tagged releases yet** (`git tag` is currently
-empty). Consume it by pinning to a specific commit SHA; `main` is the supported line and
-receives the security fixes described above.
+This is a **pre-1.0 boilerplate**. One release exists: `v0.1.0` (2026-11-08), tagged by hand.
+Consume it by pinning to that tag or to a specific commit SHA. `main` is the supported line
+and receives the security fixes described above.
 
 A tag-based release and support model (`gcp-organization/vX.Y.Z`, `gcp-workload/<env>/vX.Y.Z`)
-is wired in `terraform-apply.yml` and the CHANGELOG for when the first release is cut. The
-table below becomes authoritative at that point:
+is wired in `terraform-apply.yml` and the CHANGELOG. No such component tags exist yet. The
+table below becomes authoritative when they do:
 
 | Component | Supported |
 |-----------|-----------|
-| `main` (untagged) | Active — pin to a commit SHA |
+| `main` | Active: pin to a tag or commit SHA |
+| `v0.1.0` | Pin target only; security fixes land on `main` |
 | `gcp-organization/v1.x` | Not yet released |
 | `gcp-workload/*/v1.x` | Not yet released |
 
@@ -108,8 +118,5 @@ SARIF results are uploaded to GitHub Security tab for all scans.
 
 ## Contact
 
-- Security issues: repository **Security** tab → **"Report a vulnerability"** (the only
-  guaranteed channel). A `security@…` email backstop is planned but **not yet configured**
-  — see the notice under "Reporting a Vulnerability" above.
-- General inquiries: open a [GitHub Discussion](../../discussions) or non-security issue
-  on this repository
+- Security issues: the **Report a vulnerability** button above (no email address exists).
+- General questions: open a non-security issue on this repository

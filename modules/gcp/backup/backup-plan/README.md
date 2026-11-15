@@ -103,3 +103,7 @@ The following resources are created:
 | <a name="output_resource_policy_self_links"></a> [resource\_policy\_self\_links](#output\_resource\_policy\_self\_links) | Map of schedule name to the resource policy self\_link (full resource URL). Attach these to persistent disks via google\_compute\_disk\_resource\_policy\_attachment. |
 | <a name="output_schedule_names"></a> [schedule\_names](#output\_schedule\_names) | List of the snapshot-schedule policy names created by this module. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

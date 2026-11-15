@@ -29,9 +29,9 @@ variable "ipam_pool_id" {
 }
 
 variable "ipam_allocation" {
-  description = "How an IPAM VPC obtains its CIDR: netmask (default, legacy: pool + netmask_length, no cidr_block) or explicit_cidr (pool + cidr_block). Switching an existing VPC between the two forces replacement; use explicit_cidr for new VPCs only. Ignored when ipam_pool_id is empty."
+  description = "How an IPAM VPC obtains its CIDR: explicit_cidr (default: pool + cidr_block, so the pool allocates exactly the block the subnets are cut from) or netmask (legacy: pool + netmask_length). An existing netmask VPC keeps its id when you switch, because ipv4_netmask_length is ignored after create. If the allocated block differs from cidr_block, set cidr_block to the allocated block so the subnet math matches. Ignored when ipam_pool_id is empty."
   type        = string
-  default     = "netmask"
+  default     = "explicit_cidr"
   nullable    = false
 
   validation {
@@ -41,7 +41,7 @@ variable "ipam_allocation" {
 }
 
 variable "netmask_length" {
-  description = "Netmask length requested from the IPAM pool when ipam_pool_id is set and ipam_allocation = netmask. Ignored for static and explicit_cidr VPCs. Changing it on an existing VPC forces replacement."
+  description = "Netmask length requested from the IPAM pool when ipam_pool_id is set and ipam_allocation = netmask. Ignored for static and explicit_cidr VPCs. Used only at create: a later change is ignored and does not replace the VPC."
   type        = number
   default     = 16
 
@@ -123,7 +123,7 @@ variable "flow_log_destination_arn" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:s3:::", var.flow_log_destination_arn))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:s3:::", var.flow_log_destination_arn))
     error_message = "flow_log_destination_arn must be an S3 bucket ARN beginning with arn:aws:s3:::."
   }
 }
@@ -132,6 +132,23 @@ variable "gateway_endpoints" {
   description = "AWS services to create Gateway VPC endpoints for (e.g. s3, dynamodb)."
   type        = list(string)
   default     = ["s3", "dynamodb"]
+}
+
+variable "gateway_endpoint_policies" {
+  description = "Endpoint policy (JSON string) per gateway endpoint service, keyed like gateway_endpoints (e.g. s3, dynamodb). A service without an entry gets the AWS default full-access policy, sent explicitly so that removing an entry also removes an earlier restriction. Build the JSON with jsonencode."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for k in keys(var.gateway_endpoint_policies) : contains(var.gateway_endpoints, k)])
+    error_message = "Every gateway_endpoint_policies key must be a service listed in gateway_endpoints."
+  }
+
+  validation {
+    condition     = alltrue([for k, v in var.gateway_endpoint_policies : can(jsondecode(v).Statement)])
+    error_message = "Every gateway_endpoint_policies value must be a JSON policy document with a Statement."
+  }
 }
 
 variable "gateway_endpoint_tiers" {

@@ -180,3 +180,7 @@ The following resources are created:
 | <a name="output_name"></a> [name](#output\_name) | The fully-qualified name of the service account |
 | <a name="output_unique_id"></a> [unique\_id](#output\_unique\_id) | The unique ID of the service account |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

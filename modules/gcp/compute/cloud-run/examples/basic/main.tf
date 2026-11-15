@@ -36,6 +36,10 @@ module "cloud_run" {
   # Default, shown for clarity: no public run.app traffic.
   ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
+  # PRIVATE_RANGES_ONLY sends only internal traffic through the VPC; internet
+  # traffic leaves directly. Behind the environment egress proxy (hub Secure Web
+  # Proxy) use ALL_TRAFFIC, as stages/app-services does: production with the
+  # proxy on rejects PRIVATE_RANGES_ONLY.
   vpc_access = {
     egress = "PRIVATE_RANGES_ONLY"
     network_interfaces = {

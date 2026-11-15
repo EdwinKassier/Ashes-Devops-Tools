@@ -12,15 +12,15 @@ module "kms" {
   keys = {
     "app-data-key" = {
       rotation_period = "7776000s" # 90 days
-      iam_bindings = {
-        "roles/cloudkms.cryptoKeyEncrypterDecrypter" = [
-          "serviceAccount:my-app@my-project-id.iam.gserviceaccount.com"
-        ]
-      }
+      # Granted roles/cloudkms.cryptoKeyEncrypterDecrypter on this key (the
+      # only role the module grants; it is additive, not authoritative).
+      encrypter_decrypters = [
+        "serviceAccount:my-app@my-project-id.iam.gserviceaccount.com"
+      ]
     }
     "log-encryption-key" = {
       rotation_period = "7776000s"
-      iam_bindings    = {}
+      # No grant here: add the log sink's or service agent's identity per use case.
     }
   }
 

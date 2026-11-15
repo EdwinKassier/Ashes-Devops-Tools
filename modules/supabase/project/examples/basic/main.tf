@@ -1,9 +1,9 @@
 # Example: create a Supabase project for a QA environment.
-# Replace locals with real values or remote state.
+# Replace locals with real values or remote state. The database password is a
+# sensitive variable (TF_VAR_database_password or a sensitive TFC variable).
 
 locals {
-  organization_id   = "abcdefghijklmnop"   # from Supabase dashboard → Org Settings
-  database_password = "change-me-min-16ch" # store in a secret manager; min 16 chars
+  organization_id = "abcdefghijklmnop" # from Supabase dashboard → Org Settings
 }
 
 module "supabase_project" {
@@ -11,6 +11,6 @@ module "supabase_project" {
 
   organization_id   = local.organization_id
   project_name      = "my-app-qa"
-  database_password = local.database_password
+  database_password = var.database_password
   region            = "eu-west-2"
 }

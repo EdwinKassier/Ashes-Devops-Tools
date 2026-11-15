@@ -124,3 +124,7 @@ The following resources are created:
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the subnet |
 | <a name="output_subnet"></a> [subnet](#output\_subnet) | The created subnet resource (every attribute except the provider-deprecated fingerprint) |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

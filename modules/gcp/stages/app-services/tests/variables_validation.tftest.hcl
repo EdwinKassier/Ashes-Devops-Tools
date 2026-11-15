@@ -335,3 +335,37 @@ run "rejects_unknown_sli_type" {
     services = { api = { slo = { sli_type = "throughput" } } }
   }
 }
+
+# ARC-H1: production with the egress proxy on may not opt a service out of
+# ALL_TRAFFIC egress (its internet traffic would skip the proxy).
+run "rejects_private_ranges_only_in_production_with_proxy" {
+  command = plan
+
+  variables {
+    is_production = true
+    egress_proxy  = { enabled = true, address = "10.10.16.50" }
+    services      = { worker = { runtime = "cloud-run-job", vpc_egress = "PRIVATE_RANGES_ONLY" } }
+  }
+
+  expect_failures = [var.services]
+}
+
+run "rejects_egress_proxy_without_address" {
+  command = plan
+
+  variables {
+    egress_proxy = { enabled = true }
+  }
+
+  expect_failures = [var.egress_proxy]
+}
+
+run "rejects_egress_proxy_bad_port" {
+  command = plan
+
+  variables {
+    egress_proxy = { enabled = true, address = "10.10.16.50", port = 0 }
+  }
+
+  expect_failures = [var.egress_proxy]
+}

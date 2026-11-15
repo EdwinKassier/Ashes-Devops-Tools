@@ -81,9 +81,10 @@ variable "serverless_function_region" {
 
   validation {
     condition = contains([
-      "iad1", "sfo1", "pdx1", "sea1", "lhr1", "cdg1", "fra1",
-      "bom1", "sin1", "kix1", "cle1", "hnd1", "gru1", "icn1",
-      "dub1", "cpt1",
+      # Vercel function regions (https://vercel.com/docs/regions). Keep in step
+      # with local.vercel_to_aws_region in envs/saas/main.tf.
+      "arn1", "bom1", "cdg1", "cle1", "cpt1", "dub1", "fra1", "gru1", "hkg1", "hnd1",
+      "iad1", "icn1", "kix1", "lhr1", "pdx1", "sfo1", "sin1", "syd1", "yul1",
     ], var.serverless_function_region)
     error_message = "serverless_function_region must be a valid Vercel edge network region (e.g. 'lhr1', 'iad1')."
   }
@@ -97,9 +98,10 @@ variable "function_default_regions" {
   validation {
     condition = var.function_default_regions == null || (length(coalesce(var.function_default_regions, ["x"])) > 0 && alltrue([
       for r in coalesce(var.function_default_regions, []) : contains([
-        "iad1", "sfo1", "pdx1", "sea1", "lhr1", "cdg1", "fra1",
-        "bom1", "sin1", "kix1", "cle1", "hnd1", "gru1", "icn1",
-        "dub1", "cpt1",
+        # Vercel function regions (https://vercel.com/docs/regions). Keep in step
+        # with local.vercel_to_aws_region in envs/saas/main.tf.
+        "arn1", "bom1", "cdg1", "cle1", "cpt1", "dub1", "fra1", "gru1", "hkg1", "hnd1",
+        "iad1", "icn1", "kix1", "lhr1", "pdx1", "sfo1", "sin1", "syd1", "yul1",
       ], r)
     ]))
     error_message = "function_default_regions must be a non-empty list of valid Vercel region codes (e.g. 'lhr1', 'iad1')."

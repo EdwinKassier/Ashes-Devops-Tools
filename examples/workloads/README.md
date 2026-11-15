@@ -15,10 +15,25 @@ existing Shared VPC host project and apply standardised IAM through the
 
 ## Prerequisites
 
-- An existing Shared VPC host project and subnet (in the landing zone, the
-  `gcp-projects` and `gcp-network-hub` workspaces own them).
+- An existing Shared VPC host project and subnet. In the landing zone,
+  `gcp-projects` creates the environment host project and the
+  `gcp-workload-<env>` workspace creates the environment VPC and its subnets
+  (`modules/gcp/stages/environment` through the `net-spoke` composition);
+  `gcp-network-hub` owns only the hub.
 - A folder ID and a billing account ID.
 - An existing Google Group to act as the project admin group.
+
+## In the landing zone, use `service_teams` instead
+
+A project attached this way is **outside the environment's VPC-SC perimeter**:
+the `gcp-workload-<env>` perimeter lists the host project and the
+`service_teams` projects only, so calls from this project to the environment's
+protected services are blocked once the perimeter is enforced. To add a team
+project to a landing-zone environment, add it to
+`gcp.environments.<env>.service_teams` in `config/landing-zone.yaml` (or the
+`service_teams` variable of `envs/gcp/workload`): `gcp-workload-<env>` then
+creates it, attaches it to the Shared VPC and adds it to the perimeter. Use this
+example as a standalone sandbox only.
 
 ## Values are hard-coded
 

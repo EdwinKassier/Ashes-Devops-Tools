@@ -30,6 +30,7 @@ module "aws_organization" {
   tfc_hostname                     = var.tfc_hostname
   pin_tfc_federation_to_org        = var.pin_tfc_federation_to_org
   enable_tfc_management_roles      = var.enable_tfc_management_roles
+  tfc_management_workspaces        = local.tfc_management_workspaces
   enable_security_service_teardown = var.enable_security_service_teardown
   guard_alert_emails               = local.guard_alert_emails
 
@@ -45,6 +46,8 @@ module "aws_organization" {
   backup_service_role_region             = local.aws_region
   create_member_backup_vault             = var.create_member_backup_vault
   member_backup_vault_name               = var.member_backup_vault_name
+  member_backup_vault_encryption         = local.member_backup_vault_encryption
+  member_backup_dr_region                = local.member_backup_dr_region
   org_policy_overrides                   = var.org_policy_overrides
   partition                              = var.partition
   disabled_org_policies                  = var.disabled_org_policies
@@ -69,7 +72,14 @@ module "aws_organization" {
   # app_ingress_mode = "public_alb" (internet-facing ALB). Off by default.
   allow_vpc_bpa_exclusions = var.allow_vpc_bpa_exclusions
 
+  # StackSet stack writers outside this repo (AWS Control Tower estates:
+  # AWSControlTowerExecution). Exempt from DenyStackSetStackTampering only.
+  stackset_stack_writer_role_names = local.stackset_stack_writer_role_names
+
   ec2_allowed_images = var.ec2_allowed_images
+
+  # Required-tag reporting on the root tag policy (aws.tagging.required_for).
+  tag_policy_required_resource_types = local.tag_policy_required_resource_types
 }
 
 # The starter profile must have a budget: an unmetered sandbox is the failure

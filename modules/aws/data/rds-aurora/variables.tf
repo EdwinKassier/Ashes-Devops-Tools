@@ -48,7 +48,7 @@ variable "kms_key_id" {
   type        = string
 
   validation {
-    condition     = can(regex("^arn:aws(-us-gov|-cn)?:kms:", var.kms_key_id))
+    condition     = can(regex("^arn:aws(-us-gov|-cn|-eusc)?:kms:", var.kms_key_id))
     error_message = "kms_key_id must be a customer-managed KMS key ARN beginning with arn:aws:kms:."
   }
 }
@@ -59,7 +59,7 @@ variable "performance_insights_kms_key_arn" {
   default     = ""
 
   validation {
-    condition     = var.performance_insights_kms_key_arn == "" || can(regex("^arn:aws(-us-gov|-cn)?:kms:", var.performance_insights_kms_key_arn))
+    condition     = var.performance_insights_kms_key_arn == "" || can(regex("^arn:aws(-us-gov|-cn|-eusc)?:kms:", var.performance_insights_kms_key_arn))
     error_message = "performance_insights_kms_key_arn must be empty or a KMS key ARN beginning with arn:aws:kms:."
   }
 }
@@ -148,7 +148,7 @@ variable "master_user_secret_kms_key_id" {
   default     = ""
 
   validation {
-    condition     = var.master_user_secret_kms_key_id == "" || can(regex("^arn:aws(-us-gov|-cn)?:kms:", var.master_user_secret_kms_key_id))
+    condition     = var.master_user_secret_kms_key_id == "" || can(regex("^arn:aws(-us-gov|-cn|-eusc)?:kms:", var.master_user_secret_kms_key_id))
     error_message = "master_user_secret_kms_key_id must be empty or a KMS key ARN beginning with arn:aws:kms:."
   }
 }
@@ -194,7 +194,7 @@ variable "preferred_maintenance_window" {
   }
 }
 
-variable "deletion_protection" {
+variable "enable_deletion_protection" {
   description = <<-EOT
     Whether the cluster is protected from deletion. Secure default is true.
 
@@ -206,9 +206,18 @@ variable "deletion_protection" {
     cluster, first run:
       terraform state rm 'module.<name>.terraform_data.deletion_guard[0]'
     then set this to false and apply.
+
+    Null (default) uses the deprecated deletion_protection input, else true.
   EOT
   type        = bool
-  default     = true
+  default     = null
+}
+
+variable "deletion_protection" {
+  description = "Deprecated: use enable_deletion_protection. Removed in v1.0."
+  type        = bool
+  default     = null
+  deprecated  = "Use enable_deletion_protection; deletion_protection is removed in v1.0."
 }
 
 variable "skip_final_snapshot" {
@@ -265,6 +274,13 @@ variable "serverless_v2_max_capacity" {
   }
 }
 
+variable "enable_org_backup" {
+  description = "Tag the cluster backup = true so the organization BACKUP_POLICY (aws-backup) backs it up daily, next to the RDS automated backups. Default true. For cross-account copy to the central copy vault the kms_key_id key policy must also let the backup account use the key."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "tags" {
   description = "Tags applied to every resource created by this module."
   type        = map(string)
@@ -292,4 +308,10 @@ variable "master_password_version" {
     condition     = var.master_password_version >= 1 && floor(var.master_password_version) == var.master_password_version
     error_message = "master_password_version must be a positive integer."
   }
+}
+
+variable "enable_force_ssl" {
+  description = "Attach a cluster parameter group with rds.force_ssl = 1, so the cluster refuses unencrypted client connections. Default true. A new cluster enforces it from the start. An existing cluster shows an in-place parameter group change and enforces TLS only after each instance reboots (apply_method pending-reboot); reboot them in a maintenance window."
+  type        = bool
+  default     = true
 }

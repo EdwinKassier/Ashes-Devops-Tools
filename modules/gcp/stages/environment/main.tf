@@ -12,15 +12,35 @@
  */
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, true)
+
   vpc_sc = var.vpc_service_controls
 
-  # Effective VPC-SC policies: exactly what the caller supplies. There is no
-  # default rule in either direction. A default egress rule would have to name
-  # its identities and target projects to be safe, and this stage knows
-  # neither; a default ingress rule would need the automation identities,
-  # which the caller holds. So the perimeter starts closed and the operator
-  # opens it with named identities and projects (examples/vpc-sc).
-  effective_vpc_sc_ingress_policies = local.vpc_sc.ingress_policies
+  # Effective VPC-SC policies. There is no default egress rule: to be safe it
+  # would have to name its identities and target projects, and this stage
+  # knows neither. The one default ingress rule admits the environment's own
+  # plan and apply service accounts (var.automation_identities), so an
+  # enforced perimeter does not block its own pipeline. It is scoped to those
+  # identities and to the restricted services (enforced plus any staged
+  # dry-run ones, because the dry-run spec reuses these ingress rules), one
+  # operation per service, never service_name "*". A request to a service the
+  # perimeter does not restrict is not checked, so naming the restricted
+  # services loses nothing. Source access_level "*" (any source) is needed
+  # because HCP Terraform runs outside Google Cloud. Every other rule is the
+  # caller's (examples/vpc-sc).
+  automation_ingress_services = distinct(concat(local.vpc_sc.restricted_services, coalesce(local.vpc_sc.dry_run_restricted_services, [])))
+  automation_ingress_policy = length(var.automation_identities) == 0 || length(local.automation_ingress_services) == 0 ? [] : [{
+    identity_type = null
+    identities    = var.automation_identities
+    sources       = [{ access_level = "*", resource = null }]
+    resources     = ["*"]
+    operations = [for svc in local.automation_ingress_services : {
+      service_name     = svc
+      method_selectors = [{ method = "*", permission = null }]
+    }]
+  }]
+  effective_vpc_sc_ingress_policies = concat(local.automation_ingress_policy, local.vpc_sc.ingress_policies)
   effective_vpc_sc_egress_policies  = local.vpc_sc.egress_policies
 
   # Google APIs via PSC. Behind an ENFORCED perimeter the endpoint targets the
@@ -34,22 +54,33 @@ data "google_project" "host_project" {
   project_id = var.host_project.project_id
 }
 
+locals {
+  # Projects in the environment perimeter, by number: the host first, then the
+  # service-team projects in key order (a stable plan).
+  vpc_sc_protected_projects = concat(
+    [data.google_project.host_project.number],
+    [for k in sort(keys(var.service_teams)) : module.service_team[k].project_number],
+  )
+}
+
 # Environment spoke network: the net-spoke composition. The label stays "host"
 # so the caller's moved blocks (and the network-core moves recorded in
 # envs/gcp/workload/moved.tf) keep their addresses.
 module "host" {
   source = "../net-spoke"
 
-  project_id          = var.host_project.project_id
-  project_prefix      = var.project_prefix
-  region              = var.host_project.region
-  deletion_protection = var.deletion_protection
-  labels              = var.labels
-  additional_regions  = var.network.additional_regions
+  project_id                 = var.host_project.project_id
+  project_prefix             = var.project_prefix
+  region                     = var.host_project.region
+  enable_deletion_protection = local.enable_deletion_protection
+  labels                     = var.labels
+  additional_regions         = var.network.additional_regions
 
   network = {
-    name            = "${var.project_prefix}-${var.environment}-vpc"
-    cidr_block      = var.host_project.cidr_block
+    name       = coalesce(var.network.name, "${var.project_prefix}-${var.environment}-vpc")
+    cidr_block = var.host_project.cidr_block
+    # Pinned zones (IAC-1). Empty = the zones GCP returns for the region.
+    explicit_zones  = var.network.explicit_zones
     shared_vpc_host = true
     flow_logs = {
       aggregation_interval = var.network.flow_logs.aggregation_interval
@@ -67,7 +98,9 @@ module "host" {
   }
 
   private_service_connect = {
-    target = local.psc_target
+    target  = local.psc_target
+    name    = var.network.private_service_connect_name
+    address = var.network.private_service_connect_address
   }
 
   # Hub peering (or, with connectivity = ncc, an NCC spoke on the hub's NCC hub
@@ -104,10 +137,12 @@ module "host" {
       perimeter_title    = coalesce(local.vpc_sc.perimeter_title, "${upper(var.environment)} Perimeter")
       perimeter_type     = "PERIMETER_TYPE_REGULAR"
       enable_dry_run     = local.vpc_sc.enable_dry_run
-      # VPC-SC requires numeric project numbers, not project IDs.
-      protected_projects = [
-        data.google_project.host_project.number
-      ]
+      # VPC-SC requires numeric project numbers, not project IDs. The perimeter
+      # protects every project the environment owns (ARC-C1): the Shared VPC
+      # host and every service-team project, where the app services and their
+      # data live. Google requires a Shared VPC host and its service projects
+      # in the same perimeter.
+      protected_projects  = local.vpc_sc_protected_projects
       restricted_services = local.vpc_sc.restricted_services
       ingress_policies    = local.effective_vpc_sc_ingress_policies
       egress_policies     = local.effective_vpc_sc_egress_policies
@@ -168,17 +203,18 @@ module "service_team" {
   activate_apis = distinct(concat(each.value.activate_apis, local.team_service_apis[each.key]))
 
   enable_shared_vpc_attachment = each.value.enable_shared_vpc_attachment
-  shared_vpc_host_project_id   = var.host_project.project_id
-  shared_vpc_subnets           = each.value.shared_vpc_subnets
-  enable_gke_network_user      = each.value.enable_gke_network_user
+  # Attach service projects only after the host project is a Shared VPC host
+  # with its subnets. This output depends on the spoke network only, not on
+  # all of module.host: the perimeter in module.host lists these team
+  # projects, so a module-wide depends_on would be a dependency cycle.
+  shared_vpc_host_project_id = module.host.shared_vpc_host_project_id
+  shared_vpc_subnets         = each.value.shared_vpc_subnets
+  enable_gke_network_user    = each.value.enable_gke_network_user
 
   project_admin_group_email = each.value.project_admin_group_email
   project_admin_roles       = each.value.project_admin_roles
 
   labels = merge(var.labels, { team = each.key }, each.value.labels)
-
-  # Attach service projects only after the host project is a Shared VPC host.
-  depends_on = [module.host]
 }
 
 # =============================================================================
@@ -349,9 +385,22 @@ module "app_services" {
   # Default Cloud Run / GKE subnet: the first private (compute-tier) subnet.
   subnetwork_id = var.app_platform.subnetwork_id != null ? var.app_platform.subnetwork_id : try(values(module.host.subnets.private)[0].id, null)
 
-  services                       = local.app_services
+  services = local.app_services
+  # ARC-H1: with the environment egress proxy on, every Cloud Run service and
+  # job defaults to ALL_TRAFFIC egress and gets the proxy variables. NO_PROXY
+  # adds the PSC endpoint for Google APIs and the hub DNS domains.
+  egress_proxy = {
+    enabled = var.hub.egress_proxy.enabled
+    address = module.host.egress_proxy_address
+    port    = var.hub.egress_proxy.port
+    no_proxy = concat(
+      compact([try(module.host.private_service_connect.address, null)]),
+      [for z in values(var.hub.dns_zones) : ".${trimsuffix(z.dns_name, ".")}"],
+    )
+  }
   bootstrap_image                = var.app_platform.bootstrap_image
-  enable_deletion_protection     = var.deletion_protection
+  enable_deletion_protection     = local.enable_deletion_protection
+  require_database_cmek          = var.app_platform.require_database_cmek
   artifact_registry_kms_key_name = var.app_platform.artifact_registry_kms_key_name
   enable_vulnerability_scanning  = var.app_platform.enable_vulnerability_scanning
 
@@ -371,6 +420,41 @@ module "app_services" {
 
   # PSA (for Cloud SQL), subnets and the bridged SaaS secret must exist first.
   depends_on = [module.host, module.saas_secret_bridge, module.service_team]
+}
+
+# =============================================================================
+# BACKUP AND DR VAULT (CMP-8, BCK-07) — opt-in, on for compliance_class: regulated
+#
+# A vault in the host project and region with enforced retention and
+# organization-only access, plus a daily Backup and DR plan for every
+# app-service database (Cloud SQL enhanced backups). The vault's service agent
+# gets roles/backupdr.cloudSqlOperator in each team project that hosts a
+# database. The workload apply SA needs roles/backupdr.admin on the
+# environment folder (gcp-bootstrap workload_folder_roles, granted by
+# gcp-organization) and grants the operator role with its projectIamAdmin.
+# =============================================================================
+
+locals {
+  # Team projects that host a database. Keys are team names (static).
+  backup_vault_source_projects = {
+    for team, _ in var.service_teams : team => module.service_team[team].project_id
+    if anytrue([for k, s in var.app_services : try(s.database, null) != null if try(s.service_team, null) == team])
+  }
+}
+
+module "backup_vault" {
+  source = "../../backup/backup-vault"
+  count  = var.backup_vault.enabled ? 1 : 0
+
+  project_id              = var.host_project.project_id
+  location                = var.host_project.region
+  vault_id                = "${var.environment}-vault"
+  enforced_retention_days = var.backup_vault.enforced_retention_days
+  lock_effective_time     = var.backup_vault.lock_effective_time
+  labels                  = var.labels
+
+  cloud_sql_instances       = module.app_services.sql_instance_ids
+  cloud_sql_source_projects = local.backup_vault_source_projects
 }
 
 # =============================================================================

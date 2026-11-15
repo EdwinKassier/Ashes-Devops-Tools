@@ -196,3 +196,13 @@ run "plan_read_deny_over_managed_policy_quota_rejected" {
 
   expect_failures = [aws_cloudformation_stack_set.this]
 }
+
+run "wildcard_protected_backup_vault_name_rejected" {
+  command = plan
+
+  variables {
+    protected_backup_vault_names = ["*"]
+  }
+
+  expect_failures = [var.protected_backup_vault_names]
+}

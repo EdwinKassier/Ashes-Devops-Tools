@@ -196,10 +196,10 @@ run "optional_services_can_be_disabled" {
   command = plan
 
   variables {
-    deletion_protection     = true
-    nat                     = { enabled = false }
-    private_service_access  = { enabled = false }
-    private_service_connect = { enabled = false }
+    enable_deletion_protection = true
+    nat                        = { enabled = false }
+    private_service_access     = { enabled = false }
+    private_service_connect    = { enabled = false }
   }
 
   assert {
@@ -338,4 +338,133 @@ run "additional_region_nat_off_when_nat_disabled" {
     condition     = length(module.additional_region_nat) == 0 && length(module.integrated_nat) == 0 && length(output.additional_region_subnets) == 1
     error_message = "nat.enabled = false must suppress every NAT, additional regions included."
   }
+}
+
+# vpn.advertised_groups reaches the HA VPN Cloud Router, so a CUSTOM router can
+# keep announcing every hub subnet (ALL_SUBNETS) next to extra ranges.
+run "vpn_advertised_groups_reach_the_router" {
+  command = plan
+
+  variables {
+    vpn = {
+      enabled              = true
+      peer_gateway_ips     = ["203.0.113.1", "203.0.113.2"]
+      advertised_groups    = ["ALL_SUBNETS"]
+      advertised_ip_ranges = [{ range = "10.10.0.0/16", description = "environment dev" }]
+    }
+    vpn_shared_secret_wo = "mock-psk-not-a-secret"
+  }
+
+  assert {
+    condition = (
+      module.vpn[0].router.bgp[0].advertise_mode == "CUSTOM" &&
+      tolist(module.vpn[0].router.bgp[0].advertised_groups) == tolist(["ALL_SUBNETS"]) &&
+      [for r in module.vpn[0].router.bgp[0].advertised_ip_ranges : r.range] == ["10.10.0.0/16"]
+    )
+    error_message = "vpn.advertised_groups and advertised_ip_ranges must reach the HA VPN Cloud Router."
+  }
+}
+
+run "deprecated_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    deletion_protection = true
+  }
+
+  assert {
+    condition     = output.network_name == "hub-vpc-core"
+    error_message = "The deprecated deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+    deletion_protection        = true
+  }
+
+  assert {
+    condition     = output.network_name == "hub-vpc-core"
+    error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
+  }
+}
+
+# ARC-1: Google's endpoint name rule (1-20 lower-case letters and numbers,
+# starting with a letter) and an explicit endpoint IP outside every subnet.
+run "psc_endpoint_name_and_address_default" {
+  command = plan
+
+  assert {
+    condition     = module.private_service_connect[0].forwarding_rule.name == "hubvpccorepsc" && output.private_service_connect.name == "hubvpccorepsc"
+    error_message = "The PSC endpoint name must be the network name without non-alphanumerics plus psc (hubvpccorepsc)."
+  }
+
+  assert {
+    condition     = module.private_service_connect[0].address == "10.0.255.254" && output.private_service_connect.address == "10.0.255.254"
+    error_message = "The PSC endpoint address must default to the second-to-last address of the hub CIDR (10.0.255.254)."
+  }
+}
+
+run "psc_endpoint_name_truncates_long_network_names" {
+  command = plan
+
+  variables {
+    network = {
+      name       = "very-long-hub-network-name-01"
+      cidr_block = "10.0.0.0/16"
+    }
+  }
+
+  assert {
+    condition     = output.private_service_connect.name == "verylonghubnetworpsc" && length(output.private_service_connect.name) <= 20
+    error_message = "The derived PSC name must keep 17 characters of the network name plus psc (at most 20)."
+  }
+}
+
+run "psc_endpoint_overrides" {
+  command = plan
+
+  variables {
+    private_service_connect = {
+      name    = "hubapis"
+      address = "10.0.200.10"
+    }
+  }
+
+  assert {
+    condition     = module.private_service_connect[0].forwarding_rule.name == "hubapis" && module.private_service_connect[0].address == "10.0.200.10"
+    error_message = "private_service_connect.name and address must override the derived values."
+  }
+}
+
+run "psc_endpoint_address_inside_subnet_fails" {
+  command = plan
+
+  variables {
+    private_service_connect = {
+      address = "10.0.16.10"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
+}
+
+run "psc_endpoint_address_inside_additional_region_subnet_fails" {
+  command = plan
+
+  variables {
+    additional_regions = {
+      us-east1 = {
+        subnet_cidrs = { public = "10.2.0.0/24", private = "10.2.16.0/24", database = "10.2.32.0/24" }
+      }
+    }
+    private_service_connect = {
+      address = "10.2.32.7"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
 }

@@ -108,3 +108,7 @@ module "example" {
 | <a name="output_deny_policy_specs"></a> [deny\_policy\_specs](#output\_deny\_policy\_specs) | Map of deny-policy ID => gcloud policy-file JSON, for the break-glass path only: gcloud iam policies create\|update <id> --attachment-point=cloudresourcemanager.googleapis.com/organizations/<org> --kind=denypolicies --policy-file=<file>. |
 | <a name="output_parent"></a> [parent](#output\_parent) | URL-encoded org attachment point of the deny policies. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

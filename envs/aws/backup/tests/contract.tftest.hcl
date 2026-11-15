@@ -129,3 +129,16 @@ run "variable_contract_beats_config_contract" {
     error_message = "explicit variables must win over the config file."
   }
 }
+
+# Re-audit 7 CMP-4: a regulated estate needs the central copy vault.
+run "regulated_estate_needs_the_central_copy" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated.yaml"
+    landing_zone_name        = null
+    management_account_id    = null
+  }
+
+  expect_failures = [terraform_data.regulated_backup_copy]
+}

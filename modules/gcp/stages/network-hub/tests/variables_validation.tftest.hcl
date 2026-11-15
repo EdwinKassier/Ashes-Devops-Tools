@@ -20,7 +20,7 @@ variables {
   org_id                 = "organizations/123456789"
   folders = {
     shared = {
-      id           = "folders/111111111"
+      id           = "111111111"
       name         = "folders/111111111"
       display_name = "Shared"
     }
@@ -446,4 +446,273 @@ run "rejects_prefixed_hub_project_number" {
   }
 
   expect_failures = [var.hub_project_number]
+}
+
+# ── hub_peering_limit ──────────────────────────────────────────────────────────
+# A VPC carries at most 25 peerings by default, and the hub VPC also carries its
+# Private Service Access peering: more environments must move to NCC first.
+
+run "hub_peerings_over_the_limit_rejected" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    hub_peering_limit = 2
+    spoke_peerings = {
+      dev  = { network_self_link = "projects/p-dev/global/networks/mock-dev-vpc" }
+      uat  = { network_self_link = "projects/p-uat/global/networks/mock-uat-vpc" }
+      prod = { network_self_link = "projects/p-prod/global/networks/mock-prod-vpc" }
+    }
+  }
+
+  expect_failures = [terraform_data.hub_peering_limit]
+}
+
+run "hub_peerings_at_the_limit_accepted" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    hub_peering_limit = 2
+    spoke_peerings = {
+      dev = { network_self_link = "projects/p-dev/global/networks/mock-dev-vpc" }
+      uat = { network_self_link = "projects/p-uat/global/networks/mock-uat-vpc" }
+    }
+  }
+
+  assert {
+    condition     = terraform_data.hub_peering_limit.input == 2 && length(google_compute_network_peering.hub_to_spoke) == 2
+    error_message = "Peerings up to hub_peering_limit must plan."
+  }
+}
+
+run "rejects_zero_hub_peering_limit" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    hub_peering_limit = 0
+  }
+
+  expect_failures = [var.hub_peering_limit]
+}
+
+run "rejects_internal_domain_trailing_dot" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    internal_domain = "corp.example.com."
+  }
+
+  expect_failures = [var.internal_domain]
+}
+
+run "rejects_internal_domain_uppercase" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    internal_domain = "Corp.Example.com"
+  }
+
+  expect_failures = [var.internal_domain]
+}
+
+run "rejects_internal_domain_single_label" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    internal_domain = "corp"
+  }
+
+  expect_failures = [var.internal_domain]
+}
+
+run "rejects_internal_domain_underscore" {
+  command = plan
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  variables {
+    internal_domain = "corp_x.example.com"
+  }
+
+  expect_failures = [var.internal_domain]
+}
+
+# IAC-1: pinned hub zones must belong to default_region, once each.
+run "rejects_hub_zones_outside_the_region" {
+  command = plan
+
+  variables {
+    hub_zones = ["us-central1-a", "us-east1-b"]
+  }
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  expect_failures = [var.hub_zones]
+}
+
+run "rejects_duplicate_hub_zones" {
+  command = plan
+
+  variables {
+    hub_zones = ["us-central1-a", "us-central1-a"]
+  }
+
+  override_module {
+    target = module.hub
+    outputs = {
+      network_self_link = "projects/mock-hub-project/global/networks/hub-vpc-core"
+      network_name      = "hub-vpc-core"
+      subnets           = { public = {}, private = {}, database = {} }
+      nat_ip            = null
+    }
+  }
+  override_module {
+    target = module.dns_anchor
+    outputs = {
+      network_self_link = "projects/mock-dns-project/global/networks/dns-vpc-core"
+      dns_zone_names    = { "internal-root" = "internal-root" }
+      dns_names         = { "internal-root" = "internal.local." }
+    }
+  }
+
+  expect_failures = [var.hub_zones]
 }

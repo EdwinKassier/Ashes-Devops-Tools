@@ -171,3 +171,7 @@ The following resources are created:
 | <a name="output_membership_ids"></a> [membership\_ids](#output\_membership\_ids) | Map keyed by "<group\_id>-<member\_id>" to the membership resource ID. |
 | <a name="output_membership_names"></a> [membership\_names](#output\_membership\_names) | Map keyed by "<group\_id>-<member\_id>" to the membership resource name. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

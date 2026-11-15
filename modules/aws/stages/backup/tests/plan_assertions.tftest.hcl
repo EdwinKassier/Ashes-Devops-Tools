@@ -36,6 +36,11 @@ override_module {
   outputs = { policy_id = "p-backup00000000" }
 }
 
+override_module {
+  target  = module.copy_vault
+  outputs = { vault_arn = "arn:aws:backup:eu-west-2:444444444444:backup-vault:org-backup-copy-vault" }
+}
+
 run "composes_backup_baseline" {
   command = apply
 
@@ -148,5 +153,102 @@ run "backup_role_referenced_not_deployed_by_default" {
   assert {
     condition     = length(aws_cloudformation_stack_set.backup_role) == 0 && output.backup_role_arn == "arn:aws:iam::$account:role/aws-backup-org-role"
     error_message = "by default the stage must reference the aws-organization-deployed role and create no StackSet."
+  }
+}
+
+# compliance.backup.copy_to_central_vault: the BACKUP_POLICY writes to the CMK
+# member vault and copies every recovery point to the locked copy vault in the
+# backup account and to the member DR vault; cross-account backup is enabled in
+# the management account.
+run "central_copy_wiring" {
+  command = apply
+
+  variables {
+    enable_central_copy    = true
+    organization_id        = "o-abc1234567"
+    backup_account_id      = "444444444444"
+    copy_vault_kms_key_arn = "arn:aws:kms:eu-west-2:444444444444:key/11111111-2222-3333-4444-555555555555"
+    dr_region              = "eu-west-1"
+  }
+
+  assert {
+    condition = output.copy_destination_vault_arns == [
+      "arn:aws:backup:eu-west-2:444444444444:backup-vault:org-backup-copy-vault",
+      "arn:aws:backup:eu-west-1:$account:backup-vault:org-backup-vault-cmk",
+    ]
+    error_message = "the stage must copy every recovery point to the locked central copy vault and to the member DR vault."
+  }
+
+  assert {
+    condition     = output.policy_target_vault_name == "org-backup-vault-cmk"
+    error_message = "with central copy on, the BACKUP_POLICY must write to the CMK member vault."
+  }
+
+  assert {
+    condition     = jsondecode(aws_backup_global_settings.this[0].global_settings["isCrossAccountBackupEnabled"]) == true
+    error_message = "cross-account backup must be enabled in the management account."
+  }
+
+  assert {
+    condition     = output.copy_vault_arn == "arn:aws:backup:eu-west-2:444444444444:backup-vault:org-backup-copy-vault" && length(module.copy_vault_key) == 0
+    error_message = "an explicit copy_vault_kms_key_arn must be used and no key created."
+  }
+}
+
+run "central_copy_off_by_default" {
+  command = apply
+
+  assert {
+    condition     = output.copy_destination_vault_arns == [] && length(aws_backup_global_settings.this) == 0
+    error_message = "the default stage must not copy or touch global settings."
+  }
+
+  assert {
+    condition     = output.policy_target_vault_name == "org-backup-vault" && output.copy_vault_arn == null && length(module.copy_vault) == 0 && length(module.copy_vault_key) == 0
+    error_message = "the default stage must keep writing to vault_name and create no copy vault or key."
+  }
+}
+
+# Without an explicit key the stage creates a protected CMK in the backup
+# account for the copy vault.
+run "central_copy_creates_copy_vault_key" {
+  command = plan
+
+  variables {
+    enable_central_copy   = true
+    organization_id       = "o-abc1234567"
+    backup_account_id     = "444444444444"
+    management_account_id = "111111111111"
+  }
+
+  assert {
+    condition     = length(module.copy_vault_key) == 1 && length(module.copy_vault) == 1
+    error_message = "enable_central_copy without copy_vault_kms_key_arn must create the copy vault key and the copy vault."
+  }
+
+  assert {
+    condition     = output.copy_destination_vault_arns == ["arn:aws:backup:eu-west-2:444444444444:backup-vault:org-backup-copy-vault"]
+    error_message = "without dr_region only the central copy vault is a copy destination."
+  }
+}
+
+# compliance.backup.dr_region alone: aws-organization creates the CMK member
+# vaults (home and DR region), so the policy writes to the CMK vault and
+# copies to the DR region, with no cross-account copy.
+run "dr_copy_without_central_copy" {
+  command = apply
+
+  variables {
+    dr_region = "eu-west-1"
+  }
+
+  assert {
+    condition     = output.copy_destination_vault_arns == ["arn:aws:backup:eu-west-1:$account:backup-vault:org-backup-vault-cmk"] && output.policy_target_vault_name == "org-backup-vault-cmk"
+    error_message = "dr_region alone must copy to the member DR vault from the CMK member vault."
+  }
+
+  assert {
+    condition     = length(aws_backup_global_settings.this) == 0 && length(module.copy_vault) == 0
+    error_message = "dr_region alone must not enable cross-account backup or create the copy vault."
   }
 }

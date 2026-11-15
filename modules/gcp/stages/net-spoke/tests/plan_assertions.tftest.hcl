@@ -131,11 +131,11 @@ run "optional_services_can_be_disabled" {
   command = plan
 
   variables {
-    deletion_protection     = true
-    nat                     = { enabled = false }
-    private_service_access  = { enabled = false }
-    private_service_connect = { enabled = false }
-    edge                    = { cloud_armor = { enabled = false } }
+    enable_deletion_protection = true
+    nat                        = { enabled = false }
+    private_service_access     = { enabled = false }
+    private_service_connect    = { enabled = false }
+    edge                       = { cloud_armor = { enabled = false } }
     firewall = {
       enable_iap_access = false
       additional_rules = {
@@ -303,4 +303,137 @@ run "additional_region_nat_off_when_nat_disabled" {
     condition     = length(module.additional_region_nat) == 0 && length(module.integrated_nat) == 0 && length(output.additional_region_subnets) == 1
     error_message = "nat.enabled = false must suppress every NAT, additional regions included."
   }
+}
+
+run "flow_log_export_follows_region" {
+  command = plan
+
+  variables {
+    region = "europe-west2"
+    flow_logs_export = {
+      enabled                 = true
+      create_bigquery_dataset = true
+      create_storage_bucket   = true
+      storage_bucket_name     = "mock-dev-flow-logs"
+    }
+  }
+
+  assert {
+    condition     = module.vpc_flow_logs[0].bigquery_dataset.location == "europe-west2"
+    error_message = "the flow-log BigQuery export must default to the spoke's region, not US."
+  }
+
+  assert {
+    condition     = module.vpc_flow_logs[0].storage_bucket.location == "europe-west2"
+    error_message = "the flow-log storage export must default to the spoke's region, not US."
+  }
+}
+
+run "flow_log_export_location_can_be_pinned" {
+  command = plan
+
+  variables {
+    region = "europe-west2"
+    flow_logs_export = {
+      enabled                 = true
+      create_bigquery_dataset = true
+      bigquery_location       = "US"
+    }
+  }
+
+  assert {
+    condition     = module.vpc_flow_logs[0].bigquery_dataset.location == "US"
+    error_message = "an explicit bigquery_location must win over the region default."
+  }
+}
+
+run "deprecated_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    deletion_protection = true
+  }
+
+  assert {
+    condition     = output.network_name == "mock-dev-vpc"
+    error_message = "The deprecated deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+    deletion_protection        = true
+  }
+
+  assert {
+    condition     = output.network_name == "mock-dev-vpc"
+    error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
+  }
+}
+
+# ARC-1: Google's endpoint name rule (1-20 lower-case letters and numbers,
+# starting with a letter) and an explicit endpoint IP outside every subnet.
+run "psc_endpoint_name_and_address_default" {
+  command = plan
+
+  assert {
+    condition     = module.private_service_connect[0].forwarding_rule.name == "mockdevvpcpsc" && output.private_service_connect.name == "mockdevvpcpsc"
+    error_message = "The PSC endpoint name must be the network name without non-alphanumerics plus psc (mockdevvpcpsc)."
+  }
+
+  assert {
+    condition     = module.private_service_connect[0].address == "10.10.255.254" && output.private_service_connect.address == "10.10.255.254"
+    error_message = "The PSC endpoint address must default to the second-to-last address of the spoke CIDR (10.10.255.254)."
+  }
+}
+
+run "psc_endpoint_overrides" {
+  command = plan
+
+  variables {
+    private_service_connect = {
+      name    = "devapis"
+      address = "10.10.200.10"
+    }
+  }
+
+  assert {
+    condition     = module.private_service_connect[0].forwarding_rule.name == "devapis" && module.private_service_connect[0].address == "10.10.200.10"
+    error_message = "private_service_connect.name and address must override the derived values."
+  }
+}
+
+run "psc_endpoint_address_inside_subnet_fails" {
+  command = plan
+
+  variables {
+    private_service_connect = {
+      address = "10.10.33.4"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
+}
+
+run "psc_endpoint_address_inside_secondary_range_fails" {
+  command = plan
+
+  variables {
+    network = {
+      name           = "mock-dev-vpc"
+      cidr_block     = "10.10.0.0/16"
+      explicit_zones = ["europe-west1-b", "europe-west1-c"]
+      secondary_ranges = {
+        "europe-west1-b" = [{ range_name = "pods", ip_cidr_range = "100.64.0.0/14" }]
+      }
+    }
+    private_service_connect = {
+      address = "100.64.1.1"
+    }
+  }
+
+  expect_failures = [output.private_service_connect]
 }

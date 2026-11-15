@@ -147,6 +147,30 @@
     },
 %{ endif ~}
     {
+      "Sid": "DenyStackSetStackTampering",
+      "Effect": "Deny",
+      "Action": [
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:SetStackPolicy",
+        "cloudformation:UpdateTerminationProtection",
+        "cloudformation:ContinueUpdateRollback",
+        "cloudformation:CancelUpdateStack",
+        "cloudformation:CreateStack",
+        "cloudformation:RollbackStack",
+        "cloudformation:CreateStackRefactor",
+        "cloudformation:ExecuteStackRefactor"
+      ],
+      "Resource": "arn:${partition}:cloudformation:*:*:stack/StackSet-*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": ${jsonencode(stackset_stack_exempt_arns)}
+        }
+      }
+    },
+    {
       "Sid": "DenyLogArchiveObjectLockTampering",
       "Effect": "Deny",
       "Action": [
@@ -178,7 +202,9 @@
         "kms:ScheduleKeyDeletion",
         "kms:DisableKey",
         "kms:DisableKeyRotation",
-        "kms:DeleteImportedKeyMaterial"
+        "kms:DeleteImportedKeyMaterial",
+        "kms:UpdateAlias",
+        "kms:DeleteAlias"
       ],
       "Resource": "*",
       "Condition": {

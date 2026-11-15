@@ -16,7 +16,7 @@ override_data {
       contract = {
         org_id = "123456789012"
         folders = {
-          dev = { id = "folders/111", display_name = "Development" }
+          dev = { id = "111", name = "folders/111", display_name = "Development" }
         }
       }
     }

@@ -10,13 +10,19 @@
 # route_table_ids. That makes the for_each keys known and lets us assert the
 # OUTPUT WIRING (input <- output edges) concretely under `command = apply`.
 
-mock_provider "aws" {}
+# The alarm actions validate the topic ARN, which a mock would generate as random text.
+mock_provider "aws" {
+  mock_resource "aws_sns_topic" {
+    defaults = { arn = "arn:aws:sns:eu-west-2:111111111111:network-hub-alarms" }
+  }
+}
 
 variables {
   org_id                   = "o-abc1234567"
   org_arn                  = "arn:aws:organizations::111111111111:organization/o-abc1234567"
   flow_log_destination_arn = "arn:aws:s3:::ashes-org-log-archive"
   log_bucket_name          = "ashes-org-log-archive"
+  alarm_subscriber_emails  = ["netops@corp.test"]
 }
 
 # Feed known vpc ids + subnet tiers so downstream for_each keys are plan-known.
@@ -85,13 +91,17 @@ override_module {
 }
 
 override_module {
-  target  = module.vpc_endpoints
-  outputs = { phz_id = "Z0000000000000000000" }
+  target = module.vpc_endpoints
+  outputs = {
+    phz_id               = "Z0000000000000000000"
+    shared_dns_zone_arns = { ssm = "arn:aws:route53:::hostedzone/Z0000000000000000001" }
+  }
 }
 
 override_module {
   target = module.network_firewall
   outputs = {
+    firewall_name         = "inspection-firewall"
     firewall_arn          = "arn:aws:network-firewall:eu-west-2:111111111111:firewall/inspection"
     firewall_endpoint_ids = ["vpce-fw-a", "vpce-fw-b"]
     firewall_endpoint_ids_by_az = {
@@ -290,5 +300,234 @@ run "all_hub_vpcs_use_pool_when_new_only_disabled" {
   assert {
     condition     = local.hub_vpc_ipam_pool_ids == { inspection = "ipam-pool-eu-west-2-0", egress = "ipam-pool-eu-west-2-0" }
     error_message = "disabling the new-only gate moves both hub VPCs to the pool"
+  }
+}
+
+# A static hub VPC is not an IPAM allocation, so without a manual allocation the
+# regional pool could hand its range to a spoke. Each static hub VPC inside the
+# home-region pool is reserved there.
+run "static_hub_vpcs_are_reserved_in_the_pool" {
+  command = plan
+
+  assert {
+    condition = (
+      length(aws_vpc_ipam_pool_cidr_allocation.hub_static) == 2 &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["inspection"].cidr == var.inspection_cidr &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"].cidr == var.egress_cidr &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["inspection"].ipam_pool_id == "ipam-pool-eu-west-2-0" &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"].ipam_pool_id == "ipam-pool-eu-west-2-0"
+    )
+    error_message = "Static hub VPCs must hold a manual allocation in the regional pool so IPAM never hands their range to a spoke."
+  }
+
+  assert {
+    condition     = output.hub_static_ipam_allocations == { inspection = var.inspection_cidr, egress = var.egress_cidr }
+    error_message = "hub_static_ipam_allocations must map each reserved hub VPC to its CIDR."
+  }
+}
+
+run "pool_allocated_hub_vpc_needs_no_reservation" {
+  command = plan
+
+  variables {
+    ipam_new_vpcs = ["egress"]
+  }
+
+  assert {
+    condition     = keys(aws_vpc_ipam_pool_cidr_allocation.hub_static) == ["inspection"]
+    error_message = "A hub VPC that allocates from the pool is its own allocation; only static hubs are reserved."
+  }
+}
+
+run "no_reservation_when_both_hub_vpcs_use_the_pool" {
+  command = plan
+
+  variables {
+    ipam_mode_for_new_vpcs_only = false
+  }
+
+  assert {
+    condition     = length(aws_vpc_ipam_pool_cidr_allocation.hub_static) == 0
+    error_message = "With ipam_mode_for_new_vpcs_only = false both hub VPCs allocate from the pool, so nothing is reserved."
+  }
+}
+
+# A hub VPC outside the home-region pool cannot be handed to a spoke from that
+# pool, and IPAM rejects an allocation outside the pool CIDR.
+run "hub_vpc_outside_the_regional_pool_is_not_reserved" {
+  command = plan
+
+  variables {
+    egress_cidr = "10.32.0.0/16"
+  }
+
+  assert {
+    condition     = keys(aws_vpc_ipam_pool_cidr_allocation.hub_static) == ["inspection"]
+    error_message = "Only hub VPCs inside the regional pool CIDR are reserved there."
+  }
+}
+
+# A hub VPC that only partly overlaps the regional pool cannot be reserved, and
+# a spoke can still get part of its range: fail the plan.
+run "hub_vpc_straddling_the_regional_pool_fails" {
+  command = plan
+
+  variables {
+    inspection_cidr = "10.0.0.0/11"
+  }
+
+  expect_failures = [aws_vpc_ipam_pool_cidr_allocation.hub_static["inspection"]]
+}
+
+# The home-region pool can hold extra CIDRs (regional_additional_cidrs). A static
+# hub VPC inside one of them is reserved there too, or IPAM could hand its range
+# to a spoke.
+run "static_hub_vpc_in_an_additional_pool_cidr_is_reserved" {
+  command = plan
+
+  variables {
+    top_cidr                  = "10.0.0.0/8"
+    regional_additional_cidrs = { eu-west-2 = ["10.80.0.0/12"] }
+    egress_cidr               = "10.80.0.0/16"
+  }
+
+  assert {
+    condition = (
+      keys(aws_vpc_ipam_pool_cidr_allocation.hub_static) == ["egress", "inspection"] &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"].cidr == "10.80.0.0/16" &&
+      aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"].ipam_pool_id == "ipam-pool-eu-west-2-0"
+    )
+    error_message = "A static hub VPC inside an additional home-region pool CIDR must be reserved in the pool."
+  }
+}
+
+# Partly overlapping an additional CIDR is the same hazard as partly overlapping
+# the first one.
+run "hub_vpc_straddling_an_additional_pool_cidr_fails" {
+  command = plan
+
+  variables {
+    top_cidr                  = "10.0.0.0/8"
+    regional_additional_cidrs = { eu-west-2 = ["10.80.0.0/12"] }
+    egress_cidr               = "10.64.0.0/10"
+  }
+
+  expect_failures = [aws_vpc_ipam_pool_cidr_allocation.hub_static["egress"]]
+}
+
+# Additional CIDRs of another region do not hold the home-region hub ranges.
+run "additional_cidrs_of_another_region_do_not_reserve_hub_vpcs" {
+  command = plan
+
+  variables {
+    aws_enabled_regions       = ["eu-west-2", "eu-west-1"]
+    top_cidr                  = "10.0.0.0/8"
+    regional_additional_cidrs = { eu-west-1 = ["10.80.0.0/12"] }
+    egress_cidr               = "10.80.0.0/16"
+  }
+
+  assert {
+    condition     = keys(aws_vpc_ipam_pool_cidr_allocation.hub_static) == ["inspection"]
+    error_message = "Only the home-region pool CIDRs decide which hub VPCs are reserved."
+  }
+}
+
+run "interface_endpoints_admit_the_org_supernet" {
+  command = plan
+
+  variables {
+    top_cidr = "10.64.0.0/10"
+  }
+
+  assert {
+    condition     = length(local.endpoint_allowed_cidrs) == 1 && local.endpoint_allowed_cidrs[0] == "10.64.0.0/10"
+    error_message = "The central interface endpoints must admit HTTPS from top_cidr, so the spokes can reach them (the VPC default security group denies everything)."
+  }
+}
+
+run "hub_network_alarms_exist" {
+  command = apply
+
+  # tgw_id is known (override_module), the NAT ids are mock values: assert the
+  # metric identity, which is what makes an alarm real or silently empty.
+  assert {
+    condition = (
+      output.network_alarms["tgw-blackhole-drops"].namespace == "AWS/TransitGateway" &&
+      output.network_alarms["tgw-blackhole-drops"].metric_name == "PacketDropCountBlackhole" &&
+      output.network_alarms["tgw-blackhole-drops"].dimensions == { TransitGateway = "tgw-000000000000abcd" }
+    )
+    error_message = "the hub must alarm on blackhole drops of its own transit gateway"
+  }
+
+  assert {
+    condition     = toset(keys(output.network_alarms)) == toset(["nat-port-allocation-errors-0", "nat-port-allocation-errors-1", "tgw-blackhole-drops", "firewall-stateful-drops-0", "firewall-stateful-drops-1"])
+    error_message = "one NAT alarm and one firewall drop alarm per AZ, the blackhole alarm, and no VPN alarm without enable_vpn"
+  }
+
+  # ARC-11: stateful drop alarms carry the firewall's full metric identity.
+  assert {
+    condition = (
+      output.network_alarms["firewall-stateful-drops-1"].namespace == "AWS/NetworkFirewall" &&
+      output.network_alarms["firewall-stateful-drops-1"].metric_name == "DroppedPackets" &&
+      output.network_alarms["firewall-stateful-drops-1"].threshold == 1000 &&
+      output.network_alarms["firewall-stateful-drops-1"].dimensions == { FirewallName = "inspection-firewall", AvailabilityZone = "eu-west-2b", Engine = "Stateful" }
+    )
+    error_message = "the hub must alarm on stateful drops of its firewall, per AZ"
+  }
+
+  assert {
+    condition = alltrue([
+      for k in ["nat-port-allocation-errors-0", "nat-port-allocation-errors-1"] :
+      output.network_alarms[k].namespace == "AWS/NATGateway" &&
+      output.network_alarms[k].metric_name == "ErrorPortAllocation" &&
+      output.network_alarms[k].statistic == "Sum" &&
+      toset(keys(output.network_alarms[k].dimensions)) == toset(["NatGatewayId"])
+    ])
+    error_message = "the hub must alarm on port allocation errors of every NAT gateway"
+  }
+
+  assert {
+    condition     = length(module.network_alarms.alarm_arns) == 5 && output.alarm_topic_arn != null
+    error_message = "every alarm definition must become an alarm, publishing to a topic"
+  }
+}
+
+run "alarm_topic_is_created_and_subscribed" {
+  command = apply
+
+  variables {
+    alarm_subscriber_emails = ["netops@corp.test"]
+  }
+
+  assert {
+    condition     = length(aws_sns_topic_subscription.alarm_email) == 1 && aws_sns_topic_subscription.alarm_email["netops@corp.test"].protocol == "email"
+    error_message = "the topic the stage creates must carry the email subscribers"
+  }
+}
+
+run "supplied_alarm_topic_is_reused" {
+  command = apply
+
+  variables {
+    alarm_sns_topic_arn     = "arn:aws:sns:eu-west-2:111111111111:ops-alerts"
+    alarm_subscriber_emails = ["netops@corp.test"]
+  }
+
+  assert {
+    condition     = output.alarm_topic_arn == "arn:aws:sns:eu-west-2:111111111111:ops-alerts" && length(aws_sns_topic_subscription.alarm_email) == 0
+    error_message = "a supplied topic is used as is: the stage creates no topic and no subscription"
+  }
+}
+
+run "no_firewall_alarms_without_the_firewall" {
+  command = plan
+
+  variables {
+    enable_network_firewall = false
+  }
+
+  assert {
+    condition     = length([for k in keys(output.network_alarms) : k if startswith(k, "firewall-")]) == 0
+    error_message = "no firewall drop alarm may exist when the firewall is off"
   }
 }

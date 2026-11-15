@@ -44,7 +44,7 @@ output "github_oidc_subjects" {
 }
 
 output "services" {
-  description = "Per-service deployment contract: everything a CI pipeline needs (ECR repo, deploy role, cluster/service, task-definition family, container name) plus the runtime roles, log group, optional database endpoint/secret and optional queue/DLQ URL + ARN."
+  description = "Per-service deployment contract: everything a CI pipeline needs (ECR repo, deploy role, cluster/service, task-definition family, container name, whether CPU autoscaling is on) plus the runtime roles, log group, optional database endpoint/secret and optional queue/DLQ URL + ARN."
   value = {
     for k, s in var.services : k => {
       ecr_repository_url     = module.ecr[0].repository_urls[k]
@@ -52,6 +52,7 @@ output "services" {
       deploy_role_arn        = try(aws_iam_role.deploy[k].arn, null)
       ecs_cluster_name       = local.cluster_name
       ecs_service_name       = module.service[k].service_name
+      autoscaling_enabled    = length(module.service[k].autoscaling_target_ids) > 0
       task_definition_family = module.service[k].task_definition_family
       container_name         = module.service[k].container_name
       initial_image          = local.svc[k].initial_image

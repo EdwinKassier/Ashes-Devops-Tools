@@ -10,7 +10,7 @@ variables {
   admin_project_id        = "mock-admin-project"
   suffix                  = "abcd1234"
   folders = {
-    dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" }
+    dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }
   }
   environments = {
     dev = {
@@ -62,4 +62,16 @@ run "rejects_malformed_additional_project_service" {
   }
 
   expect_failures = [var.additional_project_services]
+}
+
+run "rejects_folder_name_without_folders_prefix" {
+  command = plan
+
+  variables {
+    folders = {
+      dev = { id = "111111111", name = "111111111", display_name = "Development" }
+    }
+  }
+
+  expect_failures = [var.folders]
 }

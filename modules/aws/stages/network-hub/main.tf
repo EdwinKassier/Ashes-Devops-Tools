@@ -16,7 +16,8 @@
 #                            public subnet and the per-AZ NAT / TGW routes into
 #                            the module-owned route tables.
 #   - transit_gateway      — segmented TGW; prod/nonprod default routes point at
-#                            the inspection attachment so traffic is inspected.
+#                            the inspection attachment so traffic is inspected
+#                            (without the firewall: at the egress attachment).
 #   - network_firewall     — stateful inspection in the inspection VPC.
 #   - vpc_endpoints        — centralized interface endpoints in the egress VPC.
 #   - route53_resolver     — inbound/outbound resolver + DNS firewall + Profile.
@@ -47,31 +48,53 @@ locals {
   # egress/east-west traffic is forced through the firewall. Extracted to a
   # local so the wiring is assertable independently of the (override_module'd)
   # transit_gateway child.
-  tgw_propagations = {
-    "inspection->prod"    = { attachment = "inspection", route_table = "prod" }
-    "inspection->nonprod" = { attachment = "inspection", route_table = "nonprod" }
-    "egress->shared"      = { attachment = "egress", route_table = "shared" }
-  }
+  tgw_propagations = merge(
+    {
+      "inspection->prod"    = { attachment = "inspection", route_table = "prod" }
+      "inspection->nonprod" = { attachment = "inspection", route_table = "nonprod" }
+      "egress->shared"      = { attachment = "egress", route_table = "shared" }
+    },
+    # With the VPN, the inspection table learns the egress VPC, so inspected
+    # on-premises traffic reaches the resolver endpoints even when no spoke
+    # (and so no inspection 0.0.0.0/0 -> egress route) exists.
+    var.enable_vpn ? { "egress->inspection" = { attachment = "egress", route_table = "inspection" } } : {},
+  )
+
+  # Spoke segments default-route to inspection when the firewall exists, else
+  # straight to the egress attachment (starter: NAT egress, not inspected; D4).
+  spoke_default_attachment = var.enable_network_firewall ? "inspection" : "egress"
 
   tgw_routes = merge(
     {
-      "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = "inspection" }
-      "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = "inspection" }
+      "prod:default"    = { route_table = "prod", cidr = "0.0.0.0/0", attachment = local.spoke_default_attachment }
+      "nonprod:default" = { route_table = "nonprod", cidr = "0.0.0.0/0", attachment = local.spoke_default_attachment }
     },
-    # On-premises traffic is default-routed to inspection too (hybrid table).
+    # On-premises traffic is default-routed to inspection (hybrid table). The
+    # VPN needs the firewall (terraform_data.hybrid_needs_inspection).
     var.enable_vpn ? { "hybrid:default" = { route_table = "hybrid", cidr = "0.0.0.0/0", attachment = "inspection" } } : {},
+    # Traffic from the egress VPC (resolver endpoint replies and forwards) to
+    # on-premises goes through inspection too, the same path as the request,
+    # so the stateful firewall sees both directions.
+    { for c in local.onprem_route_cidrs : "shared:onprem:${c}" => { route_table = "shared", cidr = c, attachment = "inspection" } },
     local.spoke_hub_routes,
   )
 
-  # Hub routes the workload spokes need (spokes.tf); added only once a spoke is
-  # wired so an estate without spoke_attachments plans no change.
-  spoke_hub_routes = length(var.spoke_attachments) > 0 ? {
+  # On-premises prefixes routed from the egress VPC to the VPN (plan-known).
+  onprem_route_cidrs = var.enable_vpn ? toset(var.vpn.onprem_cidrs) : toset([])
+
+  # Hub routes the inspected spokes need (spokes.tf); only with the firewall and
+  # at least one spoke, so an estate without spokes plans no change.
+  spoke_hub_routes = length(var.spoke_attachments) > 0 && var.enable_network_firewall ? {
     # Inspected internet-bound traffic leaves through the egress VPC (NAT).
     "inspection:default" = { route_table = "inspection", cidr = "0.0.0.0/0", attachment = "egress" }
     # NAT replies to the spokes (egress sits in the shared segment) go back
     # through inspection, so egress is inspected in both directions.
     "shared:spokes" = { route_table = "shared", cidr = var.top_cidr, attachment = "inspection" }
   } : {}
+
+  # Where spoke CIDRs propagate: the inspection table (inspected path), or the
+  # shared table that the egress attachment uses for NAT replies (starter).
+  spoke_return_route_table = var.enable_network_firewall ? "inspection" : "shared"
 }
 
 # ---------------------------------------------------------------------------
@@ -86,6 +109,9 @@ module "ipam" {
   regional_cidrs      = var.regional_cidrs
   org_arn             = var.org_arn
 
+  regional_additional_cidrs = var.regional_additional_cidrs
+  share_principal_arns      = var.share_principal_arns
+
   tags = var.tags
 }
 
@@ -98,6 +124,54 @@ locals {
   hub_vpc_ipam_pool_ids = {
     for name in ["inspection", "egress"] :
     name => (!var.ipam_mode_for_new_vpcs_only || contains(var.ipam_new_vpcs, name)) ? local.hub_regional_pool_id : ""
+  }
+
+  # Static hub VPCs (no pool) whose range overlaps a home-region pool CIDR (the
+  # first one or an additional one). Two ranges overlap when their network
+  # addresses agree on the shorter prefix (cidrhost masks the host bits of the
+  # address it is given). The keys come from variables only, so the for_each
+  # below is known at plan.
+  hub_pool_cidrs = !contains(var.aws_enabled_regions, var.aws_region) ? [] : concat(
+    compact([lookup(var.regional_cidrs, var.aws_region, "")]),
+    lookup(var.regional_additional_cidrs, var.aws_region, []),
+  )
+  hub_static_cidrs = { inspection = var.inspection_cidr, egress = var.egress_cidr }
+  hub_static_overlapping_pool = {
+    for name, cidr in local.hub_static_cidrs : name => cidr
+    if var.ipam_mode_for_new_vpcs_only && !contains(var.ipam_new_vpcs, name) &&
+    anytrue([
+      for p in local.hub_pool_cidrs :
+      cidrhost("${split("/", cidr)[0]}/${min(tonumber(split("/", cidr)[1]), tonumber(split("/", p)[1]))}", 0) ==
+      cidrhost("${split("/", p)[0]}/${min(tonumber(split("/", cidr)[1]), tonumber(split("/", p)[1]))}", 0)
+    ])
+  }
+}
+
+# A static hub VPC is not an IPAM allocation, so IPAM does not know its range is
+# in use and could allocate it to a spoke (ARC-1). This manual allocation
+# reserves the range in the regional pool. It never touches the VPC itself.
+# Every argument forces replacement (hashicorp/aws 6.72.0), so the description is
+# fixed text. A hub VPC that allocates from the pool is its own allocation and
+# needs no reservation.
+resource "aws_vpc_ipam_pool_cidr_allocation" "hub_static" {
+  for_each = local.hub_static_overlapping_pool
+
+  ipam_pool_id = local.hub_regional_pool_id
+  cidr         = each.value
+  description  = "Reserved for the static ${each.key} hub VPC (aws-network)."
+
+  # The regional pool must have its CIDR provisioned before an allocation.
+  depends_on = [module.ipam]
+
+  lifecycle {
+    precondition {
+      condition = anytrue([
+        for p in local.hub_pool_cidrs :
+        tonumber(split("/", each.value)[1]) >= tonumber(split("/", p)[1]) &&
+        cidrhost("${split("/", each.value)[0]}/${split("/", p)[1]}", 0) == cidrhost(p, 0)
+      ])
+      error_message = "The ${each.key} hub VPC CIDR (${each.value}) overlaps the ${var.aws_region} regional IPAM pool (${join(", ", local.hub_pool_cidrs)}) but is not inside one of its CIDRs, so it cannot be reserved and IPAM can allocate part of it to a spoke. Move ${each.key}_cidr inside one pool CIDR or out of all of them (aws.network in config/landing-zone.yaml)."
+    }
   }
 }
 
@@ -170,6 +244,8 @@ locals {
   # Return / hand-off routes into the transit gateway, keyed "<vpc>-<tier>-<i>":
   #   - egress public + private tiers -> top_cidr via TGW (return path to spokes
   #     for NAT'd flows, interface endpoints and resolver endpoints).
+  #   - egress private tier -> each vpn.onprem_cidrs prefix via TGW (VPN only;
+  #     keyed "egress-onprem-<i>-<cidr>").
   #   - inspection firewall tier -> 0.0.0.0/0 via TGW (inspected traffic goes back
   #     to the TGW, whose inspection route table forwards it on).
   hub_tgw_routes = merge(
@@ -178,6 +254,15 @@ locals {
       "egress-${pair[0]}-${pair[1]}" => {
         route_table_id = module.egress_vpc.route_table_ids_by_tier[pair[0]][pair[1]]
         destination    = var.top_cidr
+      }
+    },
+    # egress private tier (resolver endpoints) -> each on-premises prefix via
+    # TGW, so replies and forwards to on-premises reach the VPN, not NAT.
+    {
+      for pair in setproduct(local.nat_az_indexes, local.onprem_route_cidrs) :
+      "egress-onprem-${pair[0]}-${pair[1]}" => {
+        route_table_id = module.egress_vpc.route_table_ids_by_tier["private"][pair[0]]
+        destination    = pair[1]
       }
     },
     {
@@ -338,6 +423,12 @@ module "transit_gateway" {
 #     route, is inspected, and the inspection VPC's attachment (inspection table)
 #     forwards it to the VPN. No on-premises prefix is more specific than the
 #     spoke default, so inspection cannot be bypassed.
+#   - The egress VPC (resolver endpoints) reaches on-premises the same way: its
+#     private tier routes each vpn.onprem_cidrs prefix to the TGW, the shared
+#     table (egress attachment) sends it to inspection, and the inspection
+#     table learns the egress VPC (egress->inspection propagation) for the
+#     traffic that comes back. Both directions cross the same firewall endpoint
+#     (appliance mode).
 # ---------------------------------------------------------------------------
 
 module "vpn" {
@@ -384,6 +475,23 @@ resource "aws_ec2_transit_gateway_route" "vpn_onprem" {
 # Network Firewall — stateful inspection in the inspection VPC
 # ---------------------------------------------------------------------------
 
+locals {
+  # Shared ranges every spoke may reach: the hub VPCs (endpoints, Resolver),
+  # the on-premises prefixes behind the VPN and any extra internal ranges.
+  firewall_internal_pass_cidrs = distinct(concat(
+    [module.inspection_vpc.vpc_cidr, module.egress_vpc.vpc_cidr],
+    var.enable_vpn ? var.vpn.onprem_cidrs : [],
+    var.network_firewall_internal_pass_cidrs,
+  ))
+  # Re-audit 5 ARC-1: spokes reach spokes of their own segment only. A spoke
+  # without a cidr is in no segment, so its east-west traffic fails closed.
+  firewall_internal_segments = {
+    for seg in ["prod", "nonprod"] : seg => sort(distinct([
+      for s in values(var.spoke_attachments) : s.cidr if s.segment == seg && s.cidr != null
+    ]))
+  }
+}
+
 module "network_firewall" {
   source = "../../network/network-firewall"
 
@@ -403,11 +511,20 @@ module "network_firewall" {
   suricata_rules           = var.network_firewall_suricata_rules
   home_net_cidrs           = [var.top_cidr]
 
+  # ARC-1: pass every spoke to and from the hub VPCs and on-premises, and
+  # spokes to spokes within one segment. Prod to nonprod meets the default
+  # action, so the firewall backs up the TGW blackholes (re-audit 5 ARC-1).
+  enable_internal_pass = var.network_firewall_internal_pass
+  internal_pass_cidrs  = local.firewall_internal_pass_cidrs
+  internal_segments    = local.firewall_internal_segments
+
   tags = var.tags
 }
 
 # Production egress fails closed: an enforced estate must drop unmatched
-# established traffic and carry a domain allowlist, or carry the waiver.
+# established traffic and carry a domain allowlist, or carry the waiver. The
+# aws-network root turns the gate on for a production estate or any regulated
+# workload environment, and refuses the waiver for a regulated one.
 resource "terraform_data" "production_egress_enforced" {
   input = var.enforce_egress_allowlist
 
@@ -415,26 +532,81 @@ resource "terraform_data" "production_egress_enforced" {
     precondition {
       condition = (
         !var.enforce_egress_allowlist || var.egress_alert_only_waived ||
-        (contains(var.network_firewall_stateful_default_actions, "aws:drop_established") &&
+        (length([for a in var.network_firewall_stateful_default_actions : a if startswith(a, "aws:drop_")]) > 0 &&
         length(var.network_firewall_egress_domain_allowlist) > 0)
       )
-      error_message = "Production egress must fail closed: set network_firewall_stateful_default_actions to include aws:drop_established AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
+      error_message = "Production and regulated egress must fail closed: set network_firewall_stateful_default_actions to include a drop action (aws:drop_established_app_layer_to_server recommended) AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
     }
   }
+}
+
+# ARC-2: ".amazonaws.com" (or "amazonaws.com") in the allowlist admits every
+# S3 bucket and every AWS API in any account, so the allowlist stops nothing
+# that goes to AWS. List the regional service names that have no endpoint
+# instead (config/landing-zone.example.yaml). A warning, so an estate that
+# still carries the old example keeps planning.
+check "egress_allowlist_not_all_of_aws" {
+  assert {
+    condition     = length(setintersection(var.network_firewall_egress_domain_allowlist, [".amazonaws.com", "amazonaws.com", "*.amazonaws.com"])) == 0
+    error_message = "network_firewall_egress_domain_allowlist (config aws.network.egress_domain_allowlist) contains .amazonaws.com, which admits every S3 bucket and AWS API in any account. Replace it with the regional service names your workloads call that have no VPC endpoint, for example api.ecr.<region>.amazonaws.com, .dkr.ecr.<region>.amazonaws.com and secretsmanager.<region>.amazonaws.com."
+  }
+}
+
+# The hybrid table sends on-premises traffic to inspection, which forwards
+# nothing without the firewall. Starter estates cannot run the VPN.
+resource "terraform_data" "hybrid_needs_inspection" {
+  input = var.enable_vpn
+
+  lifecycle {
+    precondition {
+      condition     = !var.enable_vpn || var.enable_network_firewall
+      error_message = "enable_vpn needs enable_network_firewall = true (profile production): on-premises traffic is routed through the inspection VPC, which forwards nothing without the firewall."
+    }
+  }
+}
+
+# The egress VPC can route to on-premises only the prefixes in onprem_cidrs:
+# BGP propagates into the TGW inspection table, not into VPC route tables.
+check "resolver_endpoints_reach_onprem" {
+  assert {
+    condition     = !var.enable_vpn || !local.enable_resolver_endpoints || length(var.vpn.onprem_cidrs) > 0
+    error_message = "The VPN and the Resolver endpoints are on but vpn.onprem_cidrs is empty, so the egress VPC has no route to on-premises: inbound endpoint replies and outbound forwards go to NAT. List the on-premises resolver ranges in aws.network.vpn.onprem_cidrs."
+  }
+}
+
+locals {
+  # Resolver endpoints only serve on-premises resolution, so they follow the
+  # VPN unless set explicitly. Their security group admits DNS from the org
+  # supernet and the on-premises prefixes; the interface endpoints admit HTTPS
+  # from the org supernet. Locals so the tests can assert the wiring of the
+  # overridden endpoint and resolver modules.
+  enable_resolver_endpoints = coalesce(var.enable_resolver_endpoints, var.enable_vpn)
+  resolver_allowed_cidrs    = distinct(concat([var.top_cidr], var.vpn.onprem_cidrs))
+  endpoint_allowed_cidrs    = [var.top_cidr]
 }
 
 # ---------------------------------------------------------------------------
 # Centralized VPC endpoints — interface endpoints in the egress VPC
 # ---------------------------------------------------------------------------
 
+# Spokes reach the endpoints over the transit gateway (inspected: spoke tables
+# default-route to inspection, and the egress VPC returns top_cidr through it).
+# The module-owned security group admits HTTPS from the org supernet, and each
+# service name is served from a private hosted zone that the Route 53 Profile
+# carries to every associated spoke VPC.
 module "vpc_endpoints" {
   source = "../../network/vpc-endpoints"
 
-  vpc_id                   = module.egress_vpc.vpc_id
-  region                   = var.aws_region
-  subnet_ids               = module.egress_vpc.subnet_ids_by_tier["private"]
-  org_id                   = var.org_id
-  private_hosted_zone_name = var.private_hosted_zone_name
+  vpc_id                    = module.egress_vpc.vpc_id
+  region                    = var.aws_region
+  subnet_ids                = module.egress_vpc.subnet_ids_by_tier["private"]
+  org_id                    = var.org_id
+  private_hosted_zone_name  = var.private_hosted_zone_name
+  allowed_cidrs             = local.endpoint_allowed_cidrs
+  enable_shared_private_dns = true
+  # PREVIEW (default org_principals): org_principals_and_resources adds
+  # aws:ResourceOrgID for the non-exempt services.
+  endpoint_policy_mode = var.vpc_endpoint_policy_mode
 
   tags = var.tags
 }
@@ -451,6 +623,13 @@ module "route53_resolver" {
   org_arn                   = var.org_arn
   query_log_destination_arn = var.flow_log_destination_arn
   enable_dns_firewall       = true
+
+  enable_resolver_endpoints = local.enable_resolver_endpoints
+  allowed_cidrs             = local.resolver_allowed_cidrs
+
+  # The central interface endpoint zones ride the profile. The map keys are the
+  # interface service names (plan-known), so the profile for_each is plan-safe.
+  profile_hosted_zone_arns = module.vpc_endpoints.shared_dns_zone_arns
 
   tags = var.tags
 }

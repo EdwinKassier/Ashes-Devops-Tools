@@ -16,7 +16,11 @@ locals {
   # output existed (N-1, not yet re-applied) exposes the same keys as
   # individual outputs, so the read falls back to them; that fallback goes at
   # v1.0 with the individual outputs (UPGRADING.md).
-  org_remote = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  # Re-audit 7 CMP-1: regulated account keys from the aws-organization
+  # remote state (not from a supplied contract, which a workspace variable can
+  # set), ORed with this root's config file.
+  contract_regulated_account_keys = try(tolist(local.org_remote.regulated_account_keys), [])
+  org_remote                      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
   # The organization contract, whichever source supplied it, as one type (the
   # variable's). Fields this root needs are read strictly (a missing key fails
   # the plan); the rest default.
@@ -44,6 +48,26 @@ locals {
   # (management account id + org id) so no extra remote-state dependency is
   # needed just to obtain the ARN.
   org_arn = "arn:${local.partition}:organizations::${local.org.management_account_id}:organization/${local.org.organization_id}"
+
+  # RAM principals for the IPAM pools: null = the whole organization; otherwise
+  # the ARNs of the OUs named by key in the organization contract's ou_ids.
+  ipam_share_principal_arns = local.ipam_share_ou_keys == null ? null : [
+    for k in local.ipam_share_ou_keys :
+    "arn:${local.partition}:organizations::${local.org.management_account_id}:ou/${local.org.organization_id}/${lookup(local.org.ou_ids, k, "missing-${k}")}"
+  ]
+}
+
+# Fails the plan when an OU key has no ID in the organization contract, instead
+# of sharing the pools with a nonexistent OU.
+resource "terraform_data" "ipam_share_ou_keys" {
+  input = local.ipam_share_ou_keys
+
+  lifecycle {
+    precondition {
+      condition     = local.ipam_share_ou_keys == null || alltrue([for k in coalesce(local.ipam_share_ou_keys, []) : contains(keys(local.org.ou_ids), k)])
+      error_message = "ipam_share_ou_keys names OUs that are not in the organization contract's ou_ids: ${join(", ", [for k in coalesce(local.ipam_share_ou_keys, []) : k if !contains(keys(local.org.ou_ids), k)])}. Known OU keys: ${join(", ", sort(keys(local.org.ou_ids)))}."
+    }
+  }
 }
 
 module "aws_network_hub" {
@@ -55,12 +79,14 @@ module "aws_network_hub" {
   aws_region          = local.aws_region
   aws_enabled_regions = local.aws_enabled_regions
 
-  top_cidr           = local.top_cidr
-  regional_cidrs     = local.regional_cidrs
-  inspection_cidr    = local.inspection_cidr
-  egress_cidr        = local.egress_cidr
-  availability_zones = var.availability_zones
-  az_count           = var.az_count
+  top_cidr                  = local.top_cidr
+  regional_cidrs            = local.regional_cidrs
+  regional_additional_cidrs = local.regional_additional_cidrs
+  share_principal_arns      = local.ipam_share_principal_arns
+  inspection_cidr           = local.inspection_cidr
+  egress_cidr               = local.egress_cidr
+  availability_zones        = local.availability_zones # azs.tf
+  az_count                  = var.az_count
 
   flow_log_destination_arn = "arn:${local.partition}:s3:::${local.log_archive_bucket_name}"
   log_bucket_name          = local.log_archive_bucket_name
@@ -69,8 +95,9 @@ module "aws_network_hub" {
   enable_network_firewall        = local.enable_network_firewall
   enable_network_access_analyzer = var.enable_network_access_analyzer
 
-  enable_vpn = local.enable_vpn
-  vpn        = local.vpn
+  enable_vpn                = local.enable_vpn
+  vpn                       = local.vpn
+  enable_resolver_endpoints = local.enable_resolver_endpoints
 
   spoke_attachments = local.spoke_attachments
 
@@ -78,4 +105,46 @@ module "aws_network_hub" {
   egress_alert_only_waived                  = local.egress_alert_only_waived
   network_firewall_egress_domain_allowlist  = local.network_firewall_egress_domain_allowlist
   network_firewall_stateful_default_actions = local.network_firewall_stateful_default_actions
+  network_firewall_suricata_rules           = local.network_firewall_suricata_rules
+  network_firewall_internal_pass_cidrs      = local.network_firewall_internal_pass_cidrs
+
+  vpc_endpoint_policy_mode = local.vpc_endpoint_policy_mode
+
+  alarm_sns_topic_arn     = var.alarm_sns_topic_arn
+  alarm_subscriber_emails = local.alarm_subscriber_emails
+}
+
+# A hub alarm that notifies nobody is worse than none (CMP-6): production needs
+# a real subscriber or a topic the caller owns. Production = profile production,
+# or any aws.workload_environments entry with is_production: true.
+locals {
+  alarm_placeholder_emails = sort([
+    for e in local.alarm_subscriber_emails : e
+    if can(regex("(^|\\.)(example\\.(com|net|org)|example|invalid|localhost|test)$", lower(try(regex("@([^@]+)$", e)[0], ""))))
+  ])
+  alarm_contact_required = local.profile == "production" || length(local.cfg.workload_production) > 0
+}
+
+resource "terraform_data" "alarm_contact_guard" {
+  input = local.alarm_subscriber_emails
+
+  lifecycle {
+    precondition {
+      condition = (
+        !local.alarm_contact_required || var.alarm_sns_topic_arn != null ||
+        (length(local.alarm_subscriber_emails) > 0 && length(local.alarm_placeholder_emails) == 0)
+      )
+      error_message = "Production hub network alarms have no real subscriber${length(local.alarm_placeholder_emails) > 0 ? " (placeholder domain: ${join(", ", local.alarm_placeholder_emails)})" : ""}. Set notifications.emails in config/landing-zone.yaml, alarm_subscriber_emails, or alarm_sns_topic_arn. Example, .invalid, .localhost and .test domains are rejected. Production means org.profile = production or an aws.workload_environments entry with is_production: true."
+    }
+  }
+}
+
+# The aws:ResourceOrgID endpoint policy is not yet sandbox-proven, so a
+# regulated estate does not get it by default. Warn (never fail) until the
+# owner opts in after a sandbox test (docs/known-gaps.md).
+check "regulated_endpoint_policy" {
+  assert {
+    condition     = length(local.cfg.workload_regulated) == 0 || local.vpc_endpoint_policy_mode == "org_principals_and_resources"
+    error_message = "Regulated AWS workload environments (${join(", ", local.cfg.workload_regulated)}) use hub interface endpoints that check only the caller (aws:PrincipalOrgID). Prove aws.network.vpc_endpoint_policy_mode: org_principals_and_resources in a sandbox, then set it (docs/architecture/regulated-environments.md)."
+  }
 }

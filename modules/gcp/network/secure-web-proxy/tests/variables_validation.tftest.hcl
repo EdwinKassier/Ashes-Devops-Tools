@@ -114,7 +114,7 @@ run "rejects_invalid_proxy_only_cidr" {
   command = plan
   variables {
     create_proxy_only_subnet = true
-    proxy_only_subnet_cidr   = "10.0.254.0"
+    proxy_only_subnet_cidr   = "10.0.250.0"
   }
   expect_failures = [var.proxy_only_subnet_cidr]
 }
@@ -124,7 +124,7 @@ run "rejects_service_attachment_in_next_hop_mode" {
   variables {
     routing_mode              = "NEXT_HOP_ROUTING_MODE"
     create_service_attachment = true
-    psc_nat_subnet_cidr       = "10.0.253.0/24"
+    psc_nat_subnet_cidr       = "10.0.252.0/24"
     consumer_accept_projects  = ["111111111111"]
   }
   expect_failures = [var.create_service_attachment]
@@ -143,7 +143,7 @@ run "rejects_service_attachment_without_consumers" {
   command = plan
   variables {
     create_service_attachment = true
-    psc_nat_subnet_cidr       = "10.0.253.0/24"
+    psc_nat_subnet_cidr       = "10.0.252.0/24"
   }
   expect_failures = [var.consumer_accept_projects]
 }

@@ -66,7 +66,7 @@ override_module {
 
 override_module {
   target  = module.organization
-  outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "folders/111111111", name = "folders/111111111", display_name = "Development" } } }
+  outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } }, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" } } }
 }
 
 run "default_audit_store_and_org_policies" {
@@ -228,6 +228,34 @@ run "dedicated_logging_project_holds_audit_store_and_cmek" {
   assert {
     condition     = google_tags_location_tag_binding.containment_audit_keyring[0].parent == "//cloudkms.googleapis.com/projects/acme-logging/locations/europe-west1/keyRings/acme-audit-cmek"
     error_message = "containment must protect the logging-project audit keyring."
+  }
+}
+
+# CMP-12: the audit keys take gcp.audit_key_protection_level; the default is
+# SOFTWARE, and HSM is for audit keys created fresh (it is ForceNew).
+run "audit_keys_software_by_default" {
+  command = plan
+
+  assert {
+    condition     = alltrue([for k, v in local.audit_cmek_keys : v.protection_level == "SOFTWARE"])
+    error_message = "audit keys must default to SOFTWARE protection."
+  }
+}
+
+run "audit_keys_hsm" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      audit_key_protection_level = "HSM"
+      logging_project_id         = "acme-logging"
+      logging_project_number     = "222233334444"
+    })
+  }
+
+  assert {
+    condition     = length(local.audit_cmek_keys) == 2 && alltrue([for k, v in local.audit_cmek_keys : v.protection_level == "HSM"])
+    error_message = "audit keys must take audit_key_protection_level."
   }
 }
 
@@ -450,6 +478,201 @@ run "projects_delegation_is_bound_per_folder" {
   }
 }
 
+# IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list, and
+# Google advises against joining hasOnly() calls with && or ||. The lists below
+# are the gcp-bootstrap defaults (delegated_workload_folder_roles: 27 roles,
+# delegated_network_folder_roles: 13 roles; the bootstrap suite pins those
+# counts). Each folder must get one conditional binding per 10 roles.
+run "delegated_grants_split_into_ten_role_conditions" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        description             = "Shared"
+        iam_group_role_bindings = {}
+      }
+      dev = {
+        display_name            = "Development"
+        description             = "Development environment"
+        iam_group_role_bindings = {}
+      }
+    }
+    projects_apply_service_account = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+    delegated_workload_folder_roles = [
+      "organizations/123456789/roles/landingZonePlanViewer",
+      "roles/backupdr.viewer",
+      "roles/bigquery.metadataViewer",
+      "roles/cloudkms.viewer",
+      "roles/cloudsql.admin",
+      "roles/cloudsql.viewer",
+      "roles/compute.admin",
+      "roles/compute.viewer",
+      "roles/compute.xpnAdmin",
+      "roles/container.admin",
+      "roles/container.clusterViewer",
+      "roles/dns.admin",
+      "roles/dns.reader",
+      "roles/iam.securityReviewer",
+      "roles/iam.serviceAccountViewer",
+      "roles/iam.workloadIdentityPoolViewer",
+      "roles/logging.admin",
+      "roles/monitoring.admin",
+      "roles/monitoring.viewer",
+      "roles/osconfig.patchDeploymentAdmin",
+      "roles/osconfig.patchDeploymentViewer",
+      "roles/pubsub.viewer",
+      "roles/resourcemanager.folderViewer",
+      "roles/run.viewer",
+      "roles/secretmanager.viewer",
+      "roles/servicenetworking.networksAdmin",
+      "roles/serviceusage.serviceUsageAdmin",
+      "roles/serviceusage.serviceUsageViewer",
+    ]
+    delegated_network_folder_roles = [
+      "organizations/123456789/roles/landingZonePlanViewer",
+      "roles/compute.networkAdmin",
+      "roles/compute.orgFirewallPolicyAdmin",
+      "roles/compute.orgSecurityResourceAdmin",
+      "roles/compute.securityAdmin",
+      "roles/compute.viewer",
+      "roles/compute.xpnAdmin",
+      "roles/dns.admin",
+      "roles/dns.peer",
+      "roles/dns.reader",
+      "roles/servicenetworking.networksAdmin",
+      "roles/serviceusage.serviceUsageAdmin",
+      "roles/serviceusage.serviceUsageViewer",
+    ]
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }, shared = { id = "222222222", name = "folders/222222222", display_name = "Shared" } } }
+  }
+
+  # Chunk 0 keeps the folder key as its address; later chunks are <folder>|<i>.
+  assert {
+    condition     = sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) == sort(["dev", "dev|1", "dev|2", "shared", "shared|1"])
+    error_message = "each folder needs one delegated binding per 10 roles: 3 for the 28 workload roles, 2 for the 13 network roles."
+  }
+
+  assert {
+    condition = (
+      length([for k, m in google_folder_iam_member.projects_delegated_folder_iam : k if split("|", k)[0] == "dev"]) == ceil(length(var.delegated_workload_folder_roles) / 10) &&
+      length([for k, m in google_folder_iam_member.projects_delegated_folder_iam : k if split("|", k)[0] == "shared"]) == ceil(length(var.delegated_network_folder_roles) / 10)
+    )
+    error_message = "the number of bindings per folder must be ceil(roles / 10)."
+  }
+
+  assert {
+    condition = alltrue([
+      for m in google_folder_iam_member.projects_delegated_folder_iam :
+      length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0])) >= 1 && length(regexall("'[^']+'", regex("hasOnly\\(\\[(.*)\\]\\)$", m.condition[0].expression)[0])) <= 10
+    ])
+    error_message = "every delegated condition must list 1 to 10 roles (the IAM hasOnly() limit)."
+  }
+
+  assert {
+    condition = alltrue([
+      for m in google_folder_iam_member.projects_delegated_folder_iam :
+      !strcontains(m.condition[0].expression, "&&") && !strcontains(m.condition[0].expression, "||") && length(regexall("hasOnly\\(", m.condition[0].expression)) == 1 && startswith(m.condition[0].expression, "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([") && endswith(m.condition[0].expression, "])")
+    ])
+    error_message = "every delegated condition must be exactly one modifiedGrantsByRole hasOnly() call, never joined with && or ||."
+  }
+
+  assert {
+    condition = (
+      tolist(flatten([for k in sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) : [for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_folder_iam_member.projects_delegated_folder_iam[k].condition[0].expression)[0]) : r[0]] if split("|", k)[0] == "dev"])) == tolist(var.delegated_workload_folder_roles) &&
+      tolist(flatten([for k in sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) : [for r in regexall("'([^']+)'", regex("hasOnly\\(\\[(.*)\\]\\)$", google_folder_iam_member.projects_delegated_folder_iam[k].condition[0].expression)[0]) : r[0]] if split("|", k)[0] == "shared"])) == tolist(var.delegated_network_folder_roles)
+    )
+    error_message = "the chunks of each folder must together list exactly that folder's allow-list, each role once."
+  }
+
+  assert {
+    condition = alltrue([
+      for k, m in google_folder_iam_member.projects_delegated_folder_iam :
+      m.role == "roles/resourcemanager.folderIamAdmin" && m.member == "serviceAccount:acme-projects-apply@acme-admin-project.iam.gserviceaccount.com" && m.folder == (split("|", k)[0] == "dev" ? "folders/111111111" : "folders/222222222")
+    ])
+    error_message = "every chunk must be the same projects-apply folderIamAdmin grant on its own folder."
+  }
+
+  assert {
+    condition = (
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].title == "delegated_folder_role_grants" &&
+      google_folder_iam_member.projects_delegated_folder_iam["dev|2"].condition[0].title == "delegated_folder_role_grants_2" &&
+      strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev|2"].condition[0].description, "part 3 of 3") &&
+      strcontains(google_folder_iam_member.projects_delegated_folder_iam["shared|1"].condition[0].description, "part 2 of 2")
+    )
+    error_message = "each chunk needs its own condition title and a description that names the chunk."
+  }
+}
+
+# A list of 10 roles or fewer must keep exactly the binding the module created
+# before the split (same address, title, description and expression), so an
+# existing estate sees no change.
+run "short_delegated_list_keeps_one_unchanged_condition" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        description             = "Shared"
+        iam_group_role_bindings = {}
+      }
+      dev = {
+        display_name            = "Development"
+        description             = "Development environment"
+        iam_group_role_bindings = {}
+      }
+    }
+    projects_apply_service_account  = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+    delegated_workload_folder_roles = ["roles/container.admin", "roles/compute.admin"]
+    delegated_network_folder_roles = [
+      "roles/compute.networkAdmin",
+      "roles/compute.orgFirewallPolicyAdmin",
+      "roles/compute.orgSecurityResourceAdmin",
+      "roles/compute.securityAdmin",
+      "roles/compute.viewer",
+      "roles/compute.xpnAdmin",
+      "roles/dns.admin",
+      "roles/dns.peer",
+      "roles/dns.reader",
+      "roles/servicenetworking.networksAdmin",
+    ]
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }, shared = { id = "222222222", name = "folders/222222222", display_name = "Shared" } } }
+  }
+
+  assert {
+    condition     = sort(keys(google_folder_iam_member.projects_delegated_folder_iam)) == sort(["dev", "shared"])
+    error_message = "a folder with 10 roles or fewer must keep one binding at its old address."
+  }
+
+  assert {
+    condition = (
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.admin', 'roles/container.admin'])" &&
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].title == "delegated_folder_role_grants" &&
+      google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].description == "projects-apply may only grant the workload folder roles on this folder"
+    )
+    error_message = "a short workload list must keep the old condition exactly (any change replaces the binding)."
+  }
+
+  assert {
+    condition = (
+      google_folder_iam_member.projects_delegated_folder_iam["shared"].condition[0].expression == "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly(['roles/compute.networkAdmin', 'roles/compute.orgFirewallPolicyAdmin', 'roles/compute.orgSecurityResourceAdmin', 'roles/compute.securityAdmin', 'roles/compute.viewer', 'roles/compute.xpnAdmin', 'roles/dns.admin', 'roles/dns.peer', 'roles/dns.reader', 'roles/servicenetworking.networksAdmin'])" &&
+      google_folder_iam_member.projects_delegated_folder_iam["shared"].condition[0].title == "delegated_folder_role_grants" &&
+      google_folder_iam_member.projects_delegated_folder_iam["shared"].condition[0].description == "projects-apply may only grant the network folder roles on this folder"
+    )
+    error_message = "a list of exactly 10 roles must stay one condition, unchanged."
+  }
+}
+
 # An IAM condition can limit the roles a delegate grants, not the members. The
 # IAM-controlling roles are therefore dropped from projects-apply's allow-list
 # (even when the contract still lists them) and granted by this stage instead.
@@ -495,14 +718,14 @@ run "iam_controlling_roles_are_not_delegable" {
       !strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "serviceAccountAdmin") &&
       !strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "workloadIdentityPoolAdmin") &&
       strcontains(google_folder_iam_member.projects_delegated_folder_iam["dev"].condition[0].expression, "'roles/compute.admin'") &&
-      output.delegated_folder_iam_targets["dev"] == tolist(["roles/compute.admin", "roles/run.admin"])
+      output.delegated_folder_iam_targets["dev"] == tolist(["roles/compute.admin"])
     )
     error_message = "projects-apply must never be able to grant the IAM-controlling roles on an environment folder."
   }
 
   assert {
     condition = (
-      sort(keys(google_folder_iam_member.workload_non_delegable_folder_roles)) == sort(["dev|apply|roles/iam.serviceAccountAdmin", "dev|apply|roles/iam.workloadIdentityPoolAdmin", "dev|apply|roles/resourcemanager.projectIamAdmin"]) &&
+      sort(keys(google_folder_iam_member.workload_non_delegable_folder_roles)) == sort(["dev|apply|roles/iam.serviceAccountAdmin", "dev|apply|roles/iam.workloadIdentityPoolAdmin", "dev|apply|roles/resourcemanager.projectIamAdmin", "dev|apply|roles/run.admin"]) &&
       google_folder_iam_member.workload_non_delegable_folder_roles["dev|apply|roles/resourcemanager.projectIamAdmin"].folder == "folders/111111111" &&
       google_folder_iam_member.workload_non_delegable_folder_roles["dev|apply|roles/resourcemanager.projectIamAdmin"].member == "serviceAccount:acme-wl-dev-apply@acme-admin-project.iam.gserviceaccount.com"
     )
@@ -1157,5 +1380,173 @@ run "disable_default_sink_true_is_honoured" {
   assert {
     condition     = google_logging_organization_settings.this[0].disable_default_sink == true
     error_message = "gcp.disable_default_sink = true must disable the default sink."
+  }
+}
+
+# ── organization-apply's role-conditioned securityAdmin ─────────────────────
+# gcp-bootstrap conditions organization-apply's org iam.securityAdmin on a short
+# allow-list. Every role this stage grants through that securityAdmin (org and
+# project IAM, and the logging-project resources) must be on it, or the apply
+# fails with 403: the plan fails first and names the role.
+run "grants_outside_bootstrap_allowlist_fail_the_plan" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles = ["roles/logging.bucketWriter", "roles/logging.logWriter"]
+  }
+
+  expect_failures = [terraform_data.organization_apply_grants_allowed]
+}
+
+run "default_allowlist_admits_every_grant" {
+  command = plan
+
+  variables {
+    organization_apply_grantable_roles   = ["roles/billing.admin", "roles/cloudkms.cryptoKeyEncrypterDecrypter", "roles/logging.bucketWriter", "roles/logging.logWriter", "roles/storage.objectCreator"]
+    bootstrap_organization_admin_members = ["group:org-admins@acme.io"]
+  }
+
+  assert {
+    condition     = length(local.organization_apply_missing_roles) == 0 && contains(local.organization_apply_granted_roles, "roles/billing.admin") && contains(local.organization_apply_granted_roles, "roles/logging.bucketWriter")
+    error_message = "the default gcp-bootstrap allow-list must admit every role this stage grants through organization-apply's org securityAdmin."
+  }
+}
+
+run "logging_project_grants_need_the_service_agent_roles" {
+  command = plan
+
+  variables {
+    gcp = merge(var.gcp, {
+      logging_project_id     = "acme-logging"
+      logging_project_number = "210987654321"
+    })
+    organization_apply_grantable_roles = ["roles/billing.admin", "roles/logging.bucketWriter", "roles/logging.logWriter"]
+  }
+
+  expect_failures = [terraform_data.organization_apply_grants_allowed]
+}
+
+# The standing organizationAdmin grant of the admin groups is gcp-bootstrap's:
+# organization-apply may not grant organizationAdmin (it would restore
+# unconditional setIamPolicy on the org node).
+run "organization_stage_grants_no_org_admin" {
+  command = plan
+
+  variables {
+    bootstrap_organization_admin_members = ["group:org-admins@acme.io"]
+  }
+
+  assert {
+    condition     = length(local.organization_module_admin_members) == 0 && !contains(local.organization_apply_granted_roles, "roles/resourcemanager.organizationAdmin")
+    error_message = "gcp-organization must not grant roles/resourcemanager.organizationAdmin."
+  }
+}
+
+run "org_admins_missing_from_bootstrap_fail_the_plan" {
+  command = plan
+
+  variables {
+    bootstrap_organization_admin_members = ["group:someone-else@acme.io"]
+  }
+
+  expect_failures = [terraform_data.organization_admins_granted_by_bootstrap]
+}
+
+# CMP-5: gcp.restrictTLSVersion denies TLS 1.0 and 1.1 to Google APIs.
+run "restrict_tls_versions_policy" {
+  command = plan
+
+  variables {
+    # The file-level gcp object plus the key under test.
+    gcp = {
+      admin_email                           = "admin@acme.io"
+      break_glass_user                      = "break-glass@acme.io"
+      organization_admin_groups             = ["org-admins@acme.io"]
+      billing_admin_groups                  = ["billing-admins@acme.io"]
+      allowed_regions                       = ["europe-west1"]
+      strict_folder_policy_environment_keys = ["prod"]
+      budget_currency                       = "USD"
+      alert_notification_emails             = ["secops@acme.io"]
+      restrict_tls_versions                 = true
+    }
+  }
+
+  assert {
+    condition = anytrue([
+      for p in local.effective_list_policies :
+      p.constraint == "gcp.restrictTLSVersion" && toset(p.denied_values) == toset(["TLS_VERSION_1", "TLS_VERSION_1_1"])
+    ])
+    error_message = "restrict_tls_versions must deny TLS 1.0 and 1.1 to Google APIs org-wide."
+  }
+}
+
+run "restrict_tls_versions_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = !contains([for p in local.effective_list_policies : p.constraint], "gcp.restrictTLSVersion")
+    error_message = "the stage default must not set gcp.restrictTLSVersion."
+  }
+}
+
+# ── projects-apply binds data-classification on host projects only ──────────
+# gcp-projects binds each environment host project to a data-classification
+# tag value. That needs tagUser on the tag value side (granted on the
+# data-classification key only, so no other tag such as containment) and on
+# the resource side (granted on each environment folder only).
+run "projects_apply_can_bind_only_data_classification" {
+  command = plan
+
+  variables {
+    environments = {
+      shared = {
+        display_name            = "Shared"
+        description             = "Shared"
+        iam_group_role_bindings = {}
+      }
+      dev = {
+        display_name            = "Development"
+        description             = "Development environment"
+        iam_group_role_bindings = {}
+      }
+    }
+    projects_apply_service_account = "acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+  }
+
+  override_module {
+    target  = module.organization
+    outputs = { organization_id = "123456789", organization_name = "organizations/123456789", organization_domain = "acme.io", organization_directory_customer_id = "C01abc123", folder_iam_members = {}, enabled_apis = [], organizational_units = {}, folders = { dev = { id = "111111111", name = "folders/111111111", display_name = "Development" }, shared = { id = "222222222", name = "folders/222222222", display_name = "Shared" } } }
+  }
+
+  override_module {
+    target  = module.tags
+    outputs = { tag_keys = { "data-classification" = "tagKeys/700", "environment" = "tagKeys/701" }, tag_values = { "environment-dev" = "tagValues/1", "environment-shared" = "tagValues/2", "data-classification-internal" = "tagValues/902" } }
+  }
+
+  assert {
+    condition = (
+      google_tags_tag_key_iam_member.projects_apply_classification[0].tag_key == "tagKeys/700" &&
+      google_tags_tag_key_iam_member.projects_apply_classification[0].role == "roles/resourcemanager.tagUser" &&
+      google_tags_tag_key_iam_member.projects_apply_classification[0].member == "serviceAccount:acme-projects-apply@acme-admin-project.iam.gserviceaccount.com"
+    )
+    error_message = "projects-apply must hold tagUser on the data-classification tag key only."
+  }
+
+  assert {
+    condition = (
+      keys(google_folder_iam_member.projects_apply_tag_user) == ["dev"] &&
+      google_folder_iam_member.projects_apply_tag_user["dev"].folder == "folders/111111111" &&
+      google_folder_iam_member.projects_apply_tag_user["dev"].role == "roles/resourcemanager.tagUser"
+    )
+    error_message = "projects-apply must hold tagUser on each environment folder, never the shared folder or the org."
+  }
+}
+
+run "projects_apply_tag_grants_absent_without_sa" {
+  command = plan
+
+  assert {
+    condition     = length(google_tags_tag_key_iam_member.projects_apply_classification) == 0 && length(google_folder_iam_member.projects_apply_tag_user) == 0
+    error_message = "without projects_apply_service_account no tag grant may be made."
   }
 }

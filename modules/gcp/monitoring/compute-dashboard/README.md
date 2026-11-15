@@ -105,3 +105,7 @@ The following resources are created:
 | <a name="output_dashboard_console_url"></a> [dashboard\_console\_url](#output\_dashboard\_console\_url) | Direct URL to access the dashboard in the GCP Console |
 | <a name="output_dashboard_id"></a> [dashboard\_id](#output\_dashboard\_id) | The ID of the created monitoring dashboard |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

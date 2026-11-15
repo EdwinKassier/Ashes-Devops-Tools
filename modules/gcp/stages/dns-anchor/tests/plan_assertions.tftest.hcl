@@ -101,3 +101,30 @@ run "optional_peerings" {
     error_message = "Optional peerings must be planned per entry."
   }
 }
+
+run "deprecated_deletion_protection_alias_is_still_accepted" {
+  command = plan
+
+  variables {
+    deletion_protection = true
+  }
+
+  assert {
+    condition     = output.dns_zone_names == { "internal-root" = "internal-root" }
+    error_message = "The deprecated deletion_protection input must still plan (it only warns)."
+  }
+}
+
+run "enable_deletion_protection_wins_over_the_deprecated_alias" {
+  command = plan
+
+  variables {
+    enable_deletion_protection = false
+    deletion_protection        = true
+  }
+
+  assert {
+    condition     = output.dns_zone_names == { "internal-root" = "internal-root" }
+    error_message = "Setting enable_deletion_protection together with the deprecated deletion_protection must still plan."
+  }
+}

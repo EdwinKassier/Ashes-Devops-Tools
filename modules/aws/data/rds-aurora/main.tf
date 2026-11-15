@@ -8,7 +8,7 @@
 #   - storage_encrypted = true with a REQUIRED customer-managed KMS key (no
 #     default AWS key)
 #   - cluster lives in PRIVATE subnets; instances are never publicly_accessible
-#   - deletion_protection defaults on, plus a terraform_data guard that blocks an
+#   - enable_deletion_protection defaults on, plus a terraform_data guard that blocks an
 #     accidental `terraform destroy` or replacement of the cluster
 #   - automated backups retained (default 7 days), final snapshot taken on delete
 #   - IAM database authentication on by default
@@ -21,6 +21,9 @@
 # switch to the db.serverless class.
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, true)
+
   # Serverless v2 keeps engine_mode "provisioned" but uses the db.serverless
   # instance class and a scaling configuration block.
   instance_class = var.enable_serverless_v2 ? "db.serverless" : var.instance_class
@@ -39,11 +42,38 @@ resource "aws_db_subnet_group" "this" {
   tags = var.tags
 }
 
+# ── TLS in transit ────────────────────────────────────────────────────────────
+# Re-audit 5 CMP-2: rds.force_ssl = 1 refuses unencrypted client connections.
+# pending-reboot is valid whether the family reports the parameter as static
+# or dynamic ("immediate" fails on a static one). A new cluster boots with
+# it; an existing cluster enforces TLS only after a reboot of each instance,
+# which Terraform does not trigger (UPGRADING.md, re-audit 6 IAC-2).
+# A cluster parameter group per cluster, family from the engine major version.
+resource "aws_rds_cluster_parameter_group" "this" {
+  count = var.enable_force_ssl ? 1 : 0
+
+  name_prefix = "${var.name}-"
+  family      = "aurora-postgresql${split(".", var.engine_version)[0]}"
+  description = "${var.name}: require TLS (rds.force_ssl = 1)"
+
+  parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+
+  tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 # ── Cluster ───────────────────────────────────────────────────────────────────
 
 resource "aws_rds_cluster" "this" {
   # checkov:skip=CKV2_AWS_27:Query logging needs a caller-owned cluster parameter group (log_statement); export via enabled_cloudwatch_logs_exports.
-  # checkov:skip=CKV2_AWS_8:Backups are governed org-wide by the AWS Backup tag policy (modules/aws/backup/backup-org-policy), not a per-module plan.
+  # checkov:skip=CKV2_AWS_8:Backups are governed org-wide by the AWS Backup BACKUP_POLICY (modules/aws/backup/backup-org-policy), which selects the backup = true tag set here (enable_org_backup), not a per-module plan.
   cluster_identifier = var.name
   engine             = "aurora-postgresql"
   engine_mode        = "provisioned"
@@ -59,9 +89,10 @@ resource "aws_rds_cluster" "this" {
   master_password_wo         = var.manage_master_user_password ? null : var.master_password
   master_password_wo_version = var.manage_master_user_password ? null : var.master_password_version
 
-  db_subnet_group_name   = aws_db_subnet_group.this.name
-  vpc_security_group_ids = var.security_group_ids
-  port                   = var.port
+  db_subnet_group_name            = aws_db_subnet_group.this.name
+  db_cluster_parameter_group_name = var.enable_force_ssl ? aws_rds_cluster_parameter_group.this[0].name : null
+  vpc_security_group_ids          = var.security_group_ids
+  port                            = var.port
 
   # Encryption at rest with a required customer-managed key.
   storage_encrypted = true
@@ -74,7 +105,7 @@ resource "aws_rds_cluster" "this" {
   preferred_maintenance_window = var.preferred_maintenance_window
   copy_tags_to_snapshot        = true
 
-  deletion_protection       = var.deletion_protection
+  deletion_protection       = local.enable_deletion_protection
   skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : local.final_snapshot_identifier
 
@@ -89,7 +120,8 @@ resource "aws_rds_cluster" "this" {
     }
   }
 
-  tags = var.tags
+  # backup = true: the org BACKUP_POLICY selects resources by this tag.
+  tags = merge(var.tags, var.enable_org_backup ? { backup = "true" } : {})
 }
 
 # ── Cluster instances ─────────────────────────────────────────────────────────
@@ -127,7 +159,7 @@ resource "aws_rds_cluster_instance" "this" {
 # ── Deletion guard ────────────────────────────────────────────────────────────
 #
 # A terraform_data guard (not prevent_destroy on the cluster itself, which
-# cannot be switched off by a variable). Present when deletion_protection is
+# cannot be switched off by a variable). Present when enable_deletion_protection is
 # true:
 #   - prevent_destroy aborts any plan that destroys the guard, so a
 #     `terraform destroy` of the cluster fails at plan time.
@@ -135,13 +167,13 @@ resource "aws_rds_cluster_instance" "this" {
 #     REPLACE the cluster (a ForceNew change such as cluster_identifier,
 #     kms_key_id or db_subnet_group_name) also plans to replace the guard and
 #     fails the same way. In-place updates keep the id and are not blocked.
-#   - setting deletion_protection = false while the guard exists is also
+#   - setting enable_deletion_protection = false while the guard exists is also
 #     refused, because it would destroy the guard.
 # To intentionally destroy or replace a protected cluster, first run:
 #   terraform state rm '<module_address>.terraform_data.deletion_guard[0]'
-# then set deletion_protection = false and apply.
+# then set enable_deletion_protection = false and apply.
 resource "terraform_data" "deletion_guard" {
-  count = var.deletion_protection ? 1 : 0
+  count = local.enable_deletion_protection ? 1 : 0
 
   input = aws_rds_cluster.this.cluster_identifier
 

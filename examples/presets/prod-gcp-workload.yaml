@@ -3,7 +3,9 @@
 #   presets: [prod-gcp-workload]                     # every gcp-workload-<env>
 #   gcp.workload.presets_by_environment.prod: [prod-gcp-workload]   # prod only
 # Keep `values` identical to the .tfvars (envs/gcp/workload/tests/presets.tftest.hcl
-# fails otherwise). Read the .tfvars comments for the prerequisites.
+# fails otherwise). Read the .tfvars comments for the prerequisites: the VPC-SC
+# perimeter, and the production prerequisites this preset does not set (pinned
+# zones, an egress choice, service_team on app services, tfc-admin policy sets).
 root: envs/gcp/workload
 values:
   vpc_sc_enable_dry_run: false

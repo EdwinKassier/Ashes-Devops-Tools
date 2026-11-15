@@ -108,3 +108,7 @@ module "example" {
 | <a name="output_vercel_project_id"></a> [vercel\_project\_id](#output\_vercel\_project\_id) | The Vercel project ID. Null when enable\_vercel = false. |
 | <a name="output_vercel_uat_environment_id"></a> [vercel\_uat\_environment\_id](#output\_vercel\_uat\_environment\_id) | The Vercel UAT custom environment ID. Null when enable\_vercel = false. |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

@@ -27,7 +27,16 @@ Promotion steps:
    policy **before** flipping. Set `vpc_sc_ingress_identities` on
    `envs/gcp/organization` to the specific automation identities, and scope the
    ingress to the services they need (do not leave it as the default wildcard;
-   see audit finding M2).
+   see audit finding M2). An environment perimeter (`envs/gcp/workload`)
+   already admits that environment's own `wl-<env>-plan` and `wl-<env>-apply`
+   SAs for its restricted services (`environment_config[<env>].automation_identities`
+   from gcp-projects). The environment perimeter also holds the host project
+   and every `service_teams` project, so add `vpc_sc_ingress_policies` or
+   `vpc_sc_egress_policies` rules for the callers and resources outside it:
+   a CMEK key in a project outside the perimeter (a service's
+   `database.encryption_key_name`, `artifact_registry_kms_key_name`), an
+   image registry outside the perimeter, the app-deploy WIF identity, and CI.
+   Enforced with team projects is PREVIEW (`docs/known-gaps.md`).
 4. When the logs show only expected blocks, set `vpc_sc_enable_dry_run = false`
    (hub, via `envs/gcp/organization`), the per-perimeter `enable_dry_run` on the
    host stage, and the workload perimeter on `envs/gcp/workload`.
@@ -43,13 +52,61 @@ set (`dry_run_restricted_services`, `dry_run_ingress_policies`,
 (`envs/gcp/network-hub`). Validate the delta's dry-run violations, then copy it
 into the enforced input and clear the override.
 
-**Prod guard.** `envs/gcp/workload` (check `vpc_sc_enforced_in_prod`) and
-`envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`) emit a plan
-**warning** when a production environment has no perimeter or a dry-run one.
-Production is the explicit `is_production = true` attribute on the shared
-`environments` map (surfaced to gcp-workload as
-`environment_config[<env>].is_production`), not a name match. It warns rather
-than fails so the dry-run rollout above stays possible.
+**Prod guard.** `envs/gcp/workload` **fails the plan**
+(`terraform_data.production_vpc_sc_enforced`) when a production environment has
+no perimeter or a dry-run one. For a first rollout, set a time-boxed waiver on
+that workspace in `config/tfc-workspaces.yaml` (reviewed), then remove it once
+the perimeter is enforced:
+
+```yaml
+workspaces:
+  gcp-workload-prod:
+    production_vpc_sc_dry_run_waiver:
+      reason: First rollout, reading the dry-run violation logs
+      expires: "2026-12-31"
+```
+
+The waiver stops working after its `expires` date (UTC), and the plan fails
+again. `envs/gcp/network-hub` (check `hub_vpc_sc_enforced_when_prod_present`)
+emits a plan **warning** for the hub perimeter. Production is the explicit
+`is_production = true` attribute on the shared `environments` map (surfaced to
+gcp-workload as `environment_config[<env>].is_production`), not a name match.
+
+**Egress guard.** `envs/gcp/workload` also fails a production plan
+(`terraform_data.production_network_guard`) when the private tier does not
+egress through the hub Secure Web Proxy. Choose one:
+
+- Turn the proxy on: `secure_web_proxy` on `gcp-network-hub` with the
+  environment's host project as a consumer, then
+  `gcp.environments.<env>.egress_proxy: true`. The environment must be in the
+  hub proxy region, or its plan fails. With the proxy on, every app-services
+  Cloud Run service and job sends all its traffic into the VPC
+  (`vpc_egress` defaults to `ALL_TRAFFIC`, and production rejects
+  `PRIVATE_RANGES_ONLY`), and the stage injects `HTTPS_PROXY`, `HTTP_PROXY`,
+  `NO_PROXY` and `NODE_USE_ENV_PROXY=1`, so its internet calls go through the
+  proxy. The JVM and older Node.js releases (Node.js reads
+  `NODE_USE_ENV_PROXY` from v24.0.0 and v22.21.0) ignore those variables and
+  then have no internet path: configure them as `UPGRADING.md` shows. The
+  proxy is PREVIEW (`docs/known-gaps.md`): prove it in the sandbox first.
+- Or accept Cloud NAT egress with no allowlist for a limited time, with a
+  waiver on that workspace in `config/tfc-workspaces.yaml`:
+
+```yaml
+workspaces:
+  gcp-workload-prod:
+    production_egress_proxy_waiver:
+      reason: Hub egress proxy not yet proven in the sandbox
+      expires: "2026-12-31"
+```
+
+A standalone environment (no hub) cannot use the proxy, so it needs the
+waiver. The scaffolder writes neither choice.
+
+**An expired waiver blocks every run.** After `expires`, every plan on that
+workspace fails, including the plan for an emergency fix. Renew the waiver, or
+make the change it waives, before the date. The same holds for
+`org.tfc.policy_sets_waiver` in `config/landing-zone.yaml`: once it expires,
+the tfc-admin plan fails until you renew it or turn the policy sets on.
 
 **One access policy per environment.** By default (`enable_scoped_access_policies
 = true` in gcp-bootstrap and gcp-organization) gcp-organization creates a
@@ -89,10 +146,13 @@ apply or a human decision. Enable them per environment, highest-value first.
 | CMEK (AWS/GCP) | pass a key ARN/name at the module boundary | per module (e.g. `ecr`, `network-firewall`, `cloud-storage`) | Without a key, encryption falls back to an AWS-owned key or GMEK. Supplying a CMK is safe; requiring it can break a module that is not given one. |
 | **Audit-log WORM lock (GCP)** | `gcp.enable_audit_bucket_lock: true` (or `gcp_overrides.enable_audit_bucket_lock = true`) | `envs/gcp/organization` → `cloud-audit-logs` | **IRREVERSIBLE.** A locked retention policy cannot be shortened or removed. Enable only for a compliance regime that requires tamper-proof retention, and only once the retention period is final. This is why it is **not** default-on. |
 | AWS CloudTrail → CloudWatch Logs + CIS 4.x alarms | **on by default** (`enable_cloudwatch_logs`) | `modules/aws/stages/security` | The module creates its own rotated, `logs.*`-granted CMK and a KMS-encrypted SNS topic unless you pass `cloudwatch_logs_kms_key_arn`. Subscribe your on-call address. See audit A1/A4. |
+| AWS Backup (locked copy and DR) | `compliance.backup.copy_to_central_vault: true` (a `make init --profile production` scaffold writes it), optionally `compliance.backup.dr_region`; `copy_vault_notification_topic_arn` on `envs/aws/backup` for failed-job alerts | `modules/aws/stages/backup`, `modules/aws/stages/organization/backup_role.tf` | **IRREVERSIBLE** after `changeable_for_days` (default 3): the copy vault has a Compliance-mode Vault Lock. Apply `aws-organization` before `aws-backup`, and read the UPGRADING.md entry first. Without the copy, member-account vaults are unlocked, use the AWS-managed key and are not copied to the locked central vault (control matrix BCK-01 to BCK-03), so do not rely on AWS backups for ransomware or account-compromise recovery. Copy jobs are mock-tested only (known-gaps A5). |
 
-The WORM lock is the one item that must stay opt-in: an irreversible default in a
-template is a footgun, so the best-practice choice is to keep it off and enable it
-deliberately.
+The two WORM locks (GCP audit bucket, AWS backup copy vault) stay off in the
+module defaults: an irreversible default in a template is a footgun, so each one
+is enabled deliberately. A production scaffold writes the AWS backup copy as an
+explicit line in `config/landing-zone.yaml`, so the owner reviews and commits it
+before any apply.
 
 ## 3. Non-production cost right-sizing (audit F5, F2)
 
@@ -111,6 +171,46 @@ Both are in `examples/presets/nonprod-aws-security.tfvars`.
 
 Keep the full posture for production. See the cost model in
 [`docs/audit/archive/2026-11-04-finops-deep-dive.md`](../audit/archive/2026-11-04-finops-deep-dive.md).
+
+## 4. Manual identity and posture steps (CMP-15, CMP-16)
+
+These controls have no Terraform API, so the landing zone cannot apply them.
+Do them once per organization, then keep the evidence for the audit period.
+Control matrix rows: IAM-16 (MFA) and DET-07 (SCC tier).
+
+1. **Activate the Security Command Center Premium tier (GCP, DET-07).**
+   In the Google Cloud console, select the organization, open
+   **Security Command Center → Settings → Tier**, and activate **Premium** at the
+   organization level (pay-as-you-go or subscription). Do not choose
+   Enterprise: Google shuts that tier down on 2027-05-21
+   (<https://docs.cloud.google.com/security-command-center/docs/service-tiers>).
+   The landing zone already ships the findings notification (DET-03); the tier
+   adds Security Health Analytics, threat detection and compliance reports.
+   **Evidence to keep:** a dated screenshot of the Tier page that shows the
+   organization and the active tier; the output of
+   `gcloud scc manage services list --organization=<ORG_ID>`; and the billing
+   record or subscription for the tier.
+2. **Require MFA for every human sign-in (AWS and Google, IAM-16).**
+   - AWS IAM Identity Center (identity source: Identity Center directory): open
+     the IAM Identity Center console, **Settings → Authentication →
+     Multi-factor authentication → Configure**, and set **Prompt users for MFA**
+     to **Every time they sign in (always-on)**. With an external identity
+     provider this section is not shown; enforce MFA in that provider instead
+     (<https://docs.aws.amazon.com/singlesignon/latest/userguide/mfa-getting-started.html>).
+   - Google Cloud Identity or Workspace: in the Google Admin console open
+     **Security → Authentication → 2-Step Verification**, allow users to turn
+     it on, and set **Enforcement** to **On** for every organizational unit
+     that holds a Google Cloud administrator or engineer.
+
+   **Evidence to keep:** a dated screenshot of the Identity Center MFA settings
+   (no API reads them) or the external provider's MFA policy export;
+   `aws iam generate-credential-report` then `aws iam get-credential-report`
+   (column `mfa_active` for any IAM user with a password); the Security Hub
+   `IAM.5` findings; a dated screenshot of the Google 2-Step Verification
+   enforcement page; and a Directory API `users.list` export with the
+   read-only fields `isEnrolledIn2Sv` and `isEnforcedIn2Sv` for every user.
+   The landing zone alerts on AWS console sign-ins without MFA (LOG-09,
+   LOG-10); keep those alert records too.
 
 ## Contain the automation identity (audit C2)
 
@@ -146,7 +246,12 @@ Three refinements close the remaining paths:
   which holds only get/list/getIamPolicy on configuration. Variable validation
   rejects data-plane permissions (`storage.objects.get`,
   `bigquery.tables.getData`, `secretmanager.versions.access`, ...) and
-  `roles/viewer` in the plan folder role lists.
+  `roles/viewer` in the plan folder role lists. No plan SA holds
+  `roles/logging.viewer` either: it holds `logging.logEntries.list`, so at the
+  org node it reads the logs of every project. organization-plan gets the org
+  custom role `landingZoneLoggingConfigViewer` instead, with only the logging
+  configuration reads its refresh needs (sinks, settings, buckets, links,
+  metrics, views, exclusions).
 - **Folder-IAM delegation is per folder.** projects-apply's conditional
   `folderIamAdmin` is bound by gcp-organization on each environment folder (the
   workload role list only) and on the shared folder (the network role list
@@ -250,8 +355,8 @@ a security-team apply of that workspace:
   tag and the principal access boundary. Extra deny policies
   (`iam_deny_policies`) are authored in the committed
   `envs/gcp/guardrails/guardrails.auto.tfvars`, which CODEOWNERS assigns to the
-  platform and security teams, so a change is a PR the security team approves
-  and then applies. They are never workspace variables: the security team's
+  security team alone, so a change is a PR the security team approves and then
+  applies. They are never workspace variables: the security team's
   grant has variables read-only, and tfc-admin attaches no shared variable set
   to `gcp-guardrails`. The root never reads gcp-organization state; it looks
   up the org and the tag directly.
@@ -275,8 +380,9 @@ org IAM), so it could grant itself `denyAdmin` or impersonation on the
 guardrails SA. IAM deny can't condition on the role being granted, so the
 CRITICAL `guardrail_role_grant` and `guardrail_identity_change` watches alert
 on both. tfc-admin can also repoint `gcp-guardrails` (working directory, VCS
-branch, team access), so separation of duties also rests on CODEOWNERS for
-`envs/tfc-admin/**` ([known gaps](../known-gaps.md)).
+branch, team access), so separation of duties also rests on review of
+`envs/tfc-admin/**`. Its CODEOWNERS line lists the platform and the security
+team, so a platform approval alone satisfies it ([known gaps](../known-gaps.md)).
 `guardrail_owner_mode = "organization"` restores the legacy in-stage apply
 (and `denyAdmin` on the organization apply SA); do not apply `gcp-guardrails`
 then. Migrating an existing deployment: see [UPGRADING.md](../../UPGRADING.md).
@@ -290,22 +396,61 @@ denied for the SA, then promote.
 
 ### 3. Dedicated logging project (audit G4/C3)
 
-Set `gcp_overrides.logging_project_id` and `gcp_overrides.logging_project_number` (gcp-organization). The
-following then move out of the admin project into that project:
+Set `gcp.logging_project_id` and `gcp.logging_project_number` in
+`config/landing-zone.yaml` (or the same keys in `gcp_overrides`, gcp-organization).
+The following then move out of the admin project into that project:
 
 - the org audit bucket
 - the BigQuery audit dataset
 - the audit CMEK keyring (`<prefix>-audit-cmek`)
 - the control-plane alerts
 
-**The logging project must not be owned by the Terraform admin/automation SA.**
-That means no `roles/owner`, `roles/editor`, `roles/storage.admin` or
-`roles/cloudkms.admin` at project level. Otherwise the audited identity can purge
-its own trail. Create the project out-of-band, or from a separate identity, and
-grant the SA only the narrow roles it needs.
+**Required for regulated estates.** When any `gcp.environments` entry has
+`compliance_class: regulated`, the gcp-organization plan fails until both the
+logging project and `gcp.enable_audit_bucket_lock: true` are set. To plan
+without them for a limited time, set a waiver and record the risk:
+
+```yaml
+gcp:
+  audit_store_waiver:
+    reason: Logging project pending; risk register entry R-12
+    expires: "2027-03-31"
+```
+
+The waiver stops working after `expires` (UTC), and the plan fails again. In the
+production profile, an estate with an `is_production` environment and no hardened
+audit store gets a plan warning.
+
+Create the project outside Terraform, with an identity other than the automation
+service accounts:
+
+1. Create it **directly under the organization node**, not in a folder.
+   organization-apply holds `roles/resourcemanager.folderIamAdmin` at the
+   organization node, so it can grant itself roles on any project in a folder.
+   The gcp-organization plan warns when the project has a folder parent.
+2. Make a security group, not the platform team, the project owner. It owns
+   the project IAM: organization-apply gets no owner, editor or
+   `projectIamAdmin` role there.
+3. Grant `<prefix>-organization-apply` the resource roles the stage needs in the
+   project: `roles/cloudkms.admin`, `roles/storage.admin`, `roles/bigquery.admin`,
+   `roles/logging.configWriter` and `roles/monitoring.editor` (the roles it holds
+   on the admin project). Grant `<prefix>-organization-plan`
+   `roles/cloudkms.viewer`, `roles/monitoring.viewer`,
+   `roles/bigquery.metadataViewer` and the plan viewer custom role.
+4. The stage then grants, through organization-apply's role-conditioned org
+   `iam.securityAdmin`, only roles on the gcp-bootstrap
+   `organization_apply_grantable_roles` list: `roles/storage.objectCreator` on the
+   audit buckets, `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the audit keys,
+   and `roles/logging.bucketWriter` / `roles/logging.logWriter` on the project.
+   The plan fails if one is missing from that list.
+
+With those roles organization-apply can still administer the buckets and keys.
+The tamper controls are the WORM lock (no identity can delete a locked object or
+shorten the locked period) and admin containment (the deny policy on the
+`containment/protected` tag, IAM-12). Turn both on for a regulated estate.
 
 Decide this before the first apply. KMS keys can't be deleted, so moving the audit
-keys later leaves orphaned keys behind.
+keys later leaves orphaned keys behind (see UPGRADING.md for the migration).
 
 ### 4. Log Analytics, logging settings and the automation boundary
 

@@ -27,29 +27,72 @@ locals {
     tfc_organization        = try(tostring(local.lz.org.tfc.organization), null)
     log_archive_bucket_name = try(tostring(local.lz.aws.log_archive_bucket_name), null)
     aws_enabled_regions     = try([for r in local.lz.aws.enabled_regions : tostring(r)], null)
+    # notifications.emails: the hub network alarm subscribers (CMP-6 pattern).
+    notification_emails = try([for e in local.lz.notifications.emails : tostring(e)], null)
     # aws.network.*: Network Firewall egress posture.
     egress_domain_allowlist  = try([for d in local.lz.aws.network.egress_domain_allowlist : tostring(d)], null)
     stateful_default_actions = try([for a in local.lz.aws.network.stateful_default_actions : tostring(a)], null)
     egress_alert_only_waived = try(tobool(local.lz.aws.network.egress_alert_only_waived), null)
+    # aws.network.suricata_rules / internal_pass_cidrs: custom firewall rules
+    # and extra internal ranges the firewall passes (ARC-1).
+    suricata_rules      = try(tostring(local.lz.aws.network.suricata_rules), null)
+    internal_pass_cidrs = try([for c in local.lz.aws.network.internal_pass_cidrs : tostring(c)], null)
+    # aws.network.vpc_endpoint_policy_mode: the hub endpoint policy (PREVIEW).
+    vpc_endpoint_policy_mode = try(tostring(local.lz.aws.network.vpc_endpoint_policy_mode), null)
     # aws.network addressing (docs/architecture/cidr-plan.md: AWS owns
     # 10.64.0.0/10). tfc-admin fails its plan when these overlap a GCP range.
-    top_cidr        = try(tostring(local.lz.aws.network.top_cidr), null)
-    regional_cidrs  = try({ for r, c in local.lz.aws.network.regional_cidrs : r => tostring(c) }, null)
-    inspection_cidr = try(tostring(local.lz.aws.network.inspection_cidr), null)
-    egress_cidr     = try(tostring(local.lz.aws.network.egress_cidr), null)
+    top_cidr       = try(tostring(local.lz.aws.network.top_cidr), null)
+    regional_cidrs = try({ for r, c in local.lz.aws.network.regional_cidrs : r => tostring(c) }, null)
+    # aws.network.regional_additional_cidrs: extra pool CIDRs per region.
+    regional_additional_cidrs = try({ for r, cs in local.lz.aws.network.regional_additional_cidrs : r => [for c in cs : tostring(c)] }, null)
+    # aws.network.ipam_share_ou_keys: OU keys (aws.contracts.organization.ou_ids)
+    # the IPAM pools are shared with; unset = the whole organization.
+    ipam_share_ou_keys = try([for k in local.lz.aws.network.ipam_share_ou_keys : tostring(k)], null)
+    inspection_cidr    = try(tostring(local.lz.aws.network.inspection_cidr), null)
+    egress_cidr        = try(tostring(local.lz.aws.network.egress_cidr), null)
+    # aws.network.availability_zone_ids: AZ IDs (azs.tf), also read by every
+    # aws-workload root so the spokes land in the hub's physical zones.
+    availability_zone_ids = try([for id in local.lz.aws.network.availability_zone_ids : tostring(id)], null)
     # aws.network.vpn: opt-in Site-to-Site VPN on the TGW (no secret: AWS
     # generates the tunnel keys). JSON text so the explicit-variable fallback
     # is a plain conditional; the stage's variable type validates the shape.
     enable_vpn = try(tobool(local.lz.aws.network.vpn.enabled), null)
     vpn        = try(jsonencode(local.lz.aws.network.vpn), null)
+    # aws.network.resolver_endpoints.enabled: the Route 53 Resolver endpoints
+    # (unset = on only with the VPN).
+    enable_resolver_endpoints = try(tobool(local.lz.aws.network.resolver_endpoints.enabled), null)
     # aws.network.spoke_attachments: workload spokes the hub accepts, associates
     # and propagates (JSON text for the same reason as vpn).
     spoke_attachments = try(jsonencode(local.lz.aws.network.spoke_attachments), null)
-    # aws.workload_environments production flags (unset = keys prod/production).
+    # aws.workload_environments.<env>.vpc_cidr, copied onto a spoke_attachments
+    # entry with the same key that sets no cidr (segment isolation, ARC-11).
+    workload_vpc_cidrs = {
+      for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.vpc_cidr)
+      if try(e.vpc_cidr, null) != null
+    }
+    # aws.workload_environments production flags (is_production is required).
     workload_production = try([
-      for k, e in local.lz.aws.workload_environments : k
-      if coalesce(try(tobool(e.is_production), null), can(regex("^prod(uction)?$", k)))
+      for k, e in local.lz.aws.workload_environments : k if try(tobool(e.is_production), false)
     ], [])
+    workload_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
+    # aws.workload_environments.<env>.compliance_class: standard (default) or
+    # regulated (CMP-7). Any regulated environment hardens the shared hub.
+    workload_regulated = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tostring(e.compliance_class), "standard") == "regulated"
+    ])
+    # CMP-1: regulated but not is_production: true (the plan fails).
+    workload_regulated_not_production = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tostring(e.compliance_class), "standard") == "regulated" && try(tobool(e.is_production), null) != true
+    ])
+    workload_invalid_compliance_class = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if !contains(["standard", "regulated"], try(tostring(e.compliance_class), "standard"))
+    ])
     # aws.contracts.organization: stage contract override (same type as
     # var.organization_contract, identical in every aws root). Present => the
     # aws-organization read is skipped.
@@ -75,25 +118,56 @@ locals {
 
   # Profile-driven defaults (explicit variable > profile). starter drops the
   # Network Firewall endpoints (~$577/month idle at 2 AZs).
+  # A regulated workload environment needs the firewall on any profile; the
+  # enable_network_firewall validation refuses an explicit false.
   profile                 = coalesce(var.profile, local.cfg.profile, "production")
-  enable_network_firewall = coalesce(var.enable_network_firewall, local.profile == "production")
+  enable_network_firewall = coalesce(var.enable_network_firewall, local.profile == "production" || length(local.cfg.workload_regulated) > 0 || length(local.contract_regulated_account_keys) > 0)
 
-  # Production egress fails closed: on when the profile is production AND an
-  # AWS workload environment is production (explicit variable wins).
-  enforce_egress_allowlist                  = coalesce(var.enforce_egress_allowlist, local.profile == "production" && length(local.cfg.workload_production) > 0)
+  # Egress fails closed: on when the profile is production AND an AWS workload
+  # environment is production, or when any AWS workload environment is
+  # regulated (explicit variable wins; its validation refuses false for a
+  # regulated estate).
+  enforce_egress_allowlist                  = coalesce(var.enforce_egress_allowlist, length(local.cfg.workload_regulated) > 0 || length(local.contract_regulated_account_keys) > 0 || (local.profile == "production" && length(local.cfg.workload_production) > 0))
   network_firewall_egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist != null ? var.network_firewall_egress_domain_allowlist : coalesce(local.cfg.egress_domain_allowlist, [])
   network_firewall_stateful_default_actions = var.network_firewall_stateful_default_actions != null ? var.network_firewall_stateful_default_actions : coalesce(local.cfg.stateful_default_actions, ["aws:alert_established"])
   egress_alert_only_waived                  = coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false)
+  network_firewall_suricata_rules           = var.network_firewall_suricata_rules != null ? var.network_firewall_suricata_rules : (local.cfg.suricata_rules != null ? local.cfg.suricata_rules : "")
+  network_firewall_internal_pass_cidrs      = var.network_firewall_internal_pass_cidrs != null ? var.network_firewall_internal_pass_cidrs : coalesce(local.cfg.internal_pass_cidrs, [])
+  # Hub interface endpoint policy (PREVIEW, docs/known-gaps.md). Not derived
+  # from compliance_class until a sandbox proves it: main.tf warns when a
+  # regulated estate keeps the principal-only policy.
+  vpc_endpoint_policy_mode = coalesce(var.vpc_endpoint_policy_mode, local.cfg.vpc_endpoint_policy_mode, "org_principals")
+  # Hub network alarm subscribers: explicit variable > notifications.emails.
+  alarm_subscriber_emails = var.alarm_subscriber_emails != null ? var.alarm_subscriber_emails : coalesce(local.cfg.notification_emails, [])
   # Opt-in hybrid connectivity (default off: no VPN).
   # Addressing: explicit variable > aws.network.* in config > the CIDR plan's
   # AWS block (10.64.0.0/10), clear of the GCP block 10.0.0.0/12.
-  top_cidr        = coalesce(var.top_cidr, local.cfg.top_cidr, "10.64.0.0/10")
-  regional_cidrs  = var.regional_cidrs != null ? var.regional_cidrs : coalesce(local.cfg.regional_cidrs, { (contains(local.aws_enabled_regions, local.aws_region) ? local.aws_region : local.aws_enabled_regions[0]) = "10.64.0.0/12" })
-  inspection_cidr = coalesce(var.inspection_cidr, local.cfg.inspection_cidr, "10.64.0.0/16")
-  egress_cidr     = coalesce(var.egress_cidr, local.cfg.egress_cidr, "10.65.0.0/16")
+  top_cidr       = coalesce(var.top_cidr, local.cfg.top_cidr, "10.64.0.0/10")
+  regional_cidrs = var.regional_cidrs != null ? var.regional_cidrs : coalesce(local.cfg.regional_cidrs, { (contains(local.aws_enabled_regions, local.aws_region) ? local.aws_region : local.aws_enabled_regions[0]) = "10.64.0.0/12" })
+  # Extra pool CIDRs per region (capacity growth). Default none: no change.
+  regional_additional_cidrs = var.regional_additional_cidrs != null ? var.regional_additional_cidrs : coalesce(local.cfg.regional_additional_cidrs, {})
+  inspection_cidr           = coalesce(var.inspection_cidr, local.cfg.inspection_cidr, "10.64.0.0/16")
+  egress_cidr               = coalesce(var.egress_cidr, local.cfg.egress_cidr, "10.65.0.0/16")
+
+  # IPAM pool share: null = the whole organization (today's scope); OU keys =
+  # only those OUs. The OU ARNs are built in main.tf from the organization contract.
+  ipam_share_ou_keys = var.ipam_share_ou_keys != null ? var.ipam_share_ou_keys : local.cfg.ipam_share_ou_keys
 
   enable_vpn = coalesce(var.enable_vpn, local.cfg.enable_vpn, false)
   vpn        = jsondecode(var.vpn != null ? jsonencode(var.vpn) : coalesce(local.cfg.vpn, "{}"))
+  # Null = the stage turns the resolver endpoints on only with the VPN.
+  enable_resolver_endpoints = var.enable_resolver_endpoints != null ? var.enable_resolver_endpoints : local.cfg.enable_resolver_endpoints
   # Workload spoke routing (default none: no change).
-  spoke_attachments = jsondecode(var.spoke_attachments != null ? jsonencode(var.spoke_attachments) : coalesce(local.cfg.spoke_attachments, "{}"))
+  spoke_attachments_input = jsondecode(var.spoke_attachments != null ? jsonencode(var.spoke_attachments) : coalesce(local.cfg.spoke_attachments, "{}"))
+  # Every entry gets the same attribute set, so the map has one element type
+  # (config entries may omit accept or cidr). cidr defaults to the workload
+  # vpc_cidr with the same key.
+  spoke_attachments = {
+    for k, s in local.spoke_attachments_input : k => {
+      attachment_id = s.attachment_id
+      segment       = s.segment
+      accept        = try(s.accept, null) != null ? s.accept : true
+      cidr          = try(s.cidr, null) != null ? s.cidr : lookup(local.cfg.workload_vpc_cidrs, k, null)
+    }
+  }
 }

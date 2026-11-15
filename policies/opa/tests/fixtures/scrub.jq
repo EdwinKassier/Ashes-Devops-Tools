@@ -1,6 +1,6 @@
 # Scrub a `terraform show -json <planfile>` document into an OPA test fixture
-# in the HCP Terraform policy input shape ({plan: {...}}; no run, since no
-# policy may trust input.run).
+# in the HCP Terraform policy input shape ({plan: {...}}; no run: no policy
+# in policies/opa reads input.run).
 #
 #   terraform show -json plan.tfplan | jq -f policies/opa/tests/fixtures/scrub.jq > fixture.json
 #

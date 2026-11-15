@@ -64,6 +64,11 @@ output "interface_endpoint_phz_id" {
   value       = local.contract.interface_endpoint_phz_id
 }
 
+output "resolver_inbound_endpoint_ips" {
+  description = "IP addresses of the inbound Route 53 Resolver endpoint (point the on-premises conditional forwarders at them); empty unless the resolver endpoints are on."
+  value       = module.aws_network_hub.resolver_inbound_endpoint_ips
+}
+
 output "vpn_tunnel_addresses" {
   description = "AWS-side public IPs of the Site-to-Site VPN tunnels (configure them on the on-premises device); empty unless the VPN is enabled."
   value       = module.aws_network_hub.vpn_tunnel_addresses

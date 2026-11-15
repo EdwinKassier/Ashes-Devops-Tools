@@ -15,9 +15,10 @@ module "psc_apis" {
   source = "./modules/gcp/network/private-service-connect"
 
   project_id = "my-project-id"
-  name       = "psc-googleapis"
+  name       = "pscgoogleapis" # 1-20 lower-case letters and numbers, starting with a letter
   network    = "projects/my-project/global/networks/my-vpc"
-  target     = "all-apis"  # or "vpc-sc"
+  address    = "10.0.255.254"  # required: one IPv4 address outside every subnet range
+  target     = "all-apis"      # or "vpc-sc"
 }
 ```
 
@@ -26,10 +27,10 @@ module "psc_apis" {
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | `project_id` | Project ID | `string` | n/a | yes |
-| `name` | Name of the PSC endpoint | `string` | n/a | yes |
+| `name` | Name of the PSC endpoint: 1-20 lower-case letters and numbers, starting with a letter (Google's rule) | `string` | n/a | yes |
 | `network` | VPC network self-link | `string` | n/a | yes |
+| `address` | Internal IPv4 address of the endpoint, outside every subnet range of the VPC and of peered networks | `string` | n/a | yes |
 | `target` | Target bundle (`all-apis`, `vpc-sc`) | `string` | `"all-apis"` | no |
-| `address` | Specific IP to reserve | `string` | `null` | no |
 | `create_dns_zone` | Create split-horizon DNS zone | `bool` | `true` | no |
 
 ## Outputs
@@ -57,6 +58,7 @@ module "example" {
 	source = "<module-path>"
 
 	# Required variables
+	address =
 	name =
 	network =
 	project_id =
@@ -94,10 +96,10 @@ The following resources are created:
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_name"></a> [name](#input\_name) | Name of the Private Service Connect endpoint | `string` | n/a | yes |
+| <a name="input_address"></a> [address](#input\_address) | The internal IPv4 address of the endpoint (required: Google reserves an endpoint address only with an explicit IP or an internal range). It must be a single IPv4 address. Google also requires it to be outside every primary and secondary subnet range of the VPC network and of any network peered with it; this module does not check that (the net-hub and net-spoke compositions check it against their VPC's subnets). | `string` | n/a | yes |
+| <a name="input_name"></a> [name](#input\_name) | Name of the Private Service Connect endpoint (the global forwarding rule). Google's rule for an endpoint for Google APIs: 1-20 characters, lower-case letters and numbers only, starting with a letter. | `string` | n/a | yes |
 | <a name="input_network"></a> [network](#input\_network) | The self-link of the VPC network for the PSC endpoint | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID where the PSC endpoint will be created | `string` | n/a | yes |
-| <a name="input_address"></a> [address](#input\_address) | Specific IP address to reserve (optional, auto-assigned if not specified) | `string` | `null` | no |
 | <a name="input_address_name"></a> [address\_name](#input\_address\_name) | Name of the internal IP address to reserve | `string` | `null` | no |
 | <a name="input_create_dns_zone"></a> [create\_dns\_zone](#input\_create\_dns\_zone) | Create a private DNS zone for the PSC endpoint | `bool` | `true` | no |
 | <a name="input_description"></a> [description](#input\_description) | Description of the PSC endpoint | `string` | `"Private Service Connect endpoint managed by Terraform"` | no |
@@ -116,3 +118,7 @@ The following resources are created:
 | <a name="output_id"></a> [id](#output\_id) | The ID of the PSC forwarding rule |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The URI of the PSC forwarding rule |
 <!-- END_TF_DOCS -->
+
+## Examples
+
+See [`examples/basic/`](examples/basic/main.tf) for a complete working example.

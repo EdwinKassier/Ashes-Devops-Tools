@@ -1,0 +1,20 @@
+# Test fixture: notifications.emails feeds the hub network alarm subscribers
+# (root.tftest.hcl). The organization contract replaces the remote-state read.
+version: 1
+org:
+  name: cfgco
+  profile: production
+  regions:
+    aws: eu-west-2
+aws:
+  log_archive_bucket_name: cfgco-org-log-archive
+  enabled_regions: [eu-west-2]
+  contracts:
+    organization:
+      organization_id: o-cfgcfgcfg0
+      management_account_id: "012345678901"
+      account_ids:
+        network: "066666666666"
+notifications:
+  emails:
+    - secops@acme.io

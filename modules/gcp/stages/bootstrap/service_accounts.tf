@@ -16,9 +16,9 @@
 # are granted by gcp-organization on their OWN folder-scoped access policy.
 #
 # Plan identities never get roles/viewer (it reads GCS objects through legacy
-# bucket roles and BigQuery table data). They get metadata-only predefined
-# viewers plus the org custom role below (plan_viewer.tf), which holds only
-# get/list/getIamPolicy permissions.
+# bucket roles and BigQuery table data) or roles/logging.viewer (it reads log
+# entries). They get metadata-only predefined viewers plus the org custom
+# roles in plan_viewer.tf, which hold only get/list/getIamPolicy permissions.
 
 locals {
   control_plane_stages = ["bootstrap", "organization", "projects", "network-hub"]
@@ -52,7 +52,9 @@ locals {
     "organization-plan" = {
       org = concat(local.plan_org_baseline, [
         "roles/orgpolicy.policyViewer",
-        "roles/logging.viewer",
+        # Not roles/logging.viewer: it reads the log entries of every
+        # project. Logging configuration reads only (plan_viewer.tf, SEC-2).
+        local.logging_config_viewer_role,
         "roles/securitycenter.notificationConfigViewer",
         "roles/resourcemanager.tagViewer",
         "roles/iam.denyReviewer",
@@ -70,17 +72,27 @@ locals {
       ], local.plan_viewer_roles)
       billing = ["roles/billing.viewer"]
     }
-    # Folders + folder IAM, org IAM (org admin groups, audit configs), org
+    # Folders + folder IAM, org IAM (billing admin groups, audit configs), org
     # policies, org sinks, SCC notifications, tags, deny policies, contacts;
     # KMS / audit bucket / Pub/Sub / BigQuery / alerting in the admin project;
     # billing budgets. With enable_scoped_access_policies it also creates one
     # folder-scoped access policy per environment and grants the workload SAs
     # their rights on it (accesscontextmanager.policyAdmin); with enable_pam it
     # manages the JIT org-admin entitlement (privilegedaccessmanager.admin).
+    #
+    # No roles/resourcemanager.folderAdmin: it also holds
+    # resourcemanager.projects.setIamPolicy, which at the org node reaches every
+    # project, the admin project (and the guardrails SA in it) included.
+    # folderCreator (folders.create), folderEditor (folders.update/delete) and
+    # folderIamAdmin (folders.setIamPolicy) cover what this stage does on
+    # folders; folder tag bindings use tagUser (resourcemanager.hierarchyNodes.*).
+    # Its iam.securityAdmin is role-conditioned (stage_org_security_admin).
     "organization-apply" = {
       org = concat([
         "roles/resourcemanager.organizationViewer",
-        "roles/resourcemanager.folderAdmin",
+        "roles/resourcemanager.folderCreator",
+        "roles/resourcemanager.folderEditor",
+        "roles/resourcemanager.folderIamAdmin",
         "roles/iam.securityAdmin",
         "roles/orgpolicy.policyAdmin",
         "roles/logging.configWriter",
@@ -240,22 +252,46 @@ locals {
   # grants). Admin project sits directly under the org node, not in a folder, so
   # this delegation can never reach the automation project or the org node.
   #
-  # Roles that control IAM or identities are never delegable: a folder IAM
-  # condition limits which roles a grant names, not who receives them, so a
-  # delegate allowed to grant projectIamAdmin could grant it to itself.
-  # gcp-organization grants these to the workload SAs directly (its
-  # non_delegable_workload_folder_roles, same default list) and drops them from
-  # the allow-list it binds, even when an older contract still carries them.
+  # A folder IAM condition limits which roles a grant names, not who receives
+  # them, so a delegate may grant any role on its allow-list to itself. These
+  # roles are never delegable: IAM and identity control, every data-plane admin
+  # role that carries setIamPolicy (it could grant itself read on every
+  # production secret, key, bucket or dataset; backupdr.admin can also restore
+  # any backup into a project it controls), actAs, and project creation
+  # (the creator owns the new project). gcp-organization grants these to the
+  # workload SAs directly (its non_delegable_workload_folder_roles, same default
+  # list; scripts/check-consistency.sh keeps the three lists equal) and drops
+  # them from the allow-list it binds, even when an older contract still
+  # carries them.
   non_delegable_folder_roles = [
     "roles/resourcemanager.projectIamAdmin",
     "roles/iam.serviceAccountAdmin",
     "roles/iam.serviceAccountKeyAdmin",
     "roles/iam.serviceAccountTokenCreator",
     "roles/iam.workloadIdentityPoolAdmin",
+    "roles/iam.serviceAccountUser",
+    "roles/secretmanager.admin",
+    "roles/cloudkms.admin",
+    "roles/storage.admin",
+    "roles/run.admin",
+    "roles/bigquery.admin",
+    "roles/pubsub.admin",
+    "roles/artifactregistry.admin",
+    "roles/backupdr.admin",
+    "roles/resourcemanager.projectCreator",
   ]
   delegated_workload_folder_roles = sort(setsubtract(toset(concat(local.effective_workload_folder_roles.plan, local.effective_workload_folder_roles.apply)), toset(local.non_delegable_folder_roles)))
-  delegated_network_folder_roles  = sort(setsubtract(toset(concat(local.effective_network_folder_roles.plan, local.effective_network_folder_roles.apply)), toset(local.non_delegable_folder_roles)))
-  delegated_folder_roles          = sort(distinct(concat(local.delegated_workload_folder_roles, local.delegated_network_folder_roles)))
+  # roles/dns.peer is not a network-hub role: gcp-projects grants it to each
+  # workload apply SA on the shared folder, so the workload DNS peering zone
+  # can target the hub VPC. It holds only dns.networks.targetWithPeeringZone.
+  delegated_network_folder_roles = sort(setsubtract(toset(concat(local.effective_network_folder_roles.plan, local.effective_network_folder_roles.apply, ["roles/dns.peer"])), toset(local.non_delegable_folder_roles)))
+  delegated_folder_roles         = sort(distinct(concat(local.delegated_workload_folder_roles, local.delegated_network_folder_roles)))
+  # IAM accepts at most 10 roles in one modifiedGrantsByRole hasOnly() list, so
+  # the legacy org-level delegation binds one condition per chunk of 10 roles.
+  delegated_folder_role_chunks = chunklist(local.delegated_folder_roles, 10)
+
+  # Roles organization-apply's org iam.securityAdmin may add or remove.
+  organization_apply_grantable_roles = sort(distinct(var.organization_apply_grantable_roles))
 }
 
 resource "google_service_account" "stage" {
@@ -272,6 +308,9 @@ resource "google_service_account" "stage" {
 resource "google_organization_iam_member" "stage_org_roles" {
   for_each = { for k, v in local.org_grants : k => v if v.role != "roles/iam.securityAdmin" }
 
+  # The logging configuration viewer custom role must exist before it is granted.
+  depends_on = [google_organization_iam_custom_role.logging_config_viewer]
+
   org_id = var.org_id
   role   = each.value.role
   member = "serviceAccount:${local.stage_sa_email[each.value.sa_key]}"
@@ -279,15 +318,59 @@ resource "google_organization_iam_member" "stage_org_roles" {
 
 # iam.securityAdmin is held by exactly two identities: the gcp-bootstrap apply
 # SA (it manages every other stage SA's IAM) and the gcp-organization apply SA
-# (org IAM, org audit configs, folder IAM). Neither is reachable from a plan
-# phase or from any workload workspace.
+# (org and project IAM, audit configs). Neither is reachable from a plan phase
+# or from any workload workspace.
+#
+# organization-apply's grant is role-conditioned. IAM deny cannot condition on
+# the role a setIamPolicy call grants, so an unconditional securityAdmin could
+# grant itself roles/iam.denyAdmin (or a role that leads to it, such as
+# serviceAccountTokenCreator on the guardrails SA) and lift the containment
+# deny policy. The condition admits only organization_apply_grantable_roles:
+# roles that control no IAM, identity or project (a variable validation keeps
+# it that way), at most 10 (the IAM hasOnly() limit, so one condition).
+# Changes that modify no grant (audit configs, reads) leave the attribute
+# empty, and [].hasOnly(...) is true. Folder IAM does not need this role:
+# organization-apply holds folderIamAdmin. Grants on services that do not
+# recognize the attribute keep an unconditional source in the admin project:
+# Pub/Sub topics (pubsub.admin), BigQuery datasets (bigquery.admin; datasets
+# ignore the attribute) and access policies (accesscontextmanager.policyAdmin).
 resource "google_organization_iam_member" "stage_org_security_admin" {
-  # checkov:skip=CKV_GCP_45:iam.securityAdmin is restricted to the bootstrap and organization APPLY identities (apply-phase WIF only); see the role matrix above.
+  # checkov:skip=CKV_GCP_45:iam.securityAdmin is restricted to the bootstrap and organization APPLY identities (apply-phase WIF only); organization-apply's grant is conditional (modifiedGrantsByRole.hasOnly).
   for_each = { for k, v in local.org_grants : k => v if v.role == "roles/iam.securityAdmin" }
 
   org_id = var.org_id
-  role   = each.value.role #tfsec:ignore:google-iam-no-privileged-service-accounts - only the bootstrap + organization APPLY SAs (apply-phase WIF, control-plane workspaces) hold org IAM admin; no plan or workload identity does
+  role   = each.value.role #tfsec:ignore:google-iam-no-privileged-service-accounts - only the bootstrap + organization APPLY SAs (apply-phase WIF, control-plane workspaces) hold org IAM admin; organization-apply's is role-conditioned
   member = "serviceAccount:${local.stage_sa_email[each.value.sa_key]}"
+
+  dynamic "condition" {
+    for_each = each.value.sa_key == "organization-apply" ? [1] : []
+    content {
+      title       = "organization_apply_grantable_roles"
+      description = "organization-apply may grant or revoke only roles that control no IAM, identity or project"
+      expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in local.organization_apply_grantable_roles : "'${r}'"])}])"
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(local.organization_apply_grantable_roles) >= 1 && length(local.organization_apply_grantable_roles) <= 10
+      error_message = "organization_apply_grantable_roles must list 1 to 10 roles: IAM rejects a modifiedGrantsByRole hasOnly() list of more than 10 values."
+    }
+  }
+}
+
+# Standing organizationAdmin of the org-admin groups (and, with the user
+# break-glass escape, the admin users). gcp-organization granted it before, but
+# organization-apply may not grant organizationAdmin: it would restore
+# unconditional setIamPolicy on the org node. bootstrap-apply holds an
+# unconditional securityAdmin. gcp-organization checks at plan time that every
+# member it expects is in this list (organization_admin_members output).
+resource "google_organization_iam_member" "org_admins" { #tfsec:ignore:google-iam-no-user-granted-permissions
+  for_each = toset(var.organization_admin_members)
+
+  org_id = var.org_id
+  role   = "roles/resourcemanager.organizationAdmin"
+  member = each.value
 }
 
 # LEGACY (enable_org_level_folder_iam_delegation): projects-apply delegated
@@ -295,17 +378,32 @@ resource "google_organization_iam_member" "stage_org_security_admin" {
 # grant but not WHERE: any folder in the org. The default model binds it on each
 # target folder instead (gcp-organization, from the delegated_*_folder_roles
 # outputs). Kept only to bridge a migration; off by default.
+#
+# IAM accepts at most 10 roles in one hasOnly() list and Google advises against
+# joining hasOnly() calls with && or ||, so there is one binding (same member
+# and role, its own condition) per chunk of 10 roles. IAM evaluates each binding
+# on its own: a request that changes the grants of one role matches the chunk
+# that lists it; a request that changes roles from two chunks at once is denied.
+# Index [0] keeps the address, title and description of the single binding, so
+# a list of 10 roles or fewer plans no change.
 resource "google_organization_iam_member" "projects_delegated_folder_iam" {
-  count = var.enable_org_level_folder_iam_delegation ? 1 : 0
+  count = var.enable_org_level_folder_iam_delegation ? length(local.delegated_folder_role_chunks) : 0
 
   org_id = var.org_id
   role   = "roles/resourcemanager.folderIamAdmin"
   member = "serviceAccount:${local.stage_sa_email["projects-apply"]}"
 
   condition {
-    title       = "delegated_folder_role_grants"
-    description = "projects-apply may only grant the workload/network folder roles"
-    expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in local.delegated_folder_roles : "'${r}'"])}])"
+    title       = count.index == 0 ? "delegated_folder_role_grants" : "delegated_folder_role_grants_${count.index}"
+    description = "projects-apply may only grant the workload/network folder roles${length(local.delegated_folder_role_chunks) > 1 ? " (part ${count.index + 1} of ${length(local.delegated_folder_role_chunks)})" : ""}"
+    expression  = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', []).hasOnly([${join(", ", [for r in local.delegated_folder_role_chunks[count.index] : "'${r}'"])}])"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(local.delegated_folder_role_chunks[count.index]) >= 1 && length(local.delegated_folder_role_chunks[count.index]) <= 10
+      error_message = "A delegated folder-IAM condition must list 1 to 10 roles: IAM rejects a modifiedGrantsByRole hasOnly() list of more than 10 values."
+    }
   }
 }
 
@@ -381,10 +479,11 @@ resource "terraform_data" "production_workspaces_bound_by_id" {
 #
 # Break-glass path: guardrail_owner_members (a PAM-gated group, ideally)
 # impersonate the apply SA and apply the deny_policy_specs output of
-# gcp-guardrails by hand (docs/runbooks/break-glass.md). Residual:
-# iam.securityAdmin on the organization apply SA could still grant itself
-# denyAdmin; the control-plane watch "guardrail_role_grant" alerts on exactly
-# that grant.
+# gcp-guardrails by hand (docs/runbooks/break-glass.md). The organization apply
+# SA cannot grant itself denyAdmin: its iam.securityAdmin is role-conditioned
+# and it holds no folderAdmin (see stage_org_security_admin). The control-plane
+# watch "guardrail_role_grant" alerts on any such grant (defence in depth).
+# Remaining paths are listed in docs/known-gaps.md.
 locals {
   guardrails_separate = var.guardrail_owner_mode == "separate"
   # The workspace identity exists whenever a guardrails workspace is declared;

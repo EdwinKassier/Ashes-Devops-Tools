@@ -25,4 +25,14 @@
 #   # config_role_arn             = "arn:aws:iam::222222222222:role/aws-config-recorder"
 #   # aggregator_role_arn         = "arn:aws:iam::222222222222:role/aws-config-aggregator"
 #   # meta_store_manager_role_arn = "arn:aws:iam::222222222222:role/service-role/AmazonSecurityLakeMetaStoreManagerV2"
+#
+#   # notifications.emails — who receives GuardDuty, Security Hub and
+#   # break-glass alerts. REQUIRED under the production profile (org.profile:
+#   # production, the default, or an is_production workload environment): the
+#   # plan fails with no subscriber or with a placeholder domain (example.*,
+#   # .invalid, .localhost, .test). Prefer notifications.emails in the config
+#   # file; set this map only to override it.
+#   # notification_subscribers = {
+#   #   secops = { protocol = "email", endpoint = "REPLACE-secops@your-domain.invalid" }
+#   # }
 # }

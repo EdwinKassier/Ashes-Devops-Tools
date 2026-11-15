@@ -39,3 +39,8 @@ output "gateway_endpoint_ids" {
   description = "Map of gateway endpoint service name (e.g. s3, dynamodb) to its VPC endpoint ID."
   value       = { for svc, ep in aws_vpc_endpoint.gateway : svc => ep.id }
 }
+
+output "availability_zones" {
+  description = "Availability zone names the subnets are placed in (the first az_count entries of availability_zones), index-aligned with every per-tier list output."
+  value       = local.azs
+}

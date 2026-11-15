@@ -1,0 +1,17 @@
+# Test fixture: one estate with a standard dev and a regulated prod
+# (compliance_class: regulated). Used by presets.tftest.hcl.
+version: 1
+org:
+  prefix: acme
+  tfc:
+    organization: acme-tfc
+gcp:
+  environments:
+    dev:
+      cidr_block: 10.10.0.0/16
+      is_production: false
+    prod:
+      cidr_block: 10.30.0.0/16
+      is_production: true
+      compliance_class: regulated
+      zones: [europe-west2-a, europe-west2-b, europe-west2-c]

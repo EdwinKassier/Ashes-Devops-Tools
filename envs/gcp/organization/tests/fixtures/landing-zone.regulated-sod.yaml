@@ -1,0 +1,29 @@
+# Fixture: the regulated estate with a separate logging project and the
+# audit bucket WORM lock (CMP-4: hardened audit store).
+org:
+  prefix: acme
+  display_name: Acme
+  domain: acme.io
+  tfc:
+    organization: acme-tfc
+gcp:
+  billing_account: ABCDEF-123456-789012
+  admin_email: admin@acme.io
+  organization_admin_groups: [gcp-org-admins@acme.io]
+  billing_admin_groups: [gcp-billing-admins@acme.io]
+  break_glass_group: gcp-break-glass@acme.io
+  alert_emails: [secops@acme.io]
+  allowed_regions: [europe-west1]
+  logging_project_id: acme-logging-prod
+  logging_project_number: "222233334444"
+  enable_audit_bucket_lock: true
+  # A new logging project: its audit keys are created fresh, so HSM is safe.
+  audit_key_protection_level: HSM
+  environments:
+    prod:
+      display_name: Production
+      region: europe-west1
+      cidr_block: 10.30.0.0/16
+      budget_monthly_limit: 1000
+      is_production: true
+      compliance_class: regulated

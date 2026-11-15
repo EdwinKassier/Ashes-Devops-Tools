@@ -16,6 +16,9 @@
  */
 
 locals {
+  # enable_deletion_protection replaces the deprecated deletion_protection input; the new name wins.
+  enable_deletion_protection = coalesce(var.enable_deletion_protection, var.deletion_protection, false)
+
   # Explicit zones win; otherwise fall back to the zones GCP returns.
   zones = length(var.network.explicit_zones) > 0 ? var.network.explicit_zones : data.google_compute_zones.available.names
 }
@@ -36,16 +39,16 @@ data "google_compute_zones" "available" {
 module "network" {
   source = "../../network/tiered-vpc"
 
-  project_id          = var.project_id
-  name                = var.network.name
-  region              = var.region
-  cidr_block          = var.network.cidr_block
-  zones               = local.zones
-  subnet_cidrs        = var.network.subnet_cidrs
-  shared_vpc_host     = false
-  deletion_protection = var.deletion_protection
-  flow_logs           = var.network.flow_logs
-  firewall            = var.firewall
+  project_id                 = var.project_id
+  name                       = var.network.name
+  region                     = var.region
+  cidr_block                 = var.network.cidr_block
+  zones                      = local.zones
+  subnet_cidrs               = var.network.subnet_cidrs
+  shared_vpc_host            = false
+  enable_deletion_protection = local.enable_deletion_protection
+  flow_logs                  = var.network.flow_logs
+  firewall                   = var.firewall
 }
 
 # Private zones, always bound to the anchor VPC (plus any extra networks) with

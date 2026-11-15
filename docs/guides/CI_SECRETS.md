@@ -9,17 +9,22 @@ Repository secrets and variables referenced by `.github/workflows/`. Configure t
 
 | Name | Kind | Used by | Purpose |
 |------|------|---------|---------|
-| `TFC_TOKEN` | Secret | `terraform-apply.yml` | Terraform Cloud team token with **READ** access to workspace runs. Used only to verify run status before publishing a release; it does not trigger or modify runs. |
-| `TFC_TOKEN_DRIFT` | Secret | `drift-detection.yml` | Terraform Cloud team token with **Queue Plans** (`runs = plan`) and **Read state versions** on the target workspaces. Drift detection reads the current state version to find the last applied run and its configuration version, then creates a speculative refresh-only run pinned to that configuration (`POST /runs`), which read access cannot do. Merged but unapplied configuration is reported as a separate warning, not as drift. There is **no fallback** to `TFC_TOKEN`: if unset, scheduled runs skip and manual runs fail with an explicit error, so the release token is never silently granted Queue Plans. |
+| `TFC_TOKEN` | Secret (environment `tfc-readonly`, never repository level) | `terraform-apply.yml` | Terraform Cloud team token with **READ** access to workspace runs. Used only to verify run status before publishing a release; it does not trigger or modify runs. |
+| `TFC_TOKEN_GUARDRAILS` | Secret (environment `tfc-readonly`) | `terraform-apply.yml` | Token of the team set as tfc-admin `guardrails_release_reader_team_id`: runs = read on the guardrails project only (no state, no variables). Needed only for `gcp-guardrails/v*` tags, because `gcp-guardrails` sits in a security-only project that `TFC_TOKEN` cannot see. There is no fallback to `TFC_TOKEN`: a guardrails tag without this secret fails. An organization owner creates the team and its token by hand with an expiry, never with `tfe_team_token`, so it stays out of state. |
+| `TFC_TOKEN_DRIFT` | Secret (environment `tfc-drift`, never repository level) | `drift-detection.yml` | Token of the team set as tfc-admin `drift_team_id`. tfc-admin codifies its grants: **Queue Plans** (`runs = plan`), **Read state versions** and no variable access, on every project except guardrails and the secret-bearing projects (tfc-admin, `saas-*`, and any project that holds a workspace with a static secret). An organization owner creates the token by hand with an expiry (`expired_at` 90 days out) and never with `tfe_team_token`, so it stays out of state. Never use a token with rights on a secret-bearing project: a refresh-only plan still runs with the workspace's variables. On those workspaces HCP health assessments (`enable_health_assessments`) are the only drift check, and only on tiers that offer them. Drift detection reads the current state version to find the last applied run and its configuration version, then creates a speculative refresh-only run pinned to that configuration (`POST /runs`), which read access cannot do. Merged but unapplied configuration is reported as a separate warning, not as drift. There is **no fallback** to `TFC_TOKEN`: if unset, scheduled runs skip and manual runs fail with an explicit error, so the release token is never silently granted Queue Plans. |
 | `TFC_ORGANIZATION` | Variable | `drift-detection.yml`, `terraform-apply.yml` | Terraform Cloud organization name that owns the workspaces. |
-| `RELEASE_PLEASE_TOKEN` | Secret | `release.yml` | Machine-account token release-please uses to open the release PR and cut `vX.Y.Z` tags. **Required; no fallback.** See [below](#release_please_token). |
+| `RELEASE_APP_ID` | Variable (`release` environment) | `release.yml` | ID of the release GitHub App. **Required; no fallback.** See [below](#release_app). |
+| `RELEASE_APP_PRIVATE_KEY` | Secret (`release` environment) | `release.yml` | Private key of the release GitHub App. The workflow mints a one-hour token from it on every run. **Required; no fallback.** See [below](#release_app). |
 
 Without both of these, `drift-detection.yml` **fails**, unless the repository variable
 `REAL_CLOUD_CHECKS_OPT_OUT=true` acknowledges running without it (see "Drift detection
 behavior without secrets" below). `terraform-apply.yml`
 does NOT apply anything: the real apply is driven by Terraform Cloud's own VCS integration.
 That workflow only reads the latest TFC run status with the read-only `TFC_TOKEN` and publishes
-a GitHub Release when the run applied and its commit matches the tag. (The workflow is named
+a GitHub Release when the run applied and its commit matches the tag. The run's commit is the
+`commit-sha` of its configuration version's ingress attributes
+(`scripts/verify-run-commit.sh`); a run with none, such as a CLI or API run, fails the
+workflow and publishes nothing. (The workflow is named
 "Terraform Release Metadata" for this reason; `terraform-plan.yml`, named "Terraform Validation",
 runs `terraform validate` and the mock tests, and likewise never produces a real plan - that is
 the TFC speculative plan.)
@@ -43,29 +48,40 @@ The workflow passes it only to `peter-evans/create-pull-request`. The checkout s
 a stored credential. If the secret is unset the workflow falls back to `GITHUB_TOKEN` and the
 docs PR will not trigger CI.
 
-## RELEASE_PLEASE_TOKEN
+## release_app
 
-`release.yml` runs on every push to `main` and **fails on its first step** with
-`RELEASE_PLEASE_TOKEN missing` when the secret is unset. It deliberately does not fall back
-to `GITHUB_TOKEN`: a pull request opened with `GITHUB_TOKEN` does not trigger
-`pull_request` workflows, so the release PR would never receive the required
-**Validation Summary** check and could never merge under branch protection. A red run that
-names the missing secret is a better signal than a release PR that is stuck forever.
+`release.yml` runs on every push to `main`. It uses one GitHub App, the release bot, as its
+identity. The workflow mints an installation token that lasts one hour at the start of each run,
+so no long-lived personal access token exists. The first step **fails** with
+`Release App missing` when the variable `RELEASE_APP_ID` or the secret
+`RELEASE_APP_PRIVATE_KEY` is unset. It deliberately does not fall back to `GITHUB_TOKEN`: a pull
+request opened with `GITHUB_TOKEN` does not trigger `pull_request` workflows, so the release PR
+would never receive the required **Validation Summary** check and could never merge under branch
+protection. A red run that names the missing setting is a better signal than a release PR that
+is stuck forever.
 
-Create one of the following and store it as the repository secret `RELEASE_PLEASE_TOKEN`:
+Set it up once (repository admin):
 
-- **Fine-grained PAT** on a machine account (preferred over a classic PAT), scoped to this
-  repository only, with **Contents: Read and write**, **Pull requests: Read and write**
-  and **Issues: Read and write** (release-please creates its `autorelease:*` labels).
-  Give it an expiry and a calendar reminder to rotate it.
-- **GitHub App installation token**: an App installed on this repository with the same three
-  permissions. Mint the token in a step before release-please (for example with a SHA-pinned
-  `actions/create-github-app-token`) and pass it in place of the secret.
-- **Classic PAT** with `repo` scope: works, but is broader than needed.
+1. Go to **Settings, Developer settings, GitHub Apps, New GitHub App**. Name it
+   `ashes-release-bot`. Turn webhooks off.
+2. Give it these repository permissions: **Contents: Read and write**, **Pull requests: Read and
+   write**, **Issues: Read and write** (release-please creates its `autorelease:*` labels) and
+   **Metadata: Read**. Install it on this repository only.
+3. Generate a private key, then store both values in the `release` environment:
 
-The machine account must be allowed to push tags that your branch and tag rulesets protect.
+   ```bash
+   gh variable set RELEASE_APP_ID --env release --body "<app id>"
+   gh secret set RELEASE_APP_PRIVATE_KEY --env release < ashes-release-bot.private-key.pem
+   rm -P ashes-release-bot.private-key.pem   # macOS; use shred -u on Linux
+   gh workflow run release.yml
+   ```
+
+4. If a ruleset protects the `vX.Y.Z` tags, add the App as a bypass actor so release-please can
+   create the tag.
+
 Forks and clones that do not cut releases can disable the workflow instead
-(**Actions → Release → Disable workflow**).
+(**Actions, Release, Disable workflow**). Rotate the private key on a schedule: generate a new
+key, update the secret, then delete the old key in the App settings.
 
 ## Dynamic provider credentials (GCP and AWS roots) — managed by tfc-admin
 
@@ -129,16 +145,19 @@ the ones it manages at its next apply).
 
 | Name | Kind | Used by | Purpose | Default when unset |
 |------|------|---------|---------|---------------------|
-| `TFC_DRIFT_WORKSPACES` | Variable | `drift-detection.yml` | JSON array of TFC workspace names to check for drift, e.g. `["gcp-organization","gcp-workload-dev","gcp-workload-prod"]`. | `["gcp-organization","gcp-workload-dev"]` |
-| `DOCS_BOT_PAT` | Secret | `documentation.yml` | Fine-grained PAT (see [below](#docs_bot_pat)) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
+| `TFC_HEALTH_ASSESSMENTS` | Variable | `drift-detection.yml` | Set to `true` when HCP Terraform health assessments are on (tfc-admin `enable_health_assessments`, default true; needs a tier that has them). They are the drift source of record, so the workflow skips with a notice and needs neither `TFC_TOKEN_DRIFT` nor `REAL_CLOUD_CHECKS_OPT_OUT`. It is your statement that they are on; the workflow does not check. | Unset: the workflow runs as the fallback, and both paths can report drift. |
+| `TFC_DRIFT_WORKSPACES` | Variable | `drift-detection.yml` | JSON array of TFC workspace names to check for drift. Use the tfc-admin output `drift_workspaces` or a subset of it: a workspace outside it fails its leg, because the drift token has no access there. | `["gcp-bootstrap","gcp-organization","gcp-projects","gcp-network-hub","gcp-workload-dev","aws-organization","aws-security","aws-network"]` |
+| `DOCS_BOT_PAT` | Secret (environment `docs-bot`, never repository level) | `documentation.yml` | Fine-grained PAT (see [below](#docs_bot_pat)) used to open auto-generated docs PRs so they trigger downstream CI. `GITHUB_TOKEN`-authored PRs do not trigger other workflows. | Falls back to `secrets.GITHUB_TOKEN` (docs PRs will not trigger CI checks). |
 | `DOCS_REVIEWER` | Variable | `documentation.yml` | GitHub username to request as reviewer on auto-generated docs PRs. | No reviewer requested. |
-| `TFC_TOKEN_STATE_BACKUP` | Secret | `state-backup.yml` | Team token of the dedicated state-backup team (`state_backup_team_id` in `envs/tfc-admin`: `state_versions = read`, nothing else). It reads every state file, so keep it in the `tfc-state-backup` environment. See [state backup](../runbooks/state-backup.md). | Run fails unless `STATE_BACKUP_OPT_OUT=true` (scheduled runs only). |
+| `TFC_TOKEN_STATE_BACKUP` | Secret (environment `tfc-state-backup`, never repository level) | `state-backup.yml` | Team token of the dedicated state-backup team (`state_backup_team_id` in `envs/tfc-admin`: `state_versions = read`, nothing else). It reads every state file it is granted, so keep it in the `tfc-state-backup` environment. Excludes `saas-*` unless `enable_saas_state_backup = true`. See [state backup](../runbooks/state-backup.md). | Run fails unless `STATE_BACKUP_OPT_OUT=true` (scheduled runs only). |
 | `STATE_BACKUP_S3_BUCKET`, `STATE_BACKUP_AWS_ROLE_ARN`, `STATE_BACKUP_AWS_REGION` | Variables | `state-backup.yml` | S3 target: an Object Lock, versioned, SSE-KMS bucket and the role GitHub OIDC assumes to write to it. | No S3 copy. With no target at all the run fails. |
 | `STATE_BACKUP_GCS_BUCKET`, `STATE_BACKUP_GCP_WIF_PROVIDER`, `STATE_BACKUP_GCP_SA` | Variables | `state-backup.yml` | GCS target: a bucket with a locked retention policy and the service account the WIF principal impersonates. | No GCS copy. With no target at all the run fails. |
 | `STATE_BACKUP_WORKSPACES` | Variable | `state-backup.yml` | JSON array of workspaces that must be exported; a missing one fails the run. | Every workspace the token can see. |
 | `STATE_BACKUP_PREFIX` | Variable | `state-backup.yml` | Object-name prefix in the bucket. | `tfstate/` |
+| `TFC_TOKEN_AUDIT_TRAIL` | Secret (environment `tfc-audit-trail`, never repository level) | `tfc-audit-trail.yml` | The organization's audit trail token (`authentication-token?token=audit-trails`; the API refuses user and team tokens). Use it rather than an organization token. Keep it in the `tfc-audit-trail` environment only. The workflow also uses `TFC_ORGANIZATION` and the `STATE_BACKUP_*` target variables. See [audit trail export](../runbooks/state-backup.md#audit-trail-export). | Export off: scheduled runs warn, a manual dispatch fails. HCP Terraform keeps 14 days. |
 | `STATE_BACKUP_OPT_OUT` | Variable | `state-backup.yml` | `true` only to acknowledge running without a state copy outside HCP Terraform: unconfigured scheduled runs then warn instead of failing. | Unset: an unconfigured run fails. |
 | `CODEOWNERS_ENFORCE` | Variable | `terraform-plan.yml` (CODEOWNERS placeholders job) | Set to `true` once `.github/CODEOWNERS` names real teams: any remaining `@your-org/` placeholder then fails the build. | Placeholders produce a warning only, so forks stay green. |
+| `RENOVATE_HEARTBEAT_REQUIRED` | Variable | `dependency-heartbeat.yml` | Set to `true` in a fork that uses Renovate: the weekly heartbeat then fails when `renovate[bot]` has not updated an issue or pull request for 8 days. The upstream repository always fails on a stale heartbeat. | A fork gets a warning only, so a fork without Renovate stays green. |
 
 ## Sandbox E2E
 
@@ -173,15 +192,16 @@ environment, not at repository level, and restrict the environment's deployment 
 | Environment | Secrets | Deployment branch / tag policy | Used by |
 |---|---|---|---|
 | `tfc-drift` | `TFC_TOKEN_DRIFT` | `main` only | `drift-detection.yml` |
-| `release` | `RELEASE_PLEASE_TOKEN` | `main` only | `release.yml` |
+| `release` | `RELEASE_APP_PRIVATE_KEY` (plus variable `RELEASE_APP_ID`) | `main` only | `release.yml` |
 | `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
 | `tfc-state-backup` | `TFC_TOKEN_STATE_BACKUP` | `main` only | `state-backup.yml` |
-| `tfc-readonly` | `TFC_TOKEN` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
+| `tfc-audit-trail` | `TFC_TOKEN_AUDIT_TRAIL` | `main` only | `tfc-audit-trail.yml` |
+| `tfc-readonly` | `TFC_TOKEN`, `TFC_TOKEN_GUARDRAILS` | tags `gcp-bootstrap/v*`, `gcp-organization/v*`, `gcp-guardrails/v*`, `gcp-projects/v*`, `gcp-network-hub/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
 | `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label. **Required reviewers: yes** (at least one, prevent self-review) | `sandbox-e2e.yml` |
 
 ```bash
 repo=OWNER/REPO
-for env in tfc-drift tfc-state-backup release docs-bot; do
+for env in tfc-drift tfc-state-backup tfc-audit-trail release docs-bot; do
   gh api -X PUT "repos/$repo/environments/$env" \
     -F 'deployment_branch_policy[protected_branches]=false' \
     -F 'deployment_branch_policy[custom_branch_policies]=true'
@@ -193,10 +213,42 @@ gh secret delete TFC_TOKEN_DRIFT                      # (repeat for each secret)
 
 The workflows already name these environments. GitHub creates an environment, unprotected, the
 first time a job references it, so the branch policy above is what makes the scoping real.
-Prefer a GitHub App installation token over `RELEASE_PLEASE_TOKEN` / `DOCS_BOT_PAT` PATs where
-your organization allows it.
+
+**Deployment tags need a tag ruleset (CICD-1).** A tag policy on `tfc-readonly` admits any
+matching tag on any commit. A tag push runs the workflow file of the tagged commit, so a writer
+who tags a branch commit controls the job that holds `TFC_TOKEN`. `terraform-apply.yml` runs its
+verifier from the default branch, keeps the token in the one `curl` step, and fails when the
+tagged commit is not on the default branch, but a writer can edit those checks on the branch
+commit. The control is a repository ruleset on tags that limits who can create, update and
+delete the deployment tags to the release maintainers. The patterns below are the
+`on.push.tags` list of `terraform-apply.yml`; `*` does not cross `/`, so the workload tags
+(`gcp-workload/<env>/v*`, `aws-workload/<env>/v*`) are listed on their own.
+`scripts/check-tag-patterns.py` (run by `make consistency`) fails when this list, the
+`tfc-readonly` row above or `BRANCH_PROTECTION.md` drifts from the workflow:
+
+```bash
+gh api -X POST "repos/$repo/rulesets" --input - <<'JSON'
+{"name": "deployment-tags", "target": "tag", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/tags/gcp-bootstrap/v*", "refs/tags/gcp-organization/v*", "refs/tags/gcp-guardrails/v*", "refs/tags/gcp-projects/v*", "refs/tags/gcp-network-hub/v*", "refs/tags/gcp-workload/*/v*", "refs/tags/aws-*/v*", "refs/tags/aws-workload/*/v*", "refs/tags/saas/*/v*", "refs/tags/tfc-admin/v*"], "exclude": []}},
+ "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}, {"type": "non_fast_forward"}],
+ "bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always"}]}
+JSON
+# The tfc-readonly environment admits the same tags, one policy per pattern.
+for p in 'gcp-bootstrap/v*' 'gcp-organization/v*' 'gcp-guardrails/v*' 'gcp-projects/v*' 'gcp-network-hub/v*' 'gcp-workload/*/v*' 'aws-*/v*' 'aws-workload/*/v*' 'saas/*/v*' 'tfc-admin/v*'; do
+  gh api -X POST "repos/$repo/environments/tfc-readonly/deployment-branch-policies" -f name="$p" -f type=tag
+done
+```
+
+`actor_id` 5 is the built-in admin role; use a maintainers team instead where you have one.
+Prefer a GitHub App installation token over a `DOCS_BOT_PAT` PAT where
+your organization allows it. The release workflow already does this.
 
 ## Drift detection behavior without secrets
+
+HCP Terraform health assessments are the drift source of record. When they are on, set the
+repository variable `TFC_HEALTH_ASSESSMENTS=true`: `drift-detection.yml` then skips with a
+notice, and the rest of this section does not apply. The workflow is the fallback for tiers
+without health assessments.
 
 `drift-detection.yml` runs a `check-credentials` job before the matrix job. It evaluates
 `secrets.TFC_TOKEN_DRIFT` and `vars.TFC_ORGANIZATION` (secrets cannot be referenced directly in a

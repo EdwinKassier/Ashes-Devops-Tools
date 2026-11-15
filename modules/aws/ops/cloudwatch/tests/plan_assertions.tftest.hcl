@@ -70,3 +70,85 @@ run "sns_and_dashboard_created_when_enabled" {
     error_message = "Dashboard must be created when enable_dashboard = true"
   }
 }
+
+run "dashboard_renders_configured_widgets" {
+  command = plan
+
+  variables {
+    enable_dashboard = true
+    dashboard_widgets = [
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          region  = "eu-west-1"
+          title   = "CPU"
+          metrics = [["AWS/EC2", "CPUUtilization"]]
+        }
+      }
+    ]
+  }
+
+  assert {
+    condition     = length(jsondecode(aws_cloudwatch_dashboard.this[0].dashboard_body).widgets) == 1
+    error_message = "The dashboard body must carry the one configured widget"
+  }
+
+  assert {
+    condition     = jsondecode(aws_cloudwatch_dashboard.this[0].dashboard_body).widgets[0].type == "metric"
+    error_message = "The configured widget must be rendered, not the placeholder"
+  }
+}
+
+run "dashboard_placeholder_when_no_widgets" {
+  command = plan
+
+  variables {
+    enable_dashboard = true
+  }
+
+  assert {
+    condition     = jsondecode(aws_cloudwatch_dashboard.this[0].dashboard_body).widgets[0].type == "text"
+    error_message = "An empty dashboard_widgets list must render the single text placeholder"
+  }
+}
+
+run "dashboard_renders_mixed_widget_shapes" {
+  command = plan
+
+  variables {
+    enable_dashboard = true
+    dashboard_widgets = [
+      {
+        type   = "text"
+        x      = 0
+        y      = 0
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "# Service health"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 1
+        width  = 12
+        height = 6
+        properties = {
+          region  = "eu-west-1"
+          title   = "CPU"
+          metrics = [["AWS/EC2", "CPUUtilization"]]
+        }
+      }
+    ]
+  }
+
+  assert {
+    condition     = length(jsondecode(aws_cloudwatch_dashboard.this[0].dashboard_body).widgets) == 2
+    error_message = "Widgets of different shapes (text and metric) must render side by side"
+  }
+}

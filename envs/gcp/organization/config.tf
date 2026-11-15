@@ -20,7 +20,11 @@ locals {
   lz = try(local.lz_documents[0], {})
 
   cfg = {
-    project_prefix            = try(tostring(local.lz.org.prefix), null)
+    project_prefix = try(tostring(local.lz.org.prefix), null)
+    # org.cost_center / org.owner: the cost-center and owner provider default
+    # labels (providers.tf), the same keys as the AWS roots' default_tags.
+    cost_center               = try(tostring(local.lz.org.cost_center), null)
+    owner                     = try(tostring(local.lz.org.owner), null)
     organization_name         = try(tostring(local.lz.org.display_name), null)
     domain                    = try(tostring(local.lz.org.domain), null)
     default_region            = try(tostring(local.lz.org.regions.gcp), null)
@@ -35,11 +39,33 @@ locals {
     monthly_budget_usd        = try(tonumber(local.lz.org.monthly_budget_usd), null)
     alert_emails              = try([for e in local.lz.gcp.alert_emails : tostring(e)], null)
     notification_emails       = try([for e in local.lz.notifications.emails : tostring(e)], null)
+    # compliance.breach_notification_contacts: added to the alert channels.
+    breach_contacts           = try([for e in local.lz.compliance.breach_notification_contacts : tostring(e)], [])
     admin_containment         = try(tobool(local.lz.gcp.admin_containment), null)
     principal_access_boundary = try(tobool(local.lz.gcp.principal_access_boundary), null)
     enable_audit_bucket_lock  = try(tobool(local.lz.gcp.enable_audit_bucket_lock), null)
-    hub_vpc_cidr_block        = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
-    dns_hub_vpc_cidr_block    = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    # gcp.enable_network_log_export (CMP-02): null = derived (on for a
+    # regulated or framework estate).
+    enable_network_log_export = try(tobool(local.lz.gcp.enable_network_log_export), null)
+    # gcp.network_log_writer_granted: set after the break-glass grant for a
+    # legacy audit sink identity (UPGRADING.md, CMP-02).
+    network_log_writer_granted = try(tobool(local.lz.gcp.network_log_writer_granted), null)
+    logging_project_id         = try(tostring(local.lz.gcp.logging_project_id), null)
+    logging_project_number     = try(tostring(local.lz.gcp.logging_project_number), null)
+    # SOFTWARE or HSM for the two audit CMEK keys (CMP-12). ForceNew: set it
+    # only where the audit keys are created fresh.
+    audit_key_protection_level = try(tostring(local.lz.gcp.audit_key_protection_level), null)
+    # gcp.audit_store_waiver: { reason, expires } (CMP-05). Kept raw so a
+    # malformed waiver fails regulated_audit_store_guard instead of being
+    # dropped. The boolean gcp.audit_store_waived it replaced fails the same
+    # guard, naming the new key.
+    audit_store_waiver = try(local.lz.gcp.audit_store_waiver, null)
+    # Presence, not value: a bare key (null) is still the removed key.
+    audit_store_waived_removed = try(contains(keys(local.lz.gcp), "audit_store_waived"), false)
+    hub_vpc_cidr_block         = try(tostring(local.lz.gcp.network.hub_cidr_block), null)
+    dns_hub_vpc_cidr_block     = try(tostring(local.lz.gcp.network.dns_hub_cidr_block), null)
+    audit_log_retention_days   = try(tonumber(local.lz.compliance.audit_log_retention_days), null)
+    compliance_frameworks      = try([for f in local.lz.compliance.frameworks : tostring(f)], [])
     # gcp.contracts.bootstrap: stage contract override (same shape as the
     # bootstrap_contract variable). Present => the remote-state read is skipped.
     bootstrap_contract = try(local.lz.gcp.contracts.bootstrap.admin_project_number, null) == null ? null : {
@@ -64,6 +90,10 @@ locals {
       delegated_workload_folder_roles = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_workload_folder_roles, []) : tostring(r)]
       delegated_network_folder_roles  = [for r in try(local.lz.gcp.contracts.bootstrap.delegated_network_folder_roles, []) : tostring(r)]
       guardrail_owner_mode            = tostring(try(local.lz.gcp.contracts.bootstrap.guardrail_owner_mode, "separate"))
+      # Optional: copied from the gcp-bootstrap contract output. Omitted = null
+      # (no plan-time check; a check warns).
+      organization_apply_grantable_roles = try([for r in local.lz.gcp.contracts.bootstrap.organization_apply_grantable_roles : tostring(r)], null)
+      organization_admin_members         = try([for m in local.lz.gcp.contracts.bootstrap.organization_admin_members : tostring(m)], null)
     }
     # Normalised to the attribute types of var.environments (region defaults to
     # org.regions.gcp, display_name to the key). A malformed entry is caught by
@@ -77,27 +107,49 @@ locals {
         iam_group_role_bindings = try({ for g, roles in e.iam_group_role_bindings : g => toset([for r in roles : tostring(r)]) }, {})
         labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
         is_production           = tobool(try(e.is_production, false))
+        compliance_class        = tostring(try(e.compliance_class, "standard"))
       }
     }
+    # Environment keys whose is_production is missing or not a boolean. The
+    # schema requires it; the environments validation names them.
+    environments_missing_is_production = sort([
+      for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k
+      if try(tobool(e.is_production), null) == null
+    ])
   }
+
+  # Framework audit-retention floors in days. Canonical copy: every root that
+  # reads compliance.frameworks holds this exact line (check-consistency.sh).
+  retention_floor_days = { pci_dss = 365, hipaa = 2190, fedramp_moderate = 913, soc2 = 0, iso27001 = 0, nist_800_53 = 0, dora = 0, nis2 = 0, gdpr = 0 }
+  retention_floor      = max(0, [for f in local.cfg.compliance_frameworks : lookup(local.retention_floor_days, f, 0)]...)
 
   # The gcp section as the stage's gcp object (config-backed keys only; every
   # other key is unset here). Config fallbacks between keys are resolved here, so
   # the effective object below keeps gcp_overrides > config file > stage default.
+  # Control-plane alert recipients from the config file: gcp.alert_emails, else
+  # notifications.emails, plus compliance.breach_notification_contacts, each
+  # address once. Empty = unset.
+  config_alert_emails = distinct(concat(
+    length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : coalesce(local.cfg.notification_emails, []),
+    local.cfg.breach_contacts,
+  ))
+
   lz_gcp = {
     admin_email                      = local.cfg.admin_email
     organization_admin_groups        = local.cfg.organization_admin_groups
     billing_admin_groups             = local.cfg.billing_admin_groups
     allowed_regions                  = local.cfg.allowed_regions
     enable_audit_bucket_lock         = local.cfg.enable_audit_bucket_lock
+    enable_network_log_export        = local.cfg.enable_network_log_export
+    network_log_writer_granted       = local.cfg.network_log_writer_granted
+    logging_project_id               = local.cfg.logging_project_id
+    logging_project_number           = local.cfg.logging_project_number
+    audit_key_protection_level       = local.cfg.audit_key_protection_level
     enable_admin_containment         = local.cfg.admin_containment
     enable_principal_access_boundary = local.cfg.principal_access_boundary
     # gcp.break_glass_group as an IAM v2 principal.
     containment_exempt_principals = local.cfg.break_glass_group != null ? ["principalSet://goog/group/${local.cfg.break_glass_group}"] : null
-    # gcp.alert_emails > notifications.emails > unset.
-    alert_notification_emails = length(coalesce(local.cfg.alert_emails, [])) > 0 ? local.cfg.alert_emails : (
-      length(coalesce(local.cfg.notification_emails, [])) > 0 ? local.cfg.notification_emails : null
-    )
+    alert_notification_emails     = length(local.config_alert_emails) > 0 ? local.config_alert_emails : null
   }
   # A set (non-null) override key wins; an unset one keeps the config value.
   gcp = merge(local.lz_gcp, { for k, v in var.gcp_overrides : k => v if v != null })
@@ -112,6 +164,8 @@ locals {
   tfc_organization  = try(coalesce(var.tfc_organization, local.cfg.tfc_organization), null)
   environments      = var.environments != null ? var.environments : local.cfg.environments
   default_region    = coalesce(var.default_region, local.cfg.default_region, "europe-west2")
+  # Audit bucket retention: variable > compliance.audit_log_retention_days > 365.
+  audit_log_retention_days = coalesce(var.audit_log_retention_days, local.cfg.audit_log_retention_days, 365)
 
   # Admin containment follows the estate: on whenever a production environment
   # exists or a break-glass principal is set, unless explicitly set
@@ -122,9 +176,42 @@ locals {
   production_environment_keys   = sort([for k, e in coalesce(local.environments, {}) : k if e.is_production])
   enable_admin_containment      = coalesce(local.gcp.enable_admin_containment, length(local.production_environment_keys) > 0 || length(local.containment_exempt_principals) > 0)
   containment_exempt_principals = local.gcp.containment_exempt_principals == null ? [] : tolist(local.gcp.containment_exempt_principals)
+
+  # CMP-4: environments marked compliance_class: regulated need a hardened audit
+  # store: the bucket and its CMEK in a separate logging project
+  # (gcp.logging_project_id) and the bucket WORM-locked (gcp.enable_audit_bucket_lock).
+  regulated_environment_keys = sort([for k, e in coalesce(local.environments, {}) : k if try(e.compliance_class, "standard") == "regulated"])
+  # The logging project must not be the admin project, or nothing is separated.
+  audit_store_hardened = (
+    try(local.gcp.logging_project_id, null) != null
+    && try(local.gcp.logging_project_id, null) != try(local.bootstrap.admin_project_id, null)
+    && coalesce(try(local.gcp.enable_audit_bucket_lock, null), false)
+  )
+  # The waiver needs a reason and a real YYYY-MM-DD expiry, and waives through
+  # that UTC day (the production_vpc_sc_dry_run_waiver rule in gcp-workload).
+  audit_store_waiver_reason_ok = try(length(trimspace(tostring(local.cfg.audit_store_waiver.reason))) > 0, false)
+  # yamldecode reads an unquoted YAML date as YYYY-MM-DDT00:00:00Z: accept it
+  # and use the first 10 characters.
+  audit_store_waiver_expires   = try(substr(tostring(local.cfg.audit_store_waiver.expires), 0, 10), null)
+  audit_store_waiver_expiry_ok = try(can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}(T00:00:00Z)?$", tostring(local.cfg.audit_store_waiver.expires))) && can(formatdate("YYYY", "${local.audit_store_waiver_expires}T00:00:00Z")), false)
+  audit_store_waiver_valid     = local.cfg.audit_store_waiver == null || (local.audit_store_waiver_reason_ok && local.audit_store_waiver_expiry_ok)
+  audit_store_waiver_until     = local.cfg.audit_store_waiver != null && local.audit_store_waiver_valid ? "${local.audit_store_waiver_expires}T23:59:59Z" : null
+  audit_store_waived           = local.audit_store_waiver_until != null && timecmp(plantimestamp(), coalesce(local.audit_store_waiver_until, "1970-01-01T00:00:00Z")) <= 0
+
+  # CMP-02: firewall, Cloud NAT and load balancer request (Cloud Armor) logs go
+  # to the audit bucket, with its retention, when the estate is regulated or
+  # names a compliance framework. gcp_overrides > gcp.enable_network_log_export
+  # > derived.
+  enable_network_log_export = coalesce(
+    try(local.gcp.enable_network_log_export, null),
+    length(local.regulated_environment_keys) > 0 || length(local.cfg.compliance_frameworks) > 0,
+  )
   # Cost profile (variable > org.profile > production). The starter profile
   # requires a budget (variable > org.monthly_budget_usd) and alerts at 50/80/100%.
   profile = coalesce(var.profile, local.cfg.profile, "production")
+  # gcp.restrictTLSVersion: gcp_overrides.restrict_tls_versions > on for the
+  # production profile.
+  restrict_tls_versions = coalesce(try(local.gcp.restrict_tls_versions, null), local.profile == "production")
   monthly_budget_amount = coalesce(
     var.monthly_budget_amount, local.profile == "starter" ? local.cfg.monthly_budget_usd : null, local.profile == "starter" ? 0 : 1000
   )

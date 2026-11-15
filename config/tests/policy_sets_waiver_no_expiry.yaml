@@ -1,0 +1,7 @@
+# Expected to FAIL schema validation: org.tfc.policy_sets_waiver needs both
+# reason and expires (ADO-20).
+version: 1
+org:
+  tfc:
+    policy_sets_waiver:
+      reason: essentials plan until the Standard upgrade

@@ -28,6 +28,18 @@ locals {
     # aws.workload_environments: env => {account_key, vpc_cidr}.
     workload_account_keys = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.account_key) if try(e.account_key, null) != null }
     vpc_cidrs             = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.vpc_cidr) if try(e.vpc_cidr, null) != null }
+    # Production flags (is_production is required on every entry). The
+    # environment name is never read.
+    workload_is_production = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tobool(e.is_production) if try(tobool(e.is_production), null) != null }
+    # compliance_class per environment (re-audit 5 CMP-2/CMP-3): regulated
+    # environments refuse plaintext ingress and the production overrides.
+    workload_compliance_class = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.compliance_class) if try(e.compliance_class, null) != null }
+    # Data sensitivity per environment (DataClassification default tag).
+    workload_data_classification = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.data_classification) if try(e.data_classification, null) != null }
+    # Availability zone IDs (azs.tf): per environment, else the hub's
+    # (aws.network.availability_zone_ids).
+    workload_availability_zone_ids = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => [for id in e.availability_zone_ids : tostring(id)] if try(e.availability_zone_ids, null) != null }
+    network_availability_zone_ids  = try([for id in local.lz.aws.network.availability_zone_ids : tostring(id)], null)
     # aws.workload_environments.<env>.services: same shape as var.services (the
     # app-services stage validates and types them).
     services = {
@@ -45,8 +57,9 @@ locals {
       account_role_arns     = { for k, v in try(local.lz.aws.contracts.organization.account_role_arns, {}) : k => tostring(v) }
     }
     network_contract = try(local.lz.aws.contracts.network, null) == null ? null : {
-      tgw_id        = try(tostring(local.lz.aws.contracts.network.tgw_id), null)
-      ipam_pool_ids = { for k, v in try(local.lz.aws.contracts.network.ipam_pool_ids, {}) : k => tostring(v) }
+      tgw_id              = try(tostring(local.lz.aws.contracts.network.tgw_id), null)
+      ipam_pool_ids       = { for k, v in try(local.lz.aws.contracts.network.ipam_pool_ids, {}) : k => tostring(v) }
+      resolver_profile_id = try(tostring(local.lz.aws.contracts.network.resolver_profile_id), null)
     }
     # aws.workload: app golden-path settings shared by every aws-workload-<env>.
     app_ingress_mode    = try(tostring(local.lz.aws.workload.app_ingress_mode), null)
@@ -70,6 +83,22 @@ locals {
   vpc_cidr             = coalesce(var.vpc_cidr, try(local.cfg.vpc_cidrs[local.environment], null), "10.72.0.0/16")
   app_bootstrap_image  = coalesce(var.app_bootstrap_image, local.cfg.app_bootstrap_image, "public.ecr.aws/nginx/nginx-unprivileged:stable-alpine")
   saas_bridge_version  = coalesce(var.saas_bridge_version, local.cfg.saas_bridge_rotation, 1)
+
+  # Production: explicit variable > aws.workload_environments.<env>.is_production
+  # > false. Production turns ECS autoscaling on by default.
+  is_production = coalesce(var.is_production, try(local.cfg.workload_is_production[local.environment], null), false)
+  # compliance_class: aws.workload_environments.<env>.compliance_class, else
+  # standard. Also regulated when the target account belongs to a regulated
+  # environment, so a renamed environment cannot drop the class (second
+  # re-audit 5 review).
+  regulated = try(local.cfg.workload_compliance_class[local.environment], "standard") == "regulated" || contains([
+    for env, cc in local.cfg.workload_compliance_class : try(local.cfg.workload_account_keys[env], null)
+    if cc == "regulated"
+  ], local.workload_account_key) || contains(local.contract_regulated_account_keys, local.workload_account_key)
+
+  # DataClassification tag: explicit variable > aws.workload_environments.<env>
+  # .data_classification > internal.
+  data_classification = coalesce(var.data_classification, try(local.cfg.workload_data_classification[local.environment], null), "internal")
 
   # Services: explicit variable > aws.workload_environments.<env>.services >
   # none. For-expressions (not a conditional) so the differently-typed sources

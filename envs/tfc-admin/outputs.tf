@@ -67,7 +67,7 @@ output "never_auto_apply_workspaces" {
 }
 
 output "estate_config_trigger_patterns" {
-  description = "Trigger patterns every workspace gets for this estate's own config: the landing-zone file + workspace_variables_file for production (config/landing-zone.yaml + config/tfc-workspaces.yaml by default), <dir>/** (plus an outside workspace_variables_file) for any other estate (e.g. config/sandbox/**)."
+  description = "Trigger patterns every workspace gets for this estate's own config: the landing-zone file + workspace_variables_file for production (config/landing-zone.yaml + config/tfc-workspaces.yaml by default), every file under <dir> (plus an outside workspace_variables_file) for any other estate (e.g. config/sandbox/**)."
   value       = local.estate_config_trigger_patterns
 }
 
@@ -83,4 +83,9 @@ output "workspace_catalog" {
       aws_member_aliases = w.aws_member_aliases
     }
   }
+}
+
+output "drift_workspaces" {
+  description = "Workspaces the drift_team_id team can plan (runs = plan): every workspace outside the guardrails project and the secret-bearing projects. Set TFC_DRIFT_WORKSPACES (drift-detection.yml) to this list or a subset. Empty when drift_team_id is null or enable_projects is false."
+  value       = local.drift_workspaces
 }

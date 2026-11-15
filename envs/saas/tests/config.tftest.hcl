@@ -112,3 +112,104 @@ run "scaffold_gcp_aws_saas_plans" {
     stack                    = "web"
   }
 }
+
+# ── SaaS residency check (CMP-11) ────────────────────────────────────────────
+# saas.allowed_regions (else aws.allowed_regions) lists the AWS regions where
+# SaaS data may be processed. Supabase regions are AWS region names; Vercel
+# function regions map to the AWS region they run in.
+run "supabase_region_outside_allowed_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.saas-residency.yaml"
+    supabase_region          = "us-east-1"
+  }
+
+  expect_failures = [terraform_data.saas_residency_guard]
+}
+
+run "vercel_region_mapped_and_checked" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.saas-residency.yaml"
+    vercel_serverless_region = "iad1"
+  }
+
+  expect_failures = [terraform_data.saas_residency_guard]
+}
+
+run "eu_regions_pass" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.saas-residency.yaml"
+    supabase_region          = "eu-west-2"
+    vercel_serverless_region = "lhr1"
+  }
+
+  assert {
+    condition     = length(local.saas_regions_outside_allowed) == 0 && join(",", local.saas_regions_in_use) == "eu-west-2,eu-west-2"
+    error_message = "London Supabase and Vercel lhr1 (eu-west-2) must pass an eu-west-2 allow list."
+  }
+}
+
+# A disabled provider's region is not checked.
+run "disabled_provider_region_not_checked" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.saas-residency.yaml"
+    enable_vercel            = false
+    vercel_serverless_region = "iad1"
+  }
+
+  assert {
+    condition     = length(local.saas_regions_outside_allowed) == 0
+    error_message = "a disabled Vercel project must not be checked against the allow list."
+  }
+}
+
+# A Vercel code with no known AWS region fails closed when an allow list is set.
+run "unmapped_vercel_region_fails_closed" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.saas-residency.yaml"
+    vercel_serverless_region = "zzz1"
+  }
+
+  # The stage rejects unknown codes itself; isolate the root's own guard.
+  override_module {
+    target  = module.saas_workload
+    outputs = {}
+  }
+
+  expect_failures = [terraform_data.saas_residency_guard]
+}
+
+run "aws_allowed_regions_is_the_fallback" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.saas-residency-aws.yaml"
+    vercel_serverless_region = "fra1"
+  }
+
+  expect_failures = [terraform_data.saas_residency_guard]
+}
+
+# No allow list anywhere: no check (the stacks fixture has neither key).
+run "no_allow_list_no_check" {
+  command = plan
+
+  variables {
+    supabase_region          = "us-east-1"
+    vercel_serverless_region = "iad1"
+  }
+
+  assert {
+    condition     = length(local.saas_allowed_regions) == 0 && length(local.saas_regions_outside_allowed) == 0
+    error_message = "without saas.allowed_regions or aws.allowed_regions the residency check must not run."
+  }
+}
