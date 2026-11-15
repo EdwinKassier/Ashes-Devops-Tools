@@ -9,6 +9,58 @@ Status legend: **OPEN** (a real gap to fix) · **PREVIEW** (code shipped, opt-in
 default-off, not yet validated against a real apply) · **BLOCKED** (waiting on an
 upstream/provider capability) · **DECISION** (needs a human call before action).
 
+## OPEN — follow-ups from the eighth re-audit (2026-11-15)
+
+The [eighth due-diligence re-audit](audit/2026-11-15-due-diligence-reaudit-8.md)
+of commit `4479cabc` found the items below. They are not fixed on this branch:
+each is a follow-up. The report gives evidence, failure scenarios and fixes; its
+appendix lists the Medium and Low items not repeated here.
+
+High (fix before relying on the control):
+
+- **ARC-1. The regulated central backup copy cannot copy Aurora or EBS.**
+  `envs/aws/workload/kms.tf` has no key-policy statement for the backup
+  account or `backup.amazonaws.com`, which AWS Backup needs to copy recovery
+  points encrypted with that key. Do not enable
+  `compliance.backup.copy_to_central_vault` on a regulated estate until the
+  workload key grants it, and turn on `copy_vault_notification_topic_arn`.
+- **CMP-1 to CMP-3, IAC-2. The AWS regulated class can still be dropped.** A
+  supplied `organization_contract` (a workspace variable or
+  `aws.contracts.organization`) turns the aws-organization remote-state read off,
+  so `regulated_account_keys` is empty. Where the contract applies, aws-network's
+  refusals (`enable_network_firewall`, `enforce_egress_allowlist`,
+  `egress_alert_only_waived`) and aws-security's 365-day retention floor still
+  read only the root's config file.
+- **CICD-1 / SEC-2. The plan-time scanner can be disarmed in CI.** In the
+  meta-lint job, the platform-owned `scripts/check-module-api.sh` runs before the
+  scanner and can set `PLAN_EXEC_TEST` and `PLAN_EXEC_ROOT` through
+  `$GITHUB_ENV`, shadow `python3`, rewrite the scanner or pre-install a fake
+  `hcl2`. Run the scanner in its own job from a fresh checkout, refuse
+  `PLAN_EXEC_TEST` when `CI=true` and fail when 0 files are parsed.
+- **SEC-1. `azurerm` is allowlisted but unchecked.** It is on
+  `allowed_provider_sources` for a commented example only; none of its
+  credential, endpoint or upload arguments is checked. Remove it from the
+  allowlist until a fork reviews it.
+- **IAC-1. Mutation survivors in detective controls and secret exposure.**
+  Security Hub `service_enabled`, Config recorder `is_enabled`,
+  `tfe_variable.sensitive`, the Vercel production targets and the aws-security
+  `regulated_log_archive_lock` precondition are not asserted by any test.
+- **CMP-4. Waiver governance.** Only the GCP egress waiver has a maximum
+  lifetime; no waiver carries an approver or ticket, and there is no waiver
+  register.
+
+Documentation (Medium):
+
+- **ADO-1.** `docs/architecture/regulated-environments.md` says "No change" for
+  AWS backups and the audit store, and its AWS column omits aws-backup.
+- **ADO-5.** The `_to_server` firewall actions also drop external UDP and
+  returning ICMP; the caveat is in the module and UPGRADING.md but not in
+  `config/landing-zone.example.yaml` or the regulated page.
+
+Process: the report recommends the breaking-change freeze, one sandbox apply
+per cloud (it settles ARC-1 and the firewall behaviour) and an isolated scanner
+job or HCP pre-plan run task before another round of code fixes.
+
 ## OPEN — validate before relying on
 
 - **destroy_guard's deletion-protection rule is proven by OPA unit tests
