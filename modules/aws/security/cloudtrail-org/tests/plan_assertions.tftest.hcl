@@ -450,3 +450,34 @@ run "no_guard_without_module_created_key" {
     error_message = "no guard is created when the caller supplies the CloudWatch Logs key"
   }
 }
+
+# Re-audit 7 IAC-4: each CIS 4.x metric filter matches the events the
+# benchmark names, not just a well-formed pattern. Removing StopLogging from
+# the CloudTrail filter would silence the trail-tamper alarm.
+run "cis_filters_match_their_events" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for k, required in {
+        "cloudtrail-config-changes" = ["CreateTrail", "UpdateTrail", "DeleteTrail", "StartLogging", "StopLogging"]
+        "iam-policy-changes"        = ["PutRolePolicy", "AttachRolePolicy", "CreatePolicyVersion", "DeletePolicy", "DetachUserPolicy"]
+        "root-account-usage"        = ["Root", "AwsServiceEvent"]
+        "console-auth-failures"     = ["ConsoleLogin", "Failed authentication"]
+        "unauthorized-api-calls"    = ["UnauthorizedOperation", "AccessDenied"]
+      } : alltrue([for e in required : strcontains(aws_cloudwatch_log_metric_filter.cis[k].pattern, e)])
+    ])
+    error_message = "Every CIS metric filter must match the events its benchmark control names."
+  }
+
+  assert {
+    condition = alltrue([
+      for k, required in {
+        "cmk-disable-or-deletion" = ["kms.amazonaws.com", "DisableKey", "ScheduleKeyDeletion"]
+        "config-changes"          = ["StopConfigurationRecorder", "DeleteDeliveryChannel"]
+        "organizations-changes"   = ["organizations.amazonaws.com", "LeaveOrganization", "DetachPolicy"]
+      } : alltrue([for e in required : strcontains(aws_cloudwatch_log_metric_filter.cis[k].pattern, e)])
+    ])
+    error_message = "The KMS, Config and Organizations CIS filters must match their events."
+  }
+}

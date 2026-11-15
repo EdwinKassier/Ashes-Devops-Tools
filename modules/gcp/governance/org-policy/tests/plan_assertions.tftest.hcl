@@ -155,3 +155,42 @@ run "custom_constraints_are_enforced" {
     error_message = "enforce must add a spec, dry_run a dry_run_spec, and off no policy; every constraint is still defined."
   }
 }
+
+# Re-audit 7 IAC-5: every like-for-like legacy boolean constraint is set
+# through its exact managed name (a typo fails at apply and drops the legacy
+# policy too).
+run "every_managed_equivalent_is_exact" {
+  command = plan
+
+  variables {
+    boolean_policies = [
+      { constraint = "iam.disableServiceAccountKeyCreation", enforce = true },
+      { constraint = "iam.disableServiceAccountKeyUpload", enforce = true },
+      { constraint = "iam.automaticIamGrantsForDefaultServiceAccounts", enforce = true },
+      { constraint = "compute.disableSerialPortAccess", enforce = true },
+      { constraint = "compute.requireOsLogin", enforce = true },
+      { constraint = "compute.disableNestedVirtualization", enforce = true },
+      { constraint = "compute.disableGuestAttributesAccess", enforce = true },
+      { constraint = "sql.restrictPublicIp", enforce = true },
+    ]
+  }
+
+  assert {
+    condition = toset(keys(google_org_policy_policy.managed_policies)) == toset([
+      "iam.managed.disableServiceAccountKeyCreation",
+      "iam.managed.disableServiceAccountKeyUpload",
+      "iam.managed.preventPrivilegedBasicRolesForDefaultServiceAccounts",
+      "compute.managed.disableSerialPortAccess",
+      "compute.managed.requireOsLogin",
+      "compute.managed.disableNestedVirtualization",
+      "compute.managed.disableGuestAttributesAccess",
+      "sql.managed.restrictPublicIp",
+    ])
+    error_message = "Each legacy boolean constraint must be set through its exact managed equivalent."
+  }
+
+  assert {
+    condition     = length(google_org_policy_policy.boolean_policies) == 0
+    error_message = "A translated constraint must not also be set as a legacy policy."
+  }
+}

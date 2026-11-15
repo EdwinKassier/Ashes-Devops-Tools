@@ -72,7 +72,6 @@ CHANGELOG.md   ${platform_team}
 # ── Consistency gate and the configuration files (platform or security) ──────
 # landing-zone.yaml feeds every root (gcp-guardrails included);
 # tfc-workspaces.yaml sets per-workspace variables (credential env vars included).
-/scripts/check-consistency.sh     ${platform_team} ${security_team}
 /config/landing-zone.yaml    ${platform_team} ${security_team}
 /config/tfc-workspaces.yaml  ${platform_team} ${security_team}
 /config/sandbox/             ${platform_team} ${security_team}
@@ -110,5 +109,10 @@ CHANGELOG.md   ${platform_team}
 /modules/supabase/vault-secrets/        ${security_team}
 /scripts/verify-run-commit.sh           ${security_team}
 /scripts/check-tag-patterns.py          ${security_team}
+# Re-audit 7 CICD-4: the scanner's callers, so it cannot be skipped or
+# repointed without a security approval.
+/scripts/check-consistency.sh           ${security_team}
+/scripts/tests/test-check-plan-time-exec.sh ${security_team}
+/.github/workflows/terraform-plan.yml   ${security_team}
 /docs/guides/CI_SECRETS.md              ${security_team}
 /docs/guides/BRANCH_PROTECTION.md       ${security_team}

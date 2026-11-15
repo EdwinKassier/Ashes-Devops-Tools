@@ -37,6 +37,12 @@ install_package() {
   fi
 }
 
+# The plan-time scanner runs as `python3 -P` (Python 3.11+).
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
+  echo "python3 is $(python3 --version 2>&1); the repo scripts need Python 3.11 or newer (python3 -P)." >&2
+  exit 1
+fi
+
 install_pip_package() { python3 -m pip install --user "$1==$2"; }
 
 # Returns the installed version of a binary, or empty string if not installed.

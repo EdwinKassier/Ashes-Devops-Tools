@@ -41,6 +41,43 @@ patch knowingly and expect conflicts here.
 Manual steps for the next release, grouped by area. A breaking change
 (`feat!:` or a `BREAKING CHANGE` footer) must add its entry here; CI enforces it.
 
+### What your next run does (re-audit 7 fixes)
+
+The fixes for [re-audit 7](docs/audit/2026-11-15-due-diligence-reaudit-7.md)
+change these runs:
+
+- **Path-reading resource arguments (SEC-1 to SEC-3, breaking for forks).**
+  The scanner and the mandatory OPA policy now check the arguments that read
+  a runner path and upload it (`path_reading_attributes` in
+  `policies/opa/no_plan_time_code_execution_allowlist.rego`: S3, GCS and
+  Lambda uploads, `data "tfe_slug"`). They may only hold a literal path under
+  `path.module` or a `data.archive_file` `output_path`.
+  `vercel_deployment.files` / `path_prefix` and `tfe_policy_set.slug` are
+  refused. A fork that uploads a file from elsewhere moves it under the module.
+- **Regulated AWS estates (CMP-1, CMP-2, CMP-4, breaking).**
+  - aws-organization publishes `regulated_account_keys` in its contract; the
+    aws-workload, aws-network and aws-backup roots also treat an account as
+    regulated when the aws-organization remote state says so. Apply
+    aws-organization first.
+  - aws-security refuses `log_archive_object_lock_mode = "GOVERNANCE"` when
+    any AWS workload environment is regulated, frameworks or not.
+  - aws-backup fails the plan for a regulated estate until
+    `compliance.backup.copy_to_central_vault: true` (the copy vault's lock is
+    irreversible: read the backup section of this file first).
+- **Scanner invocation (CICD-4).** `PLAN_EXEC_ROOT` and
+  `PLAN_EXEC_POLICY_DIR` act only with `PLAN_EXEC_TEST=1`, and the scanner
+  refuses to run with `PYTHONPATH` set. The repo scripts need Python 3.11 or
+  newer (`scripts/setup.sh` checks). `scripts/check-consistency.sh`,
+  `.github/workflows/terraform-plan.yml` and the scanner's test script need a
+  security approval: copy the new CODEOWNERS lines into your fork.
+- **No run change, documentation only.** The exact `landing_zone_config_path`
+  form for HCP Terraform runs; the Route 53 Profile is billed once to the
+  network account; the `_to_server` firewall actions also drop external UDP
+  and returning ICMP (add pass rules for NTP, DNS or path MTU discovery if
+  you need them). `compliance_class_guard` (aws-workload, re-audit 6) adds a
+  `terraform_data` resource for any environment that states a class, standard
+  included.
+
 ### What your next run does (re-audit 6 fixes)
 
 The fixes for [re-audit 6](docs/audit/2026-11-15-due-diligence-reaudit-6.md)
@@ -120,8 +157,7 @@ change these runs:
   layers; a module may not read files from `path.root`; and
   `archive_file` may only zip a literal `source_file` under `path.module`.
   The mandatory OPA policy now refuses a `landing_zone_config_path` other than
-  null, `config/landing-zone.yaml` or `config/<estate>/landing-zone.yaml`
-  (relative to the root): a workspace that points it at a test fixture, the
+  null or `../../../config/landing-zone.yaml` or `../../../config/<estate>/landing-zone.yaml` (`../../` for `envs/saas` and `envs/tfc-admin`), relative to the root: a workspace that points it at a test fixture, the
   example or `""` fails its policy check.
 - **Spoke CIDRs (aws-network).** `spoke_attachments` CIDRs must sit inside
   `top_cidr` and may no longer overlap each other or the hub VPCs; the plan

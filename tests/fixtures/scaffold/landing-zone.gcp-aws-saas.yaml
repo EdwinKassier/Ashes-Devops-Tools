@@ -472,6 +472,12 @@ aws:
       vpc_cidr: 10.73.0.0/16
       is_production: true
       # Opt-in regulated class (docs/architecture/regulated-environments.md).
+      # A regulated environment with services also needs an HTTPS ALB
+      # (app_alb_certificate_arn), ALB access logs (the aws-workload-<env>
+      # workspace variable app_alb_access_logs_bucket:
+      # an S3 bucket in the workload account whose policy allows ELB log
+      # delivery, ideally Object-Locked for 365 days) and, on public_alb, the WAF,
+      # and its backups need compliance.backup.copy_to_central_vault: true.
       # One regulated environment hardens the shared aws-network hub: Network
       # Firewall on and egress fail-closed on every profile, no alert-only waiver,
       # and at least 365 days of log-archive retention (the VPC flow logs).

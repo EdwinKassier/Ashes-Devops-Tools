@@ -14,7 +14,11 @@ locals {
   # output existed (N-1, not yet re-applied) exposes the same keys as
   # individual outputs, so the read falls back to them; that fallback goes at
   # v1.0 with the individual outputs (UPGRADING.md).
-  org_remote = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  # Re-audit 7 CMP-1: regulated account keys from the aws-organization
+  # remote state (not from a supplied contract, which a workspace variable can
+  # set), ORed with this root's config file.
+  contract_regulated_account_keys = try(tolist(local.org_remote.regulated_account_keys), [])
+  org_remote                      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
   # The organization contract, whichever source supplied it, as one type (the
   # variable's). Fields this root needs are read strictly (a missing key fails
   # the plan); the rest default.
@@ -104,6 +108,22 @@ resource "terraform_data" "organization_contract_guard" {
     precondition {
       condition     = contains(keys(local.org.ou_ids), "Workloads")
       error_message = "The aws-organization contract has no ou_ids[\"Workloads\"] (organization_contract / aws.contracts.organization, else the ${var.organization_workspace_name} workspace's contract output); the org backup policy attaches to that OU."
+    }
+  }
+}
+
+# Re-audit 7 CMP-4: a regulated estate keeps every recovery point in the
+# central Compliance-mode copy vault (outside the workload accounts' reach).
+# The copy vault's lock is irreversible, so this asks for the decision rather
+# than making it: set compliance.backup.copy_to_central_vault: true.
+resource "terraform_data" "regulated_backup_copy" {
+  count = length(local.cfg.workload_regulated) > 0 || length(local.contract_regulated_account_keys) > 0 ? 1 : 0
+  input = local.enable_central_copy
+
+  lifecycle {
+    precondition {
+      condition     = local.enable_central_copy
+      error_message = "A regulated AWS workload environment exists, so its backups must be copied to the central Vault-Locked vault: set compliance.backup.copy_to_central_vault: true (or enable_central_copy = true) after reading UPGRADING.md (the vault lock is irreversible)."
     }
   }
 }

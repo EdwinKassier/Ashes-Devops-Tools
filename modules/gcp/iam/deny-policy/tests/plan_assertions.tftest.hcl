@@ -32,14 +32,21 @@ run "creates_deny_policy" {
         display_name = "Deny SA key creation"
         rules = [
           {
-            description          = "Only break-glass may create SA keys"
-            denied_principals    = ["principalSet://goog/public:all"]
-            denied_permissions   = ["iam.googleapis.com/serviceAccountKeys.create"]
-            exception_principals = ["principalSet://goog/group/break-glass@example.com"]
+            description           = "Only break-glass may create SA keys"
+            denied_principals     = ["principalSet://goog/public:all"]
+            denied_permissions    = ["iam.googleapis.com/serviceAccountKeys.create"]
+            exception_principals  = ["principalSet://goog/group/break-glass@example.com"]
+            exception_permissions = ["iam.googleapis.com/serviceAccountKeys.list"]
           }
         ]
       }
     ]
+  }
+
+  # Re-audit 7 IAC-3: the exception permissions are planned as given.
+  assert {
+    condition     = toset(google_iam_deny_policy.this["deny-sa-key-creation"].rules[0].deny_rule[0].exception_permissions) == toset(["iam.googleapis.com/serviceAccountKeys.list"])
+    error_message = "The planned deny rule must carry exactly the input's exception permissions."
   }
 
   assert {

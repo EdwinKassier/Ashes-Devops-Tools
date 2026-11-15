@@ -165,3 +165,27 @@ run "rejects_allowed_refs_without_repository_id" {
     ]
   }
 }
+
+# Re-audit 7 IAC-2: an enabled GitLab or AWS provider without its scope would
+# get a null attribute_condition and trust the whole issuer.
+run "gitlab_provider_without_namespace_fails" {
+  command = plan
+
+  variables {
+    enable_gitlab_provider = true
+    gitlab_namespace       = null
+  }
+
+  expect_failures = [google_iam_workload_identity_pool_provider.gitlab]
+}
+
+run "aws_provider_without_account_fails" {
+  command = plan
+
+  variables {
+    enable_aws_provider = true
+    aws_account_id      = null
+  }
+
+  expect_failures = [google_iam_workload_identity_pool_provider.aws]
+}

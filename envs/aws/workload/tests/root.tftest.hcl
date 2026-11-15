@@ -659,3 +659,54 @@ run "gateway_endpoint_policies_can_be_turned_off_in_production" {
     error_message = "enable_gateway_endpoint_policies = false must win over the production default"
   }
 }
+
+# Re-audit 7 CMP-1: the aws-organization remote state marks the workload
+# account regulated, so the environment is regulated even when this root's
+# config file (here: none) does not say so.
+run "remote_state_keeps_the_regulated_class" {
+  command = plan
+
+  override_data {
+    target = data.terraform_remote_state.aws_organization
+    values = {
+      outputs = {
+        contract = {
+          account_ids            = { workload_dev = "222222222222" }
+          account_role_arns      = { workload_dev = "arn:aws:iam::222222222222:role/cross-account" }
+          regulated_account_keys = ["workload_dev"]
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_network
+    values = {
+      outputs = {
+        contract = {
+          tgw_id        = "tgw-000000000000abcd"
+          ipam_pool_ids = { "eu-west-2" = "ipam-pool-eu-west-2-0" }
+        }
+      }
+    }
+  }
+
+  override_data {
+    target = data.terraform_remote_state.aws_security
+    values = {
+      outputs = {
+        contract = {
+          log_archive_bucket_name = "ashes-org-log-archive"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.regulated
+    error_message = "regulated_account_keys in the aws-organization contract must make the workload regulated."
+  }
+
+  # Not production here, so the regulated guard fails the plan.
+  expect_failures = [terraform_data.regulated_guard]
+}

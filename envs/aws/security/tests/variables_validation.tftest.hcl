@@ -477,3 +477,19 @@ run "production_with_real_contact_plans" {
     error_message = "a production plan with a real subscriber must pass the security contact guard."
   }
 }
+
+# Re-audit 7 CMP-2: a regulated AWS estate keeps the log archive in
+# COMPLIANCE mode even with no compliance.frameworks.
+run "regulated_estate_refuses_governance_lock" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    aws_overrides = {
+      log_archive_object_lock_mode = "GOVERNANCE"
+      log_archive_retention_days   = 365
+    }
+  }
+
+  expect_failures = [var.aws_overrides]
+}

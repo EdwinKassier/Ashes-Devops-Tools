@@ -98,3 +98,39 @@ allowed_credential_literals := {
 # code with the workspace's credentials. This repo uses only tfe_outputs (the
 # SaaS secret bridge of envs/aws/workload and envs/gcp/workload).
 allowed_ephemeral_types := {"tfe_outputs"}
+
+# Re-audit 7 SEC-1 to SEC-3: resource and data-source arguments that take a
+# path on the runner, which the provider reads at plan or apply and uploads.
+# Each may only hold a path under path.module (or the output_path of a
+# reviewed archive_file). "<type>.<argument>".
+# The list follows the provider schemas (aws 6.72, google 8.10, tfe 0.83,
+# vercel 4.8.2, supabase 1.9.1): re-check it on every provider upgrade
+# (docs/known-gaps.md).
+path_reading_attributes := {
+	"aws_connect_contact_flow.filename",
+	"aws_connect_contact_flow_module.filename",
+	"aws_gamelift_script.zip_file",
+	"aws_lambda_function.filename",
+	"aws_lambda_layer_version.filename",
+	"aws_rds_custom_db_engine_version.filename",
+	"aws_s3_bucket_object.source",
+	"aws_s3_object.source",
+	"aws_synthetics_canary.zip_file",
+	"google_apigee_api.config_bundle",
+	"google_apigee_keystores_aliases_pkcs12.file",
+	"google_apigee_sharedflow.config_bundle",
+	"google_storage_bucket_object.source",
+	"supabase_edge_function.entrypoint",
+	"supabase_edge_function.import_map",
+	"supabase_edge_function.static_files",
+	"tfe_slug.source_path",
+	"vercel_blob_object.source",
+}
+
+# Arguments that upload local files and that this repo never uses: refused
+# outright (a vercel_deployment files map, a pre-built policy-set slug).
+refused_path_attributes := {
+	"tfe_policy_set.slug",
+	"vercel_deployment.files",
+	"vercel_deployment.path_prefix",
+}

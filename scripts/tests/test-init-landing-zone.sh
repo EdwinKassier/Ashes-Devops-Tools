@@ -341,8 +341,7 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
     /modules/gcp/stages/organization/ /modules/gcp/stages/bootstrap/ \
     /modules/aws/stages/organization/ /modules/aws/stages/security/ /modules/aws/stages/backup/ \
     /config/tfc-workspaces.yaml \
-    /envs/tfc-admin/ /.github/ \
-    /scripts/check-consistency.sh; do
+    /envs/tfc-admin/ /.github/; do
     assert_line "${co}" "^${path} +@acme-gh/platform-team @acme-gh/sec\$" "${path} lists platform + security"
   done
   # Guardrail paths list the security team ONLY, so a security approval is
@@ -351,7 +350,9 @@ if bash "${SCRIPT}" --non-interactive --output "${workdir}/co.yaml" --org-name a
     /scripts/check-plan-time-exec.py /.github/requirements/ /.github/CODEOWNERS \
     /templates/aws/bootstrap/ /templates/CODEOWNERS.tftpl \
     /modules/gcp/iam/deny-policy/ /modules/tfc/ \
-    /renovate.json /release-please-config.json /.tool-versions /.pre-commit-config.yaml; do
+    /renovate.json /release-please-config.json /.tool-versions /.pre-commit-config.yaml \
+    /scripts/check-consistency.sh /.github/workflows/terraform-plan.yml \
+    /modules/aws/network/network-firewall/ /scripts/verify-run-commit.sh; do
     assert_line "${co}" "^${path} +@acme-gh/sec\$" "${path} is security-team only"
   done
   # Each security-only line must come after every broader line that matches it,

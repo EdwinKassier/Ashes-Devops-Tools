@@ -21,6 +21,13 @@ locals {
     tfc_management_plan_role_arns  = module.aws_organization.tfc_management_plan_role_arns
     tfc_management_apply_role_arns = module.aws_organization.tfc_management_apply_role_arns
     guard_alerts_topic_arn         = module.aws_organization.guard_alerts_topic_arn
+    # Re-audit 7 CMP-1: account keys of aws.workload_environments entries with
+    # compliance_class: regulated. The AWS roots OR this with their own config
+    # file, so a workspace that reads another estate's file stays regulated.
+    regulated_account_keys = sort(distinct([
+      for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : tostring(e.account_key)
+      if try(tostring(e.compliance_class), "standard") == "regulated" && try(e.account_key, null) != null
+    ]))
   }
 }
 
@@ -42,6 +49,7 @@ output "contract" {
     tfc_management_plan_role_arns  = map(string)
     tfc_management_apply_role_arns = map(string)
     guard_alerts_topic_arn         = string
+    regulated_account_keys         = list(string)
   })
   value = local.contract
 }

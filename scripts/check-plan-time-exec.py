@@ -18,6 +18,10 @@ time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
     (external, http, aws_lambda_invocation), top-level or inside a check block;
   - an archive_file whose source is not a literal source_file under
     path.module (re-audit 5 SEC-2: it can zip /proc/self/environ);
+  - a path-reading resource or data argument (path_reading_attributes: S3,
+    GCS and Lambda uploads, tfe_slug) that is not a literal path under
+    path.module or an archive_file output_path, and any refused upload
+    argument (refused_path_attributes) (re-audit 7 SEC-1 to SEC-3);
   - an ephemeral block whose type is not on allowed_ephemeral_types (the plan
     JSON does not render ephemeral blocks, so this is the only layer that sees
     one that nothing references);
@@ -64,7 +68,7 @@ comprehension, a set expression, a second definition) exits 2. A fork edits
 only the allowlist .rego file, and both controls follow.
 
 Exit codes: 0 clean, 1 violations, 2 setup error (parser or git missing,
-policy unreadable). PLAN_EXEC_ROOT overrides the tree to scan (tests): it is
+policy unreadable). With PLAN_EXEC_TEST=1 only (tests), PLAN_EXEC_ROOT overrides the tree to scan: it is
 read with `git ls-files` when it is a git work tree, else walked.
 PLAN_EXEC_POLICY_DIR overrides the policy folder (tests).
 """
@@ -98,10 +102,23 @@ except ImportError:  # fail closed with the install hint
     sys.exit(2)
 
 REPO = Path(__file__).resolve().parent.parent
-TEST_ROOT = os.environ.get("PLAN_EXEC_ROOT")
+# Re-audit 7 CICD-4: the test knobs act only with PLAN_EXEC_TEST=1 (the
+# test script sets it; CI and make never do), so a caller cannot point the
+# gate at a clean copy of the tree or at other allowlists. PYTHONPATH could
+# replace hcl2 even under -P, so it is refused.
+_TESTING = os.environ.get("PLAN_EXEC_TEST") == "1"
+if not _TESTING and (os.environ.get("PLAN_EXEC_ROOT") or os.environ.get("PLAN_EXEC_POLICY_DIR")):
+    sys.stderr.write("check-plan-time-exec: PLAN_EXEC_ROOT / PLAN_EXEC_POLICY_DIR are test-only "
+                     "(PLAN_EXEC_TEST=1); refusing to scan anything but this repository\n")
+    sys.exit(2)
+if os.environ.get("PYTHONPATH"):
+    sys.stderr.write("check-plan-time-exec: PYTHONPATH is set; unset it (it could replace a module "
+                     "this check imports)\n")
+    sys.exit(2)
+TEST_ROOT = os.environ.get("PLAN_EXEC_ROOT") if _TESTING else None
 ROOT = Path(TEST_ROOT or REPO).resolve()
 # PLAN_EXEC_POLICY_DIR replaces the policy folder (tests of the .rego reader).
-POLICY_DIR = Path(os.environ.get("PLAN_EXEC_POLICY_DIR") or REPO / "policies" / "opa").resolve()
+POLICY_DIR = Path((os.environ.get("PLAN_EXEC_POLICY_DIR") if _TESTING else None) or REPO / "policies" / "opa").resolve()
 POLICY = POLICY_DIR / "no_plan_time_code_execution.rego"
 ALLOWLIST = POLICY_DIR / "no_plan_time_code_execution_allowlist.rego"
 POLICY_PACKAGE = "terraform.policies.no_plan_time_code_execution"
@@ -311,7 +328,8 @@ def load_policy() -> dict:
                         "endpoint_key_exceptions", "allowed_remote_state_backends",
                         "allowed_action_types", "allowed_credential_references",
                         "allowed_credential_literals", "allowed_ephemeral_types",
-                        "allowed_credential_variable_types"])
+                        "allowed_credential_variable_types", "path_reading_attributes",
+                        "refused_path_attributes"])
     patterns = {}
     for name in ("endpoint_key_pattern", "credential_key_pattern"):
         m = re.search(rf"^{name}\s*:=\s*`([^`]+)`\s*$", policy, re.M)
@@ -352,6 +370,8 @@ def load_policy() -> dict:
         "endpoint_exceptions": rego_string_set(allow, "endpoint_key_exceptions", ALLOWLIST),
         "backends": rego_string_set(allow, "allowed_remote_state_backends", ALLOWLIST),
         "actions": rego_string_set(allow, "allowed_action_types", ALLOWLIST, allow_empty=True),
+        "path_attrs": rego_string_set(allow, "path_reading_attributes", ALLOWLIST),
+        "refused_attrs": rego_string_set(allow, "refused_path_attributes", ALLOWLIST),
     }
 
 
@@ -517,6 +537,8 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
         if kind in ("data", "ephemeral") and rtype in pol["exec_data_types"]:
             out.append(f'{rel}: {kind} "{rtype}" "{name}" runs code or calls out at plan time '
                        "with the workspace's credentials and environment")
+        if kind in ("data", "resource"):
+            out += path_attribute_problems(rel, rtype, name, body, pol)
         if rtype == "archive_file" and kind in ("data", "resource"):
             out += archive_problems(rel, name, body)
         if kind == "ephemeral" and rtype not in pol["ephemeral"]:
@@ -623,6 +645,31 @@ def string_literal(text: str, start: int) -> str | None:
             return text[start + 1:i]
         i += 1
     return None
+
+
+ARCHIVE_OUTPUT_REF = re.compile(r"^\$\{data\.archive_file\.[A-Za-z_][A-Za-z0-9_-]*(?:\[[0-9]+\])?\.output_path\}$")
+
+
+def path_attribute_problems(rel: str, rtype: str, name: str, body: dict, pol: dict) -> list[str]:
+    """Re-audit 7 SEC-1 to SEC-3: a path-reading argument holds a literal path
+    under path.module in the repository, or a reviewed archive_file's
+    output_path; a refused argument is never set."""
+    out = []
+    for attr, value in body.items():
+        key = f"{rtype}.{attr}"
+        if key in pol["refused_attrs"]:
+            out.append(f'{rel}: {rtype} "{name}" sets {attr}, which uploads local files and is '
+                       "not allowed (refused_path_attributes)")
+        elif key in pol["path_attrs"]:
+            ok = isinstance(value, str) and (
+                ARCHIVE_OUTPUT_REF.match(value)
+                or (ARCHIVE_SOURCE.match(value) and "%{" not in value and not posixpath.normpath(
+                    posixpath.join(posixpath.dirname(rel), value[len("${path.module}"):].lstrip("/"))).startswith("..")))
+            if not ok:
+                out.append(f'{rel}: {rtype} "{name}" {attr} reads a path on the runner and uploads '
+                           f"it; use a literal path under path.module or a data.archive_file "
+                           f"output_path, not {value!r}")
+    return out
 
 
 ARCHIVE_SOURCE = re.compile(r"^\$\{path\.module\}/[A-Za-z0-9_./-]+$")

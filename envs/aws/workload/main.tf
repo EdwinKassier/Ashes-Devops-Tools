@@ -64,9 +64,13 @@ locals {
   # output existed (N-1, not yet re-applied) exposes the same keys as individual
   # outputs, so each read falls back to them; that fallback goes at v1.0 with the
   # individual outputs (UPGRADING.md).
-  org_remote      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
-  network_remote  = local.read_network ? try(data.terraform_remote_state.aws_network[0].outputs.contract, data.terraform_remote_state.aws_network[0].outputs) : null
-  security_remote = local.read_security ? try(data.terraform_remote_state.aws_security[0].outputs.contract, data.terraform_remote_state.aws_security[0].outputs) : null
+  # Re-audit 7 CMP-1: regulated account keys from the aws-organization
+  # remote state (not from a supplied contract, which a workspace variable can
+  # set), ORed with this root's config file.
+  contract_regulated_account_keys = try(tolist(local.org_remote.regulated_account_keys), [])
+  org_remote                      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  network_remote                  = local.read_network ? try(data.terraform_remote_state.aws_network[0].outputs.contract, data.terraform_remote_state.aws_network[0].outputs) : null
+  security_remote                 = local.read_security ? try(data.terraform_remote_state.aws_security[0].outputs.contract, data.terraform_remote_state.aws_security[0].outputs) : null
 
   # Wrong-account guard for both providers. No try(): a missing account_ids key
   # fails the plan loudly instead of silently dropping the guard.

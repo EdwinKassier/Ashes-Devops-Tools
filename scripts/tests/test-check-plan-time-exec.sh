@@ -31,7 +31,7 @@ case_tree() {
 # expect_rc <label> <rc> <tree> [<text the output must contain>]
 expect_rc() {
   local rc=0
-  PLAN_EXEC_ROOT="$3" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+  PLAN_EXEC_TEST=1 PLAN_EXEC_ROOT="$3" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
   if [ "${rc}" -ne "$2" ]; then
     bad "$1 (rc=${rc}, want $2)"
     cat "${workdir}/out" >&2
@@ -712,7 +712,7 @@ expect_rc "SEC-2 (re-audit 5 review 2): data vercel_file fails" 1 "$(case_tree v
 }')" "vercel_file"
 # Re-audit 6 SEC-2: without -P a file beside the scanner could replace hcl2.
 rc=0
-PLAN_EXEC_ROOT="${workdir}" python3 "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+PLAN_EXEC_TEST=1 PLAN_EXEC_ROOT="${workdir}" python3 "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
 if [ "${rc}" -eq 2 ] && grep -qF -- "python3 -P" "${workdir}/out"; then ok "SEC-2 (re-audit 6): the scanner refuses to run without python3 -P"; else bad "SEC-2 (re-audit 6): the scanner ran without -P (rc=${rc})"; fi
 expect_rc "SEC-1 (re-audit 6): a # in a string literal does not hide file()" 1 "$(tpl_tree tplhash '${"#" != "" ? file("/etc/hosts") : ""}')" "names a file function"
 expect_rc "SEC-1 (re-audit 6): a } in a string literal does not hide file()" 1 "$(tpl_tree tplbrace '${"}" == "}" ? file("/etc/hosts") : ""}')" "names a file function"
@@ -722,6 +722,47 @@ expect_rc "SEC-1 (re-audit 6 review): a %{} directive in a file() path fails" 1 
 expect_rc "SEC-1 (re-audit 6 review): a %{} directive in a templatefile() path fails" 1 "$(case_tree dirtpl modules/a/main.tf 'locals {
   x = templatefile("${path.module}/%{if false}x%{endif}evil.tftpl", {})
 }')" "template directive or escape"
+# Re-audit 7 SEC-1 to SEC-3: path-reading resource arguments.
+expect_rc "SEC-1 (re-audit 7): an S3 object uploading /proc/self/environ fails" 1 "$(case_tree s3env modules/a/main.tf 'resource "aws_s3_object" "o" {
+  bucket = "b"
+  key    = "k"
+  source = "/proc/self/environ"
+}')" "reads a path on the runner and uploads it"
+expect_rc "SEC-1 (re-audit 7): a GCS object from a variable path fails" 1 "$(case_tree gcsvar modules/a/main.tf 'resource "google_storage_bucket_object" "o" {
+  bucket = "b"
+  name   = "k"
+  source = var.path
+}')" "reads a path on the runner and uploads it"
+expect_rc "SEC-1 (re-audit 7): a Lambda from an archive_file output passes" 0 "$(case_tree lambdaok modules/a/main.tf 'resource "aws_lambda_function" "f" {
+  function_name = "f"
+  role          = "r"
+  filename      = data.archive_file.isolate[0].output_path
+}')"
+expect_rc "SEC-1 (re-audit 7): an S3 object from a path.module file passes" 0 "$(case_tree s3ok modules/a/main.tf 'resource "aws_s3_object" "o" {
+  bucket = "b"
+  key    = "k"
+  source = "${path.module}/files/o.json"
+}')"
+expect_rc "SEC-3 (re-audit 7): a vercel_deployment files map fails" 1 "$(case_tree vdep modules/a/main.tf 'resource "vercel_deployment" "d" {
+  project_id = "p"
+  files      = { "/proc/self/environ" = "1~abc" }
+}')" "uploads local files and is not allowed"
+expect_rc "SEC-2 (re-audit 7): data tfe_slug of / fails" 1 "$(case_tree slug modules/a/main.tf 'data "tfe_slug" "s" {
+  source_path = "/"
+}')" "reads a path on the runner and uploads it"
+# Re-audit 7 CICD-4: the test knobs need PLAN_EXEC_TEST=1, and PYTHONPATH is refused.
+rc=0
+PLAN_EXEC_ROOT="${workdir}" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+if [ "${rc}" -eq 2 ] && grep -qF -- "test-only" "${workdir}/out"; then ok "CICD-4 (re-audit 7): PLAN_EXEC_ROOT without PLAN_EXEC_TEST is refused"; else bad "CICD-4 (re-audit 7): PLAN_EXEC_ROOT without PLAN_EXEC_TEST ran (rc=${rc})"; fi
+rc=0
+PYTHONPATH="${workdir}" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+if [ "${rc}" -eq 2 ] && grep -qF -- "PYTHONPATH" "${workdir}/out"; then ok "CICD-4 (re-audit 7): PYTHONPATH is refused"; else bad "CICD-4 (re-audit 7): PYTHONPATH was accepted (rc=${rc})"; fi
+expect_rc "SEC-1 (re-audit 7 review): a Vercel blob uploading a runner file fails" 1 "$(case_tree vblob modules/a/main.tf 'resource "vercel_blob_object" "b" {
+  source = "/proc/self/environ"
+}')" "reads a path on the runner and uploads it"
+expect_rc "SEC-1 (re-audit 7 review): Supabase edge function static files outside the module fail" 1 "$(case_tree sbfn modules/a/main.tf 'resource "supabase_edge_function" "f" {
+  static_files = ["/proc/self/environ"]
+}')" "reads a path on the runner and uploads it"
 expect_rc "SEC-1 (re-audit 5): a plain template passes" 0 "$(tpl_tree tplok '{"a": "${x}"}')"
 expect_rc "SEC-1 (re-audit 5): a missing template fails closed" 1 "$(case_tree tplmissing modules/a/main.tf 'locals {
   x = templatefile("${path.module}/none.tftpl", {})
@@ -813,7 +854,7 @@ policy_copy() {
 # expect_policy_rc <label> <rc> <policy dir> <text>
 expect_policy_rc() {
   local rc=0
-  PLAN_EXEC_POLICY_DIR="$3" PLAN_EXEC_ROOT="${workdir}/clean" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+  PLAN_EXEC_TEST=1 PLAN_EXEC_POLICY_DIR="$3" PLAN_EXEC_ROOT="${workdir}/clean" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
   if [ "${rc}" -eq "$2" ] && grep -qF -- "$4" "${workdir}/out"; then ok "$1"; else
     bad "$1 (rc=${rc}, want $2 with: $4)"
     cat "${workdir}/out" >&2

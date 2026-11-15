@@ -16,7 +16,11 @@ locals {
   # output existed (N-1, not yet re-applied) exposes the same keys as
   # individual outputs, so the read falls back to them; that fallback goes at
   # v1.0 with the individual outputs (UPGRADING.md).
-  org_remote = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  # Re-audit 7 CMP-1: regulated account keys from the aws-organization
+  # remote state (not from a supplied contract, which a workspace variable can
+  # set), ORed with this root's config file.
+  contract_regulated_account_keys = try(tolist(local.org_remote.regulated_account_keys), [])
+  org_remote                      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
   # The organization contract, whichever source supplied it, as one type (the
   # variable's). Fields this root needs are read strictly (a missing key fails
   # the plan); the rest default.

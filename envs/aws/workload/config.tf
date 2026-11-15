@@ -94,7 +94,7 @@ locals {
   regulated = try(local.cfg.workload_compliance_class[local.environment], "standard") == "regulated" || contains([
     for env, cc in local.cfg.workload_compliance_class : try(local.cfg.workload_account_keys[env], null)
     if cc == "regulated"
-  ], local.workload_account_key)
+  ], local.workload_account_key) || contains(local.contract_regulated_account_keys, local.workload_account_key)
 
   # DataClassification tag: explicit variable > aws.workload_environments.<env>
   # .data_classification > internal.

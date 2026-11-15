@@ -121,13 +121,13 @@ locals {
   # A regulated workload environment needs the firewall on any profile; the
   # enable_network_firewall validation refuses an explicit false.
   profile                 = coalesce(var.profile, local.cfg.profile, "production")
-  enable_network_firewall = coalesce(var.enable_network_firewall, local.profile == "production" || length(local.cfg.workload_regulated) > 0)
+  enable_network_firewall = coalesce(var.enable_network_firewall, local.profile == "production" || length(local.cfg.workload_regulated) > 0 || length(local.contract_regulated_account_keys) > 0)
 
   # Egress fails closed: on when the profile is production AND an AWS workload
   # environment is production, or when any AWS workload environment is
   # regulated (explicit variable wins; its validation refuses false for a
   # regulated estate).
-  enforce_egress_allowlist                  = coalesce(var.enforce_egress_allowlist, length(local.cfg.workload_regulated) > 0 || (local.profile == "production" && length(local.cfg.workload_production) > 0))
+  enforce_egress_allowlist                  = coalesce(var.enforce_egress_allowlist, length(local.cfg.workload_regulated) > 0 || length(local.contract_regulated_account_keys) > 0 || (local.profile == "production" && length(local.cfg.workload_production) > 0))
   network_firewall_egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist != null ? var.network_firewall_egress_domain_allowlist : coalesce(local.cfg.egress_domain_allowlist, [])
   network_firewall_stateful_default_actions = var.network_firewall_stateful_default_actions != null ? var.network_firewall_stateful_default_actions : coalesce(local.cfg.stateful_default_actions, ["aws:alert_established"])
   egress_alert_only_waived                  = coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false)

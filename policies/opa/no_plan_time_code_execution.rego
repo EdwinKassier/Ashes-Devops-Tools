@@ -160,6 +160,43 @@ deny contains msg if {
 	msg := sprintf("%s: declares a %s provisioner (arbitrary commands at apply time with the workspace's credentials); only envs/saas -> module.saas_workload -> module.vault_secrets may", [full_address(path, r), object.get(prov, "type", "?")])
 }
 
+# Re-audit 7 SEC-1 to SEC-3: a path-reading argument (path_reading_attributes)
+# may only reference path.module or a data.archive_file output, never a
+# constant or another value; a refused argument may not be set at all. The
+# plan JSON shows only the references of "${path.module}/...", so a "../"
+# after path.module is the scanner's to catch.
+deny contains msg if {
+	some pair in config_resources
+	path := pair[0]
+	r := pair[1]
+	some key, e in object.get(r, "expressions", {})
+	sprintf("%s.%s", [object.get(r, "type", ""), key]) in path_reading_attributes
+	not path_attribute_reviewed(e)
+	msg := sprintf("%s: %s reads a path on the runner and uploads it; it may only hold a path under path.module or a data.archive_file output_path", [full_address(path, r), key])
+}
+
+deny contains msg if {
+	some pair in config_resources
+	path := pair[0]
+	r := pair[1]
+	some key, _ in object.get(r, "expressions", {})
+	sprintf("%s.%s", [object.get(r, "type", ""), key]) in refused_path_attributes
+	msg := sprintf("%s: %s uploads local files and is not allowed", [full_address(path, r), key])
+}
+
+path_attribute_reviewed(e) if {
+	object.get(e, "constant_value", null) == null
+	refs := object.get(e, "references", [])
+	count(refs) > 0
+	every ref in refs {
+		path_attribute_reference(ref)
+	}
+}
+
+path_attribute_reference("path.module")
+
+path_attribute_reference(ref) if startswith(ref, "data.archive_file.")
+
 # Re-audit 5 SEC-2: archive_file reads any file on the runner into a zip that
 # filebase64() can return. Only a source_file under path.module is allowed.
 deny contains msg if {
@@ -325,7 +362,7 @@ deny contains msg if {
 	v := object.get(input.plan, ["variables", "landing_zone_config_path", "value"], null)
 	v != null
 	not estate_config_path(v)
-	msg := sprintf("landing_zone_config_path = %q: a run may read only an estate file (config/landing-zone.yaml or config/<estate>/landing-zone.yaml); another file, or \"\", can drop compliance_class: regulated and its guards", [v])
+	msg := sprintf("landing_zone_config_path = %q: a run may read only an estate file (../../../config/landing-zone.yaml or ../../../config/<estate>/landing-zone.yaml from the root; ../../ for saas and tfc-admin); another file, or \"\", can drop compliance_class: regulated and its guards", [v])
 }
 
 estate_config_path(v) if {

@@ -18,7 +18,7 @@ variable "landing_zone_config_path" {
   # drop the whole config and fall back to built-in defaults.
   validation {
     condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
-    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path (in HCP Terraform only config/landing-zone.yaml or config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only)."
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path. In HCP Terraform only ../../config/landing-zone.yaml or ../../config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only."
   }
 }
 

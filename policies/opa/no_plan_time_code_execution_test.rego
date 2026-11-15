@@ -56,6 +56,41 @@ test_archive_variable_source_denied if {
 	count(p.deny) == 1 with input as archive({"source_file": {"references": ["var.f", "path.module"]}})
 }
 
+# Re-audit 7 SEC-1 to SEC-3: path-reading resource arguments.
+path_resource(type, expressions) := in_root([{"address": sprintf("%s.x", [type]), "mode": "managed", "type": type, "name": "x", "expressions": expressions}])
+
+test_s3_object_constant_source_denied if {
+	count(p.deny) == 1 with input as path_resource("aws_s3_object", {"source": {"constant_value": "/proc/self/environ"}})
+}
+
+test_s3_object_variable_source_denied if {
+	count(p.deny) == 1 with input as path_resource("aws_s3_object", {"source": {"references": ["var.f"]}})
+}
+
+test_s3_object_path_module_source_allowed if {
+	count(p.deny) == 0 with input as path_resource("aws_s3_object", {"source": {"references": ["path.module"]}})
+}
+
+test_lambda_archive_filename_allowed if {
+	count(p.deny) == 0 with input as path_resource("aws_lambda_function", {"filename": {"references": ["data.archive_file.isolate[0].output_path", "data.archive_file.isolate[0]", "data.archive_file.isolate"]}})
+}
+
+test_s3_object_content_allowed if {
+	count(p.deny) == 0 with input as path_resource("aws_s3_object", {"content": {"constant_value": "x"}})
+}
+
+test_vercel_blob_source_denied if {
+	count(p.deny) == 1 with input as path_resource("vercel_blob_object", {"source": {"constant_value": "/proc/self/environ"}})
+}
+
+test_vercel_deployment_files_denied if {
+	count(p.deny) == 1 with input as path_resource("vercel_deployment", {"files": {"references": ["local.f"]}})
+}
+
+test_tfe_slug_source_path_denied if {
+	count(p.deny) == 1 with input as in_root([{"address": "data.tfe_slug.x", "mode": "data", "type": "tfe_slug", "name": "x", "expressions": {"source_path": {"constant_value": "/"}}}])
+}
+
 test_http_data_denied if count(p.deny) == 1 with input as in_module("../vpc", [data_source("http")])
 
 # A look-alike source does not match the allowlist.

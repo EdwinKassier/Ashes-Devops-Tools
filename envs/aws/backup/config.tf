@@ -29,8 +29,14 @@ locals {
     # cross-region copy. compliance.audit_log_retention_days does not apply:
     # backup retention is a separate decision.
     backup_copy_to_central_vault = try(tobool(local.lz.compliance.backup.copy_to_central_vault), null)
-    backup_copy_retention_days   = try(tonumber(local.lz.compliance.backup.copy_retention_days), null)
-    backup_dr_region             = try(tostring(local.lz.compliance.backup.dr_region), null)
+    # Re-audit 7 CMP-4: regulated AWS workload environments need the central,
+    # Vault-Locked copy of every recovery point.
+    workload_regulated = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tostring(e.compliance_class), "standard") == "regulated"
+    ])
+    backup_copy_retention_days = try(tonumber(local.lz.compliance.backup.copy_retention_days), null)
+    backup_dr_region           = try(tostring(local.lz.compliance.backup.dr_region), null)
     # aws.allowed_regions: the region SCP allow-list (aws-organization). The
     # dr_region validation uses the same fallback, ["eu-west-2"].
     allowed_regions = try([for r in local.lz.aws.allowed_regions : tostring(r)], null)

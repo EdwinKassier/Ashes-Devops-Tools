@@ -53,7 +53,7 @@ gcloud services enable cloudresourcemanager.googleapis.com \
 - [ ] `jq` installed (used by CI scripts)
 - [ ] `aws --version` reports AWS CLI v2 (AWS only: the phase-0 CloudFormation stack, StackSets and the account checks in the AWS runbooks)
 - [ ] `gh --version` (repository secrets and variables, environments, branch protection, numeric repository IDs)
-- [ ] `python3 --version` reports Python 3 (CI uses 3.12) for the repo scripts, and `python3 -c 'import hcl2'` succeeds (`python-hcl2`, hash-locked in `.github/requirements/hcl2.txt`; `make install` installs it; `make consistency` needs it)
+- [ ] `python3 --version` reports Python 3.11 or newer (CI uses 3.12; the plan-time scanner runs as `python3 -P`, which 3.11 added) for the repo scripts, and `python3 -c 'import hcl2'` succeeds (`python-hcl2`, hash-locked in `.github/requirements/hcl2.txt`; `make install` installs it; `make consistency` needs it)
 - [ ] `pre-commit --version` and `cz version` (commitizen; CI pins it in `.github/requirements/commitizen.txt`): `make yamllint`, `make markdownlint-check` and `make commit-check` need them
 - [ ] `check-jsonschema --version` reports 0.39.0 (`make install` installs it; by hand: `pipx install check-jsonschema==0.39.0`; `make config-check` needs it)
 - [ ] `tflint`, `terraform-docs`, `shellcheck`, `trivy` and `opa` at the versions in `.tool-versions` (`make install` checks or installs all of them except shellcheck, which `make shellcheck` runs through `uvx` when available; `make opa-test` and `make security` refuse a version mismatch)
@@ -127,7 +127,7 @@ How the roots read it:
 - **Precedence:** an explicit variable (tfvars, `TF_VAR_*`, a TFC workspace or variable-set variable) > `config/landing-zone.yaml` > the root's built-in default. Existing tfvars keep working unchanged.
 - **Single source:** `environments` (GCP roots and tfc-admin), `project_prefix`, `landing_zone_name`, `tfc_organization`, regions, the AWS account map and the workload-env → account-key mapping are no longer duplicated across roots.
 - **Fail fast:** a value that is still unset, or still an upstream placeholder (`my-org`, `REPLACE_WITH_*`, `@example.com` root emails), fails the plan. The error names the variable and the config key.
-- **Optional:** with no `config/landing-zone.yaml`, every root behaves as before. Each root's `landing_zone_config_path` variable points elsewhere, and `""` disables the lookup in local and test runs. In an HCP Terraform run the mandatory OPA policy accepts only null, `config/landing-zone.yaml` or `config/<estate>/landing-zone.yaml`.
+- **Optional:** with no `config/landing-zone.yaml`, every root behaves as before. Each root's `landing_zone_config_path` variable points elsewhere, and `""` disables the lookup in local and test runs. In an HCP Terraform run the mandatory OPA policy accepts only null (the default file) or `../../../config/landing-zone.yaml` or `../../../config/<estate>/landing-zone.yaml` (`../../` for `envs/saas` and `envs/tfc-admin`), relative to the root.
 - **Per-workspace overrides** still go in [`config/tfc-workspaces.yaml`](../../config/tfc-workspaces.example.yaml), which tfc-admin writes as workspace variables. Those win over the config file.
 
 ---

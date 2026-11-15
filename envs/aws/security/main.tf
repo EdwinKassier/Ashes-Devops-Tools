@@ -15,7 +15,11 @@ locals {
   # output existed (N-1, not yet re-applied) exposes the same keys as
   # individual outputs, so the read falls back to them; that fallback goes at
   # v1.0 with the individual outputs (UPGRADING.md).
-  org_remote = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
+  # Re-audit 7 CMP-1/CMP-2: regulated account keys from the aws-organization
+  # remote state (a workspace variable cannot change it), ORed with this
+  # root's config file for the log-archive lock mode.
+  contract_regulated_account_keys = try(tolist(local.org_remote.regulated_account_keys), [])
+  org_remote                      = local.read_organization ? try(data.terraform_remote_state.aws_organization[0].outputs.contract, data.terraform_remote_state.aws_organization[0].outputs) : null
   # The organization contract, whichever source supplied it, as one type (the
   # variable's). Fields this root needs are read strictly (a missing key fails
   # the plan); the rest default.
@@ -142,5 +146,19 @@ check "security_contact_set" {
   assert {
     condition     = length(local.notification_subscribers) > 0 && length(local.placeholder_subscribers) == 0
     error_message = "No real security notification subscriber is set (notifications.emails or aws_overrides.notification_subscribers): GuardDuty, Security Hub and break-glass alerts will fire without notifying anyone."
+  }
+}
+
+# Re-audit 7 review: the variable validation sees only this root's config
+# file; this precondition also follows the aws-organization contract.
+resource "terraform_data" "regulated_log_archive_lock" {
+  count = length(local.contract_regulated_account_keys) > 0 ? 1 : 0
+  input = coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE")
+
+  lifecycle {
+    precondition {
+      condition     = coalesce(try(var.aws_overrides.log_archive_object_lock_mode, null), "COMPLIANCE") == "COMPLIANCE"
+      error_message = "The aws-organization contract marks ${join(", ", local.contract_regulated_account_keys)} regulated, so aws_overrides.log_archive_object_lock_mode must stay COMPLIANCE."
+    }
   }
 }

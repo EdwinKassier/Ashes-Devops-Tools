@@ -1710,7 +1710,7 @@ side (all mock-tested, secure defaults):
   depend on how python-hcl2 (pinned with hashes) renders the expressions; a
   python-hcl2 upgrade can need them refreshed. A workspace variable can still
   point the loader at another estate file: the mandatory OPA policy accepts
-  only `config/landing-zone.yaml` or `config/<estate>/landing-zone.yaml`
+  only `../../../config/landing-zone.yaml` or `../../../config/<estate>/landing-zone.yaml` (`../../` for `envs/saas` and `envs/tfc-admin`), relative to the root
   (never a test fixture, the example or `""`), but cannot tell one estate's
   file from another's. gcp-workload also reads `compliance_class` from the
   gcp-projects contract, and gcp-projects and gcp-organization refuse an
@@ -1726,7 +1726,12 @@ side (all mock-tested, secure defaults):
   under `path.module` (re-audit 5 SEC-2); OPA sees only the references of
   that path, not `../` segments after `path.module`, and does not constrain
   `output_path`, so the scanner is the control for both. The Google and AWS
-  token data sources are refused. OPA cannot see function calls at all.
+  token data sources are refused. Resource arguments that upload a runner path
+  (`path_reading_attributes`, re-audit 7) must hold a path under
+  `path.module`; the list follows the provider schemas and needs a re-check
+  on every provider upgrade, and OPA sees only the references of such a path,
+  so a `../` after `path.module` is the scanner's to catch. OPA cannot see
+  function calls at all.
 - **Workload SAs keep `workloadIdentityPoolAdmin` (SEC-10).** app-services
   needs it to create the app-deploy pool. `custom.wifProviderTenantPinned` pins
   each GitHub provider condition to the owner. The mandatory OPA policy

@@ -416,3 +416,29 @@ run "iam_bindings_unchanged_with_export_on" {
     error_message = "Turning the export on must not add or remove an IAM binding."
   }
 }
+
+# Re-audit 7 IAC-1: the primary org audit sink exports every child's audit
+# logs into the audit bucket. include_children = false would stop every
+# project's logs reaching the WORM store.
+run "org_audit_sink_covers_every_project" {
+  command = plan
+
+  variables {
+    org_id = "123456789"
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_audit_sink[0].include_children == true
+    error_message = "The org audit sink must include every child resource (include_children = true)."
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_audit_sink[0].filter == "logName:cloudaudit.googleapis.com" && google_logging_organization_sink.org_audit_sink[0].org_id == "123456789"
+    error_message = "The org audit sink must export every Cloud Audit Log of the organization."
+  }
+
+  assert {
+    condition     = google_logging_organization_sink.org_audit_sink[0].destination == "storage.googleapis.com/${google_storage_bucket.audit_logs.name}"
+    error_message = "The org audit sink must write to this module's audit bucket."
+  }
+}
