@@ -196,7 +196,7 @@ environment, not at repository level, and restrict the environment's deployment 
 | `docs-bot` | `DOCS_BOT_PAT` (optional) | `main` only | `documentation.yml` |
 | `tfc-state-backup` | `TFC_TOKEN_STATE_BACKUP` | `main` only | `state-backup.yml` |
 | `tfc-audit-trail` | `TFC_TOKEN_AUDIT_TRAIL` | `main` only | `tfc-audit-trail.yml` |
-| `tfc-readonly` | `TFC_TOKEN`, `TFC_TOKEN_GUARDRAILS` | tags `gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
+| `tfc-readonly` | `TFC_TOKEN`, `TFC_TOKEN_GUARDRAILS` | tags `gcp-bootstrap/v*`, `gcp-organization/v*`, `gcp-guardrails/v*`, `gcp-projects/v*`, `gcp-network-hub/v*`, `gcp-workload/*/v*`, `aws-*/v*`, `aws-workload/*/v*`, `saas/*/v*`, `tfc-admin/v*` | `terraform-apply.yml` |
 | `e2e-sandbox` | none (OIDC only) | `main`, plus PR branches if you use the `e2e` label. **Required reviewers: yes** (at least one, prevent self-review) | `sandbox-e2e.yml` |
 
 ```bash
@@ -220,17 +220,23 @@ who tags a branch commit controls the job that holds `TFC_TOKEN`. `terraform-app
 verifier from the default branch, keeps the token in the one `curl` step, and fails when the
 tagged commit is not on the default branch, but a writer can edit those checks on the branch
 commit. The control is a repository ruleset on tags that limits who can create, update and
-delete the deployment tags (`gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*`) to the
-release maintainers:
+delete the deployment tags to the release maintainers. The patterns below are the
+`on.push.tags` list of `terraform-apply.yml`; `*` does not cross `/`, so the workload tags
+(`gcp-workload/<env>/v*`, `aws-workload/<env>/v*`) are listed on their own.
+`scripts/check-tag-patterns.py` (run by `make consistency`) fails when this list, the
+`tfc-readonly` row above or `BRANCH_PROTECTION.md` drifts from the workflow:
 
 ```bash
 gh api -X POST "repos/$repo/rulesets" --input - <<'JSON'
 {"name": "deployment-tags", "target": "tag", "enforcement": "active",
- "conditions": {"ref_name": {"include": ["refs/tags/gcp-*/v*", "refs/tags/aws-*/v*",
-   "refs/tags/saas/*/v*", "refs/tags/tfc-admin/v*"], "exclude": []}},
- "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}],
+ "conditions": {"ref_name": {"include": ["refs/tags/gcp-bootstrap/v*", "refs/tags/gcp-organization/v*", "refs/tags/gcp-guardrails/v*", "refs/tags/gcp-projects/v*", "refs/tags/gcp-network-hub/v*", "refs/tags/gcp-workload/*/v*", "refs/tags/aws-*/v*", "refs/tags/aws-workload/*/v*", "refs/tags/saas/*/v*", "refs/tags/tfc-admin/v*"], "exclude": []}},
+ "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}, {"type": "non_fast_forward"}],
  "bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always"}]}
 JSON
+# The tfc-readonly environment admits the same tags, one policy per pattern.
+for p in 'gcp-bootstrap/v*' 'gcp-organization/v*' 'gcp-guardrails/v*' 'gcp-projects/v*' 'gcp-network-hub/v*' 'gcp-workload/*/v*' 'aws-*/v*' 'aws-workload/*/v*' 'saas/*/v*' 'tfc-admin/v*'; do
+  gh api -X POST "repos/$repo/environments/tfc-readonly/deployment-branch-policies" -f name="$p" -f type=tag
+done
 ```
 
 `actor_id` 5 is the built-in admin role; use a maintainers team instead where you have one.

@@ -69,9 +69,10 @@ The following resources are created:
 
 
 - resource.aws_db_subnet_group.this (modules/aws/data/rds-aurora/main.tf#L38)
-- resource.aws_rds_cluster.this (modules/aws/data/rds-aurora/main.tf#L47)
-- resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L101)
-- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L147)
+- resource.aws_rds_cluster.this (modules/aws/data/rds-aurora/main.tf#L70)
+- resource.aws_rds_cluster_instance.this (modules/aws/data/rds-aurora/main.tf#L125)
+- resource.aws_rds_cluster_parameter_group.this (modules/aws/data/rds-aurora/main.tf#L48)
+- resource.terraform_data.deletion_guard (modules/aws/data/rds-aurora/main.tf#L171)
 
 
 ## Inputs
@@ -87,6 +88,7 @@ The following resources are created:
 | <a name="input_database_name"></a> [database\_name](#input\_database\_name) | Name of the initial database created in the cluster. | `string` | `"app"` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Deprecated: use enable\_deletion\_protection. Removed in v1.0. | `bool` | `null` | no |
 | <a name="input_enable_deletion_protection"></a> [enable\_deletion\_protection](#input\_enable\_deletion\_protection) | Whether the cluster is protected from deletion. Secure default is true.<br/><br/>When true, the cluster's AWS-side deletion\_protection is set and a<br/>terraform\_data guard with prevent\_destroy is created. The guard is replaced<br/>whenever the cluster would be replaced, so Terraform refuses any plan that<br/>destroys or replaces the cluster. Setting this to false while the guard<br/>exists is also refused. To intentionally destroy or replace a protected<br/>cluster, first run:<br/>  terraform state rm 'module.<name>.terraform\_data.deletion\_guard[0]'<br/>then set this to false and apply.<br/><br/>Null (default) uses the deprecated deletion\_protection input, else true. | `bool` | `null` | no |
+| <a name="input_enable_force_ssl"></a> [enable\_force\_ssl](#input\_enable\_force\_ssl) | Attach a cluster parameter group with rds.force\_ssl = 1, so the cluster refuses unencrypted client connections. Default true. The parameter applies at the next reboot (apply\_method pending-reboot); an existing cluster shows an in-place parameter group change. | `bool` | `true` | no |
 | <a name="input_enable_org_backup"></a> [enable\_org\_backup](#input\_enable\_org\_backup) | Tag the cluster backup = true so the organization BACKUP\_POLICY (aws-backup) backs it up daily, next to the RDS automated backups. Default true. For cross-account copy to the central copy vault the kms\_key\_id key policy must also let the backup account use the key. | `bool` | `true` | no |
 | <a name="input_enable_serverless_v2"></a> [enable\_serverless\_v2](#input\_enable\_serverless\_v2) | Whether to run the cluster as Aurora Serverless v2 (engine\_mode provisioned + serverlessv2\_scaling\_configuration, instances use db.serverless). | `bool` | `false` | no |
 | <a name="input_enabled_cloudwatch_logs_exports"></a> [enabled\_cloudwatch\_logs\_exports](#input\_enabled\_cloudwatch\_logs\_exports) | Log types to export to CloudWatch Logs (e.g. postgresql). | `list(string)` | <pre>[<br/>  "postgresql"<br/>]</pre> | no |

@@ -16,6 +16,17 @@ variables {
 run "secure_defaults" {
   command = plan
 
+  # Re-audit 5 CMP-2: TLS is required by default through a cluster parameter
+  # group with rds.force_ssl = 1, in the engine's major-version family.
+  assert {
+    condition = (
+      length(aws_rds_cluster_parameter_group.this) == 1 &&
+      aws_rds_cluster_parameter_group.this[0].family == "aurora-postgresql${split(".", var.engine_version)[0]}" &&
+      anytrue([for p in aws_rds_cluster_parameter_group.this[0].parameter : p.name == "rds.force_ssl" && p.value == "1"])
+    )
+    error_message = "The cluster must get a parameter group with rds.force_ssl = 1 by default."
+  }
+
   assert {
     condition     = aws_rds_cluster.this.engine == "aurora-postgresql"
     error_message = "cluster must use the aurora-postgresql engine."
@@ -189,5 +200,18 @@ run "enable_deletion_protection_wins_over_the_deprecated_alias" {
   assert {
     condition     = aws_rds_cluster.this.deletion_protection == true && length(terraform_data.deletion_guard) == 1
     error_message = "enable_deletion_protection = true must win over the deprecated deletion_protection = false."
+  }
+}
+
+run "force_ssl_can_be_disabled" {
+  command = plan
+
+  variables {
+    enable_force_ssl = false
+  }
+
+  assert {
+    condition     = length(aws_rds_cluster_parameter_group.this) == 0
+    error_message = "enable_force_ssl = false must create no parameter group."
   }
 }

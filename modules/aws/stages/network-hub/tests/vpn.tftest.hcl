@@ -349,6 +349,7 @@ run "onprem_prefix_overlapping_a_spoke_fails" {
 
   variables {
     enable_vpn = true
+    top_cidr   = "100.64.0.0/10" # the spoke sits inside top_cidr
     vpn        = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["100.64.0.0/12"] }
     spoke_attachments = {
       dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "100.70.0.0/16" }
@@ -418,8 +419,8 @@ run "firewall_passes_onprem_prefixes" {
   }
 
   assert {
-    condition     = tolist(local.firewall_internal_pass_cidrs) == tolist(["192.168.0.0/16", "172.20.0.0/14"])
-    error_message = "the firewall internal pass ranges must be the VPN on-premises prefixes plus the extra ranges, without duplicates"
+    condition     = tolist(local.firewall_internal_pass_cidrs) == tolist(["10.0.0.0/16", "10.1.0.0/16", "192.168.0.0/16", "172.20.0.0/14"])
+    error_message = "the firewall shared ranges must be the hub VPCs, the VPN on-premises prefixes and the extra ranges, without duplicates"
   }
 }
 
@@ -427,7 +428,7 @@ run "firewall_internal_pass_ranges_empty_without_vpn" {
   command = plan
 
   assert {
-    condition     = length(local.firewall_internal_pass_cidrs) == 0
-    error_message = "without the VPN or extra ranges the firewall passes HOME_NET to HOME_NET only"
+    condition     = tolist(local.firewall_internal_pass_cidrs) == tolist(["10.0.0.0/16", "10.1.0.0/16"]) && length(local.firewall_internal_segments["prod"]) == 0 && length(local.firewall_internal_segments["nonprod"]) == 0
+    error_message = "without the VPN, extra ranges or spokes the firewall passes only HOME_NET to and from the hub VPCs"
   }
 }

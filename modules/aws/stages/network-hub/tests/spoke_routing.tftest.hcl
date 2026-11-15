@@ -325,7 +325,7 @@ run "starter_segments_blackhole_each_others_spokes" {
 }
 
 run "spoke_without_cidr_is_not_isolated" {
-  command = apply
+  command = plan
 
   variables {
     spoke_attachments = {
@@ -339,7 +339,7 @@ run "spoke_without_cidr_is_not_isolated" {
     error_message = "Only spokes with a cidr can be blackholed."
   }
 
-  expect_failures = [check.segments_isolated]
+  expect_failures = [terraform_data.segments_isolated]
 }
 
 run "spoke_cidr_must_be_a_cidr" {
@@ -352,4 +352,22 @@ run "spoke_cidr_must_be_a_cidr" {
   }
 
   expect_failures = [var.spoke_attachments]
+}
+
+# Re-audit 5 ARC-1: the firewall passes spokes to spokes within a segment only.
+run "firewall_segments_follow_the_spokes" {
+  command = plan
+
+  variables {
+    spoke_attachments = {
+      prod    = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "prod", cidr = "10.80.0.0/16" }
+      dev     = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.72.0.0/16" }
+      staging = { attachment_id = "tgw-attach-0aaaaaaaaaaaaaaaa", segment = "nonprod", cidr = "10.73.0.0/16" }
+    }
+  }
+
+  assert {
+    condition     = tolist(local.firewall_internal_segments["prod"]) == tolist(["10.80.0.0/16"]) && tolist(local.firewall_internal_segments["nonprod"]) == tolist(["10.72.0.0/16", "10.73.0.0/16"])
+    error_message = "each segment's firewall pass rule must hold exactly that segment's spoke CIDRs"
+  }
 }

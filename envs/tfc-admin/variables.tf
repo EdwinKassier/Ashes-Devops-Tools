@@ -75,6 +75,15 @@ variable "environments" {
     condition     = (var.environments == null || var.environments != null) && length(local.cfg.regulated_not_production) == 0
     error_message = "A regulated environment must set is_production: true, so it gets every production control (CMP-1). Set is_production: true on: ${join(", ", local.cfg.regulated_not_production)} (config/landing-zone.yaml), or set compliance_class: standard."
   }
+
+  validation {
+    # Re-audit 5 CMP-3: an explicit environments map (a TFC variable no review
+    # sees) must not mark a regulated environment non-production either.
+    condition = var.environments == null || alltrue([
+      for k in local.cfg.regulated_keys : try(var.environments[k].is_production, true) == true
+    ])
+    error_message = "environments sets is_production = false on a regulated environment (compliance_class: regulated in config/landing-zone.yaml): ${join(", ", [for k in local.cfg.regulated_keys : k if try(var.environments[k].is_production, true) != true])}. A regulated environment must be production."
+  }
 }
 
 variable "enable_gcp" {

@@ -42,6 +42,29 @@ resource "aws_db_subnet_group" "this" {
   tags = var.tags
 }
 
+# ── TLS in transit ────────────────────────────────────────────────────────────
+# Re-audit 5 CMP-2: rds.force_ssl = 1 refuses unencrypted client connections.
+# A cluster parameter group per cluster, family from the engine major version.
+resource "aws_rds_cluster_parameter_group" "this" {
+  count = var.enable_force_ssl ? 1 : 0
+
+  name_prefix = "${var.name}-"
+  family      = "aurora-postgresql${split(".", var.engine_version)[0]}"
+  description = "${var.name}: require TLS (rds.force_ssl = 1)"
+
+  parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+
+  tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 # ── Cluster ───────────────────────────────────────────────────────────────────
 
 resource "aws_rds_cluster" "this" {
@@ -62,9 +85,10 @@ resource "aws_rds_cluster" "this" {
   master_password_wo         = var.manage_master_user_password ? null : var.master_password
   master_password_wo_version = var.manage_master_user_password ? null : var.master_password_version
 
-  db_subnet_group_name   = aws_db_subnet_group.this.name
-  vpc_security_group_ids = var.security_group_ids
-  port                   = var.port
+  db_subnet_group_name            = aws_db_subnet_group.this.name
+  db_cluster_parameter_group_name = var.enable_force_ssl ? aws_rds_cluster_parameter_group.this[0].name : null
+  vpc_security_group_ids          = var.security_group_ids
+  port                            = var.port
 
   # Encryption at rest with a required customer-managed key.
   storage_encrypted = true

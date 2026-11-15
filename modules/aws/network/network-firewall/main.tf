@@ -9,17 +9,24 @@
 #
 #   priority 100+  AWS-managed threat rule groups (var.managed_rule_groups) —
 #                  attack infrastructure, malware and botnet C2 domains. These
-#                  drop known-bad traffic before any allow rule can pass it.
+#                  drop known-bad external traffic before any allow rule can
+#                  pass it. A flow that the internal pass group passes on its
+#                  first packet is not inspected further, so they do not see
+#                  the rest of an internal or hybrid flow.
 #   priority 1000  optional custom Suricata rules (var.suricata_rules). They run
 #                  before the internal pass group, so an adopter can drop a
 #                  specific internal flow here.
 #   priority 1500  internal pass group (var.enable_internal_pass, default on):
-#                  passes HOME_NET to HOME_NET (spoke to the central endpoints,
-#                  the Resolver and other spokes; prod/nonprod isolation is
-#                  the transit gateway's blackhole routes) and HOME_NET to and
-#                  from var.internal_pass_cidrs (on-premises). Without it a
-#                  fail-closed policy drops all of that traffic, because the
-#                  ALLOWLIST rules match only HOME_NET -> EXTERNAL_NET.
+#                  passes HOME_NET to and from var.internal_pass_cidrs (the
+#                  hub VPCs and on-premises) and, for each entry of
+#                  var.internal_segments, that segment's CIDRs to each other.
+#                  It never passes HOME_NET to HOME_NET, so traffic between
+#                  segments (prod to nonprod) still meets the default action:
+#                  the firewall stays a second isolation layer behind the
+#                  transit gateway blackholes (re-audit 5 ARC-1). Without the
+#                  group a fail-closed policy drops all internal traffic,
+#                  because the ALLOWLIST rules match only HOME_NET ->
+#                  EXTERNAL_NET.
 #   priority 2000  optional egress domain allowlist (HTTP_HOST + TLS_SNI) —
 #                  generated ALLOWLIST rules pass the listed domains and DROP all
 #                  other HTTP/TLS flows from HOME_NET.
@@ -55,15 +62,22 @@ locals {
 
   create_custom_rules = var.enable_network_firewall && trimspace(var.suricata_rules) != ""
   create_allowlist    = var.enable_network_firewall && length(var.egress_domain_allowlist) > 0
-  create_internal     = var.enable_network_firewall && var.enable_internal_pass
+  # Segments with at least one CIDR, in a stable (sorted key) order.
+  internal_segments = { for k in sort(keys(var.internal_segments)) : k => var.internal_segments[k] if length(var.internal_segments[k]) > 0 }
+  create_internal = var.enable_network_firewall && var.enable_internal_pass && (
+    length(var.internal_pass_cidrs) > 0 || length(local.internal_segments) > 0
+  )
 
-  # Suricata IP list for the extra internal ranges, e.g. [192.168.0.0/16,172.16.0.0/12].
+  # Suricata IP lists, e.g. [10.65.0.0/16,192.168.0.0/16].
   internal_peer_list = "[${join(",", var.internal_pass_cidrs)}]"
   internal_pass_rules = join("\n", concat(
-    ["pass ip $HOME_NET any -> $HOME_NET any (msg:\"landing zone internal: HOME_NET to HOME_NET\"; sid:1; rev:1;)"],
     length(var.internal_pass_cidrs) == 0 ? [] : [
-      "pass ip $HOME_NET any -> ${local.internal_peer_list} any (msg:\"landing zone internal: HOME_NET to internal peers\"; sid:2; rev:1;)",
-      "pass ip ${local.internal_peer_list} any -> $HOME_NET any (msg:\"landing zone internal: internal peers to HOME_NET\"; sid:3; rev:1;)",
+      "pass ip $HOME_NET any -> ${local.internal_peer_list} any (msg:\"landing zone internal: HOME_NET to shared ranges\"; sid:1; rev:1;)",
+      "pass ip ${local.internal_peer_list} any -> $HOME_NET any (msg:\"landing zone internal: shared ranges to HOME_NET\"; sid:2; rev:1;)",
+    ],
+    [
+      for i, k in keys(local.internal_segments) :
+      "pass ip [${join(",", local.internal_segments[k])}] any -> [${join(",", local.internal_segments[k])}] any (msg:\"landing zone internal: segment ${k}\"; sid:${10 + i}; rev:1;)"
     ],
   ))
 

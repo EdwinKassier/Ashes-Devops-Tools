@@ -89,12 +89,19 @@ resource "aws_ec2_transit_gateway_route" "segment_isolation" {
   blackhole                      = true
 }
 
-check "segments_isolated" {
-  assert {
-    condition = !(
-      contains([for s in values(var.spoke_attachments) : s.segment], "prod") &&
-      contains([for s in values(var.spoke_attachments) : s.segment], "nonprod")
-    ) || alltrue([for s in values(var.spoke_attachments) : s.cidr != null])
-    error_message = "prod and nonprod spokes are both attached but some spoke_attachments have no cidr, so their segments can reach each other. Set aws.workload_environments.<env>.vpc_cidr (the root copies it) or spoke_attachments.<key>.cidr."
+# Re-audit 5 ARC-1: with prod and nonprod spokes attached, a spoke without a
+# cidr gets no blackhole, so the plan fails instead of warning.
+resource "terraform_data" "segments_isolated" {
+  count = (
+    contains([for s in values(var.spoke_attachments) : s.segment], "prod") &&
+    contains([for s in values(var.spoke_attachments) : s.segment], "nonprod")
+  ) ? 1 : 0
+  input = sort([for k, s in var.spoke_attachments : k if s.cidr == null])
+
+  lifecycle {
+    precondition {
+      condition     = alltrue([for s in values(var.spoke_attachments) : s.cidr != null])
+      error_message = "prod and nonprod spokes are both attached but ${join(", ", sort([for k, s in var.spoke_attachments : k if s.cidr == null]))} ${length([for k, s in var.spoke_attachments : k if s.cidr == null]) == 1 ? "has" : "have"} no cidr, so no blackhole keeps the segments apart. Set aws.workload_environments.<env>.vpc_cidr (the root copies it when the spoke key is the environment name) or spoke_attachments.<key>.cidr."
+    }
   }
 }

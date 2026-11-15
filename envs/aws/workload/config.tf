@@ -31,6 +31,9 @@ locals {
     # Production flags (is_production is required on every entry). The
     # environment name is never read.
     workload_is_production = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tobool(e.is_production) if try(tobool(e.is_production), null) != null }
+    # compliance_class per environment (re-audit 5 CMP-2/CMP-3): regulated
+    # environments refuse plaintext ingress and the production overrides.
+    workload_compliance_class = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.compliance_class) if try(e.compliance_class, null) != null }
     # Data sensitivity per environment (DataClassification default tag).
     workload_data_classification = { for env, e in try({ for k, v in local.lz.aws.workload_environments : k => v }, {}) : env => tostring(e.data_classification) if try(e.data_classification, null) != null }
     # Availability zone IDs (azs.tf): per environment, else the hub's
@@ -84,6 +87,14 @@ locals {
   # Production: explicit variable > aws.workload_environments.<env>.is_production
   # > false. Production turns ECS autoscaling on by default.
   is_production = coalesce(var.is_production, try(local.cfg.workload_is_production[local.environment], null), false)
+  # compliance_class: aws.workload_environments.<env>.compliance_class, else
+  # standard. Also regulated when the target account belongs to a regulated
+  # environment, so a renamed environment cannot drop the class (second
+  # re-audit 5 review).
+  regulated = try(local.cfg.workload_compliance_class[local.environment], "standard") == "regulated" || contains([
+    for env, cc in local.cfg.workload_compliance_class : try(local.cfg.workload_account_keys[env], null)
+    if cc == "regulated"
+  ], local.workload_account_key)
 
   # DataClassification tag: explicit variable > aws.workload_environments.<env>
   # .data_classification > internal.

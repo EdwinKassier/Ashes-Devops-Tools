@@ -375,6 +375,9 @@ echo "==> Production is decided by is_production only (scripts/check-production-
 echo "==> tfc-admin and tfc_admin_guard refuse the same code-execution env vars (scripts/check-env-pattern-sync.sh)"
 ./scripts/check-env-pattern-sync.sh >/dev/null || note "code_exec_env_pattern (envs/tfc-admin/main.tf) and steering_env_pattern (policies/opa-destructive/tfc_admin_guard.rego) list different env vars"
 
+echo "==> Deployment-tag patterns agree between terraform-apply.yml and its rulesets (scripts/check-tag-patterns.py)"
+python3 -I scripts/check-tag-patterns.py >/dev/null || note "a documented deployment-tag ruleset or tfc-readonly policy differs from terraform-apply.yml on.push.tags (run python3 scripts/check-tag-patterns.py)"
+
 echo "==> check-jsonschema pin agrees across CI, setup.sh and pre-commit"
 cj_ci="$(grep -oE 'check-jsonschema==[0-9.]+' .github/workflows/terraform-plan.yml | head -1 | cut -d= -f3)"
 cj_pc="$(awk '/check-jsonschema$/{f=1} f && /rev:/{print $2; exit}' .pre-commit-config.yaml)"

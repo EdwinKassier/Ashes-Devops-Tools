@@ -423,6 +423,35 @@ run "config_environment_without_is_production_fails" {
   expect_failures = [var.environments]
 }
 
+# Re-audit 5 CMP-3: an explicit environments map cannot mark a regulated
+# environment non-production.
+run "environments_override_cannot_unmark_regulated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    environments = {
+      dev = { is_production = false, aws_account_key = "workload_dev" }
+      pci = { is_production = false, aws_account_key = "workload_pci" }
+    }
+  }
+
+  expect_failures = [var.environments]
+}
+
+run "regulated_config_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+  }
+
+  assert {
+    condition     = local.cfg.regulated_keys == tolist(["pci"])
+    error_message = "the regulated keys of both clouds must be read from the config file."
+  }
+}
+
 # CMP-1: a regulated environment (either cloud) must be is_production: true.
 run "regulated_environment_not_production_fails" {
   command = plan

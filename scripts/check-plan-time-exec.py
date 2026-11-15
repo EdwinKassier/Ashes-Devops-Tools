@@ -16,6 +16,8 @@ time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
     removed blocks, so the policy cannot see these);
   - a data or ephemeral block whose type is on the policy's exec_data_types
     (external, http, aws_lambda_invocation), top-level or inside a check block;
+  - an archive_file whose source is not a literal source_file under
+    path.module (re-audit 5 SEC-2: it can zip /proc/self/environ);
   - an ephemeral block whose type is not on allowed_ephemeral_types (the plan
     JSON does not render ephemeral blocks, so this is the only layer that sees
     one that nothing references);
@@ -46,7 +48,7 @@ time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
     that is not under path.module / path.root or leaves the repository, a
     path built by a function or expression, and (SEC-1) a path that is a
     reference or holds an interpolation, except the reviewed config loaders
-    on FILE_REFERENCE_ALLOW (a reference's value is not known here, so
+    on FILE_READERS (a reference's value is not known here, so
     file(var.x) with x = /proc/self/environ would read the runner's
     environment);
   - elsewhere, a module source that is neither local nor this repository's
@@ -138,16 +140,69 @@ FILE_ARG_REFERENCE = re.compile(
     r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[[^\[\]()]*\])*\s*[,)]"
 )
 # SEC-1: the reviewed file readers whose path is a reference or holds an
-# interpolation. The roots' config loaders read landing_zone_config_path,
-# whose validation allows only a relative .yaml path inside the repository;
-# tfc-admin reads workspace_variables_file (same rule); gcp-workload reads
-# examples/presets/<name>.yaml for preset names that match ^[a-z0-9-]+$.
-# Each entry: (file regex, function, argument or literal path).
-FILE_REFERENCE_ALLOW = (
-    (re.compile(r"^(?:envs/(?:aws/|gcp/)?[a-z-]+|templates/[a-z/-]+)/config\.tf$"), "file", "f"),
-    (re.compile(r"^envs/tfc-admin/main\.tf$"), "file", "local.workspace_variables_file_path"),
-    (re.compile(r"^envs/gcp/workload/config\.tf$"), "file",
-     '"${path.root}/../../../examples/presets/${n}.yaml"'),
+# interpolation. Re-audit 5 showed that matching the call text is not enough
+# (file(f) with f bound to /proc/self/environ passed), so each reader is pinned
+# to its whole expression, the locals that bind its path, and the validations
+# of the variable it reads. python-hcl2 (pinned with hashes) renders each
+# expression as below; any other text, or a second definition, fails.
+#   - every root's config loader (envs/** and templates/** config.tf): reads
+#     landing_zone_config_path, which may only be a relative .yaml path that
+#     stays in the repository;
+#   - tfc-admin's workspace_variables_file reader (relative .yaml only);
+#   - gcp-workload's preset loader (names must match ^[a-z0-9-]+$).
+_LZF = ('${var.landing_zone_config_path == "" ? null : (var.landing_zone_config_path == null ? '
+        '"${path.root}/%s/config/landing-zone.yaml" : (startswith(var.landing_zone_config_path, "/") ? '
+        'var.landing_zone_config_path : "${path.root}/${var.landing_zone_config_path}"))}')
+# The exact validation conditions (python-hcl2 renders null as None). A
+# condition that merely contains these checks (true || ...) does not match.
+_YAML_RE = 'can(regex("^[A-Za-z0-9_./-]+\\\\.ya?ml$", coalesce(%s, "x")))'
+_LZP_SHAPE = ('${var.landing_zone_config_path == None || var.landing_zone_config_path == "" || ('
+              + _YAML_RE % "var.landing_zone_config_path"
+              + ' && !startswith(coalesce(var.landing_zone_config_path, "x"), "/") && length([for s in '
+              'split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) '
+              '<= %d)}')
+_WVF_SHAPE = ('${var.workspace_variables_file == None || ('
+              + _YAML_RE % "var.workspace_variables_file"
+              + ' && !startswith(coalesce(var.workspace_variables_file, "x"), "/"))}')
+_ESCAPE = ('${startswith(coalesce(%s, "/"), "/") || !(dirname("./${coalesce(%s, "x")}/_") == ".." || '
+           'dirname("./${coalesce(%s, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(%s, "x")}/_"), '
+           '"../../../") || (startswith(dirname("./${coalesce(%s, "x")}/_"), "../") && '
+           '!startswith(dirname("./${coalesce(%s, "x")}/_"), "../../")))}')
+FILE_READERS = (
+    {
+        "path": re.compile(r"^(?:envs/(?:aws/|gcp/)?[a-z-]+|templates/[a-z/-]+)/config\.tf$"),
+        "carrier": ("lz_documents",
+                    '${[for f in compact([${local.landing_zone_config_file != None && '
+                    'fileexists(coalesce(local.landing_zone_config_file, "/nonexistent")) ? '
+                    'local.landing_zone_config_file : ""}]) : yamldecode(file(f))]}'),
+        # Depth-tied (re-audit 5 review): a root at depth d may climb d levels
+        # only, so a depth-2 root cannot take the depth-3 shape.
+        "pins": {"landing_zone_config_file": lambda d: {_LZF % "/".join([".."] * d)}},
+        "var": ("landing_zone_config_path", lambda d: [{_LZP_SHAPE % d}]),
+    },
+    {
+        "path": re.compile(r"^envs/tfc-admin/main\.tf$"),
+        "carrier": ("workspace_variables_file_raw",
+                    '${local.workspace_variables_file_present ? '
+                    'yamldecode(file(local.workspace_variables_file_path)) : {}}'),
+        "pins": {
+            "workspace_variables_file_path": {
+                '${var.workspace_variables_file == null ? null : (startswith(var.workspace_variables_file, "/") ? '
+                'var.workspace_variables_file : "${path.root}/${var.workspace_variables_file}")}'},
+            "workspace_variables_file_present": {
+                '${local.workspace_variables_file_path != None && '
+                'fileexists(coalesce(local.workspace_variables_file_path, "/nonexistent"))}'},
+        },
+        "var": ("workspace_variables_file", [{_WVF_SHAPE}, {_ESCAPE % (("var.workspace_variables_file",) * 6)}]),
+    },
+    {
+        "path": re.compile(r"^envs/gcp/workload/config\.tf$"),
+        "carrier": ("preset_documents",
+                    '${[for n in local.preset_names : yamldecode(file("${path.root}/../../../examples/'
+                    'presets/${n}.yaml")) if can(regex("^[a-z0-9-]+$", n))]}'),
+        "pins": {},
+        "var": None,
+    },
 )
 # path.module and path.root are safe references (fileset's first argument).
 SAFE_FILE_REFERENCES = {"path.module", "path.root"}
@@ -424,7 +479,7 @@ def credential_problem(value, allowed: list, pol: dict, dir_vars: dict) -> str |
 
 
 def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_dir: str,
-              dir_vars: dict | None = None) -> list[str]:
+              dir_vars: dict | None = None, dir_locals: dict | None = None) -> list[str]:
     dir_vars = dir_vars or {}
     out: list[str] = []
 
@@ -453,6 +508,8 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
         if kind in ("data", "ephemeral") and rtype in pol["exec_data_types"]:
             out.append(f'{rel}: {kind} "{rtype}" "{name}" runs code or calls out at plan time '
                        "with the workspace's credentials and environment")
+        if rtype == "archive_file" and kind in ("data", "resource"):
+            out += archive_problems(rel, name, body)
         if kind == "ephemeral" and rtype not in pol["ephemeral"]:
             out.append(f'{rel}: ephemeral "{rtype}" "{name}" is not on allowed_ephemeral_types '
                        "(an ephemeral resource runs provider code during the plan and the apply; "
@@ -521,7 +578,7 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
             if why:
                 out.append(f'{rel}: variable "{vname}": {why}')
 
-    out += file_function_problems(rel, doc)
+    out += file_function_problems(rel, doc, dir_locals, dir_vars)
     out += override_problems(rel, doc)
     return out
 
@@ -559,6 +616,25 @@ def string_literal(text: str, start: int) -> str | None:
     return None
 
 
+ARCHIVE_SOURCE = re.compile(r"^\$\{path\.module\}/[A-Za-z0-9_./-]+$")
+
+
+def archive_problems(rel: str, name: str, body: dict) -> list[str]:
+    """Re-audit 5 SEC-2: archive_file reads any runner file into a zip that
+    filebase64() can return; only a literal source_file under path.module that
+    stays in the repository is allowed."""
+    where = f'{rel}: archive_file "{name}"'
+    extra = sorted(set(map(str, body)) & {"source_dir", "source", "source_content", "source_content_filename"})
+    if extra:
+        return [f"{where} sets {extra}; only source_file under path.module is allowed"]
+    src = body.get("source_file")
+    if not isinstance(src, str) or not ARCHIVE_SOURCE.match(src) or \
+            posixpath.normpath(posixpath.join(posixpath.dirname(rel), src[len("${path.module}"):].lstrip("/"))).startswith(".."):
+        return [f"{where} source_file must be a literal path under path.module in the repository, "
+                f"not {src!r} (it reads files on the runner at plan time)"]
+    return []
+
+
 def remote_state_config_problems(rel: str, name: str, config) -> list[str]:
     """SEC-2: a remote-state config must be an object literal with only the
     keys organization and workspaces, so a hostname (or token) cannot send
@@ -581,16 +657,91 @@ def remote_state_config_problems(rel: str, name: str, config) -> list[str]:
     return out
 
 
-def file_reference_allowed(rel: str, fn: str, arg: str) -> bool:
-    return any(pat.match(rel) and fn == afn and arg == aarg
-               for pat, afn, aarg in FILE_REFERENCE_ALLOW)
+TEMPLATE_CALL = re.compile(r"(?<![\w.])(?:file\w*|templatefile|templatestring)\s*\(")
+TEMPLATE_COMMENT = re.compile(r"/\*.*?\*/|#[^\n]*|//[^\n]*", re.S)
 
 
-def file_function_problems(rel: str, doc: dict) -> list[str]:
+def template_expressions(body: str) -> list[str] | None:
+    """The text of every ${...} and %{...} sequence of a template (where
+    functions can run), braces matched; None when one does not close."""
+    out, i = [], 0
+    while True:
+        starts = [x for x in (body.find("${", i), body.find("%{", i)) if x >= 0]
+        if not starts:
+            return out
+        i = min(starts)
+        if i > 0 and body[i - 1] == body[i]:  # $${ and %%{ are literal escapes
+            i += 2
+            continue
+        depth, j = 0, i + 1
+        while j < len(body):
+            depth += {"{": 1, "}": -1}.get(body[j], 0)
+            if depth == 0:
+                break
+            j += 1
+        if depth:
+            return None
+        out.append(body[i + 2:j])
+        i = j + 1
+
+
+def template_problems(rel: str, fn: str, lit: str, suffix: str) -> list[str]:
+    """Re-audit 5 review: a templatefile() template is code too. Terraform lets
+    a template call file(), so a .tftpl holding ${file("/proc/self/environ")}
+    reads the runner's environment. The template must exist in the repository
+    and call no file reader."""
+    path = ROOT / posixpath.normpath(posixpath.join(posixpath.dirname(rel), "." + suffix))
+    try:
+        body = path.read_text()
+    except (OSError, UnicodeDecodeError):
+        return [f'{rel}: {fn}("{lit}") reads a template this check cannot read; fail closed']
+    exprs = template_expressions(body)
+    if exprs is None:
+        return [f'{rel}: {fn}("{lit}") renders a template with an unclosed interpolation; fail closed']
+    # Comments are removed first: file/*x*/("...") is still a call.
+    if any(TEMPLATE_CALL.search(TEMPLATE_COMMENT.sub("", e)) for e in exprs):
+        return [f'{rel}: {fn}("{lit}") renders a template that calls a file reader '
+                "(file(), templatefile(), ...): it would read files on the runner"]
+    return []
+
+
+def reader_problems(rel: str, text: str, dir_locals: dict, dir_vars: dict) -> list[str] | None:
+    """None when text is the whole expression of a reviewed reader of rel and
+    its path bindings and variable validations are the reviewed ones; else
+    the reasons (an empty list is never returned)."""
+    for r in FILE_READERS:
+        name, canon = r["carrier"]
+        if not r["path"].match(rel) or text != canon:
+            continue
+        out = []
+        depth = rel.count("/")
+        pins = {k: (v(depth) if callable(v) else v) for k, v in r["pins"].items()}
+        for lname, allowed in [(name, {canon})] + list(pins.items()):
+            defs = dir_locals.get(lname, [])
+            if len(defs) != 1 or defs[0] not in allowed:
+                out.append(f"{rel}: local.{lname} is not the reviewed definition, so the path "
+                           f"that {name} reads is not pinned")
+        if r["var"]:
+            vname, groups = r["var"]
+            groups = groups(depth) if callable(groups) else groups
+            conds = {str(v.get("condition", "")) for v in blocks(dir_vars.get(vname, {}).get("validation"))}
+            for group in groups:
+                if not conds & group:
+                    out.append(f"{rel}: variable {vname} lacks the reviewed path validation "
+                               "(relative .yaml inside the repository), so "
+                               f"{name} could read a file on the runner")
+        return out or None
+    return ["not a reviewed reader"]
+
+
+def file_function_problems(rel: str, doc: dict, dir_locals: dict | None = None,
+                           dir_vars: dict | None = None) -> list[str]:
     """file(), templatefile() and the other file readers must read a literal
     path under path.module / path.root that stays in the repository and holds
     no interpolation. A reference, or an interpolated path, is allowed only
-    on FILE_REFERENCE_ALLOW (SEC-1)."""
+    for a reviewed reader on FILE_READERS whose whole expression, path locals
+    and variable validations match (SEC-1)."""
+    dir_locals, dir_vars = dir_locals or {}, dir_vars or {}
     out = []
     for text in all_strings(doc):
         for m in FILE_FUNCTION.finditer(text):
@@ -602,27 +753,35 @@ def file_function_problems(rel: str, doc: dict) -> list[str]:
                     if lit is not None and lit.startswith(prefix):
                         suffix = lit[len(prefix):]
                         rest = re.sub(r"\$\{[^}]*\}", "x", suffix)
-                if rest is None:
+                if rest is not None and lit.startswith("${path.root}") and rel.startswith("modules/") \
+                        and "/examples/" not in rel:
+                    out.append(f'{rel}: {fn}("{lit}") reads from path.root in a module: path.root is '
+                               "the calling root, which this check does not resolve; use path.module")
+                elif rest is None:
                     out.append(f'{rel}: {fn}("{lit}") reads a path that is not under path.module '
                                "or path.root (a file on the runner, such as /proc/self/environ, "
                                "would reach state or outputs)")
                 elif posixpath.normpath(posixpath.join(posixpath.dirname(rel), "." + rest)).startswith(".."):
                     out.append(f'{rel}: {fn}("{lit}") reads a path outside the repository')
-                elif "${" in suffix and not file_reference_allowed(rel, fn, f'"{lit}"'):
+                elif fn == "templatefile" and "${" not in suffix:
+                    out += template_problems(rel, fn, lit, suffix)
+                elif "${" in suffix and (why := reader_problems(rel, text, dir_locals, dir_vars)):
+                    out += why[1:] if why[0] == "not a reviewed reader" else why
                     out.append(f'{rel}: {fn}("{lit}") builds its path from an interpolation, which '
                                "can hold ../ and leave the repository; use a literal path, or add "
-                               "the reviewed reader to FILE_REFERENCE_ALLOW")
+                               "the reviewed reader to FILE_READERS")
             else:
                 ref = FILE_ARG_REFERENCE.match(text, at)
                 arg = ref.group(0)[:-1].strip() if ref else None
                 if ref is None:
                     out.append(f"{rel}: {fn}(...) reads a path built by a function or expression; use a "
                                "literal path under path.module or path.root")
-                elif arg not in SAFE_FILE_REFERENCES and not file_reference_allowed(rel, fn, arg):
+                elif arg not in SAFE_FILE_REFERENCES and (why := reader_problems(rel, text, dir_locals, dir_vars)):
+                    out += why[1:] if why[0] == "not a reviewed reader" else why
                     out.append(f"{rel}: {fn}({arg}) reads a path from a reference, whose value this "
                                "check cannot see (file(var.x) with x = /proc/self/environ reads the "
                                "runner's environment); use a literal path under path.module or "
-                               "path.root, or add the reviewed reader to FILE_REFERENCE_ALLOW")
+                               "path.root, or pin a reviewed reader in FILE_READERS")
     return out
 
 
@@ -746,12 +905,17 @@ def main() -> int:
     # required_providers are module-scoped: one map per directory.
     by_dir: dict[str, dict] = {}
     vars_by_dir: dict[str, dict] = {}
+    locals_by_dir: dict[str, dict] = {}
     for rel, doc in docs.items():
         by_dir.setdefault(posixpath.dirname(rel), {}).update(required_providers(doc))
         vars_by_dir.setdefault(posixpath.dirname(rel), {}).update(variable_blocks(doc))
+        dl = locals_by_dir.setdefault(posixpath.dirname(rel), {})
+        for block in blocks(doc.get("locals")):
+            for name, value in block.items():
+                dl.setdefault(str(name), []).append(value)
     for rel, doc in docs.items():
         d = posixpath.dirname(rel)
-        problems += check_doc(rel, doc, by_dir[d], pol, provisioner_dir, vars_by_dir[d])
+        problems += check_doc(rel, doc, by_dir[d], pol, provisioner_dir, vars_by_dir[d], locals_by_dir[d])
     problems += check_chain(docs, pol)
 
     for p in problems:

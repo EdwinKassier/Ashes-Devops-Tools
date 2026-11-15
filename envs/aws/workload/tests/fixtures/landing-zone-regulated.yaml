@@ -1,0 +1,15 @@
+# Test fixture: a regulated AWS workload environment (dev) on CloudFront VPC
+# origin ingress, which reaches the ALB over HTTP (app_golden_path.tftest.hcl,
+# re-audit 5 CMP-2/CMP-3).
+version: 1
+org:
+  name: cfgco
+  regions:
+    aws: eu-west-2
+  tfc:
+    organization: cfg-tfc
+aws:
+  workload_environments:
+    dev: {is_production: true, account_key: workload_dev, compliance_class: regulated}
+  workload:
+    app_ingress_mode: cloudfront_vpc_origin

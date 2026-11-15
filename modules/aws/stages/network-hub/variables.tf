@@ -214,19 +214,36 @@ variable "network_firewall_suricata_rules" {
 }
 
 variable "network_firewall_internal_pass" {
-  description = "Create the firewall's internal pass rule group: pass top_cidr to top_cidr (spokes to the central endpoints, the Resolver and other spokes) and top_cidr to and from the on-premises prefixes (vpn.onprem_cidrs when enable_vpn is true, plus network_firewall_internal_pass_cidrs). Default true. Under a fail-closed policy that traffic is dropped without it. Set false only when network_firewall_suricata_rules pass it instead."
+  description = "Create the firewall's internal pass rule group: every top_cidr address to and from the hub VPCs, the on-premises prefixes (vpn.onprem_cidrs when enable_vpn is true) and network_firewall_internal_pass_cidrs; and spokes to spokes of the same segment (spoke_attachments cidr). Prod to nonprod is never passed. Default true. Under a fail-closed policy internal traffic is dropped without it. Set false only when network_firewall_suricata_rules pass it instead."
   type        = bool
   default     = true
 }
 
 variable "network_firewall_internal_pass_cidrs" {
-  description = "Extra internal ranges outside top_cidr that the firewall passes in both directions (for example on-premises prefixes reached over Direct Connect). The vpn.onprem_cidrs prefixes are added automatically when enable_vpn is true. Empty (default) = none."
+  description = "Extra internal ranges outside top_cidr that the firewall passes in both directions (for example on-premises prefixes reached over Direct Connect). Private ranges only, and none may overlap top_cidr (that would pass traffic between segments). The vpn.onprem_cidrs prefixes are added automatically when enable_vpn is true. Empty (default) = none."
   type        = list(string)
   default     = []
 
   validation {
-    condition     = alltrue([for c in var.network_firewall_internal_pass_cidrs : can(cidrnetmask(c))])
-    error_message = "network_firewall_internal_pass_cidrs entries must be IPv4 CIDR blocks."
+    condition = alltrue([
+      for c in var.network_firewall_internal_pass_cidrs : can(cidrnetmask(c)) && anytrue([
+        for b in ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "198.18.0.0/15"] :
+        tonumber(split("/", c)[1]) >= tonumber(split("/", b)[1]) && cidrhost("${split("/", c)[0]}/${split("/", b)[1]}", 0) == cidrhost(b, 0)
+      ])
+    ])
+    error_message = "network_firewall_internal_pass_cidrs (config aws.network.internal_pass_cidrs) entries must be IPv4 blocks inside a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 198.18.0.0/15); a public range or 0.0.0.0/0 would pass internet egress before the allowlist."
+  }
+
+  # Two ranges overlap when their network addresses agree on the shorter prefix.
+  validation {
+    condition = alltrue([
+      for c in var.network_firewall_internal_pass_cidrs : !try(
+        cidrhost("${split("/", c)[0]}/${min(tonumber(split("/", c)[1]), tonumber(split("/", var.top_cidr)[1]))}", 0) ==
+        cidrhost("${split("/", var.top_cidr)[0]}/${min(tonumber(split("/", c)[1]), tonumber(split("/", var.top_cidr)[1]))}", 0),
+        false
+      )
+    ])
+    error_message = "network_firewall_internal_pass_cidrs (config aws.network.internal_pass_cidrs) must not overlap top_cidr: a range inside top_cidr would pass traffic between the prod and nonprod segments."
   }
 }
 
@@ -386,6 +403,54 @@ variable "spoke_attachments" {
   validation {
     condition     = length(distinct([for s in values(var.spoke_attachments) : s.attachment_id])) == length(var.spoke_attachments)
     error_message = "spoke_attachments must not list the same attachment_id twice (an attachment associates with exactly one route table)."
+  }
+
+  # Second re-audit 5 review: a spoke CIDR must sit inside top_cidr (HOME_NET),
+  # so the firewall's segment rules and the default action apply to it.
+  validation {
+    condition = alltrue([
+      for sp in values(var.spoke_attachments) : sp.cidr == null || try(
+        tonumber(split("/", sp.cidr)[1]) >= tonumber(split("/", var.top_cidr)[1]) &&
+        cidrhost("${split("/", sp.cidr)[0]}/${split("/", var.top_cidr)[1]}", 0) == cidrhost(var.top_cidr, 0),
+        false
+      )
+    ])
+    error_message = "every spoke_attachments cidr must be inside top_cidr (${var.top_cidr}): outside it, the firewall does not treat the spoke as HOME_NET."
+  }
+
+  # Re-audit 5 review: spoke CIDRs must not overlap each other or the hub VPCs.
+  # An overlap would put one spoke in the other segment's firewall pass rule,
+  # or make a spoke a shared range that every address may reach. Two ranges
+  # overlap when their network addresses agree on the shorter prefix.
+  validation {
+    condition = length([
+      for p in setproduct(
+        [for k, sp in var.spoke_attachments : "spoke_attachments.${k} ${sp.cidr}" if sp.cidr != null],
+        concat(
+          [for k, sp in var.spoke_attachments : "spoke_attachments.${k} ${sp.cidr}" if sp.cidr != null],
+          ["inspection_cidr ${var.inspection_cidr}", "egress_cidr ${var.egress_cidr}"],
+        )
+      ) : "${split(" ", p[0])[0]} overlaps ${split(" ", p[1])[0]}"
+      if p[0] != p[1] && try(
+        cidrhost("${split("/", split(" ", p[0])[1])[0]}/${min(tonumber(split("/", split(" ", p[0])[1])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0) ==
+        cidrhost("${split("/", split(" ", p[1])[1])[0]}/${min(tonumber(split("/", split(" ", p[0])[1])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0),
+        false
+      )
+    ]) == 0
+    error_message = "spoke_attachments CIDRs must not overlap each other or inspection_cidr / egress_cidr: ${join("; ", distinct([
+      for p in setproduct(
+        [for k, sp in var.spoke_attachments : "spoke_attachments.${k} ${sp.cidr}" if sp.cidr != null],
+        concat(
+          [for k, sp in var.spoke_attachments : "spoke_attachments.${k} ${sp.cidr}" if sp.cidr != null],
+          ["inspection_cidr ${var.inspection_cidr}", "egress_cidr ${var.egress_cidr}"],
+        )
+      ) : "${split(" ", p[0])[0]} overlaps ${split(" ", p[1])[0]}"
+      if p[0] != p[1] && try(
+        cidrhost("${split("/", split(" ", p[0])[1])[0]}/${min(tonumber(split("/", split(" ", p[0])[1])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0) ==
+        cidrhost("${split("/", split(" ", p[1])[1])[0]}/${min(tonumber(split("/", split(" ", p[0])[1])[1]), tonumber(split("/", split(" ", p[1])[1])[1]))}", 0),
+        false
+      )
+    ]))}."
   }
 }
 

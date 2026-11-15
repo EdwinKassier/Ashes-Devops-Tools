@@ -104,3 +104,63 @@ run "alarm_subscriber_emails_must_be_addresses" {
 
   expect_failures = [var.alarm_subscriber_emails]
 }
+
+# Re-audit 5 ARC-2: an extra internal range must be private and outside
+# top_cidr, or it passes egress or traffic between segments.
+run "internal_pass_cidr_inside_top_cidr_rejected" {
+  command = plan
+
+  variables {
+    network_firewall_internal_pass_cidrs = ["10.64.0.0/10"]
+  }
+
+  expect_failures = [var.network_firewall_internal_pass_cidrs]
+}
+
+run "public_internal_pass_cidr_rejected" {
+  command = plan
+
+  variables {
+    network_firewall_internal_pass_cidrs = ["0.0.0.0/0"]
+  }
+
+  expect_failures = [var.network_firewall_internal_pass_cidrs]
+}
+
+# Re-audit 5 review: overlapping spoke CIDRs would cross the segment rules.
+run "overlapping_spoke_cidrs_rejected" {
+  command = plan
+
+  variables {
+    spoke_attachments = {
+      prod = { attachment_id = "tgw-attach-0123456789abcdef0", segment = "prod", cidr = "10.64.0.0/12" }
+      dev  = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.70.0.0/16" }
+    }
+  }
+
+  expect_failures = [var.spoke_attachments]
+}
+
+run "spoke_cidr_reusing_a_hub_vpc_rejected" {
+  command = plan
+
+  variables {
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "10.1.0.0/16" }
+    }
+  }
+
+  expect_failures = [var.spoke_attachments]
+}
+
+run "spoke_cidr_outside_top_cidr_rejected" {
+  command = plan
+
+  variables {
+    spoke_attachments = {
+      dev = { attachment_id = "tgw-attach-0fedcba9876543210", segment = "nonprod", cidr = "172.20.0.0/16" }
+    }
+  }
+
+  expect_failures = [var.spoke_attachments]
+}

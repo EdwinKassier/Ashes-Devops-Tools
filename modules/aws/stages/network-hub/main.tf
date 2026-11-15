@@ -476,8 +476,20 @@ resource "aws_ec2_transit_gateway_route" "vpn_onprem" {
 # ---------------------------------------------------------------------------
 
 locals {
-  # On-premises prefixes behind the VPN plus any extra internal ranges.
-  firewall_internal_pass_cidrs = distinct(concat(var.enable_vpn ? var.vpn.onprem_cidrs : [], var.network_firewall_internal_pass_cidrs))
+  # Shared ranges every spoke may reach: the hub VPCs (endpoints, Resolver),
+  # the on-premises prefixes behind the VPN and any extra internal ranges.
+  firewall_internal_pass_cidrs = distinct(concat(
+    [module.inspection_vpc.vpc_cidr, module.egress_vpc.vpc_cidr],
+    var.enable_vpn ? var.vpn.onprem_cidrs : [],
+    var.network_firewall_internal_pass_cidrs,
+  ))
+  # Re-audit 5 ARC-1: spokes reach spokes of their own segment only. A spoke
+  # without a cidr is in no segment, so its east-west traffic fails closed.
+  firewall_internal_segments = {
+    for seg in ["prod", "nonprod"] : seg => sort(distinct([
+      for s in values(var.spoke_attachments) : s.cidr if s.segment == seg && s.cidr != null
+    ]))
+  }
 }
 
 module "network_firewall" {
@@ -499,12 +511,12 @@ module "network_firewall" {
   suricata_rules           = var.network_firewall_suricata_rules
   home_net_cidrs           = [var.top_cidr]
 
-  # ARC-1: pass HOME_NET to HOME_NET (spokes to the central endpoints, the
-  # Resolver and other spokes; the TGW blackholes keep prod and nonprod apart)
-  # and to and from on-premises, so a fail-closed policy drops only external
-  # traffic the allowlist does not cover.
+  # ARC-1: pass every spoke to and from the hub VPCs and on-premises, and
+  # spokes to spokes within one segment. Prod to nonprod meets the default
+  # action, so the firewall backs up the TGW blackholes (re-audit 5 ARC-1).
   enable_internal_pass = var.network_firewall_internal_pass
   internal_pass_cidrs  = local.firewall_internal_pass_cidrs
+  internal_segments    = local.firewall_internal_segments
 
   tags = var.tags
 }

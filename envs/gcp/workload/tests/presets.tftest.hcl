@@ -42,9 +42,11 @@ variables {
   }
   enable_network_hub = false
   # Standalone production cannot use the hub egress proxy (ARC-4).
+  # A waiver inside the regulated 90-day limit (re-audit 5 CMP-1), relative
+  # to the test run so it never expires.
   production_egress_proxy_waiver = {
-    reason  = "Test suite: standalone, no hub egress proxy."
-    expires = "2099-12-31"
+    reason  = "Test suite: the egress proxy is out of scope here."
+    expires = formatdate("YYYY-MM-DD", timeadd(timestamp(), "720h"))
   }
 }
 
@@ -186,6 +188,11 @@ run "regulated_env_applies_regulated_preset" {
 
   variables {
     landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    # Re-audit 5 CMP-1: a regulated egress waiver may run 90 days at most.
+    production_egress_proxy_waiver = {
+      reason  = "Test suite: a waiver inside the regulated 90-day limit."
+      expires = formatdate("YYYY-MM-DD", timeadd(timestamp(), "720h"))
+    }
     projects_contract = {
       environment_config = {
         prod = {
@@ -586,4 +593,33 @@ run "regulated_env_must_be_production" {
   }
 
   expect_failures = [terraform_data.compliance_class_guard]
+}
+
+# Re-audit 5 CMP-1: a regulated environment refuses an egress waiver that runs
+# more than 90 days.
+run "regulated_env_refuses_a_long_egress_waiver" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    production_egress_proxy_waiver = {
+      reason  = "Test suite: a waiver past the regulated 90-day limit."
+      expires = "2099-12-31"
+    }
+    projects_contract = {
+      environment_config = {
+        prod = {
+          folder_id               = "333"
+          host_project_id         = "acme-prod-host-abcd"
+          host_project_number     = "333333333333"
+          region                  = "europe-west2"
+          cidr_block              = "10.30.0.0/16"
+          is_production           = true
+          vpc_sc_access_policy_id = "555555555"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.regulated_egress_waiver_guard]
 }

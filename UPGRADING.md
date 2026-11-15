@@ -41,6 +41,63 @@ patch knowingly and expect conflicts here.
 Manual steps for the next release, grouped by area. A breaking change
 (`feat!:` or a `BREAKING CHANGE` footer) must add its entry here; CI enforces it.
 
+### What your next run does (re-audit 5 fixes)
+
+The fixes for [re-audit 5](docs/audit/2026-11-15-due-diligence-reaudit-5.md)
+change these runs:
+
+- **aws-network firewall rules (ARC-1, ARC-2, breaking).** The internal pass
+  group no longer passes `top_cidr` to `top_cidr`. It passes every spoke to
+  and from the hub VPCs, the VPN `onprem_cidrs` and
+  `aws.network.internal_pass_cidrs`, and spokes to spokes of the same segment
+  (their `spoke_attachments` CIDRs). Under a fail-closed policy, traffic from
+  prod to nonprod, and east-west traffic of a spoke without a `cidr`, is now
+  dropped. The rule group updates in place. `aws.network.internal_pass_cidrs`
+  must be private ranges outside `top_cidr`. With prod and nonprod spokes
+  attached, a spoke without a `cidr` now fails the plan instead of warning.
+- **Aurora TLS (CMP-2, breaking).** `modules/aws/data/rds-aurora` attaches a
+  cluster parameter group with `rds.force_ssl = 1` by default
+  (`enable_force_ssl`). An existing cluster shows an in-place parameter
+  group change that applies at the next reboot; clients that connect without
+  TLS then fail. A regulated AWS workload with services also needs
+  `app_alb_certificate_arn` and `app_ingress_mode` internal or public_alb, and
+  refuses `is_production = false` and `enable_gateway_endpoint_policies =
+  false`.
+- **Regulated GCP egress waiver (CMP-1, breaking).** A regulated environment's
+  `production_egress_proxy_waiver` may expire at most 90 days after the plan.
+  Renew it each quarter after review, or turn the egress proxy on.
+- **tfc-admin (CMP-3).** An explicit `environments` variable cannot set
+  `is_production = false` on an environment that the config file marks
+  regulated.
+- **Plan-time scanner and OPA (SEC-1, SEC-2, breaking).** The scanner pins
+  each reviewed file reader to its exact expression, path locals and variable
+  validation (tied to the root's depth); edited loaders fail CI. A
+  `templatefile()` template may not call a file reader. The Google token data
+  sources (`google_client_config`, `google_service_account_*_token`, `_jwt`)
+  and the AWS token data sources (`aws_eks_cluster_auth`,
+  `aws_ecr_authorization_token`, `aws_ecrpublic_authorization_token`,
+  `aws_codeartifact_authorization_token`, the Redshift credential data
+  sources) and the Vercel file data sources (`vercel_file`,
+  `vercel_project_directory`, `vercel_prebuilt_project`) are refused by both
+  layers; a module may not read files from `path.root`; and
+  `archive_file` may only zip a literal `source_file` under `path.module`.
+  The mandatory OPA policy now refuses a `landing_zone_config_path` other than
+  null, `config/landing-zone.yaml` or `config/<estate>/landing-zone.yaml`
+  (relative to the root): a workspace that points it at a test fixture, the
+  example or `""` fails its policy check.
+- **Spoke CIDRs (aws-network).** `spoke_attachments` CIDRs must sit inside
+  `top_cidr` and may no longer overlap each other or the hub VPCs; the plan
+  fails instead.
+- **aws-workload regulated by account.** An environment that deploys into the
+  account of a regulated environment (`workload_account_key`) is treated as
+  regulated even under another environment name.
+- **Release workflow (CICD-4, CICD-10).** The documented deployment-tag
+  ruleset and `tfc-readonly` tag policy now list every tag pattern of
+  `terraform-apply.yml`, including the workload tags, restrict creation and
+  name the admin role as bypass actor. `BRANCH_PROTECTION.md` gives the same
+  ruleset. If you created a ruleset from the earlier text of either guide,
+  replace it.
+
 ### What your next run does (re-audit 4 fixes)
 
 The 2026-11-15 fixes for [re-audit 4](docs/audit/2026-11-15-due-diligence-reaudit-4.md)

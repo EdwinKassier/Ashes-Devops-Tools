@@ -69,7 +69,25 @@ import rego.v1
 
 # Data sources that run code or call out during the plan: external runs a
 # program, http fetches a URL, aws_lambda_invocation invokes a Lambda function.
-exec_data_types := {"external", "http", "aws_lambda_invocation"}
+# The token data sources return a token built from the run's credentials (or
+# mint one), so their value can be printed or sent (re-audit 5 SEC-2): Google
+# access and ID tokens, an EKS bearer token, ECR and CodeArtifact registry
+# credentials, Redshift database passwords. This repo uses none. Data sources
+# that read secrets the run is entitled to (Secrets Manager, Secret Manager,
+# KMS decrypt, Supabase and Vercel keys) stay allowed: the plan role's data
+# deny-list and the secret-bearing workspaces are their controls
+# (docs/known-gaps.md).
+exec_data_types := {
+	"external", "http", "aws_lambda_invocation",
+	"google_client_config", "google_service_account_access_token",
+	"google_service_account_id_token", "google_service_account_jwt",
+	"aws_eks_cluster_auth", "aws_ecr_authorization_token",
+	"aws_ecrpublic_authorization_token", "aws_codeartifact_authorization_token",
+	"aws_redshift_cluster_credentials", "aws_redshiftserverless_credentials",
+	# The Vercel file data sources read any runner path; a deployment built
+	# from them uploads its contents at apply (second re-audit 5 review).
+	"vercel_file", "vercel_project_directory", "vercel_prebuilt_project",
+}
 
 allowed_provisioner_chain := [
 	{"name": "saas_workload", "source": "../../modules/saas/stages/saas-workload"},
@@ -140,6 +158,28 @@ deny contains msg if {
 	some prov in object.get(r, "provisioners", [])
 	not provisioner_exempt(path)
 	msg := sprintf("%s: declares a %s provisioner (arbitrary commands at apply time with the workspace's credentials); only envs/saas -> module.saas_workload -> module.vault_secrets may", [full_address(path, r), object.get(prov, "type", "?")])
+}
+
+# Re-audit 5 SEC-2: archive_file reads any file on the runner into a zip that
+# filebase64() can return. Only a source_file under path.module is allowed.
+deny contains msg if {
+	some pair in config_resources
+	path := pair[0]
+	r := pair[1]
+	object.get(r, "type", "") == "archive_file"
+	not archive_source_reviewed(r)
+	msg := sprintf("%s: archive_file may only zip a source_file under path.module (no source_dir, source block or absolute path); it reads files on the runner at plan time", [full_address(path, r)])
+}
+
+archive_source_reviewed(r) if {
+	e := object.get(r, "expressions", {})
+	not "source_dir" in object.keys(e)
+	not "source" in object.keys(e)
+	not "source_content" in object.keys(e)
+	refs := object.get(e, ["source_file", "references"], [])
+	count(refs) > 0
+	every ref in refs { ref == "path.module" }
+	object.get(e, ["source_file", "constant_value"], null) == null
 }
 
 deny contains msg if {
@@ -273,6 +313,25 @@ variable_inert(r) if {
 	vars := object.get(input.plan.configuration, ["root_module", "variables"], {})
 	inert_default(object.get(vars, [name, "default"], null))
 	credential_variable_value_ok(name, object.get(input.plan, ["variables", name, "value"], null))
+}
+
+# Re-audit 5 review (CMP): landing_zone_config_path decides which estate
+# file a root reads, and with it compliance_class: regulated. A workspace
+# variable (which no code review sees) pointing it at a test fixture, the
+# example or "" would switch every regulated guard off. A run may use the
+# default (null) or an estate file: config/landing-zone.yaml or
+# config/<estate>/landing-zone.yaml, never config/tests/.
+deny contains msg if {
+	v := object.get(input.plan, ["variables", "landing_zone_config_path", "value"], null)
+	v != null
+	not estate_config_path(v)
+	msg := sprintf("landing_zone_config_path = %q: a run may read only an estate file (config/landing-zone.yaml or config/<estate>/landing-zone.yaml); another file, or \"\", can drop compliance_class: regulated and its guards", [v])
+}
+
+estate_config_path(v) if {
+	is_string(v)
+	regex.match(`^(\.\./){2,3}config/([a-z0-9][a-z0-9-]*/)?landing-zone\.ya?ml$`, v)
+	not regex.match(`(^|/)config/tests/`, v)
 }
 
 ref_variable(r) := substring(regex.find_n(`^var\.[A-Za-z_][A-Za-z0-9_-]*`, r, 1)[0], 4, -1)

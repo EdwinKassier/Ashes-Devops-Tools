@@ -372,3 +372,28 @@ resource "aws_secretsmanager_secret_policy" "saas_bridge" {
     }]
   })
 }
+
+# Re-audit 5 CMP-2/CMP-3: a regulated environment (aws.workload_environments
+# .<env>.compliance_class: regulated) keeps every production control and
+# encrypts app traffic in transit. Explicit variables cannot weaken it.
+resource "terraform_data" "regulated_guard" {
+  count = local.regulated ? 1 : 0
+  input = local.environment
+
+  lifecycle {
+    precondition {
+      condition     = local.is_production
+      error_message = "aws-workload-${local.environment} is regulated (aws.workload_environments.${local.environment}.compliance_class: regulated), so it must be production: remove the is_production = false override (a regulated environment gets every production control)."
+    }
+
+    precondition {
+      condition     = local.enable_gateway_endpoint_policies
+      error_message = "aws-workload-${local.environment} is regulated, so its S3 and DynamoDB gateway endpoints must keep the organization-only policies: remove enable_gateway_endpoint_policies = false."
+    }
+
+    precondition {
+      condition     = length(local.services) == 0 || (var.app_alb_certificate_arn != null && !local.app_vpc_origin)
+      error_message = "aws-workload-${local.environment} is regulated, so its app traffic must be encrypted in transit to the ALB: set app_alb_certificate_arn (an HTTPS listener) and use app_ingress_mode internal or public_alb (cloudfront_vpc_origin reaches the ALB over HTTP)."
+    }
+  }
+}

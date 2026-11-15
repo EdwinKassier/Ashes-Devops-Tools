@@ -337,3 +337,77 @@ run "enable_app_alb_deletion_protection_wins_over_the_deprecated_alias" {
     error_message = "Setting enable_app_alb_deletion_protection together with the deprecated alias must still plan."
   }
 }
+
+# Re-audit 5 CMP-2/CMP-3: a regulated environment refuses plaintext ingress to
+# the ALB and the production overrides.
+run "regulated_refuses_plaintext_ingress" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+# One override per run, so each precondition is proven on its own.
+run "regulated_refuses_is_production_false" {
+  command = plan
+
+  variables {
+    landing_zone_config_path         = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode                 = "internal"
+    app_alb_certificate_arn          = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    is_production                    = false
+    enable_gateway_endpoint_policies = true # isolate the is_production precondition
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+run "regulated_refuses_open_gateway_endpoints" {
+  command = plan
+
+  variables {
+    landing_zone_config_path         = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode                 = "internal"
+    app_alb_certificate_arn          = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    enable_gateway_endpoint_policies = false
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+run "regulated_with_https_ingress_plans" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode         = "internal"
+    app_alb_certificate_arn  = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+  }
+
+  assert {
+    condition     = length(terraform_data.regulated_guard) == 1 && local.regulated && local.is_production
+    error_message = "a regulated environment with an HTTPS ALB must plan, with the regulated guard in place."
+  }
+}
+
+# Second re-audit 5 review: an environment name outside the config cannot
+# deploy into a regulated account without the regulated guard.
+run "regulated_account_under_another_environment_name" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    environment              = "dev2"
+    workload_account_key     = "workload_dev"
+  }
+
+  assert {
+    condition     = local.regulated
+    error_message = "an environment deploying into a regulated environment's account must be regulated."
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}

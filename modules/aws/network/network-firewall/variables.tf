@@ -74,19 +74,54 @@ variable "stateful_default_actions" {
 }
 
 variable "enable_internal_pass" {
-  description = "Create the internal pass rule group (priority 1500): pass HOME_NET to HOME_NET, and HOME_NET to and from internal_pass_cidrs. Default true. Under a fail-closed policy (aws:drop_established) traffic to the central endpoints, the Resolver, other spokes and on-premises is dropped without it, because the egress allowlist matches only HOME_NET to EXTERNAL_NET. Set false only when custom suricata_rules pass that traffic instead."
+  description = "Create the internal pass rule group (priority 1500) from internal_pass_cidrs and internal_segments. Default true; no group is created when both are empty. Under a fail-closed policy (aws:drop_established) internal traffic is dropped without it, because the egress allowlist matches only HOME_NET to EXTERNAL_NET. Set false only when custom suricata_rules pass that traffic instead."
   type        = bool
   default     = true
 }
 
 variable "internal_pass_cidrs" {
-  description = "Extra internal ranges outside HOME_NET that the internal pass group passes in both directions, for example the on-premises prefixes behind a VPN. Empty (default) = HOME_NET to HOME_NET only."
+  description = "Shared internal ranges that every HOME_NET address may reach and be reached from: the hub VPCs (central endpoints, Resolver) and on-premises prefixes. Private ranges only (10/8, 172.16/12, 192.168/16, 100.64/10, 198.18/15). Never list HOME_NET itself: that would pass traffic between segments. Empty (default) = none."
   type        = list(string)
   default     = []
 
   validation {
-    condition     = alltrue([for c in var.internal_pass_cidrs : can(cidrnetmask(c))])
-    error_message = "internal_pass_cidrs entries must be IPv4 CIDR blocks."
+    condition = alltrue([
+      for c in var.internal_pass_cidrs : can(cidrnetmask(c)) && anytrue([
+        for b in ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "198.18.0.0/15"] :
+        tonumber(split("/", c)[1]) >= tonumber(split("/", b)[1]) && cidrhost("${split("/", c)[0]}/${split("/", b)[1]}", 0) == cidrhost(b, 0)
+      ])
+    ])
+    error_message = "internal_pass_cidrs entries must be IPv4 CIDR blocks inside a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 198.18.0.0/15); a public range or 0.0.0.0/0 would pass internet egress before the allowlist."
+  }
+
+  # A range that contains a HOME_NET range would pass traffic between segments.
+  validation {
+    condition = alltrue([
+      for p in setproduct(var.internal_pass_cidrs, var.home_net_cidrs) : !try(
+        tonumber(split("/", p[0])[1]) <= tonumber(split("/", p[1])[1]) &&
+        cidrhost("${split("/", p[1])[0]}/${split("/", p[0])[1]}", 0) == cidrhost(p[0], 0),
+        false
+      )
+    ])
+    error_message = "internal_pass_cidrs must not contain a home_net_cidrs range: passing it would pass traffic between segments."
+  }
+}
+
+variable "internal_segments" {
+  description = "Segments whose members may reach each other, keyed by segment name (for example { prod = [spoke CIDRs], nonprod = [spoke CIDRs] }). Each entry passes its CIDRs to its own CIDRs only, so traffic between segments still meets the default action. Same private-range rule as internal_pass_cidrs. Empty (default) = none."
+  type        = map(list(string))
+  default     = {}
+
+  validation {
+    condition = alltrue(flatten([
+      for k, cs in var.internal_segments : [
+        for c in cs : can(cidrnetmask(c)) && anytrue([
+          for b in ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "198.18.0.0/15"] :
+          tonumber(split("/", c)[1]) >= tonumber(split("/", b)[1]) && cidrhost("${split("/", c)[0]}/${split("/", b)[1]}", 0) == cidrhost(b, 0)
+        ])
+      ]
+    ])) && alltrue([for k in keys(var.internal_segments) : can(regex("^[a-z][a-z0-9_-]*$", k))])
+    error_message = "internal_segments keys must be lowercase names and every CIDR must be an IPv4 block inside a private range (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 198.18.0.0/15)."
   }
 }
 
@@ -96,8 +131,8 @@ variable "internal_pass_capacity" {
   default     = 100
 
   validation {
-    condition     = var.internal_pass_capacity >= 3
-    error_message = "internal_pass_capacity must be at least 3 (one per generated rule)."
+    condition     = var.internal_pass_capacity >= 4
+    error_message = "internal_pass_capacity must be at least 4 (one per generated rule)."
   }
 }
 

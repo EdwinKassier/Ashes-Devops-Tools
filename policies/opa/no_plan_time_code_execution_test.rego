@@ -25,6 +25,37 @@ test_module_provisioner_denied if count(p.deny) == 1 with input as in_module("..
 
 test_external_data_denied if count(p.deny) == 1 with input as in_root([data_source("external")])
 
+# Re-audit 5 SEC-2: token data sources and archive_file outside path.module.
+test_google_client_config_data_denied if count(p.deny) == 1 with input as in_root([data_source("google_client_config")])
+
+test_eks_cluster_auth_data_denied if count(p.deny) == 1 with input as in_root([data_source("aws_eks_cluster_auth")])
+
+test_ecr_authorization_token_data_denied if count(p.deny) == 1 with input as in_root([data_source("aws_ecr_authorization_token")])
+
+test_redshift_credentials_data_denied if count(p.deny) == 1 with input as in_root([data_source("aws_redshift_cluster_credentials")])
+
+test_vercel_file_data_denied if count(p.deny) == 1 with input as in_root([data_source("vercel_file")])
+
+test_google_access_token_data_denied if count(p.deny) == 1 with input as in_root([data_source("google_service_account_access_token")])
+
+archive(expressions) := in_root([{"address": "data.archive_file.x", "mode": "data", "type": "archive_file", "name": "x", "expressions": expressions}])
+
+test_archive_path_module_source_allowed if {
+	count(p.deny) == 0 with input as archive({"source_file": {"references": ["path.module"]}, "output_path": {"references": ["path.root"]}})
+}
+
+test_archive_absolute_source_denied if {
+	count(p.deny) == 1 with input as archive({"source_file": {"constant_value": "/proc/self/environ"}})
+}
+
+test_archive_source_dir_denied if {
+	count(p.deny) == 1 with input as archive({"source_dir": {"constant_value": "/"}})
+}
+
+test_archive_variable_source_denied if {
+	count(p.deny) == 1 with input as archive({"source_file": {"references": ["var.f", "path.module"]}})
+}
+
 test_http_data_denied if count(p.deny) == 1 with input as in_module("../vpc", [data_source("http")])
 
 # A look-alike source does not match the allowlist.
@@ -700,3 +731,20 @@ test_bridge_switch_bool_allowed if {
 test_bridge_switch_string_denied if {
 	count(p.deny) == 1 with input as with_values(tfe_tok, {"enable_saas_secret_bridge": {"default": false}}, {"enable_saas_secret_bridge": {"value": "attacker-token"}})
 }
+
+# Re-audit 5 review (CMP): a run reads only an estate config file.
+config_path(v) := {"plan": {"configuration": {"root_module": {}}, "variables": {"landing_zone_config_path": {"value": v}}}}
+
+test_config_path_default_allowed if count(p.deny) == 0 with input as {"plan": {"configuration": {"root_module": {}}, "variables": {"landing_zone_config_path": {"value": null}}}}
+
+test_config_path_estate_allowed if count(p.deny) == 0 with input as config_path("../../../config/landing-zone.yaml")
+
+test_config_path_sandbox_estate_allowed if count(p.deny) == 0 with input as config_path("../../config/sandbox/landing-zone.yaml")
+
+test_config_path_fixture_denied if count(p.deny) == 1 with input as config_path("../../../envs/aws/workload/tests/fixtures/landing-zone.yaml")
+
+test_config_path_example_denied if count(p.deny) == 1 with input as config_path("../../../config/landing-zone.example.yaml")
+
+test_config_path_negative_fixture_denied if count(p.deny) == 1 with input as config_path("../../../config/tests/landing-zone.yaml")
+
+test_config_path_disabled_denied if count(p.deny) == 1 with input as config_path("")

@@ -349,11 +349,12 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
     segment's table (`spoke_attachments.<key>.cidr`, default
     `aws.workload_environments.<key>.vpc_cidr`). A spoke whose CIDR is not
     known (no `vpc_cidr`, or a key that differs from the environment name) is
-    not blackholed; a `check` warns when both segments are attached. A
-    secondary VPC CIDR added to a spoke
+    not blackholed; when both segments are attached the plan fails
+    (re-audit 5). A secondary VPC CIDR added to a spoke
     ([CIDR expansion](runbooks/aws-cidr-expansion.md)) propagates but is not
-    blackholed, so the other segment can reach it through inspection until
-    a blackhole is added for it;
+    blackholed and is in no firewall segment rule, so under a fail-closed
+    policy its traffic to other spokes is dropped until the CIDR is added to
+    the spoke's `cidr`;
   - **validate in the sandbox:** the accepter on a `pendingAcceptance`
     attachment, the association of a cross-account attachment, end-to-end
     egress and reply through the firewall (appliance mode), on-premises →
@@ -1699,14 +1700,24 @@ side (all mock-tested, secure defaults):
   sources pass. The scanner checks the paths of `file()`, `templatefile()`
   and the other file readers: a literal path must stay under `path.module` /
   `path.root` in the repository and hold no interpolation, and a reference is
-  refused (SEC-1, re-audit 4). The reviewed readers on `FILE_REFERENCE_ALLOW`
-  are the exceptions: each root's config loader (`file(f)` in `config.tf`),
-  whose `landing_zone_config_path` validation allows only a relative
-  `.yaml`/`.yml` path that stays in the repository; tfc-admin's
-  `workspace_variables_file` (relative `.yaml` only); and gcp-workload's
-  preset loader, whose names must match `^[a-z0-9-]+$`. A workspace variable
-  can still point the loader at another `.yaml` file in the repository. OPA
-  cannot see function calls at all.
+  refused (SEC-1, re-audit 4). The exceptions are the reviewed readers on
+  `FILE_READERS`. Since re-audit 5 each is pinned to its whole expression, to
+  the locals that bind its path and to the exact validation of the variable it
+  reads, so `file(f)` with `f` bound to anything else fails: each root's
+  config loader (`landing_zone_config_path`: a relative `.yaml`/`.yml` path
+  that stays in the repository), tfc-admin's `workspace_variables_file`
+  reader and gcp-workload's preset loader (names `^[a-z0-9-]+$`). The pins
+  depend on how python-hcl2 (pinned with hashes) renders the expressions; a
+  python-hcl2 upgrade can need them refreshed. A workspace variable can still
+  point the loader at another estate file: the mandatory OPA policy accepts
+  only `config/landing-zone.yaml` or `config/<estate>/landing-zone.yaml`
+  (never a test fixture, the example or `""`), but cannot tell one estate's
+  file from another's. A `templatefile()` template is read too and may not
+  call a file reader. `archive_file` may only zip a literal `source_file`
+  under `path.module` (re-audit 5 SEC-2); OPA sees only the references of
+  that path, not `../` segments after `path.module`, and does not constrain
+  `output_path`, so the scanner is the control for both. The Google and AWS
+  token data sources are refused. OPA cannot see function calls at all.
 - **Workload SAs keep `workloadIdentityPoolAdmin` (SEC-10).** app-services
   needs it to create the app-deploy pool. `custom.wifProviderTenantPinned` pins
   each GitHub provider condition to the owner. The mandatory OPA policy
@@ -1861,13 +1872,15 @@ side (all mock-tested, secure defaults):
   D5).** It crosses Network Firewall in both directions, so it pays the
   per-GB processing charge. Under a fail-closed production policy
   (`aws:drop_established`) it passes because the firewall's internal pass
-  rule group (priority 1500, on by default) passes `top_cidr` to `top_cidr`
-  and to and from the VPN on-premises prefixes and
-  `aws.network.internal_pass_cidrs` (ARC-1, re-audit 4). The egress allowlist
-  matches only traffic from `HOME_NET` to the internet, so it cannot pass
-  internal traffic: do not add `.amazonaws.com` to it for this. Prod and
-  nonprod spokes stay apart through the transit gateway blackhole routes, not
-  the firewall; to drop a specific internal flow, write it in
+  rule group (priority 1500, on by default) passes every `top_cidr` address
+  to and from the hub VPCs, the VPN on-premises prefixes and
+  `aws.network.internal_pass_cidrs`, and spokes to spokes of the same
+  segment (ARC-1, re-audit 4; per segment since re-audit 5). The egress
+  allowlist matches only traffic from `HOME_NET` to the internet, so it
+  cannot pass internal traffic: do not add `.amazonaws.com` to it for this.
+  Prod and nonprod spokes stay apart through the transit gateway blackhole
+  routes and, under a fail-closed policy, the firewall's default action; to
+  drop a specific internal flow, write it in
   `aws.network.suricata_rules`, which run before the pass group. The packet
   behaviour is proved by code and tests only, not yet by a sandbox apply. A
   direct transit gateway route from the spoke tables to the egress attachment

@@ -638,14 +638,114 @@ expect_rc "SEC-1: templatefile(local.x) fails" 1 "$(case_tree localfile envs/r/m
   x = templatefile(local.tpl, {})
 }')" "templatefile(local.tpl)"
 expect_rc "SEC-1: an interpolated path segment fails" 1 "$(case_tree interpfile modules/a/main.tf 'locals {
-  y = [for n in var.names : yamldecode(file("${path.root}/../../presets/${n}.yaml"))]
+  y = [for n in var.names : yamldecode(file("${path.module}/presets/${n}.yaml"))]
 }')" "builds its path from an interpolation"
-expect_rc "SEC-1: the reviewed config loader passes" 0 "$(case_tree loaderfile envs/aws/r/config.tf 'locals {
-  lz_documents = [for f in compact([local.landing_zone_config_file]) : yamldecode(file(f))]
+# Re-audit 5 SEC-1: a reviewed reader is pinned to its whole expression, the
+# locals that bind its path and its variable's validations, not its call text.
+LOADER_LOCALS='locals {
+  landing_zone_config_file = var.landing_zone_config_path == "" ? null : (
+    var.landing_zone_config_path == null ? "${path.root}/../../../config/landing-zone.yaml" : (
+      startswith(var.landing_zone_config_path, "/") ? var.landing_zone_config_path : "${path.root}/${var.landing_zone_config_path}"
+    )
+  )
+  lz_documents = [
+    for f in compact([local.landing_zone_config_file != null && fileexists(coalesce(local.landing_zone_config_file, "/nonexistent")) ? local.landing_zone_config_file : ""]) :
+    yamldecode(file(f))
+  ]
+}'
+LOADER_VAR='variable "landing_zone_config_path" {
+  type    = string
+  default = null
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "x"
+  }
+}'
+loader_tree() { # loader_tree <name> <config.tf> <variables.tf>
+  local t="${workdir}/$1"
+  add_file "${t}" envs/aws/r/config.tf "$2"
+  add_file "${t}" envs/aws/r/variables.tf "$3"
+  echo "${t}"
+}
+expect_rc "SEC-1: the reviewed config loader passes" 0 "$(loader_tree loaderok "${LOADER_LOCALS}" "${LOADER_VAR}")"
+expect_rc "SEC-1: the loader form outside config.tf fails" 1 "$(case_tree loaderelse envs/aws/r/main.tf "${LOADER_LOCALS}")" "file(f)"
+expect_rc "SEC-1 (re-audit 5): file(f) with f bound to /proc/self/environ fails" 1 "$(loader_tree loaderleak "${LOADER_LOCALS}
+locals {
+  leak = [for f in [\"/proc/self/environ\"] : tonumber(file(f))]
+}" "${LOADER_VAR}")" "file(f) reads a path from a reference"
+expect_rc "SEC-1 (re-audit 5): a rebound landing_zone_config_file fails" 1 "$(loader_tree loaderrebind "${LOADER_LOCALS/\$\{path.root\}\/..\/..\/..\/config\/landing-zone.yaml/\/proc\/self\/environ}" "${LOADER_VAR}")" "local.landing_zone_config_file is not the reviewed definition"
+expect_rc "SEC-1 (re-audit 5): the loader without the path validation fails" 1 "$(loader_tree loadernoval "${LOADER_LOCALS}" 'variable "landing_zone_config_path" {
+  type    = string
+  default = null
+}')" "lacks the reviewed path validation"
+expect_rc "SEC-1 (re-audit 5): a raised ../ depth fails" 1 "$(loader_tree loaderdepth "${LOADER_LOCALS}" "${LOADER_VAR/<= 3/<= 9}")" "lacks the reviewed path validation"
+expect_rc "SEC-1 (re-audit 5): a short-circuited path validation fails" 1 "$(loader_tree loadertrue "${LOADER_LOCALS}" "${LOADER_VAR/condition = var.landing_zone_config_path == null/condition = true || var.landing_zone_config_path == null}")" "lacks the reviewed path validation"
+# Re-audit 5 review: a depth-2 root may not take the depth-3 loader shape.
+depth_tree() {
+  local t="${workdir}/$1"
+  add_file "${t}" envs/s/config.tf "${LOADER_LOCALS}"
+  add_file "${t}" envs/s/variables.tf "${LOADER_VAR}"
+  echo "${t}"
+}
+expect_rc "SEC-1 (re-audit 5): a depth-2 root with the depth-3 loader fails" 1 "$(depth_tree loaderd2)" "is not the reviewed definition"
+# Re-audit 5 review: a templatefile() template that calls file() fails.
+tpl_tree() {
+  local t="${workdir}/$1"
+  add_file "${t}" modules/a/main.tf 'locals {
+  x = templatefile("${path.module}/t.tftpl", {})
+}'
+  add_file "${t}" modules/a/t.tftpl "$2"
+  echo "${t}"
+}
+expect_rc "SEC-1 (re-audit 5): a template calling file() fails" 1 "$(tpl_tree tplfile '${file("/proc/self/environ")}')" "renders a template that calls a file reader"
+expect_rc "SEC-1 (re-audit 5 review 2): a commented file() call in a template fails" 1 "$(tpl_tree tplcomment '[${file/*c*/("/proc/self/environ")}]')" "renders a template that calls a file reader"
+expect_rc "SEC-1 (re-audit 5 review 2): a file() call in a template directive fails" 1 "$(tpl_tree tpldirective '%{ for x in [file("/etc/hosts")] }${x}%{ endfor }')" "renders a template that calls a file reader"
+expect_rc "SEC-1 (re-audit 5 review 2): an escaped interpolation passes" 0 "$(tpl_tree tplescape '$${file("x")} is literal text')"
+expect_rc "SEC-1 (re-audit 5 review 2): path.root in a module fails" 1 "$(case_tree rootinmod modules/a/main.tf 'locals {
+  x = templatefile("${path.root}/t.tftpl", {})
+}')" "reads from path.root in a module"
+expect_rc "SEC-2 (re-audit 5 review 2): data vercel_file fails" 1 "$(case_tree vfile modules/a/main.tf 'data "vercel_file" "f" {
+  path = "/proc/self/environ"
+}')" "vercel_file"
+expect_rc "SEC-1 (re-audit 5): a plain template passes" 0 "$(tpl_tree tplok '{"a": "${x}"}')"
+expect_rc "SEC-1 (re-audit 5): a missing template fails closed" 1 "$(case_tree tplmissing modules/a/main.tf 'locals {
+  x = templatefile("${path.module}/none.tftpl", {})
+}')" "cannot read"
+expect_rc "SEC-2 (re-audit 5): data aws_eks_cluster_auth fails" 1 "$(case_tree eksauth modules/a/main.tf 'data "aws_eks_cluster_auth" "c" {
+  name = "x"
+}')" "aws_eks_cluster_auth"
+expect_rc "SEC-1 (re-audit 5): a rebound tfc-admin workspace file path fails" 1 "$(case_tree tfcleak envs/tfc-admin/main.tf 'locals {
+  workspace_variables_file_path    = "/proc/self/environ"
+  workspace_variables_file_present = local.workspace_variables_file_path != null && fileexists(coalesce(local.workspace_variables_file_path, "/nonexistent"))
+  workspace_variables_file_raw     = local.workspace_variables_file_present ? yamldecode(file(local.workspace_variables_file_path)) : {}
+}')" "local.workspace_variables_file_path is not the reviewed definition"
+
+# Re-audit 5 SEC-2: token data sources and archive_file of a runner file.
+expect_rc "SEC-2 (re-audit 5): data google_client_config fails" 1 "$(case_tree gcc modules/a/main.tf 'data "google_client_config" "c" {}')" "google_client_config"
+expect_rc "SEC-2 (re-audit 5): archive_file of /proc/self/environ fails" 1 "$(case_tree arcenv modules/a/main.tf 'data "archive_file" "e" {
+  type        = "zip"
+  source_file = "/proc/self/environ"
+  output_path = "${path.module}/e.zip"
+}')" "source_file must be a literal path under path.module"
+expect_rc "SEC-2 (re-audit 5): archive_file source_dir fails" 1 "$(case_tree arcdir modules/a/main.tf 'data "archive_file" "e" {
+  type        = "zip"
+  source_dir  = "${path.module}"
+  output_path = "${path.module}/e.zip"
+}')" "source_dir"
+expect_rc "SEC-2 (re-audit 5): archive_file leaving the repository fails" 1 "$(case_tree arcesc modules/a/main.tf 'data "archive_file" "e" {
+  type        = "zip"
+  source_file = "${path.module}/../../../../etc/passwd"
+  output_path = "${path.module}/e.zip"
+}')" "source_file must be"
+expect_rc "SEC-2 (re-audit 5): archive_file of a module file passes" 0 "$(case_tree arcok modules/a/main.tf 'data "archive_file" "e" {
+  type        = "zip"
+  source_file = "${path.module}/files/f.py"
+  output_path = "${path.root}/.terraform/tmp/f.zip"
 }')"
-expect_rc "SEC-1: the loader form outside config.tf fails" 1 "$(case_tree loaderelse envs/aws/r/main.tf 'locals {
-  lz_documents = [for f in compact([local.landing_zone_config_file]) : yamldecode(file(f))]
-}')" "file(f)"
 
 # SEC-2: a remote-state config may set only organization and workspaces.
 expect_rc "SEC-2: a remote-state hostname fails" 1 "$(case_tree rshost envs/r/main.tf 'data "terraform_remote_state" "x" {

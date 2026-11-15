@@ -26,21 +26,11 @@ run "firewall_enabled" {
     error_message = "No custom Suricata or allowlist rule group must be created by default."
   }
 
-  # ARC-1: the internal pass group is on by default, at priority 1500, and
-  # passes HOME_NET to HOME_NET only when no extra internal range is set.
+  # Re-audit 5 ARC-1: no internal pass group without shared ranges or
+  # segments; HOME_NET to HOME_NET is never passed.
   assert {
-    condition     = length(aws_networkfirewall_rule_group.internal_pass) == 1 && contains([for r in output.stateful_rule_group_references : r.priority], 1500)
-    error_message = "The internal pass rule group must be created by default and referenced at priority 1500."
-  }
-
-  assert {
-    condition     = aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string == "pass ip $HOME_NET any -> $HOME_NET any (msg:\"landing zone internal: HOME_NET to HOME_NET\"; sid:1; rev:1;)"
-    error_message = "With no internal_pass_cidrs, the internal pass group must hold only the HOME_NET to HOME_NET rule."
-  }
-
-  assert {
-    condition     = aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].stateful_rule_options[0].rule_order == "STRICT_ORDER"
-    error_message = "The internal pass rule group must use STRICT_ORDER."
+    condition     = length(aws_networkfirewall_rule_group.internal_pass) == 0
+    error_message = "Without internal_pass_cidrs or internal_segments no internal pass group may be created."
   }
 
   # STRICT_ORDER engine.
@@ -109,6 +99,7 @@ run "custom_rules_allowlist_and_drop_default" {
     egress_domain_allowlist  = [".amazonaws.com", "github.com"]
     home_net_cidrs           = ["10.0.0.0/8"]
     stateful_default_actions = ["aws:drop_established", "aws:alert_established"]
+    internal_pass_cidrs      = ["10.65.0.0/16"]
   }
 
   override_resource {
@@ -267,10 +258,41 @@ run "internal_pass_disabled" {
 
   variables {
     enable_internal_pass = false
+    internal_pass_cidrs  = ["10.65.0.0/16"]
   }
 
   assert {
     condition     = length(aws_networkfirewall_rule_group.internal_pass) == 0 && !contains([for r in output.stateful_rule_group_references : r.priority], 1500)
     error_message = "enable_internal_pass = false must not create or reference the internal pass group."
+  }
+}
+
+# Re-audit 5 ARC-1: segments pass within themselves only; never HOME_NET to
+# HOME_NET, so prod to nonprod meets the default action.
+run "internal_pass_per_segment" {
+  command = plan
+
+  variables {
+    internal_pass_cidrs = ["10.64.0.0/16", "10.65.0.0/16"]
+    internal_segments = {
+      prod    = ["10.80.0.0/16", "10.81.0.0/16"]
+      nonprod = ["10.72.0.0/16"]
+      empty   = []
+    }
+  }
+
+  assert {
+    condition = aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string == join("\n", [
+      "pass ip $HOME_NET any -> [10.64.0.0/16,10.65.0.0/16] any (msg:\"landing zone internal: HOME_NET to shared ranges\"; sid:1; rev:1;)",
+      "pass ip [10.64.0.0/16,10.65.0.0/16] any -> $HOME_NET any (msg:\"landing zone internal: shared ranges to HOME_NET\"; sid:2; rev:1;)",
+      "pass ip [10.72.0.0/16] any -> [10.72.0.0/16] any (msg:\"landing zone internal: segment nonprod\"; sid:10; rev:1;)",
+      "pass ip [10.80.0.0/16,10.81.0.0/16] any -> [10.80.0.0/16,10.81.0.0/16] any (msg:\"landing zone internal: segment prod\"; sid:11; rev:1;)",
+    ])
+    error_message = "The internal pass group must pass HOME_NET to and from the shared ranges and each segment to itself only."
+  }
+
+  assert {
+    condition     = !strcontains(aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string, "-> $HOME_NET any (msg:\"landing zone internal: HOME_NET")
+    error_message = "HOME_NET to HOME_NET must never be passed."
   }
 }

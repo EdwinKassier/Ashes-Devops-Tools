@@ -457,6 +457,22 @@ resource "terraform_data" "regulated_cloud_armor_guard" {
   }
 }
 
+# Re-audit 5 CMP-1: a regulated environment may run without the egress proxy
+# (which leaves the private tier on Cloud NAT with no destination allowlist)
+# only on a waiver that expires within 90 days of the plan, so the exception is
+# reviewed at least every quarter. The VPC-SC waiver is refused outright above.
+resource "terraform_data" "regulated_egress_waiver_guard" {
+  count = local.regulated && !local.enable_egress_proxy && local.egress_waiver_until != null ? 1 : 0
+  input = try(var.production_egress_proxy_waiver.expires, null)
+
+  lifecycle {
+    precondition {
+      condition     = timecmp(coalesce(local.egress_waiver_until, "1970-01-01T00:00:00Z"), timeadd(plantimestamp(), "2160h")) <= 0
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated), so production_egress_proxy_waiver may expire at most 90 days after the plan (it expires ${try(substr(var.production_egress_proxy_waiver.expires, 0, 10), "")}). Without the egress proxy the private tier reaches any internet destination through Cloud NAT; set a nearer expiry and renew it after review, or turn the egress proxy on."
+    }
+  }
+}
+
 # CMP-8: a regulated environment keeps its Cloud SQL backups in an
 # enforced-retention, organization-only Backup and DR vault.
 resource "terraform_data" "regulated_backup_vault_guard" {

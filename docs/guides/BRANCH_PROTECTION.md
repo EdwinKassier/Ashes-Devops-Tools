@@ -133,14 +133,14 @@ workflow acts on all of these patterns (keep this list in sync with its `on.push
 - Never force-push to release tags
 
 ```bash
-# Create a tag ruleset (GitHub Enterprise or GitHub.com with rulesets beta)
-gh api repos/OWNER/REPO/rulesets \
-  --method POST \
-  --field name="Release tag protection" \
-  --field target="tag" \
-  --field enforcement="active" \
-  --field conditions='{"ref_name":{"include":["refs/tags/gcp-bootstrap/v*","refs/tags/gcp-organization/v*","refs/tags/gcp-guardrails/v*","refs/tags/gcp-projects/v*","refs/tags/gcp-network-hub/v*","refs/tags/gcp-workload/*/v*","refs/tags/aws-*/v*","refs/tags/aws-workload/*/v*","refs/tags/saas/*/v*","refs/tags/tfc-admin/v*"],"exclude":[]}}' \
-  --field rules='[{"type":"deletion"},{"type":"non_fast_forward"}]'
+# The same ruleset as docs/guides/CI_SECRETS.md (scripts/check-tag-patterns.py keeps them
+# equal). Without bypass_actors the creation rule would block every release tag.
+gh api -X POST repos/OWNER/REPO/rulesets --input - <<'JSON'
+{"name": "deployment-tags", "target": "tag", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/tags/gcp-bootstrap/v*", "refs/tags/gcp-organization/v*", "refs/tags/gcp-guardrails/v*", "refs/tags/gcp-projects/v*", "refs/tags/gcp-network-hub/v*", "refs/tags/gcp-workload/*/v*", "refs/tags/aws-*/v*", "refs/tags/aws-workload/*/v*", "refs/tags/saas/*/v*", "refs/tags/tfc-admin/v*"], "exclude": []}},
+ "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}, {"type": "non_fast_forward"}],
+ "bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always"}]}
+JSON
 ```
 
 ---

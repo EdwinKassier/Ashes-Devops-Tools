@@ -122,6 +122,12 @@ locals {
     ))
     # CMP-1: regulated environments that are not is_production: true. A
     # regulated environment must get every production control.
+    # Environment keys marked regulated in either cloud (re-audit 5 CMP-3:
+    # checked against var.environments too, which a TFC variable can set).
+    regulated_keys = sort(distinct(concat(
+      [for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : k if try(tostring(e.compliance_class), "standard") == "regulated"],
+      [for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k if try(tostring(e.compliance_class), "standard") == "regulated"],
+    )))
     regulated_not_production = sort(concat(
       [for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : "gcp.environments.${k}" if try(tostring(e.compliance_class), "standard") == "regulated" && try(tobool(e.is_production), null) != true],
       [for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : "aws.workload_environments.${k}" if try(tostring(e.compliance_class), "standard") == "regulated" && try(tobool(e.is_production), null) != true],

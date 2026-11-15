@@ -72,10 +72,19 @@ run "key_and_policy_configured" {
     error_message = "the protection tag must be off by default"
   }
 
-  # aws:SourceOrgID scoping is present on the log-service grants.
+  # Re-audit 5 IAC-3: EVERY log-service grant (one Allow-* statement per
+  # log_service_principals entry) carries aws:SourceOrgID = org_id, not just
+  # one statement somewhere in the document.
   assert {
-    condition     = can(regex("aws:SourceOrgID", aws_kms_key.this.policy))
-    error_message = "Log-service grants must be scoped by aws:SourceOrgID"
+    condition = length(var.log_service_principals) > 1 && alltrue([
+      for p in var.log_service_principals : length([
+        for s in jsondecode(aws_kms_key.this.policy).Statement : s
+        if s.Sid == "Allow-${replace(p, ".", "-")}" && try(s.Principal.Service, null) == p &&
+        try(s.Condition.StringEquals["aws:SourceOrgID"], null) == var.org_id &&
+        length(keys(s.Condition.StringEquals)) == 1
+      ]) == 1
+    ])
+    error_message = "Every log-service grant must be its own statement scoped by aws:SourceOrgID = org_id (no other StringEquals key)"
   }
 
   # CloudTrail's EncryptionContext condition is present.

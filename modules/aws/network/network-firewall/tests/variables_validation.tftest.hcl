@@ -79,3 +79,42 @@ run "rejects_invalid_internal_pass_cidr" {
 
   expect_failures = [var.internal_pass_cidrs]
 }
+
+# Re-audit 5 ARC-2: a public range or 0.0.0.0/0 would pass internet egress
+# before the allowlist.
+run "rejects_public_internal_pass_cidr" {
+  command = plan
+
+  variables {
+    inspection_vpc_id   = "vpc-inspection0000000"
+    log_bucket_name     = "example-firewall-log-bucket"
+    internal_pass_cidrs = ["0.0.0.0/0"]
+  }
+
+  expect_failures = [var.internal_pass_cidrs]
+}
+
+run "rejects_public_segment_cidr" {
+  command = plan
+
+  variables {
+    inspection_vpc_id = "vpc-inspection0000000"
+    log_bucket_name   = "example-firewall-log-bucket"
+    internal_segments = { prod = ["8.8.8.0/24"] }
+  }
+
+  expect_failures = [var.internal_segments]
+}
+
+run "rejects_internal_pass_cidr_containing_home_net" {
+  command = plan
+
+  variables {
+    inspection_vpc_id   = "vpc-inspection0000000"
+    log_bucket_name     = "example-firewall-log-bucket"
+    home_net_cidrs      = ["10.64.0.0/10"]
+    internal_pass_cidrs = ["10.0.0.0/8"]
+  }
+
+  expect_failures = [var.internal_pass_cidrs]
+}
