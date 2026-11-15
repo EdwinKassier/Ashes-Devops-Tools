@@ -96,7 +96,7 @@ jobs:
     steps:
       # Egress/process audit for this job (audit mode: observe, never block).
       - name: Harden runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: audit
 
@@ -174,7 +174,7 @@ jobs:
       # This job holds an issues: write token. github-script calls only the
       # GitHub API, so all other egress is blocked.
       - name: Harden runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -224,7 +224,7 @@ jobs:
       #   gcloud cleanup script.
       # The OIDC token, artifact and cache hosts are allowed by harden-runner.
       - name: Harden runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -266,7 +266,7 @@ jobs:
 
       - name: Upload JUnit report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: e2e-gcp-junit
           path: ${{ runner.temp }}/e2e-gcp-junit.xml
@@ -300,7 +300,7 @@ jobs:
       #   script. A China-region sandbox (amazonaws.com.cn) needs that domain.
       # The OIDC token, artifact and cache hosts are allowed by harden-runner.
       - name: Harden runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -343,7 +343,7 @@ jobs:
 
       - name: Upload JUnit report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: e2e-aws-junit
           path: ${{ runner.temp }}/e2e-aws-junit.xml

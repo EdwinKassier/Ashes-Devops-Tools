@@ -57,7 +57,7 @@ jobs:
       # scripts/verify-run-commit.sh from github.com and curl to the HCP
       # Terraform API, so all other egress is blocked.
       - name: Harden runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -276,7 +276,7 @@ jobs:
       # This job holds a contents: write token. Its only network call is the
       # gh CLI to the GitHub API, so all other egress is blocked.
       - name: Harden runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
