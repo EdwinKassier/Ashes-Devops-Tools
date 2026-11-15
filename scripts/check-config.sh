@@ -3,7 +3,8 @@
 #   config/landing-zone.yaml (the fork's real file, when present), the example,
 #   config/sandbox/, every test fixture, and tests/fixtures/scaffold. Then check
 #   the schema covers every key a root reads, and that the negative fixtures
-#   (config/tests/*.yaml and the *-missing-is-production.yaml test fixtures)
+#   (config/tests/*.yaml and the *-missing-is-production.yaml and
+#   *-regulated-not-production.yaml test fixtures)
 #   are rejected.
 #
 #   scripts/check-config.sh [ROOT]   (make config-check; CI: meta-lint)
@@ -24,7 +25,7 @@ while IFS= read -r f; do files+=("${f}"); done < <(
   {
     [[ -f config/landing-zone.example.yaml ]] && echo config/landing-zone.example.yaml
     find config/sandbox -name 'landing-zone*.yaml' 2>/dev/null || true
-    find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*' ! -name '*-missing-is-production.yaml' ! -path '*/.terraform/*' 2>/dev/null || true
+    find envs modules -name 'landing-zone*.yaml' -path '*/tests/fixtures/*' ! -name '*-missing-is-production.yaml' ! -name '*-regulated-not-production.yaml' ! -path '*/.terraform/*' 2>/dev/null || true
     find tests/fixtures/scaffold -name 'landing-zone*.yaml' 2>/dev/null || true
   } | sort -u
 )
@@ -35,7 +36,7 @@ check-jsonschema --schemafile "${SCHEMA}" "${files[@]}"
 negatives=()
 for f in config/tests/*.yaml; do [[ -e "${f}" ]] && negatives+=("${f}"); done
 while IFS= read -r f; do negatives+=("${f}"); done < <(
-  find envs -name '*-missing-is-production.yaml' -path '*/tests/fixtures/*' ! -path '*/.terraform/*' 2>/dev/null | sort
+  find envs \( -name '*-missing-is-production.yaml' -o -name '*-regulated-not-production.yaml' \) -path '*/tests/fixtures/*' ! -path '*/.terraform/*' 2>/dev/null | sort
 )
 for f in ${negatives[@]+"${negatives[@]}"}; do
   if check-jsonschema --schemafile "${SCHEMA}" "${f}" >/dev/null 2>&1; then

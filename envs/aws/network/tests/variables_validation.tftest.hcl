@@ -380,3 +380,36 @@ run "az_count_one_rejected" {
 
   expect_failures = [var.az_count]
 }
+
+# SEC-1: the config loader's file() must not read a file on the runner.
+run "absolute_config_path_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "/proc/self/environ"
+  }
+
+  expect_failures = [var.landing_zone_config_path]
+}
+
+run "config_path_leaving_the_repository_rejected" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "../../../../outside/landing-zone.yaml"
+  }
+
+  expect_failures = [var.landing_zone_config_path]
+}
+
+# IAC-3: a set path that names no file fails instead of silently dropping the
+# config (and falling back to eu-west-2).
+run "missing_config_file_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-typo.yaml"
+  }
+
+  expect_failures = [var.landing_zone_config_path]
+}

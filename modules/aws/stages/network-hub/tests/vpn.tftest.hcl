@@ -405,3 +405,29 @@ run "vpn_tunnel_state_alarm_follows_the_vpn" {
     error_message = "enable_vpn must alarm on TunnelState of the hub VPN connection"
   }
 }
+
+# ARC-1: the firewall passes traffic to and from the on-premises prefixes, so a
+# fail-closed policy does not drop hybrid traffic.
+run "firewall_passes_onprem_prefixes" {
+  command = plan
+
+  variables {
+    enable_vpn                           = true
+    vpn                                  = { customer_gateway_ip = "203.0.113.10", onprem_cidrs = ["192.168.0.0/16"] }
+    network_firewall_internal_pass_cidrs = ["172.20.0.0/14", "192.168.0.0/16"]
+  }
+
+  assert {
+    condition     = tolist(local.firewall_internal_pass_cidrs) == tolist(["192.168.0.0/16", "172.20.0.0/14"])
+    error_message = "the firewall internal pass ranges must be the VPN on-premises prefixes plus the extra ranges, without duplicates"
+  }
+}
+
+run "firewall_internal_pass_ranges_empty_without_vpn" {
+  command = plan
+
+  assert {
+    condition     = length(local.firewall_internal_pass_cidrs) == 0
+    error_message = "without the VPN or extra ranges the firewall passes HOME_NET to HOME_NET only"
+  }
+}

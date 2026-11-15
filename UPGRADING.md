@@ -41,6 +41,49 @@ patch knowingly and expect conflicts here.
 Manual steps for the next release, grouped by area. A breaking change
 (`feat!:` or a `BREAKING CHANGE` footer) must add its entry here; CI enforces it.
 
+### What your next run does (re-audit 4 fixes)
+
+The 2026-11-15 fixes for [re-audit 4](docs/audit/2026-11-15-due-diligence-reaudit-4.md)
+change these runs:
+
+- **aws-network (ARC-1, ARC-11).** With the Network Firewall on, the plan
+  creates a rule group `<rule_group_name>-internal-pass` and updates the
+  firewall policy in place to reference it at priority 1500. It passes
+  `top_cidr` to `top_cidr` and to and from the VPN `onprem_cidrs` and the new
+  `aws.network.internal_pass_cidrs`, so a fail-closed policy no longer drops
+  spoke traffic to the central endpoints, between spokes or to on-premises.
+  If you relied on the firewall to drop traffic between spokes of one
+  segment, write that drop in the new `aws.network.suricata_rules` (they run
+  first) or set `network_firewall_internal_pass = false` on the stage. The
+  plan also adds one `DroppedPackets` alarm per firewall AZ
+  (`network_firewall_drop_alarm_threshold`, default 1000 per 5 minutes).
+  Remove `.amazonaws.com` from `aws.network.egress_domain_allowlist` if you
+  added it for endpoint traffic.
+- **Regulated environments must be production (CMP-1, breaking).** A
+  `gcp.environments` or `aws.workload_environments` entry with
+  `compliance_class: regulated` must set `is_production: true`. The schema,
+  tfc-admin, aws-network and gcp-workload fail the plan otherwise. Setting it
+  turns on the production controls for that environment (and, in tfc-admin,
+  its production workspace settings): read the production sections of this
+  file for that environment before you apply.
+- **Config paths (SEC-1, IAC-3, breaking).** `landing_zone_config_path` must
+  be `""`, null, or a relative `.yaml`/`.yml` path that stays inside the
+  repository; an absolute path now fails the plan. A path that is set must
+  name an existing file, so a typo no longer drops the whole config and falls
+  back to built-in defaults (such as `eu-west-2`). tfc-admin's
+  `workspace_variables_file` must be a relative `.yaml`/`.yml` path. Preset
+  names must match `^[a-z0-9-]+$`.
+- **Plan-time scanner (SEC-1, SEC-2).** `scripts/check-plan-time-exec.py`
+  refuses a `file()`-family call whose path is a reference or holds an
+  interpolation (except the reviewed config loaders), and a
+  `terraform_remote_state` `config` with keys other than `organization` and
+  `workspaces`. The OPA policy denies `hostname` or `token` in a
+  remote-state `config`. A fork that uses either form fails CI.
+- **Release metadata (CICD-1).** `terraform-apply.yml` publishes a release
+  only for a tag on a commit that is on the default branch. Add the
+  deployment-tag ruleset in `docs/guides/CI_SECRETS.md`: without it, a writer
+  who edits the workflow on a branch commit still controls the job.
+
 ### What your next run does (re-audit 2 code wave)
 
 The 2026-11-13 code wave ([re-audit 2](docs/audit/2026-11-13-due-diligence-reaudit-2.md))

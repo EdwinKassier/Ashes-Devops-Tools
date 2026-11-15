@@ -213,6 +213,34 @@ variable "network_firewall_suricata_rules" {
   default     = ""
 }
 
+variable "network_firewall_internal_pass" {
+  description = "Create the firewall's internal pass rule group: pass top_cidr to top_cidr (spokes to the central endpoints, the Resolver and other spokes) and top_cidr to and from the on-premises prefixes (vpn.onprem_cidrs when enable_vpn is true, plus network_firewall_internal_pass_cidrs). Default true. Under a fail-closed policy that traffic is dropped without it. Set false only when network_firewall_suricata_rules pass it instead."
+  type        = bool
+  default     = true
+}
+
+variable "network_firewall_internal_pass_cidrs" {
+  description = "Extra internal ranges outside top_cidr that the firewall passes in both directions (for example on-premises prefixes reached over Direct Connect). The vpn.onprem_cidrs prefixes are added automatically when enable_vpn is true. Empty (default) = none."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.network_firewall_internal_pass_cidrs : can(cidrnetmask(c))])
+    error_message = "network_firewall_internal_pass_cidrs entries must be IPv4 CIDR blocks."
+  }
+}
+
+variable "network_firewall_drop_alarm_threshold" {
+  description = "Stateful dropped packets per 5-minute period, per firewall AZ, above which the hub alarms for 3 periods in a row. A fail-closed firewall drops non-allowlisted egress on purpose, so the default (1000) alarms on a sustained surge (a broken allowlist, a missing internal pass rule or a workload calling a new domain), not on single drops. Only used when enable_network_firewall is true."
+  type        = number
+  default     = 1000
+
+  validation {
+    condition     = var.network_firewall_drop_alarm_threshold >= 0
+    error_message = "network_firewall_drop_alarm_threshold must be zero or more."
+  }
+}
+
 variable "enable_network_access_analyzer" {
   description = "Whether to create the Network Access Analyzer scope that flags segmentation-intent violations. Off by default."
   type        = bool

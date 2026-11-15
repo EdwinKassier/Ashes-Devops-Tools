@@ -26,3 +26,6 @@ aws:
       - .githubusercontent.com
       - .terraform.io
     stateful_default_actions: [aws:drop_established, aws:alert_established]
+    internal_pass_cidrs: [192.168.0.0/16]
+    suricata_rules: |
+      pass tcp $HOME_NET any -> 203.0.113.10 22 (msg:"sftp partner"; flow:to_server; sid:100001; rev:1;)

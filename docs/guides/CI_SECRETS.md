@@ -213,6 +213,27 @@ gh secret delete TFC_TOKEN_DRIFT                      # (repeat for each secret)
 
 The workflows already name these environments. GitHub creates an environment, unprotected, the
 first time a job references it, so the branch policy above is what makes the scoping real.
+
+**Deployment tags need a tag ruleset (CICD-1).** A tag policy on `tfc-readonly` admits any
+matching tag on any commit. A tag push runs the workflow file of the tagged commit, so a writer
+who tags a branch commit controls the job that holds `TFC_TOKEN`. `terraform-apply.yml` runs its
+verifier from the default branch, keeps the token in the one `curl` step, and fails when the
+tagged commit is not on the default branch, but a writer can edit those checks on the branch
+commit. The control is a repository ruleset on tags that limits who can create, update and
+delete the deployment tags (`gcp-*/v*`, `aws-*/v*`, `saas/*/v*`, `tfc-admin/v*`) to the
+release maintainers:
+
+```bash
+gh api -X POST "repos/$repo/rulesets" --input - <<'JSON'
+{"name": "deployment-tags", "target": "tag", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/tags/gcp-*/v*", "refs/tags/aws-*/v*",
+   "refs/tags/saas/*/v*", "refs/tags/tfc-admin/v*"], "exclude": []}},
+ "rules": [{"type": "creation"}, {"type": "update"}, {"type": "deletion"}],
+ "bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always"}]}
+JSON
+```
+
+`actor_id` 5 is the built-in admin role; use a maintainers team instead where you have one.
 Prefer a GitHub App installation token over a `DOCS_BOT_PAT` PAT where
 your organization allows it. The release workflow already does this.
 

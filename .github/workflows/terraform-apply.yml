@@ -50,23 +50,50 @@ jobs:
       release_name: ${{ steps.parse.outputs.release_name }}
       version: ${{ steps.parse.outputs.version }}
       status: ${{ steps.run_status.outputs.status }}
-      commit_match: ${{ steps.run_status.outputs.commit_match }}
+      commit_match: ${{ steps.run_commit.outputs.commit_match }}
     steps:
-      # This job holds TFC_TOKEN (or TFC_TOKEN_GUARDRAILS). Its network calls
-      # are the checkout of scripts/verify-run-commit.sh from github.com and
-      # curl to the HCP Terraform API, so all other egress is blocked.
+      # This job holds TFC_TOKEN (or TFC_TOKEN_GUARDRAILS) in one step only.
+      # Its network calls are the GitHub compare API, the checkout of
+      # scripts/verify-run-commit.sh from github.com and curl to the HCP
+      # Terraform API, so all other egress is blocked.
       - name: Harden runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
           egress-policy: block
           allowed-endpoints: >
+            api.github.com:443
             app.terraform.io:443
             github.com:443
 
-      # Only the commit verifier, from the tagged commit; no credentials kept.
+      # CICD-1: a deployment tag must point at a commit on the default branch,
+      # so a tag on an unreviewed branch commit gets no release. Runs before
+      # any step that holds a secret. This check lives in the tagged commit's
+      # workflow file, so a writer who also edits this file on that commit
+      # bypasses it: the tag ruleset (docs/guides/CI_SECRETS.md) is the control
+      # that stops a writer from creating deployment tags at all.
+      - name: Check the tagged commit is on the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TAG_COMMIT: ${{ github.sha }}
+        run: |
+          compare=$(gh api "repos/${REPO}/compare/${DEFAULT_BRANCH}...${TAG_COMMIT}" --jq .status)
+          case "$compare" in
+            identical|behind) ;;
+            *)
+              echo "::error::Tagged commit ${TAG_COMMIT} is not on ${DEFAULT_BRANCH} (compare status '${compare}')." \
+                "Tag a commit that is merged to ${DEFAULT_BRANCH}." >&2
+              exit 1
+              ;;
+          esac
+
+      # Only the commit verifier, from the default branch (not the tagged
+      # commit, CICD-1); no credentials kept.
       - name: Checkout the run-commit verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           sparse-checkout: scripts/verify-run-commit.sh
           sparse-checkout-cone-mode: false
@@ -169,7 +196,7 @@ jobs:
             && secrets.TFC_TOKEN_GUARDRAILS || secrets.TFC_TOKEN }}
           TFC_ORGANIZATION: ${{ vars.TFC_ORGANIZATION }}
           WORKSPACE: ${{ steps.parse.outputs.workspace }}
-          TAG_COMMIT: ${{ github.sha }}
+          RUNS_FILE: ${{ runner.temp }}/tfc-runs.json
         run: |
           RUNS_URL="https://app.terraform.io/api/v2/organizations/${TFC_ORGANIZATION}"
           RUNS_URL="${RUNS_URL}/workspaces/${WORKSPACE}/runs?page%5Bsize%5D=1&include=configuration_version.ingress_attributes"
@@ -215,14 +242,24 @@ jobs:
               ;;
           esac
 
-          # L7: verify the run's source commit matches THIS tag's commit, so a
-          # release never asserts a deploy of a different configuration. The
-          # commit is in the ingress attributes of the run's configuration
-          # version, which the runs API includes when asked for
-          # include=configuration_version.ingress_attributes (above). A run with
-          # no source commit (a CLI or API run) fails this job, so no release is
-          # published: a release must point at a VCS run of the tagged commit.
-          ./scripts/verify-run-commit.sh <<<"$response" >> "$GITHUB_OUTPUT"
+          # The response goes to a file for the next step, which runs the
+          # verifier without the token (CICD-1).
+          printf '%s' "$response" > "$RUNS_FILE"
+
+      # L7: verify the run's source commit matches THIS tag's commit, so a
+      # release never asserts a deploy of a different configuration. The commit
+      # is in the ingress attributes of the run's configuration version, which
+      # the runs API includes when asked for
+      # include=configuration_version.ingress_attributes (above). A run with no
+      # source commit (a CLI or API run) fails this job, so no release is
+      # published: a release must point at a VCS run of the tagged commit. This
+      # step has no TFC token in its environment.
+      - name: Verify the run commit
+        id: run_commit
+        env:
+          TAG_COMMIT: ${{ github.sha }}
+          RUNS_FILE: ${{ runner.temp }}/tfc-runs.json
+        run: ./scripts/verify-run-commit.sh < "$RUNS_FILE" >> "$GITHUB_OUTPUT"
 
   release:
     name: Publish GitHub Release

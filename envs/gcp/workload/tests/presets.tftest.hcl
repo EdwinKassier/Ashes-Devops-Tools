@@ -253,7 +253,7 @@ run "regulated_env_rejects_dry_run_perimeter" {
   }
 
   # is_production is false: the regulated guard alone stops the plan.
-  expect_failures = [terraform_data.regulated_perimeter_guard]
+  expect_failures = [terraform_data.regulated_perimeter_guard, terraform_data.compliance_class_guard]
 }
 
 run "regulated_env_needs_a_perimeter" {
@@ -263,8 +263,9 @@ run "regulated_env_needs_a_perimeter" {
     landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
   }
 
-  # The file-level contract has no vpc_sc_access_policy_id: no perimeter.
-  expect_failures = [terraform_data.regulated_perimeter_guard]
+  # The file-level contract has no vpc_sc_access_policy_id: no perimeter. Its
+  # is_production is false, so the CMP-1 guard fails too.
+  expect_failures = [terraform_data.regulated_perimeter_guard, terraform_data.compliance_class_guard]
 }
 
 run "regulated_env_refuses_the_production_waiver" {
@@ -317,7 +318,7 @@ run "regulated_env_refuses_reduced_flow_log_sampling" {
     }
   }
 
-  expect_failures = [terraform_data.regulated_flow_logs_guard]
+  expect_failures = [terraform_data.regulated_flow_logs_guard, terraform_data.compliance_class_guard]
 }
 
 run "regulated_env_refuses_short_flow_log_retention" {
@@ -341,7 +342,7 @@ run "regulated_env_refuses_short_flow_log_retention" {
     }
   }
 
-  expect_failures = [terraform_data.regulated_flow_logs_guard]
+  expect_failures = [terraform_data.regulated_flow_logs_guard, terraform_data.compliance_class_guard]
 }
 
 run "standard_env_in_a_regulated_estate_is_unchanged" {
@@ -403,7 +404,7 @@ run "regulated_env_refuses_disabled_cloud_armor" {
     }
   }
 
-  expect_failures = [terraform_data.regulated_cloud_armor_guard]
+  expect_failures = [terraform_data.regulated_cloud_armor_guard, terraform_data.compliance_class_guard]
 }
 
 run "regulated_env_refuses_disabled_owasp_rules" {
@@ -427,7 +428,7 @@ run "regulated_env_refuses_disabled_owasp_rules" {
     }
   }
 
-  expect_failures = [terraform_data.regulated_cloud_armor_guard]
+  expect_failures = [terraform_data.regulated_cloud_armor_guard, terraform_data.compliance_class_guard]
 }
 
 # CMP-8: a regulated environment may not switch the Backup and DR vault off.
@@ -452,7 +453,7 @@ run "regulated_env_refuses_disabled_backup_vault" {
     }
   }
 
-  expect_failures = [terraform_data.regulated_backup_vault_guard]
+  expect_failures = [terraform_data.regulated_backup_vault_guard, terraform_data.compliance_class_guard]
 }
 
 # A standard environment opts in through gcp.environments.<env>.backup_vault;
@@ -560,4 +561,29 @@ run "regulated_preset_yaml_matches_tfvars" {
     condition     = join(",", local.preset_names) == "regulated-gcp-workload" && length(local.preset) == 5
     error_message = "A regulated environment must load the regulated preset with its five values."
   }
+}
+
+# CMP-1: a regulated environment that is not production fails the plan, and
+# only through the compliance class guard.
+run "regulated_env_must_be_production" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    projects_contract = {
+      environment_config = {
+        prod = {
+          folder_id               = "333"
+          host_project_id         = "acme-prod-host-abcd"
+          host_project_number     = "333333333333"
+          region                  = "europe-west2"
+          cidr_block              = "10.30.0.0/16"
+          is_production           = false
+          vpc_sc_access_policy_id = "555555555"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.compliance_class_guard]
 }

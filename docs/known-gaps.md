@@ -848,25 +848,29 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   Production services autoscale by default (ARC-16). Services with a deploy role
   ignore `desired_count`.
 - **The Secure Web Proxy has no TLS inspection.** Rules match on host name only.
-- **AWS hub network alarms cover three signals, not the firewall.** The
+- **AWS hub network alarms: the firewall drop alarm needs sandbox proof.** The
   aws-network hub alarms on transit gateway `PacketDropCountBlackhole`, NAT
-  gateway `ErrorPortAllocation` (one alarm per gateway) and, with the VPN,
-  Site-to-Site VPN `TunnelState` (below 1 means at least one tunnel is not up).
-  Prod and nonprod isolation uses blackhole routes on purpose, so the transit
-  gateway alarm fires only after three 5-minute periods of drops. There is no
-  Network Firewall alarm: `DroppedPackets` counts packets dropped by rule
-  actions, so in alert-only mode it stays at zero, and in block mode it counts
-  the drops the policy exists to make. Neither says the firewall is unhealthy.
-  The signals that do (`OtherDroppedPackets`, which includes packets throttled
-  under burst load, and `InvalidDroppedPackets`) have a dimension set that the
-  documentation does not give per metric, and an alarm on the wrong set stays in
-  INSUFFICIENT_DATA. Add them after reading the set from a deployed firewall
-  (`aws cloudwatch list-metrics --namespace AWS/NetworkFirewall`). The alarms
-  publish to a topic in the network account, not to `security-notifications`
-  (another account); a production plan needs `notifications.emails` or
-  `alarm_sns_topic_arn`. TGW `PacketDropCountNoRoute` is not alarmed: spokes
-  without a matching route also drop there, and the sandbox has not shown a
-  threshold that stays quiet in normal use.
+  gateway `ErrorPortAllocation` (one alarm per gateway), with the VPN on
+  Site-to-Site VPN `TunnelState` (below 1 means at least one tunnel is not up),
+  and with the firewall on Network Firewall `DroppedPackets` (one alarm per AZ,
+  ARC-11). Prod and nonprod isolation uses blackhole routes on purpose, so the
+  transit gateway alarm fires only after three 5-minute periods of drops. A
+  fail-closed firewall drops non-allowlisted egress on purpose, so its alarm
+  fires only above `network_firewall_drop_alarm_threshold` (default 1000
+  packets per 5 minutes) for three periods: it catches a broken allowlist or
+  internal pass rule, not single drops. The alarm uses the dimension set
+  `FirewallName`, `AvailabilityZone`, `Engine = Stateful` (Classic policy).
+  The AWS documentation lists the dimensions but not the set per metric, and
+  an alarm on the wrong set stays in INSUFFICIENT_DATA. Confirm the set on a
+  deployed firewall (`aws cloudwatch list-metrics --namespace
+  AWS/NetworkFirewall --metric-name DroppedPackets`). `OtherDroppedPackets`
+  (burst throttling) and `InvalidDroppedPackets` are not alarmed yet for the
+  same reason. The alarms publish to a topic in the network account, not to
+  `security-notifications` (another account); a production plan needs
+  `notifications.emails` or `alarm_sns_topic_arn`. TGW
+  `PacketDropCountNoRoute` is not alarmed: spokes without a matching route also
+  drop there, and the sandbox has not shown a threshold that stays quiet in
+  normal use.
 - **The tfc-plan API-key deny cannot use `plan_role_data_read_exempt_arns`.** A
   stack that plans REST API keys must turn the deny off.
 - **The deny-tamper SCP does not cover an external apply boundary** set through
@@ -1641,12 +1645,16 @@ side (all mock-tested, secure defaults):
     block, which the plan JSON does not render, and the documented stage
     usage sets a literal ARN, so neither layer judges the role. The controls
     are the identity policies of the TFC roles and review.
-- **Remote-state `hostname` is not checked.** `terraform_remote_state` must
-  use the `cloud` or `remote` backend, but the policy does not check a
-  `hostname` in its `config`. When `config` is built from locals or variables
-  the plan JSON shows only references, so such a check could not be complete.
-  No remote-state read in this repo sets `hostname`.
-  `scripts/check-plan-time-exec.py` does not check `config.hostname` either.
+- **Remote-state `hostname` is checked before the plan; OPA only detects it
+  (SEC-2, re-audit 4).** `scripts/check-plan-time-exec.py` requires a
+  `terraform_remote_state` `config` to be an object literal with only
+  `organization` and `workspaces` (`name` or `prefix`), so no `hostname` or
+  `token` passes CI. The OPA policy denies `hostname` or `token` in a constant
+  `config` and in the read value in `prior_state` when `config` holds
+  references. OPA runs after the plan, so by then the read, and the token it
+  sends, has already happened: OPA stops the apply and marks the run. A plan
+  of an unscanned commit (a CLI upload, or a VCS run before CI) is covered by
+  OPA only.
 - **Ephemeral resources are visible to OPA only when referenced (SEC-2).**
   Terraform does not render an `ephemeral` block in the plan JSON (verified
   with Terraform 1.17.1), yet it opens the resource during the plan and the
@@ -1688,11 +1696,16 @@ side (all mock-tested, secure defaults):
   tag (`git::…?ref=vX.Y.Z`) is allowed only outside `envs/` (examples and
   templates, which HCP Terraform does not run); its code is not scanned, and
   it was checked when that release was cut. Under `envs/` only local module
-  sources pass. The scanner checks literal paths of `file()`,
-  `templatefile()` and the other file readers (they must stay under
-  `path.module` / `path.root` in the repository) and lets a plain reference
-  through without knowing its value (for example the `landing_zone_config_path`
-  variable that every root reads, or a `${n}` part of a literal path). OPA
+  sources pass. The scanner checks the paths of `file()`, `templatefile()`
+  and the other file readers: a literal path must stay under `path.module` /
+  `path.root` in the repository and hold no interpolation, and a reference is
+  refused (SEC-1, re-audit 4). The reviewed readers on `FILE_REFERENCE_ALLOW`
+  are the exceptions: each root's config loader (`file(f)` in `config.tf`),
+  whose `landing_zone_config_path` validation allows only a relative
+  `.yaml`/`.yml` path that stays in the repository; tfc-admin's
+  `workspace_variables_file` (relative `.yaml` only); and gcp-workload's
+  preset loader, whose names must match `^[a-z0-9-]+$`. A workspace variable
+  can still point the loader at another `.yaml` file in the repository. OPA
   cannot see function calls at all.
 - **Workload SAs keep `workloadIdentityPoolAdmin` (SEC-10).** app-services
   needs it to create the app-deploy pool. `custom.wifProviderTenantPinned` pins
@@ -1845,14 +1858,22 @@ side (all mock-tested, secure defaults):
   with `scripts/tool-checksums.sh`; and `required_version` / provider-major
   bumps stay manual by design.
 - **Spoke traffic to the central AWS interface endpoints is inspected (ARC-6,
-  D5).** It crosses Network Firewall in both directions, so it pays the per-GB
-  processing charge, and under a fail-closed production allowlist
-  (`aws:drop_established`) it passes only when
-  `aws.network.egress_domain_allowlist` covers the service names (for example
-  `.amazonaws.com`). A direct transit gateway route from the spoke tables to
-  the egress attachment would make return traffic asymmetric (the `shared`
-  table returns spoke traffic through inspection), and the stateful firewall
-  drops asymmetric flows. Revisit with a dedicated endpoints segment.
+  D5).** It crosses Network Firewall in both directions, so it pays the
+  per-GB processing charge. Under a fail-closed production policy
+  (`aws:drop_established`) it passes because the firewall's internal pass
+  rule group (priority 1500, on by default) passes `top_cidr` to `top_cidr`
+  and to and from the VPN on-premises prefixes and
+  `aws.network.internal_pass_cidrs` (ARC-1, re-audit 4). The egress allowlist
+  matches only traffic from `HOME_NET` to the internet, so it cannot pass
+  internal traffic: do not add `.amazonaws.com` to it for this. Prod and
+  nonprod spokes stay apart through the transit gateway blackhole routes, not
+  the firewall; to drop a specific internal flow, write it in
+  `aws.network.suricata_rules`, which run before the pass group. The packet
+  behaviour is proved by code and tests only, not yet by a sandbox apply. A
+  direct transit gateway route from the spoke tables to the egress attachment
+  would make return traffic asymmetric (the `shared` table returns spoke
+  traffic through inspection), and the stateful firewall drops asymmetric
+  flows. Revisit with a dedicated endpoints segment.
 
 ## Scanner coverage
 

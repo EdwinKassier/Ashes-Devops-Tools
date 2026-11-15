@@ -628,8 +628,51 @@ expect_rc "a file() path built by a function fails" 1 "$(case_tree joinfile modu
 }')" "filebase64"
 expect_rc "a path.module file() passes" 0 "$(case_tree okfile modules/a/main.tf 'locals {
   x = file("${path.module}/policies/p.json")
+  s = fileset(path.module, "*.json")
+}')"
+# SEC-1: a reference or an interpolated segment can hold /proc/self/environ or ../.
+expect_rc "SEC-1: file(var.x) fails" 1 "$(case_tree varfile modules/a/main.tf 'locals {
+  x = file(var.path)
+}')" "file(var.path) reads a path from a reference"
+expect_rc "SEC-1: templatefile(local.x) fails" 1 "$(case_tree localfile envs/r/main.tf 'locals {
+  x = templatefile(local.tpl, {})
+}')" "templatefile(local.tpl)"
+expect_rc "SEC-1: an interpolated path segment fails" 1 "$(case_tree interpfile modules/a/main.tf 'locals {
   y = [for n in var.names : yamldecode(file("${path.root}/../../presets/${n}.yaml"))]
-  z = fileexists(coalesce(local.f, "/nonexistent")) ? file(local.f) : ""
+}')" "builds its path from an interpolation"
+expect_rc "SEC-1: the reviewed config loader passes" 0 "$(case_tree loaderfile envs/aws/r/config.tf 'locals {
+  lz_documents = [for f in compact([local.landing_zone_config_file]) : yamldecode(file(f))]
+}')"
+expect_rc "SEC-1: the loader form outside config.tf fails" 1 "$(case_tree loaderelse envs/aws/r/main.tf 'locals {
+  lz_documents = [for f in compact([local.landing_zone_config_file]) : yamldecode(file(f))]
+}')" "file(f)"
+
+# SEC-2: a remote-state config may set only organization and workspaces.
+expect_rc "SEC-2: a remote-state hostname fails" 1 "$(case_tree rshost envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "remote"
+  config = {
+    hostname     = "attacker.example"
+    organization = "o"
+    workspaces   = { name = "w" }
+  }
+}')" "hostname"
+expect_rc "SEC-2: a built remote-state config fails" 1 "$(case_tree rsbuilt envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "cloud"
+  config  = merge(local.c, { organization = "o" })
+}')" "object literal"
+expect_rc "SEC-2: a remote-state token in workspaces fails" 1 "$(case_tree rsws envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "cloud"
+  config = {
+    organization = "o"
+    workspaces   = { name = "w", token = "t" }
+  }
+}')" "workspaces must be"
+expect_rc "SEC-2: an organization/workspaces remote-state config passes" 0 "$(case_tree rsok envs/r/main.tf 'data "terraform_remote_state" "x" {
+  backend = "cloud"
+  config = {
+    organization = local.org
+    workspaces   = { name = var.ws }
+  }
 }')"
 
 # --- SEC-2: ephemeral resources ---------------------------------------------------

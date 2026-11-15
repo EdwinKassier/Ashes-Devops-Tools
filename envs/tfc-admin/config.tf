@@ -120,6 +120,12 @@ locals {
       [for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : "gcp.environments.${k}" if try(tobool(e.is_production), null) == null],
       [for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : "aws.workload_environments.${k}" if try(tobool(e.is_production), null) == null],
     ))
+    # CMP-1: regulated environments that are not is_production: true. A
+    # regulated environment must get every production control.
+    regulated_not_production = sort(concat(
+      [for k, e in try({ for k, e in local.lz.gcp.environments : k => e }, {}) : "gcp.environments.${k}" if try(tostring(e.compliance_class), "standard") == "regulated" && try(tobool(e.is_production), null) != true],
+      [for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : "aws.workload_environments.${k}" if try(tostring(e.compliance_class), "standard") == "regulated" && try(tobool(e.is_production), null) != true],
+    ))
   }
 
   project_name_keys = ["gcp", "aws", "saas", "platform", "gcp-workloads", "aws-workloads", "guardrails"]

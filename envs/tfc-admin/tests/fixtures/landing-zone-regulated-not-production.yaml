@@ -1,0 +1,26 @@
+# Negative fixture: regulated environments (one per cloud) that are not
+# is_production: true. The plan must fail naming both (CMP-1), and
+# config-check expects this file to fail schema validation too.
+version: 1
+org:
+  tfc:
+    organization: cfg-tfc
+    project_name_prefix: lz-
+    aws_project: aws-landing-zone
+    plan: standard
+    vcs_repo:
+      identifier: cfg/landing-zone
+      github_app_installation_id: ghain-123
+gcp:
+  enabled: true
+  environments:
+    dev: {cidr_block: 10.10.0.0/16, is_production: false}
+    pci: {cidr_block: 10.30.0.0/16, is_production: false, compliance_class: regulated}
+aws:
+  enabled: true
+  workload_environments:
+    dev: {account_key: workload_dev, is_production: false, vpc_cidr: 10.72.0.0/16}
+    pci: {account_key: workload_pci, is_production: false, compliance_class: regulated, vpc_cidr: 10.73.0.0/16}
+saas:
+  enabled: true
+  workspaces: [web, admin]

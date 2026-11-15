@@ -1,5 +1,5 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values. Its directory also sets the estate's trigger patterns (config/ = production, any other dir = <dir>/**), so a relative path must stay inside the repository."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values. Its directory also sets the estate's trigger patterns (config/ = production, any other dir = <dir>/**), so a relative path must stay inside the repository."
   type        = string
   default     = null
 
@@ -9,7 +9,25 @@ variable "landing_zone_config_path" {
       dirname("./${coalesce(var.landing_zone_config_path, "x")}/_") == ".." || dirname("./${coalesce(var.landing_zone_config_path, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../../../") ||
       (startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../") && !startswith(dirname("./${coalesce(var.landing_zone_config_path, "x")}/_"), "../../"))
     )
-    error_message = "landing_zone_config_path is relative but leaves the repository (e.g. ../../../x). Use ../../<dir>/<file> (repo-relative from envs/tfc-admin), a path below envs/tfc-admin, or an absolute path."
+    error_message = "landing_zone_config_path is relative but leaves the repository (e.g. ../../../x). Use ../../<dir>/<file> (repo-relative from envs/tfc-admin) or a path below envs/tfc-admin."
+  }
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 2
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 2 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path, or set \"\" to disable the config file."
   }
 }
 
@@ -47,6 +65,15 @@ variable "environments" {
       ? alltrue([for e in values(var.environments) : e.is_production != null])
     : length(local.cfg.missing_is_production) == 0)
     error_message = "is_production must be true or false on every environment (environments[*].is_production, or gcp.environments / aws.workload_environments in config/landing-zone.yaml); a name such as prod is not read. Missing: ${var.environments != null ? join(", ", [for k, e in var.environments : k if e.is_production == null]) : join(", ", local.cfg.missing_is_production)}."
+  }
+
+  validation {
+    # CMP-1: the production gates (egress, identity binding, containment,
+    # endpoint policies) key on is_production, so a regulated environment that
+    # is not production would miss them. Checked on the config file, which is
+    # where compliance_class lives. The var reference is a no-op.
+    condition     = (var.environments == null || var.environments != null) && length(local.cfg.regulated_not_production) == 0
+    error_message = "A regulated environment must set is_production: true, so it gets every production control (CMP-1). Set is_production: true on: ${join(", ", local.cfg.regulated_not_production)} (config/landing-zone.yaml), or set compliance_class: standard."
   }
 }
 
@@ -378,7 +405,7 @@ variable "workspace_variables" {
 variable "workspace_variables_file" {
   description = <<-EOT
     Committed per-workspace Terraform variables for VCS-driven runs (which get no
-    local tfvars). Path relative to this root (or absolute); read only if the file
+    local tfvars). Path relative to this root (a .yaml or .yml file inside the repository; no absolute); read only if the file
     exists, so the default is a no-op until you create it. YAML shape (see
     config/tfc-workspaces.example.yaml):
       workspaces:
@@ -400,7 +427,14 @@ variable "workspace_variables_file" {
       dirname("./${coalesce(var.workspace_variables_file, "x")}/_") == ".." || dirname("./${coalesce(var.workspace_variables_file, "x")}/_") == "../../.." || startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../../../") ||
       (startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../") && !startswith(dirname("./${coalesce(var.workspace_variables_file, "x")}/_"), "../../"))
     )
-    error_message = "workspace_variables_file is relative but leaves the repository (e.g. ../../../x): it must stay inside the repo so it can be a trigger pattern. Use ../../<dir>/<file>, a path below envs/tfc-admin, or an absolute path."
+    error_message = "workspace_variables_file is relative but leaves the repository (e.g. ../../../x): it must stay inside the repo so it can be a trigger pattern. Use ../../<dir>/<file> or a path below envs/tfc-admin."
+  }
+
+  # SEC-1: file() reads this path, so it must be a relative .yaml/.yml file
+  # (an absolute path could read a file on the runner).
+  validation {
+    condition     = var.workspace_variables_file == null || (can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.workspace_variables_file, "x"))) && !startswith(coalesce(var.workspace_variables_file, "x"), "/"))
+    error_message = "workspace_variables_file must be a relative path to a .yaml or .yml file (no leading /): an absolute path could read a file on the runner."
   }
 }
 

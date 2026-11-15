@@ -21,7 +21,9 @@ time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
     one that nothing references);
   - an action block whose type is not on allowed_action_types;
   - a data "terraform_remote_state" whose backend is not a literal on the
-    policy's allowed_remote_state_backends;
+    policy's allowed_remote_state_backends, or whose config is not an object
+    literal with only the keys organization and workspaces (workspaces: name
+    or prefix), so no hostname or token can send the run's token elsewhere;
   - a provider that is not on the policy's allowed_provider_sources: in
     required_providers (qualified, unqualified or version-only) and as the
     provider of every provider, resource, data, ephemeral and action block;
@@ -41,8 +43,12 @@ time. It parses every tracked *.tf file (python-hcl2) and *.tf.json file
     envs/**/backend_override.tf that holds only terraform { backend / cloud };
   - a non-local module source under envs/ (HCP Terraform runs envs/);
   - file(), templatefile() and the other file readers with a literal path
-    that is not under path.module / path.root or leaves the repository, or a
-    path built by a function or expression;
+    that is not under path.module / path.root or leaves the repository, a
+    path built by a function or expression, and (SEC-1) a path that is a
+    reference or holds an interpolation, except the reviewed config loaders
+    on FILE_REFERENCE_ALLOW (a reference's value is not known here, so
+    file(var.x) with x = /proc/self/environ would read the runner's
+    environment);
   - elsewhere, a module source that is neither local nor this repository's
     release tag, or a local source into .terraform/ or node_modules/;
   - a drift between allowed_provisioner_chain and the module calls in the code;
@@ -131,6 +137,23 @@ FILE_FUNCTION = re.compile(
 FILE_ARG_REFERENCE = re.compile(
     r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_-]*|\[[^\[\]()]*\])*\s*[,)]"
 )
+# SEC-1: the reviewed file readers whose path is a reference or holds an
+# interpolation. The roots' config loaders read landing_zone_config_path,
+# whose validation allows only a relative .yaml path inside the repository;
+# tfc-admin reads workspace_variables_file (same rule); gcp-workload reads
+# examples/presets/<name>.yaml for preset names that match ^[a-z0-9-]+$.
+# Each entry: (file regex, function, argument or literal path).
+FILE_REFERENCE_ALLOW = (
+    (re.compile(r"^(?:envs/(?:aws/|gcp/)?[a-z-]+|templates/[a-z/-]+)/config\.tf$"), "file", "f"),
+    (re.compile(r"^envs/tfc-admin/main\.tf$"), "file", "local.workspace_variables_file_path"),
+    (re.compile(r"^envs/gcp/workload/config\.tf$"), "file",
+     '"${path.root}/../../../examples/presets/${n}.yaml"'),
+)
+# path.module and path.root are safe references (fileset's first argument).
+SAFE_FILE_REFERENCES = {"path.module", "path.root"}
+# SEC-2: the only keys a terraform_remote_state config may set.
+REMOTE_STATE_CONFIG_KEYS = {"organization", "workspaces"}
+REMOTE_STATE_WORKSPACE_KEYS = {"name", "prefix"}
 OVERRIDE_FILE = re.compile(r"(?:^|_)override\.tf(?:\.json)?$")
 # A fork's own state backend (UPGRADING.md "What you own").
 BACKEND_OVERRIDE = "backend_override.tf"
@@ -441,6 +464,8 @@ def check_doc(rel: str, doc: dict, dir_providers: dict, pol: dict, provisioner_d
                 and literal(body.get("backend")) not in pol["backends"]:
             out.append(f"{rel}: data.terraform_remote_state.{name} backend must be a literal "
                        f"{sorted(pol['backends'])}, not {body.get('backend')!r}")
+        if kind == "data" and rtype == "terraform_remote_state":
+            out += remote_state_config_problems(rel, name, body.get("config"))
         src = resolve(provider_local(rtype, body))
         if src not in pol["providers"]:
             out.append(f'{rel}: {kind} "{rtype}" "{name}" uses provider {src}, '
@@ -534,29 +559,70 @@ def string_literal(text: str, start: int) -> str | None:
     return None
 
 
+def remote_state_config_problems(rel: str, name: str, config) -> list[str]:
+    """SEC-2: a remote-state config must be an object literal with only the
+    keys organization and workspaces, so a hostname (or token) cannot send
+    the run's HCP Terraform token to another host during the plan."""
+    where = f"{rel}: data.terraform_remote_state.{name} config"
+    if config is None:
+        return []
+    if not isinstance(config, dict):
+        return [f"{where} must be an object literal with only {sorted(REMOTE_STATE_CONFIG_KEYS)}, "
+                "not an expression (a built config could set hostname)"]
+    out = []
+    extra = sorted(set(map(str, config)) - REMOTE_STATE_CONFIG_KEYS)
+    if extra:
+        out.append(f"{where} sets {extra}; only {sorted(REMOTE_STATE_CONFIG_KEYS)} are allowed "
+                   "(hostname or token would send the run's token to another host)")
+    ws = config.get("workspaces")
+    if ws is not None and not (isinstance(ws, dict) and set(map(str, ws)) <= REMOTE_STATE_WORKSPACE_KEYS):
+        out.append(f"{where}.workspaces must be an object literal with only "
+                   f"{sorted(REMOTE_STATE_WORKSPACE_KEYS)}")
+    return out
+
+
+def file_reference_allowed(rel: str, fn: str, arg: str) -> bool:
+    return any(pat.match(rel) and fn == afn and arg == aarg
+               for pat, afn, aarg in FILE_REFERENCE_ALLOW)
+
+
 def file_function_problems(rel: str, doc: dict) -> list[str]:
     """file(), templatefile() and the other file readers must read a literal
-    path under path.module / path.root that stays in the repository, or a
-    plain reference (its value is not checked)."""
+    path under path.module / path.root that stays in the repository and holds
+    no interpolation. A reference, or an interpolated path, is allowed only
+    on FILE_REFERENCE_ALLOW (SEC-1)."""
     out = []
     for text in all_strings(doc):
         for m in FILE_FUNCTION.finditer(text):
             fn, at = m.group(1), m.end()
             if text.startswith('"', at):
                 lit = string_literal(text, at)
-                rest = None
+                rest = suffix = None
                 for prefix in ("${path.module}", "${path.root}"):
                     if lit is not None and lit.startswith(prefix):
-                        rest = re.sub(r"\$\{[^}]*\}", "x", lit[len(prefix):])
+                        suffix = lit[len(prefix):]
+                        rest = re.sub(r"\$\{[^}]*\}", "x", suffix)
                 if rest is None:
                     out.append(f'{rel}: {fn}("{lit}") reads a path that is not under path.module '
                                "or path.root (a file on the runner, such as /proc/self/environ, "
                                "would reach state or outputs)")
                 elif posixpath.normpath(posixpath.join(posixpath.dirname(rel), "." + rest)).startswith(".."):
                     out.append(f'{rel}: {fn}("{lit}") reads a path outside the repository')
-            elif not FILE_ARG_REFERENCE.match(text, at):
-                out.append(f"{rel}: {fn}(...) reads a path built by a function or expression; use a "
-                           "literal path under path.module or path.root, or a plain reference")
+                elif "${" in suffix and not file_reference_allowed(rel, fn, f'"{lit}"'):
+                    out.append(f'{rel}: {fn}("{lit}") builds its path from an interpolation, which '
+                               "can hold ../ and leave the repository; use a literal path, or add "
+                               "the reviewed reader to FILE_REFERENCE_ALLOW")
+            else:
+                ref = FILE_ARG_REFERENCE.match(text, at)
+                arg = ref.group(0)[:-1].strip() if ref else None
+                if ref is None:
+                    out.append(f"{rel}: {fn}(...) reads a path built by a function or expression; use a "
+                               "literal path under path.module or path.root")
+                elif arg not in SAFE_FILE_REFERENCES and not file_reference_allowed(rel, fn, arg):
+                    out.append(f"{rel}: {fn}({arg}) reads a path from a reference, whose value this "
+                               "check cannot see (file(var.x) with x = /proc/self/environ reads the "
+                               "runner's environment); use a literal path under path.module or "
+                               "path.root, or add the reviewed reader to FILE_REFERENCE_ALLOW")
     return out
 
 

@@ -67,3 +67,15 @@ run "invalid_home_net_rejected" {
 
   expect_failures = [var.home_net_cidrs]
 }
+
+run "rejects_invalid_internal_pass_cidr" {
+  command = plan
+
+  variables {
+    inspection_vpc_id   = "vpc-inspection0000000"
+    log_bucket_name     = "example-firewall-log-bucket"
+    internal_pass_cidrs = ["192.168.0.0"]
+  }
+
+  expect_failures = [var.internal_pass_cidrs]
+}

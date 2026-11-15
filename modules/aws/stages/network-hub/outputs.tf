@@ -101,7 +101,7 @@ output "network_alarm_arns" {
 output "network_alarms" {
   description = "The CloudWatch alarm definitions the hub creates, keyed like network_alarm_arns: namespace, metric name, statistic, threshold and dimensions."
   value = {
-    for k, a in merge(local.nat_alarms, local.tgw_alarms, local.vpn_alarms) : k => {
+    for k, a in merge(local.nat_alarms, local.tgw_alarms, local.vpn_alarms, local.firewall_alarms) : k => {
       namespace   = a.namespace
       metric_name = a.metric_name
       statistic   = a.statistic

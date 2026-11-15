@@ -35,6 +35,8 @@
 #     modules, keyed "<name>[.<alias>]" or "<module_address>:<name>")
 #   resource_changes[].provider_name
 #   ...resources[i].expressions.backend.constant_value (terraform_remote_state)
+#   ...resources[i].expressions.config.constant_value.{hostname,token}
+#   prior_state...resources[i].values.config.{hostname,token} (read value)
 # Blind spots (docs/known-gaps.md):
 #   - a `dynamic` block inside a provider block is not rendered in .expressions;
 #   - endpoints set through environment variables, an AWS shared config or
@@ -160,6 +162,35 @@ deny contains msg if {
 	object.get(r, "type", "") == "terraform_remote_state"
 	not object.get(r, ["expressions", "backend", "constant_value"], null) in allowed_remote_state_backends
 	msg := sprintf("%s: terraform_remote_state backend must be a literal %v, not %v", [full_address(path, r), sort(allowed_remote_state_backends), object.get(r, ["expressions", "backend"], null)])
+}
+
+# SEC-2 (re-audit 4): a remote-state config with hostname or token sends the
+# run's HCP Terraform token to that host during the plan. The configuration
+# shows the keys only when config is a constant; the data source's read value
+# in prior_state shows them when config holds references. The read has already
+# happened when this runs (detective); scripts/check-plan-time-exec.py rejects
+# any config key other than organization and workspaces before the plan.
+remote_state_forbidden_config_keys := {"hostname", "token"}
+
+deny contains msg if {
+	some pair in config_resources
+	path := pair[0]
+	r := pair[1]
+	object.get(r, "mode", "") == "data"
+	object.get(r, "type", "") == "terraform_remote_state"
+	some k in remote_state_forbidden_config_keys
+	object.get(r, ["expressions", "config", "constant_value", k], null) != null
+	msg := sprintf("%s: terraform_remote_state config sets %s, which sends the run's token to another host", [full_address(path, r), k])
+}
+
+deny contains msg if {
+	walk(object.get(input.plan, "prior_state", {}), [_, r])
+	is_object(r)
+	object.get(r, "mode", "") == "data"
+	object.get(r, "type", "") == "terraform_remote_state"
+	some k in remote_state_forbidden_config_keys
+	object.get(r, ["values", "config", k], null) != null
+	msg := sprintf("%s: terraform_remote_state config sets %s, which sends the run's token to another host", [object.get(r, "address", "?"), k])
 }
 
 deny contains msg if {

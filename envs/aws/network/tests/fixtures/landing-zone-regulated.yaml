@@ -1,6 +1,6 @@
-# Test fixture: starter profile with one regulated, non-production workload
-# environment. The class, not the profile or is_production, drives the egress
-# gate and the Network Firewall (root.tftest.hcl).
+# Test fixture: starter profile with one regulated workload environment (a
+# regulated environment must be is_production: true, CMP-1). The class, not the
+# profile, drives the egress gate and the Network Firewall (root.tftest.hcl).
 version: 1
 org:
   name: cfgco
@@ -13,7 +13,7 @@ aws:
   log_archive_bucket_name: cfgco-org-log-archive
   workload_environments:
     dev: {is_production: false, account_key: workload_dev}
-    pci: {is_production: false, account_key: workload_pci, compliance_class: regulated}
+    pci: {is_production: true, account_key: workload_pci, compliance_class: regulated}
   contracts:
     organization:
       organization_id: o-cfgcfgcfg0

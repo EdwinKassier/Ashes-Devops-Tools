@@ -101,6 +101,7 @@ override_module {
 override_module {
   target = module.network_firewall
   outputs = {
+    firewall_name         = "inspection-firewall"
     firewall_arn          = "arn:aws:network-firewall:eu-west-2:111111111111:firewall/inspection"
     firewall_endpoint_ids = ["vpce-fw-a", "vpce-fw-b"]
     firewall_endpoint_ids_by_az = {
@@ -459,8 +460,19 @@ run "hub_network_alarms_exist" {
   }
 
   assert {
-    condition     = toset(keys(output.network_alarms)) == toset(["nat-port-allocation-errors-0", "nat-port-allocation-errors-1", "tgw-blackhole-drops"])
-    error_message = "one NAT alarm per AZ, the blackhole alarm, and no VPN alarm without enable_vpn"
+    condition     = toset(keys(output.network_alarms)) == toset(["nat-port-allocation-errors-0", "nat-port-allocation-errors-1", "tgw-blackhole-drops", "firewall-stateful-drops-0", "firewall-stateful-drops-1"])
+    error_message = "one NAT alarm and one firewall drop alarm per AZ, the blackhole alarm, and no VPN alarm without enable_vpn"
+  }
+
+  # ARC-11: stateful drop alarms carry the firewall's full metric identity.
+  assert {
+    condition = (
+      output.network_alarms["firewall-stateful-drops-1"].namespace == "AWS/NetworkFirewall" &&
+      output.network_alarms["firewall-stateful-drops-1"].metric_name == "DroppedPackets" &&
+      output.network_alarms["firewall-stateful-drops-1"].threshold == 1000 &&
+      output.network_alarms["firewall-stateful-drops-1"].dimensions == { FirewallName = "inspection-firewall", AvailabilityZone = "eu-west-2b", Engine = "Stateful" }
+    )
+    error_message = "the hub must alarm on stateful drops of its firewall, per AZ"
   }
 
   assert {
@@ -475,7 +487,7 @@ run "hub_network_alarms_exist" {
   }
 
   assert {
-    condition     = length(module.network_alarms.alarm_arns) == 3 && output.alarm_topic_arn != null
+    condition     = length(module.network_alarms.alarm_arns) == 5 && output.alarm_topic_arn != null
     error_message = "every alarm definition must become an alarm, publishing to a topic"
   }
 }
@@ -504,5 +516,18 @@ run "supplied_alarm_topic_is_reused" {
   assert {
     condition     = output.alarm_topic_arn == "arn:aws:sns:eu-west-2:111111111111:ops-alerts" && length(aws_sns_topic_subscription.alarm_email) == 0
     error_message = "a supplied topic is used as is: the stage creates no topic and no subscription"
+  }
+}
+
+run "no_firewall_alarms_without_the_firewall" {
+  command = plan
+
+  variables {
+    enable_network_firewall = false
+  }
+
+  assert {
+    condition     = length([for k in keys(output.network_alarms) : k if startswith(k, "firewall-")]) == 0
+    error_message = "no firewall drop alarm may exist when the firewall is off"
   }
 }

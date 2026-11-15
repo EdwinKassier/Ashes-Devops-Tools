@@ -33,6 +33,10 @@ locals {
     egress_domain_allowlist  = try([for d in local.lz.aws.network.egress_domain_allowlist : tostring(d)], null)
     stateful_default_actions = try([for a in local.lz.aws.network.stateful_default_actions : tostring(a)], null)
     egress_alert_only_waived = try(tobool(local.lz.aws.network.egress_alert_only_waived), null)
+    # aws.network.suricata_rules / internal_pass_cidrs: custom firewall rules
+    # and extra internal ranges the firewall passes (ARC-1).
+    suricata_rules      = try(tostring(local.lz.aws.network.suricata_rules), null)
+    internal_pass_cidrs = try([for c in local.lz.aws.network.internal_pass_cidrs : tostring(c)], null)
     # aws.network.vpc_endpoint_policy_mode: the hub endpoint policy (PREVIEW).
     vpc_endpoint_policy_mode = try(tostring(local.lz.aws.network.vpc_endpoint_policy_mode), null)
     # aws.network addressing (docs/architecture/cidr-plan.md: AWS owns
@@ -80,6 +84,11 @@ locals {
       for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
       if try(tostring(e.compliance_class), "standard") == "regulated"
     ])
+    # CMP-1: regulated but not is_production: true (the plan fails).
+    workload_regulated_not_production = sort([
+      for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
+      if try(tostring(e.compliance_class), "standard") == "regulated" && try(tobool(e.is_production), null) != true
+    ])
     workload_invalid_compliance_class = sort([
       for k, e in try({ for k, e in local.lz.aws.workload_environments : k => e }, {}) : k
       if !contains(["standard", "regulated"], try(tostring(e.compliance_class), "standard"))
@@ -122,6 +131,8 @@ locals {
   network_firewall_egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist != null ? var.network_firewall_egress_domain_allowlist : coalesce(local.cfg.egress_domain_allowlist, [])
   network_firewall_stateful_default_actions = var.network_firewall_stateful_default_actions != null ? var.network_firewall_stateful_default_actions : coalesce(local.cfg.stateful_default_actions, ["aws:alert_established"])
   egress_alert_only_waived                  = coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false)
+  network_firewall_suricata_rules           = var.network_firewall_suricata_rules != null ? var.network_firewall_suricata_rules : (local.cfg.suricata_rules != null ? local.cfg.suricata_rules : "")
+  network_firewall_internal_pass_cidrs      = var.network_firewall_internal_pass_cidrs != null ? var.network_firewall_internal_pass_cidrs : coalesce(local.cfg.internal_pass_cidrs, [])
   # Hub interface endpoint policy (PREVIEW, docs/known-gaps.md). Not derived
   # from compliance_class until a sandbox proves it: main.tf warns when a
   # regulated estate keeps the principal-only policy.

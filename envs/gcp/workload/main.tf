@@ -406,6 +406,14 @@ resource "terraform_data" "compliance_class_guard" {
       condition     = contains(["standard", "regulated"], local.compliance_class)
       error_message = "gcp.environments.${var.environment}.compliance_class is \"${local.compliance_class}\": use standard or regulated."
     }
+
+    # CMP-1: the production gates (egress proxy, perimeter, zones, workload
+    # identity binding, admin containment) key on is_production, so a
+    # regulated environment must be production.
+    precondition {
+      condition     = !local.regulated || local.is_production
+      error_message = "Environment '${var.environment}' is regulated (gcp.environments.${var.environment}.compliance_class: regulated) but not production, so it would miss the production controls (CMP-1). Set gcp.environments.${var.environment}.is_production: true (then apply gcp-projects so environment_config carries it), or set compliance_class: standard."
+    }
   }
 }
 

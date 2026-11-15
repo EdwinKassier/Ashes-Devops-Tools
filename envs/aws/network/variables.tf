@@ -3,9 +3,27 @@
 # -----------------------------------------------------------------------------
 
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path, or set \"\" to disable the config file."
+  }
 }
 
 variable "tfc_organization" {
@@ -324,12 +342,36 @@ variable "enforce_egress_allowlist" {
     condition     = (var.enforce_egress_allowlist == null || var.enforce_egress_allowlist != null) && length(local.cfg.workload_invalid_compliance_class) == 0
     error_message = "aws.workload_environments.<env>.compliance_class must be standard or regulated. Invalid: ${join(", ", local.cfg.workload_invalid_compliance_class)}."
   }
+
+  validation {
+    # CMP-1: a regulated environment gets every production control. The var
+    # reference is a no-op (see above).
+    condition     = (var.enforce_egress_allowlist == null || var.enforce_egress_allowlist != null) && length(local.cfg.workload_regulated_not_production) == 0
+    error_message = "A regulated AWS workload environment must set is_production: true, so it gets every production control (CMP-1). Set is_production: true on aws.workload_environments.${join(", aws.workload_environments.", local.cfg.workload_regulated_not_production)} in config/landing-zone.yaml, or set compliance_class: standard."
+  }
 }
 
 variable "network_firewall_egress_domain_allowlist" {
   description = "Egress domain allowlist matched on HTTP Host / TLS SNI; a leading dot matches subdomains. Null = aws.network.egress_domain_allowlist from config, else empty (no domain filtering)."
   type        = list(string)
   default     = null
+}
+
+variable "network_firewall_suricata_rules" {
+  description = "Custom Suricata rules (STRICT_ORDER) evaluated after the AWS-managed threat groups and before the internal pass group and the egress allowlist. Null = aws.network.suricata_rules from config, else none."
+  type        = string
+  default     = null
+}
+
+variable "network_firewall_internal_pass_cidrs" {
+  description = "Extra internal ranges outside top_cidr that the firewall passes in both directions (for example on-premises prefixes over Direct Connect). The VPN on-premises prefixes are added automatically. Null = aws.network.internal_pass_cidrs from config, else none."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.network_firewall_internal_pass_cidrs == null || alltrue([for c in coalesce(var.network_firewall_internal_pass_cidrs, []) : can(cidrnetmask(c))])
+    error_message = "network_firewall_internal_pass_cidrs entries must be IPv4 CIDR blocks."
+  }
 }
 
 variable "network_firewall_stateful_default_actions" {

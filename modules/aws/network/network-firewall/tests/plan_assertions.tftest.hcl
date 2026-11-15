@@ -26,6 +26,23 @@ run "firewall_enabled" {
     error_message = "No custom Suricata or allowlist rule group must be created by default."
   }
 
+  # ARC-1: the internal pass group is on by default, at priority 1500, and
+  # passes HOME_NET to HOME_NET only when no extra internal range is set.
+  assert {
+    condition     = length(aws_networkfirewall_rule_group.internal_pass) == 1 && contains([for r in output.stateful_rule_group_references : r.priority], 1500)
+    error_message = "The internal pass rule group must be created by default and referenced at priority 1500."
+  }
+
+  assert {
+    condition     = aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string == "pass ip $HOME_NET any -> $HOME_NET any (msg:\"landing zone internal: HOME_NET to HOME_NET\"; sid:1; rev:1;)"
+    error_message = "With no internal_pass_cidrs, the internal pass group must hold only the HOME_NET to HOME_NET rule."
+  }
+
+  assert {
+    condition     = aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].stateful_rule_options[0].rule_order == "STRICT_ORDER"
+    error_message = "The internal pass rule group must use STRICT_ORDER."
+  }
+
   # STRICT_ORDER engine.
   assert {
     condition     = aws_networkfirewall_firewall_policy.this[0].firewall_policy[0].stateful_engine_options[0].rule_order == "STRICT_ORDER"
@@ -40,7 +57,7 @@ run "firewall_enabled" {
 
   # AWS-managed threat groups attached by ARN with ascending priority.
   assert {
-    condition = toset([for r in aws_networkfirewall_firewall_policy.this[0].firewall_policy[0].stateful_rule_group_reference : r.resource_arn]) == toset([
+    condition = toset([for r in aws_networkfirewall_firewall_policy.this[0].firewall_policy[0].stateful_rule_group_reference : r.resource_arn if r.priority < 1000]) == toset([
       "arn:aws:network-firewall:eu-west-2:aws-managed:stateful-rulegroup/AttackInfrastructureStrictOrder",
       "arn:aws:network-firewall:eu-west-2:aws-managed:stateful-rulegroup/MalwareDomainsStrictOrder",
       "arn:aws:network-firewall:eu-west-2:aws-managed:stateful-rulegroup/BotNetCommandAndControlDomainsStrictOrder",
@@ -120,14 +137,14 @@ run "custom_rules_allowlist_and_drop_default" {
     error_message = "Allowlist must be an ALLOWLIST over HTTP_HOST and TLS_SNI with the supplied domains."
   }
 
-  # Ordering: managed (100-102) < custom (1000) < allowlist (2000).
+  # Ordering: managed (100-102) < custom (1000) < internal pass (1500) < allowlist (2000).
   assert {
-    condition     = [for r in output.stateful_rule_group_references : r.priority] == [100, 101, 102, 1000, 2000]
+    condition     = [for r in output.stateful_rule_group_references : r.priority] == [100, 101, 102, 1000, 1500, 2000]
     error_message = "Rule group priorities must place managed threat groups first, then custom rules, then the allowlist."
   }
 
   assert {
-    condition     = output.stateful_rule_group_references[4].arn == "arn:aws:network-firewall:eu-west-2:123456789012:stateful-rulegroup/org-stateful-egress-allowlist"
+    condition     = output.stateful_rule_group_references[5].arn == "arn:aws:network-firewall:eu-west-2:123456789012:stateful-rulegroup/org-stateful-egress-allowlist"
     error_message = "The allowlist must be the lowest-priority (last) reference."
   }
 
@@ -224,5 +241,36 @@ run "enable_deletion_protection_wins_over_the_deprecated_alias" {
   assert {
     condition     = aws_networkfirewall_firewall.this[0].delete_protection == true
     error_message = "enable_deletion_protection = true must win over the deprecated delete_protection = false."
+  }
+}
+
+run "internal_pass_with_onprem_peers" {
+  command = plan
+
+  variables {
+    internal_pass_cidrs = ["192.168.0.0/16", "172.16.0.0/12"]
+  }
+
+  assert {
+    condition     = strcontains(aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string, "pass ip $HOME_NET any -> [192.168.0.0/16,172.16.0.0/12] any")
+    error_message = "The internal pass group must pass HOME_NET to the internal peers."
+  }
+
+  assert {
+    condition     = strcontains(aws_networkfirewall_rule_group.internal_pass[0].rule_group[0].rules_source[0].rules_string, "pass ip [192.168.0.0/16,172.16.0.0/12] any -> $HOME_NET any")
+    error_message = "The internal pass group must pass the internal peers to HOME_NET."
+  }
+}
+
+run "internal_pass_disabled" {
+  command = plan
+
+  variables {
+    enable_internal_pass = false
+  }
+
+  assert {
+    condition     = length(aws_networkfirewall_rule_group.internal_pass) == 0 && !contains([for r in output.stateful_rule_group_references : r.priority], 1500)
+    error_message = "enable_internal_pass = false must not create or reference the internal pass group."
   }
 }

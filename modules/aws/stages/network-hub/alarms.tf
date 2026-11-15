@@ -15,8 +15,9 @@
 #     https://docs.aws.amazon.com/vpc/latest/userguide/metrics-dimensions-nat-gateway.html
 #   AWS/VPN TunnelState, dimension VpnId
 #     https://docs.aws.amazon.com/vpn/latest/s2svpn/monitoring-cloudwatch-vpn.html
-#
-# Network Firewall has no alarm here: see docs/known-gaps.md.
+#   AWS/NetworkFirewall DroppedPackets, dimensions FirewallName,
+#     AvailabilityZone and Engine (Stateful)
+#     https://docs.aws.amazon.com/network-firewall/latest/developerguide/monitoring-cloudwatch.html
 
 locals {
   # One alarm per NAT gateway (one per AZ). Keys come from the static AZ index.
@@ -49,6 +50,26 @@ locals {
     }
   }
 
+  # ARC-11: one alarm per firewall AZ on stateful drops. A fail-closed firewall
+  # drops non-allowlisted egress on purpose, so the threshold catches a
+  # sustained surge (a broken allowlist or internal pass rule), not one drop.
+  firewall_alarms = var.enable_network_firewall ? {
+    for k in local.nat_az_keys : "firewall-stateful-drops-${k}" => {
+      namespace           = "AWS/NetworkFirewall"
+      metric_name         = "DroppedPackets"
+      statistic           = "Sum"
+      comparison_operator = "GreaterThanThreshold"
+      threshold           = var.network_firewall_drop_alarm_threshold
+      evaluation_periods  = 3
+      dimensions = {
+        FirewallName     = module.network_firewall.firewall_name
+        AvailabilityZone = var.availability_zones[tonumber(k)]
+        Engine           = "Stateful"
+      }
+      alarm_description = "The hub Network Firewall dropped more than ${var.network_firewall_drop_alarm_threshold} stateful packets per 5 minutes in ${var.availability_zones[tonumber(k)]} for 15 minutes. Check the ALERT logs: a workload may call a domain missing from aws.network.egress_domain_allowlist, or internal traffic is not passed (aws.network.internal_pass_cidrs)."
+    }
+  } : {}
+
   # TunnelState is 1 when every tunnel is up and below 1 when at least one is
   # not. A missing metric means no data from the VPN: treated as down.
   vpn_alarms = var.enable_vpn ? {
@@ -70,7 +91,7 @@ module "network_alarms" {
   source = "../../ops/cloudwatch"
 
   name_prefix      = "network-hub"
-  alarms           = merge(local.nat_alarms, local.tgw_alarms, local.vpn_alarms)
+  alarms           = merge(local.nat_alarms, local.tgw_alarms, local.vpn_alarms, local.firewall_alarms)
   create_sns_topic = var.alarm_sns_topic_arn == null
   sns_topic_arn    = var.alarm_sns_topic_arn
   tags             = var.tags

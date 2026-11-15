@@ -540,6 +540,17 @@ aws:
       - .github.com
       - .githubusercontent.com
       - .terraform.io
+    # The firewall passes all traffic inside top_cidr (spokes to the central
+    # endpoints, the Resolver and other spokes; the transit gateway keeps prod
+    # and nonprod apart) and to and from the VPN onprem_cidrs. The allowlist
+    # above covers only traffic to the internet. List other internal ranges
+    # outside top_cidr here, for example on-premises over Direct Connect.
+    # internal_pass_cidrs: [192.168.0.0/16]
+    # Custom Suricata rules (STRICT_ORDER), evaluated before the internal pass
+    # rules and the allowlist: drop a specific internal flow, or pass an
+    # external flow that is not HTTP or TLS (the allowlist sees only those).
+    # suricata_rules: |
+    #   pass tcp $HOME_NET any -> 203.0.113.10 22 (msg:"sftp partner"; flow:to_server; sid:100001; rev:1;)
     # Explicit waiver to run production alert-only (log-but-pass) while allow
     # rules are being built. Reviewable; remove once the allowlist is complete.
     # A regulated workload environment refuses it.

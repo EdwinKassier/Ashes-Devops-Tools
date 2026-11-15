@@ -1,4 +1,4 @@
-# Test fixture: a starter profile with a regulated, non-production AWS
+# Test fixture: a starter profile with a regulated (is_production: true) AWS
 # workload environment and a 90-day audit retention (variables_validation,
 # regulated flow-log retention floor). No compliance.frameworks.
 version: 1
@@ -16,7 +16,7 @@ aws:
   log_archive_bucket_name: cfgco-org-log-archive
   enabled_regions: [eu-west-1, eu-west-2]
   workload_environments:
-    pci: {is_production: false, account_key: workload_pci, compliance_class: regulated}
+    pci: {is_production: true, account_key: workload_pci, compliance_class: regulated}
   contracts:
     organization:
       organization_id: o-cfgcfgcfg0

@@ -195,6 +195,12 @@ run "production_profile_with_seeded_allowlist_plans" {
     condition     = local.enforce_egress_allowlist == true && length(local.network_firewall_egress_domain_allowlist) == 6
     error_message = "production must enforce the allowlist and read it from config."
   }
+
+  # ARC-1: the extra internal ranges and the custom rules come from config.
+  assert {
+    condition     = local.network_firewall_internal_pass_cidrs == tolist(["192.168.0.0/16"]) && startswith(local.network_firewall_suricata_rules, "pass tcp $HOME_NET any -> 203.0.113.10 22")
+    error_message = "aws.network.internal_pass_cidrs and aws.network.suricata_rules must reach the firewall."
+  }
 }
 
 run "starter_profile_unaffected" {
@@ -365,4 +371,16 @@ run "alarm_subscribers_follow_notifications_emails" {
     condition     = local.alarm_subscriber_emails == tolist(["secops@acme.io"])
     error_message = "notifications.emails must feed the hub alarm subscribers when the variable is unset"
   }
+}
+
+# CMP-1: a regulated environment must be production, or it misses the
+# production controls that key on is_production.
+run "regulated_not_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated-not-production.yaml"
+  }
+
+  expect_failures = [var.enforce_egress_allowlist]
 }

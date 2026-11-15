@@ -475,6 +475,11 @@ resource "aws_ec2_transit_gateway_route" "vpn_onprem" {
 # Network Firewall — stateful inspection in the inspection VPC
 # ---------------------------------------------------------------------------
 
+locals {
+  # On-premises prefixes behind the VPN plus any extra internal ranges.
+  firewall_internal_pass_cidrs = distinct(concat(var.enable_vpn ? var.vpn.onprem_cidrs : [], var.network_firewall_internal_pass_cidrs))
+}
+
 module "network_firewall" {
   source = "../../network/network-firewall"
 
@@ -493,6 +498,13 @@ module "network_firewall" {
   egress_domain_allowlist  = var.network_firewall_egress_domain_allowlist
   suricata_rules           = var.network_firewall_suricata_rules
   home_net_cidrs           = [var.top_cidr]
+
+  # ARC-1: pass HOME_NET to HOME_NET (spokes to the central endpoints, the
+  # Resolver and other spokes; the TGW blackholes keep prod and nonprod apart)
+  # and to and from on-premises, so a fail-closed policy drops only external
+  # traffic the allowlist does not cover.
+  enable_internal_pass = var.network_firewall_internal_pass
+  internal_pass_cidrs  = local.firewall_internal_pass_cidrs
 
   tags = var.tags
 }

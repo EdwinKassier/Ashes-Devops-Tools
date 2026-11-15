@@ -236,7 +236,8 @@ locals {
     try([for n in local.lz.gcp.workload.presets_by_environment[var.environment] : tostring(n)], []),
     local.regulated ? ["regulated-gcp-workload"] : [],
   ))
-  preset_documents = [for n in local.preset_names : yamldecode(file("${path.root}/../../../examples/presets/${n}.yaml"))]
+  # SEC-1: a preset name is one path segment, so it cannot leave examples/presets.
+  preset_documents = [for n in local.preset_names : yamldecode(file("${path.root}/../../../examples/presets/${n}.yaml")) if can(regex("^[a-z0-9-]+$", n))]
   preset = merge([
     for d in local.preset_documents : { for k, v in try(d.values, {}) : k => v } if try(d.root, "") == local.preset_root
   ]...)

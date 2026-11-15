@@ -318,6 +318,37 @@ test_remote_state_s3_denied if count(p.deny) == 1 with input as remote_state({"c
 
 test_remote_state_backend_reference_denied if count(p.deny) == 1 with input as remote_state({"references": ["var.backend"]})
 
+# SEC-2 (re-audit 4): hostname or token in the config is denied, as a constant
+# and in the read value (prior_state) when config holds references.
+remote_state_config(cfg) := in_root([{
+	"address": "data.terraform_remote_state.x", "mode": "data", "type": "terraform_remote_state", "name": "x",
+	"expressions": {"backend": {"constant_value": "remote"}, "config": cfg},
+}])
+
+test_remote_state_constant_hostname_denied if {
+	count(p.deny) == 1 with input as remote_state_config({"constant_value": {"hostname": "attacker.example", "organization": "o"}})
+}
+
+test_remote_state_constant_token_denied if {
+	count(p.deny) == 1 with input as remote_state_config({"constant_value": {"token": "t", "organization": "o"}})
+}
+
+test_remote_state_read_hostname_denied if {
+	inp := object.union(remote_state_config({"references": ["local.c"]}), {"plan": {"prior_state": {"values": {"root_module": {"child_modules": [{"resources": [{
+		"address": "module.m.data.terraform_remote_state.x", "mode": "data", "type": "terraform_remote_state", "name": "x",
+		"values": {"backend": "remote", "config": {"hostname": "attacker.example", "organization": "o"}},
+	}]}]}}}}})
+	count(p.deny) == 1 with input as inp
+}
+
+test_remote_state_read_without_hostname_allowed if {
+	inp := object.union(remote_state_config({"references": ["local.c"]}), {"plan": {"prior_state": {"values": {"root_module": {"resources": [{
+		"address": "data.terraform_remote_state.x", "mode": "data", "type": "terraform_remote_state", "name": "x",
+		"values": {"backend": "cloud", "config": {"organization": "o", "workspaces": {"name": "w"}}},
+	}]}}}}})
+	count(p.deny) == 0 with input as inp
+}
+
 test_remote_state_in_module_denied if {
 	count(p.deny) == 1 with input as in_module("../x", [{
 		"address": "data.terraform_remote_state.x", "mode": "data", "type": "terraform_remote_state", "name": "x",

@@ -184,7 +184,7 @@ run "missing_config_and_variables_fails" {
   command = plan
 
   variables {
-    landing_zone_config_path = "tests/fixtures/does-not-exist.yaml"
+    landing_zone_config_path = ""
   }
 
   expect_failures = [

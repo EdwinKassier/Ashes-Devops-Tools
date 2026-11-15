@@ -22,6 +22,15 @@ aws:
 `config/landing-zone.schema.json` accepts `standard` and `regulated`. The roots
 that read the key also fail the plan on any other value.
 
+A regulated environment must also set `is_production: true` (CMP-1, re-audit
+4). The production controls (the egress proxy and egress allowlist gates, the
+pinned zones, the immutable-ID workload identity binding, admin containment and
+the gateway endpoint policies) key on `is_production`, so a regulated
+environment that is not production would miss them. The schema, tfc-admin,
+aws-network and gcp-workload each fail on that combination. A regulated
+staging or test environment that holds regulated data is production for these
+controls.
+
 ## What regulated turns on
 
 Every guard below fails the plan and names the config key or variable to fix.

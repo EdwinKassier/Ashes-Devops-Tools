@@ -134,7 +134,7 @@ run "missing_organization_fails" {
   command = plan
 
   variables {
-    landing_zone_config_path = "tests/fixtures/does-not-exist.yaml"
+    landing_zone_config_path = ""
     enable_gcp               = true
   }
 
@@ -418,6 +418,17 @@ run "config_environment_without_is_production_fails" {
 
   variables {
     landing_zone_config_path = "tests/fixtures/landing-zone-missing-is-production.yaml"
+  }
+
+  expect_failures = [var.environments]
+}
+
+# CMP-1: a regulated environment (either cloud) must be is_production: true.
+run "regulated_environment_not_production_fails" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated-not-production.yaml"
   }
 
   expect_failures = [var.environments]

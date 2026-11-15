@@ -101,6 +101,7 @@ override_module {
 override_module {
   target = module.network_firewall
   outputs = {
+    firewall_name         = "inspection-firewall"
     firewall_arn          = "arn:aws:network-firewall:eu-west-2:111111111111:firewall/inspection"
     firewall_endpoint_ids = ["vpce-fw-a", "vpce-fw-b"]
     firewall_endpoint_ids_by_az = {

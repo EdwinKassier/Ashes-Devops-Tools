@@ -23,6 +23,11 @@ output "firewall_endpoint_ids_by_az" {
 }
 
 output "stateful_rule_group_references" {
-  description = "Ordered list of { arn, priority } stateful rule group references in the STRICT_ORDER policy (managed threat groups, then custom rules, then the egress allowlist)."
+  description = "Ordered list of { arn, priority } stateful rule group references in the STRICT_ORDER policy (managed threat groups, then custom rules, then the internal pass group, then the egress allowlist)."
   value       = var.enable_network_firewall ? local.stateful_references : []
+}
+
+output "firewall_name" {
+  description = "Name of the Network Firewall (the FirewallName dimension of its CloudWatch metrics), or null when the firewall is disabled."
+  value       = var.enable_network_firewall ? var.firewall_name : null
 }

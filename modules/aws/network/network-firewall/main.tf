@@ -10,7 +10,16 @@
 #   priority 100+  AWS-managed threat rule groups (var.managed_rule_groups) —
 #                  attack infrastructure, malware and botnet C2 domains. These
 #                  drop known-bad traffic before any allow rule can pass it.
-#   priority 1000  optional custom Suricata rules (var.suricata_rules).
+#   priority 1000  optional custom Suricata rules (var.suricata_rules). They run
+#                  before the internal pass group, so an adopter can drop a
+#                  specific internal flow here.
+#   priority 1500  internal pass group (var.enable_internal_pass, default on):
+#                  passes HOME_NET to HOME_NET (spoke to the central endpoints,
+#                  the Resolver and other spokes; prod/nonprod isolation is
+#                  the transit gateway's blackhole routes) and HOME_NET to and
+#                  from var.internal_pass_cidrs (on-premises). Without it a
+#                  fail-closed policy drops all of that traffic, because the
+#                  ALLOWLIST rules match only HOME_NET -> EXTERNAL_NET.
 #   priority 2000  optional egress domain allowlist (HTTP_HOST + TLS_SNI) —
 #                  generated ALLOWLIST rules pass the listed domains and DROP all
 #                  other HTTP/TLS flows from HOME_NET.
@@ -46,6 +55,17 @@ locals {
 
   create_custom_rules = var.enable_network_firewall && trimspace(var.suricata_rules) != ""
   create_allowlist    = var.enable_network_firewall && length(var.egress_domain_allowlist) > 0
+  create_internal     = var.enable_network_firewall && var.enable_internal_pass
+
+  # Suricata IP list for the extra internal ranges, e.g. [192.168.0.0/16,172.16.0.0/12].
+  internal_peer_list = "[${join(",", var.internal_pass_cidrs)}]"
+  internal_pass_rules = join("\n", concat(
+    ["pass ip $HOME_NET any -> $HOME_NET any (msg:\"landing zone internal: HOME_NET to HOME_NET\"; sid:1; rev:1;)"],
+    length(var.internal_pass_cidrs) == 0 ? [] : [
+      "pass ip $HOME_NET any -> ${local.internal_peer_list} any (msg:\"landing zone internal: HOME_NET to internal peers\"; sid:2; rev:1;)",
+      "pass ip ${local.internal_peer_list} any -> $HOME_NET any (msg:\"landing zone internal: internal peers to HOME_NET\"; sid:3; rev:1;)",
+    ],
+  ))
 
   region = var.region != null ? var.region : data.aws_region.current[0].region
 
@@ -54,10 +74,11 @@ locals {
     "arn:${var.partition}:network-firewall:${local.region}:aws-managed:stateful-rulegroup/${name}"
   ]
 
-  # Ordered references: managed threat groups first, then custom, then allowlist.
+  # Ordered references: managed threat groups, custom, internal pass, allowlist.
   stateful_references = concat(
     [for i, arn in local.managed_rule_group_arns : { arn = arn, priority = 100 + i }],
     local.create_custom_rules ? [{ arn = aws_networkfirewall_rule_group.stateful[0].arn, priority = 1000 }] : [],
+    local.create_internal ? [{ arn = aws_networkfirewall_rule_group.internal_pass[0].arn, priority = 1500 }] : [],
     local.create_allowlist ? [{ arn = aws_networkfirewall_rule_group.domain_allowlist[0].arn, priority = 2000 }] : [],
   )
 }
@@ -73,6 +94,36 @@ resource "aws_networkfirewall_rule_group" "stateful" {
   rule_group {
     rules_source {
       rules_string = var.suricata_rules
+    }
+
+    stateful_rule_options {
+      rule_order = "STRICT_ORDER"
+    }
+  }
+
+  dynamic "encryption_configuration" {
+    for_each = local.use_cmk ? [1] : []
+    content {
+      type   = "CUSTOMER_KMS"
+      key_id = var.kms_key_arn
+    }
+  }
+
+  tags = var.tags
+}
+
+#checkov:skip=CKV_AWS_345:CMK encryption is opt-in via var.kms_key_arn (set by the network-hub stage that owns the KMS key); default falls back to an AWS-owned key.
+resource "aws_networkfirewall_rule_group" "internal_pass" {
+  count = local.create_internal ? 1 : 0
+
+  capacity = var.internal_pass_capacity
+  name     = "${var.rule_group_name}-internal-pass"
+  type     = "STATEFUL"
+
+  rule_group {
+    # HOME_NET comes from the policy-level variable (var.home_net_cidrs).
+    rules_source {
+      rules_string = local.internal_pass_rules
     }
 
     stateful_rule_options {

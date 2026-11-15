@@ -101,6 +101,8 @@ module "aws_network_hub" {
   egress_alert_only_waived                  = local.egress_alert_only_waived
   network_firewall_egress_domain_allowlist  = local.network_firewall_egress_domain_allowlist
   network_firewall_stateful_default_actions = local.network_firewall_stateful_default_actions
+  network_firewall_suricata_rules           = local.network_firewall_suricata_rules
+  network_firewall_internal_pass_cidrs      = local.network_firewall_internal_pass_cidrs
 
   vpc_endpoint_policy_mode = local.vpc_endpoint_policy_mode
 

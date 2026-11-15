@@ -16,7 +16,7 @@ variable "rule_group_capacity" {
 }
 
 variable "rule_group_name" {
-  description = "Name of the custom Suricata rule group (the allowlist group is named <rule_group_name>-egress-allowlist)."
+  description = "Name of the custom Suricata rule group (the allowlist group is named <rule_group_name>-egress-allowlist, the internal pass group <rule_group_name>-internal-pass)."
   type        = string
   default     = "org-stateful"
 
@@ -70,6 +70,34 @@ variable "stateful_default_actions" {
       length([for a in var.stateful_default_actions : a if startswith(a, "aws:alert_")]) <= 1
     )
     error_message = "stateful_default_actions may contain at most one drop action and one alert action."
+  }
+}
+
+variable "enable_internal_pass" {
+  description = "Create the internal pass rule group (priority 1500): pass HOME_NET to HOME_NET, and HOME_NET to and from internal_pass_cidrs. Default true. Under a fail-closed policy (aws:drop_established) traffic to the central endpoints, the Resolver, other spokes and on-premises is dropped without it, because the egress allowlist matches only HOME_NET to EXTERNAL_NET. Set false only when custom suricata_rules pass that traffic instead."
+  type        = bool
+  default     = true
+}
+
+variable "internal_pass_cidrs" {
+  description = "Extra internal ranges outside HOME_NET that the internal pass group passes in both directions, for example the on-premises prefixes behind a VPN. Empty (default) = HOME_NET to HOME_NET only."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.internal_pass_cidrs : can(cidrnetmask(c))])
+    error_message = "internal_pass_cidrs entries must be IPv4 CIDR blocks."
+  }
+}
+
+variable "internal_pass_capacity" {
+  description = "Reserved capacity for the internal pass rule group. Cannot be changed after creation."
+  type        = number
+  default     = 100
+
+  validation {
+    condition     = var.internal_pass_capacity >= 3
+    error_message = "internal_pass_capacity must be at least 3 (one per generated rule)."
   }
 }
 

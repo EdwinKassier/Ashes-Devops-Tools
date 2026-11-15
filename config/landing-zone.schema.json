@@ -1082,7 +1082,7 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or an unexpired gcp.audit_store_waiver is set. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), Cloud Armor and its OWASP rules are on, flow-log sampling is 1, flow-log retention is at least 365 days and the Backup and DR vault (backup_vault) is on.",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). gcp-organization fails the plan for a regulated environment until the audit store is hardened (gcp.logging_project_id and gcp.enable_audit_bucket_lock) or an unexpired gcp.audit_store_waiver is set. gcp-workload-<env> applies the regulated-gcp-workload preset and fails the plan unless the VPC-SC perimeter is enforced (no production_vpc_sc_dry_run_waiver), Cloud Armor and its OWASP rules are on, flow-log sampling is 1, flow-log retention is at least 365 days and the Backup and DR vault (backup_vault) is on. A regulated environment must set is_production: true (CMP-1): it gets every production control.",
                 "enum": [
                   "standard",
                   "regulated"
@@ -1121,7 +1121,27 @@
                 ]
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "if": {
+              "properties": {
+                "compliance_class": {
+                  "const": "regulated"
+                }
+              },
+              "required": [
+                "compliance_class"
+              ]
+            },
+            "then": {
+              "properties": {
+                "is_production": {
+                  "const": true
+                }
+              },
+              "required": [
+                "is_production"
+              ]
+            }
           }
         },
         "bootstrap_image": {
@@ -1738,7 +1758,7 @@
               },
               "compliance_class": {
                 "type": "string",
-                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). Any regulated entry hardens the shared aws-network hub: the Network Firewall is on and the egress gate fails closed on every profile, and aws.network.egress_alert_only_waived is refused. aws-security then fails the plan when the log-archive retention (which holds the VPC flow logs) is below 365 days.",
+                "description": "standard (default) or regulated (docs/architecture/regulated-environments.md). Any regulated entry hardens the shared aws-network hub: the Network Firewall is on and the egress gate fails closed on every profile, and aws.network.egress_alert_only_waived is refused. aws-security then fails the plan when the log-archive retention (which holds the VPC flow logs) is below 365 days. A regulated environment must set is_production: true (CMP-1): it gets every production control.",
                 "enum": [
                   "standard",
                   "regulated"
@@ -1755,7 +1775,27 @@
                 ]
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "if": {
+              "properties": {
+                "compliance_class": {
+                  "const": "regulated"
+                }
+              },
+              "required": [
+                "compliance_class"
+              ]
+            },
+            "then": {
+              "properties": {
+                "is_production": {
+                  "const": true
+                }
+              },
+              "required": [
+                "is_production"
+              ]
+            }
           }
         },
         "network": {
@@ -1821,6 +1861,17 @@
             },
             "stateful_default_actions": {
               "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "suricata_rules": {
+              "type": "string",
+              "description": "Custom Suricata rules (STRICT_ORDER) for the hub Network Firewall, evaluated after the AWS-managed threat groups and before the internal pass group and the egress allowlist. Use them to drop a specific internal flow or to pass a non-HTTP/TLS external flow."
+            },
+            "internal_pass_cidrs": {
+              "type": "array",
+              "description": "Extra internal ranges outside aws.network.top_cidr that the hub Network Firewall passes in both directions, for example on-premises prefixes over Direct Connect. The VPN on-premises prefixes (aws.network.vpn.onprem_cidrs) are added automatically.",
               "items": {
                 "type": "string"
               }

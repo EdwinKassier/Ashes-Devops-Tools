@@ -1,7 +1,25 @@
 variable "landing_zone_config_path" {
-  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), absolute or relative to this root. Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. Read only if the file exists; explicit variables win over its values. Its `presets` list (and gcp.workload.presets_by_environment) loads examples/presets/<name>.yaml overlays."
+  description = "Path to the single-source landing-zone config (YAML; schema config/landing-zone.example.yaml), relative to this root (a .yaml or .yml file inside the repository). Null = ../../../config/landing-zone.yaml; \"\" disables the lookup. When set, the file must exist (the plan fails otherwise); the default path is read only if the file exists; explicit variables win over its values. Its `presets` list (and gcp.workload.presets_by_environment) loads examples/presets/<name>.yaml overlays."
   type        = string
   default     = null
+
+  # SEC-1: only a relative .yaml/.yml path that stays inside the repository, so
+  # the loader's file() cannot read a file on the runner (/proc/self/environ).
+  validation {
+    condition = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || (
+      can(regex("^[A-Za-z0-9_./-]+\\.ya?ml$", coalesce(var.landing_zone_config_path, "x"))) &&
+      !startswith(coalesce(var.landing_zone_config_path, "x"), "/") &&
+      length([for s in split("/", dirname("./${coalesce(var.landing_zone_config_path, "x")}/_")) : s if s == ".."]) <= 3
+    )
+    error_message = "landing_zone_config_path must be a relative path to a .yaml or .yml file inside the repository (no leading /, at most 3 leading ../ from this root): an absolute or escaping path could read a file on the runner."
+  }
+
+  # IAC-3: a path that is set must name a file, so a typo does not silently
+  # drop the whole config and fall back to built-in defaults.
+  validation {
+    condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path, or set \"\" to disable the config file."
+  }
 }
 
 variable "project_prefix" {
@@ -341,6 +359,13 @@ variable "vpc_sc_enable_dry_run" {
     # landing_zone_config_path would cycle; the var reference is a no-op.
     condition     = (var.vpc_sc_enable_dry_run == null || var.vpc_sc_enable_dry_run != null) && length(setsubtract(keys(local.preset), local.preset_supported_keys)) == 0
     error_message = "A preset for envs/gcp/workload sets a key this root cannot take from a preset (supported: vpc_sc_enable_dry_run, enable_cloud_armor, enable_owasp_rules, log_config_flow_sampling, vpc_flow_logs_retention_days). Set it as a variable instead."
+  }
+
+  validation {
+    # SEC-1: the loader skips a preset name that is not one path segment; this
+    # fails the plan so the name is fixed, not ignored.
+    condition     = (var.vpc_sc_enable_dry_run == null || var.vpc_sc_enable_dry_run != null) && alltrue([for n in local.preset_names : can(regex("^[a-z0-9-]+$", n))])
+    error_message = "A preset name (presets / gcp.workload.presets_by_environment in config/landing-zone.yaml) must match ^[a-z0-9-]+$ (a file name under examples/presets without .yaml). Invalid: ${join(", ", [for n in local.preset_names : n if !can(regex("^[a-z0-9-]+$", n))])}."
   }
 }
 
