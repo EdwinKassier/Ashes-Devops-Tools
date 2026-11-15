@@ -31,6 +31,8 @@ locals {
         }
         # Explicit production marker for the workload guardrail checks.
         is_production = env.is_production
+        # standard or regulated (re-audit 6 CMP-4).
+        compliance_class = try(env.compliance_class, "standard")
         # This environment's folder-scoped VPC-SC access policy (gcp-organization);
         # null when scoped policies are disabled or the org state predates them.
         vpc_sc_access_policy_id = try(local.org.scoped_access_policy_ids[env_key], null)
@@ -78,6 +80,7 @@ output "contract" {
       vpc_sc_access_policy_id = string
       automation_identities   = list(string)
       spoke_network_name      = string
+      compliance_class        = string
     }))
     automation_folder_grants = map(object({ folder = string, role = string }))
   })

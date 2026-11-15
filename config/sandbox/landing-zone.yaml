@@ -111,8 +111,8 @@ aws:
       - .githubusercontent.com
       - .terraform.io
     stateful_default_actions:
-      - aws:drop_established
-      - aws:alert_established
+      - aws:drop_established_app_layer_to_server
+      - aws:alert_established_app_layer_to_server
   workload: {}
 
 saas:

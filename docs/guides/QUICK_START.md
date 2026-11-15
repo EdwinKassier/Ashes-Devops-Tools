@@ -127,7 +127,7 @@ How the roots read it:
 - **Precedence:** an explicit variable (tfvars, `TF_VAR_*`, a TFC workspace or variable-set variable) > `config/landing-zone.yaml` > the root's built-in default. Existing tfvars keep working unchanged.
 - **Single source:** `environments` (GCP roots and tfc-admin), `project_prefix`, `landing_zone_name`, `tfc_organization`, regions, the AWS account map and the workload-env → account-key mapping are no longer duplicated across roots.
 - **Fail fast:** a value that is still unset, or still an upstream placeholder (`my-org`, `REPLACE_WITH_*`, `@example.com` root emails), fails the plan. The error names the variable and the config key.
-- **Optional:** with no `config/landing-zone.yaml`, every root behaves as before. Each root's `landing_zone_config_path` variable points elsewhere, and `""` disables the lookup.
+- **Optional:** with no `config/landing-zone.yaml`, every root behaves as before. Each root's `landing_zone_config_path` variable points elsewhere, and `""` disables the lookup in local and test runs. In an HCP Terraform run the mandatory OPA policy accepts only null, `config/landing-zone.yaml` or `config/<estate>/landing-zone.yaml`.
 - **Per-workspace overrides** still go in [`config/tfc-workspaces.yaml`](../../config/tfc-workspaces.example.yaml), which tfc-admin writes as workspace variables. Those win over the config file.
 
 ---

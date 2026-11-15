@@ -676,7 +676,7 @@ upstream/provider capability) · **DECISION** (needs a human call before action)
   domain-list groups; `AttackInfrastructureStrictOrder`); confirm regional
   availability with `aws network-firewall list-rule-groups --scope MANAGED` and
   check the active-threat-defense pricing. (2) The default stateful action is
-  log-but-pass (`aws:alert_established`). Move to `aws:drop_established` +
+  log-but-pass (`aws:alert_established`). Move to `aws:drop_established_app_layer_to_server` +
   `aws:alert_established` once egress allow rules exist. (3) Run a full
   security, workload and backup apply under the `tfc-apply-boundary` boundary,
   including a destroy/replace of Config and GuardDuty resources, which the
@@ -1712,8 +1712,17 @@ side (all mock-tested, secure defaults):
   point the loader at another estate file: the mandatory OPA policy accepts
   only `config/landing-zone.yaml` or `config/<estate>/landing-zone.yaml`
   (never a test fixture, the example or `""`), but cannot tell one estate's
-  file from another's. A `templatefile()` template is read too and may not
-  call a file reader. `archive_file` may only zip a literal `source_file`
+  file from another's. gcp-workload also reads `compliance_class` from the
+  gcp-projects contract, and gcp-projects and gcp-organization refuse an
+  `environments` variable that drops it (re-audit 6), but a gcp-workload
+  workspace variable that replaces the contract (`projects_contract`,
+  `projects_workspace_name`) together with another estate's file can still
+  make a regulated environment standard there. Pinning the estate path and
+  the contract source per workspace in tfc-admin, with OPA comparing the run
+  to it, would close it. A `templatefile()` template is read too and may not
+  name a file function anywhere (re-audit 6: an expression scan lost to
+  string literals twice). The scanner runs as `python3 -P` so no file beside
+  it can replace a module. `archive_file` may only zip a literal `source_file`
   under `path.module` (re-audit 5 SEC-2); OPA sees only the references of
   that path, not `../` segments after `path.module`, and does not constrain
   `output_path`, so the scanner is the control for both. The Google and AWS
@@ -1871,7 +1880,7 @@ side (all mock-tested, secure defaults):
 - **Spoke traffic to the central AWS interface endpoints is inspected (ARC-6,
   D5).** It crosses Network Firewall in both directions, so it pays the
   per-GB processing charge. Under a fail-closed production policy
-  (`aws:drop_established`) it passes because the firewall's internal pass
+  (a drop action) it passes because the firewall's internal pass
   rule group (priority 1500, on by default) passes every `top_cidr` address
   to and from the hub VPCs, the VPN on-premises prefixes and
   `aws.network.internal_pass_cidrs`, and spokes to spokes of the same

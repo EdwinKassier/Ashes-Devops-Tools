@@ -102,3 +102,13 @@ CHANGELOG.md   ${platform_team}
 /release-please-config.json       ${security_team}
 /.tool-versions                   ${security_team}
 /.pre-commit-config.yaml          ${security_team}
+# Re-audit 6: the firewall rule groups and the hub that feeds them, the
+# module whose provisioners run with production database credentials, the
+# release verifier and the ruleset JSON operators paste.
+/modules/aws/network/network-firewall/  ${security_team}
+/modules/aws/stages/network-hub/        ${security_team}
+/modules/supabase/vault-secrets/        ${security_team}
+/scripts/verify-run-commit.sh           ${security_team}
+/scripts/check-tag-patterns.py          ${security_team}
+/docs/guides/CI_SECRETS.md              ${security_team}
+/docs/guides/BRANCH_PROTECTION.md       ${security_team}

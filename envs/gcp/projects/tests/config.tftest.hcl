@@ -219,3 +219,38 @@ run "data_classification_and_cost_labels_from_config" {
     error_message = "org.cost_center / org.owner must reach the provider default labels in label form (lowercase, other characters as '-')."
   }
 }
+
+# Re-audit 6 CMP-4: the contract publishes the class, and an environments
+# variable cannot drop it.
+run "contract_publishes_the_regulated_class" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated.yaml"
+  }
+
+  assert {
+    condition     = output.contract.environment_config["prod"].compliance_class == "regulated" && output.contract.environment_config["dev"].compliance_class == "standard"
+    error_message = "environment_config must carry each environment's compliance_class."
+  }
+}
+
+run "environments_override_cannot_unmark_regulated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated.yaml"
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west2"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 1000
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+  }
+
+  expect_failures = [var.environments]
+}

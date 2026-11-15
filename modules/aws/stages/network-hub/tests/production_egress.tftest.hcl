@@ -183,3 +183,20 @@ run "waiver_plans" {
     egress_alert_only_waived = true
   }
 }
+
+# Re-audit 6 ARC-1: the app-layer drop action (which lets the allowlist see a
+# split TLS ClientHello) satisfies the production gate.
+run "production_app_layer_drop_passes" {
+  command = plan
+
+  variables {
+    enforce_egress_allowlist                  = true
+    network_firewall_stateful_default_actions = ["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"]
+    network_firewall_egress_domain_allowlist  = ["api.ecr.eu-west-2.amazonaws.com"]
+  }
+
+  assert {
+    condition     = terraform_data.production_egress_enforced.input == true
+    error_message = "aws:drop_established_app_layer_to_server must satisfy the production egress gate."
+  }
+}

@@ -44,6 +44,10 @@ resource "aws_db_subnet_group" "this" {
 
 # ── TLS in transit ────────────────────────────────────────────────────────────
 # Re-audit 5 CMP-2: rds.force_ssl = 1 refuses unencrypted client connections.
+# pending-reboot is valid whether the family reports the parameter as static
+# or dynamic ("immediate" fails on a static one). A new cluster boots with
+# it; an existing cluster enforces TLS only after a reboot of each instance,
+# which Terraform does not trigger (UPGRADING.md, re-audit 6 IAC-2).
 # A cluster parameter group per cluster, family from the engine major version.
 resource "aws_rds_cluster_parameter_group" "this" {
   count = var.enable_force_ssl ? 1 : 0

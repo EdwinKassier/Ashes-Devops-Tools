@@ -339,3 +339,25 @@ run "regulated_estate_admin_project_as_logging_project_fails" {
 
   expect_failures = [terraform_data.regulated_audit_store_guard, check.production_audit_store]
 }
+
+# Re-audit 6 CMP-3: an environments variable cannot drop compliance_class:
+# regulated from an environment the config file marks regulated.
+run "environments_override_cannot_unmark_regulated" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone.regulated.yaml"
+    environments = {
+      prod = {
+        display_name            = "Production"
+        region                  = "europe-west1"
+        cidr_block              = "10.30.0.0/16"
+        budget_monthly_limit    = 1000
+        iam_group_role_bindings = {}
+        is_production           = true
+      }
+    }
+  }
+
+  expect_failures = [var.environments]
+}

@@ -375,7 +375,7 @@ then an egress domain allowlist, with `HOME_NET` set to the org supernet
 The default action is `aws:alert_established`: log but pass, so day one never
 blackholes. A production estate must fail closed. With `enforce_egress_allowlist`
 set, which `aws-network` derives from `org.profile` and a production workload,
-the plan fails unless the actions include `aws:drop_established` and the
+the plan fails unless the actions include a drop action (`aws:drop_established_app_layer_to_server`) and the
 allowlist is non-empty, or `aws.network.egress_alert_only_waived` is set.
 The TGW attachment for inspection runs in **appliance mode**, so both
 directions of a flow use the same AZ and the same stateful endpoint
@@ -580,8 +580,8 @@ aws:
       is_production: true
   network:
     stateful_default_actions:
-      - aws:drop_established
-      - aws:alert_established
+      - aws:drop_established_app_layer_to_server
+      - aws:alert_established_app_layer_to_server
     egress_domain_allowlist:
       - .amazonaws.com
       - .github.com
@@ -727,7 +727,7 @@ checked 2026-11). It usually starts right after an `aws-network` apply.
    SNI means policy. No entry at all means the flow never reached the firewall:
    check routing.
 2. **Policy:** was a domain removed from `aws.network.egress_domain_allowlist`,
-   or did `stateful_default_actions` just gain `aws:drop_established`? Compare
+   or did `stateful_default_actions` just gain a drop action (`aws:drop_established_app_layer_to_server`)? Compare
    the last applied run in Terraform Cloud.
 3. **Routing:** is the spoke listed in `aws.network.spoke_attachments`? Does
    the `prod` table still route `0.0.0.0/0` to inspection? Is
@@ -741,7 +741,7 @@ checked 2026-11). It usually starts right after an `aws-network` apply.
 1. **Missing domain:** add it to the allowlist in config and apply
    `aws-network` through Terraform Cloud. Never edit the firewall policy in the
    console: the next apply reverts it.
-2. **Broad breakage after a tightening:** remove `aws:drop_established` from
+2. **Broad breakage after a tightening:** remove a drop action (`aws:drop_established_app_layer_to_server`) from
    `aws.network.stateful_default_actions`, which is what returns the firewall
    to log-but-pass, **and** set `aws.network.egress_alert_only_waived: true`.
    The waiver only lets the plan pass the production gate; on its own it

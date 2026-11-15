@@ -34,7 +34,7 @@
 #                  ["aws:alert_established"]: unmatched traffic PASSES but is
 #                  logged, so turning the firewall on never blackholes a running
 #                  workload. Move to the AWS-recommended
-#                  ["aws:drop_established", "aws:alert_established"] once the
+#                  ["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"] once the
 #                  allow rules / allowlist cover legitimate egress.
 #
 # Stateless defaults forward everything to the stateful engine.

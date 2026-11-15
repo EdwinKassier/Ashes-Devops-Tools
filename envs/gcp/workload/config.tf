@@ -115,6 +115,7 @@ locals {
           vpc_sc_access_policy_id = try(tostring(e.vpc_sc_access_policy_id), null)
           automation_identities   = [for i in try(e.automation_identities, []) : tostring(i)]
           spoke_network_name      = try(tostring(e.spoke_network_name), null)
+          compliance_class        = try(tostring(e.compliance_class), null)
         }
       }
     }
@@ -222,7 +223,11 @@ locals {
 locals {
   # gcp.environments.<environment>.compliance_class: standard (default) or
   # regulated (CMP-7). main.tf (compliance_class_guard) rejects other values.
-  compliance_class = try(tostring(local.lz.gcp.environments[var.environment].compliance_class), "standard")
+  # Regulated when this root's config file or the gcp-projects contract
+  # (environment_config, from the estate gcp-projects read) says so, so a
+  # workspace that points landing_zone_config_path at another estate's file
+  # keeps the class (re-audit 6 CMP-4).
+  compliance_class = try(local.env_config.compliance_class, null) == "regulated" ? "regulated" : try(tostring(local.lz.gcp.environments[var.environment].compliance_class), "standard")
   regulated        = local.compliance_class == "regulated"
   # CMP-12: every app-service database of a regulated environment must set
   # database.encryption_key_name (cloud-sql require_cmek fails the plan). It is

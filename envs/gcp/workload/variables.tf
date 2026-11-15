@@ -18,7 +18,7 @@ variable "landing_zone_config_path" {
   # drop the whole config and fall back to built-in defaults.
   validation {
     condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
-    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path, or set \"\" to disable the config file."
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path (in HCP Terraform only config/landing-zone.yaml or config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only)."
   }
 }
 
@@ -153,6 +153,7 @@ variable "projects_contract" {
       vpc_sc_access_policy_id = optional(string)
       automation_identities   = optional(list(string), [])
       spoke_network_name      = optional(string)
+      compliance_class        = optional(string)
     })), {})
   })
   default = null
@@ -389,7 +390,7 @@ variable "production_vpc_sc_dry_run_waiver" {
 }
 
 variable "production_egress_proxy_waiver" {
-  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its private-tier egress does not go through the hub Secure Web Proxy (enable_egress_proxy / gcp.environments.<env>.egress_proxy off, or no hub). reason says why; expires (YYYY-MM-DD, UTC; the midnight form YYYY-MM-DDT00:00:00Z is read as that day) is the last day it waives. Null (default) fails such a plan, because Cloud NAT egress has no destination allowlist. Set it through config/tfc-workspaces.yaml (reviewed)."
+  description = "Explicit, time-boxed waiver: let a production environment (environment_config is_production) plan while its private-tier egress does not go through the hub Secure Web Proxy (enable_egress_proxy / gcp.environments.<env>.egress_proxy off, or no hub). reason says why; expires (YYYY-MM-DD, UTC; the midnight form YYYY-MM-DDT00:00:00Z is read as that day) is the last day it waives. Null (default) fails such a plan, because Cloud NAT egress has no destination allowlist. Set it through config/tfc-workspaces.yaml (reviewed). A regulated environment refuses a waiver that expires more than 90 days after the plan."
   type = object({
     reason  = string
     expires = string

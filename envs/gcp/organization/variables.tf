@@ -18,7 +18,7 @@ variable "landing_zone_config_path" {
   # drop the whole config and fall back to built-in defaults.
   validation {
     condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
-    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path, or set \"\" to disable the config file."
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path (in HCP Terraform only config/landing-zone.yaml or config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only)."
   }
 }
 
@@ -133,6 +133,17 @@ variable "environments" {
   validation {
     condition     = alltrue([for c in(var.environments != null ? [for e in values(var.environments) : e.compliance_class] : [for e in values(local.cfg.environments) : e.compliance_class]) : contains(["standard", "regulated"], c)])
     error_message = "Each environment's compliance_class must be standard or regulated."
+  }
+
+  validation {
+    # Re-audit 6 CMP-3: an explicit environments map (a workspace variable no
+    # review sees) must not drop compliance_class: regulated, or the regulated
+    # audit-store guard switches off.
+    condition = var.environments == null || alltrue([
+      for k, e in coalesce(local.cfg.environments, {}) :
+      try(var.environments[k].compliance_class, "missing") == "regulated" if try(e.compliance_class, "standard") == "regulated"
+    ])
+    error_message = "environments drops compliance_class: regulated from ${join(", ", [for k, e in coalesce(local.cfg.environments, {}) : k if try(e.compliance_class, "standard") == "regulated" && try(var.environments[k].compliance_class, "missing") != "regulated"])} (regulated in config/landing-zone.yaml). A regulated environment stays, under its own key, regulated."
   }
 
   validation {

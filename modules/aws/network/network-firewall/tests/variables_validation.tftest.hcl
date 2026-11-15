@@ -118,3 +118,25 @@ run "rejects_internal_pass_cidr_containing_home_net" {
 
   expect_failures = [var.internal_pass_cidrs]
 }
+
+run "app_layer_default_actions_accepted" {
+  command = plan
+
+  variables {
+    inspection_vpc_id        = "vpc-inspection0000000"
+    log_bucket_name          = "example-firewall-log-bucket"
+    stateful_default_actions = ["aws:drop_established_app_layer", "aws:alert_established_app_layer"]
+  }
+}
+
+run "mixed_established_and_app_layer_rejected" {
+  command = plan
+
+  variables {
+    inspection_vpc_id        = "vpc-inspection0000000"
+    log_bucket_name          = "example-firewall-log-bucket"
+    stateful_default_actions = ["aws:drop_established_app_layer", "aws:alert_established"]
+  }
+
+  expect_failures = [var.stateful_default_actions]
+}

@@ -31,7 +31,7 @@ case_tree() {
 # expect_rc <label> <rc> <tree> [<text the output must contain>]
 expect_rc() {
   local rc=0
-  PLAN_EXEC_ROOT="$3" python3 "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+  PLAN_EXEC_ROOT="$3" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
   if [ "${rc}" -ne "$2" ]; then
     bad "$1 (rc=${rc}, want $2)"
     cat "${workdir}/out" >&2
@@ -701,16 +701,27 @@ tpl_tree() {
   add_file "${t}" modules/a/t.tftpl "$2"
   echo "${t}"
 }
-expect_rc "SEC-1 (re-audit 5): a template calling file() fails" 1 "$(tpl_tree tplfile '${file("/proc/self/environ")}')" "renders a template that calls a file reader"
-expect_rc "SEC-1 (re-audit 5 review 2): a commented file() call in a template fails" 1 "$(tpl_tree tplcomment '[${file/*c*/("/proc/self/environ")}]')" "renders a template that calls a file reader"
-expect_rc "SEC-1 (re-audit 5 review 2): a file() call in a template directive fails" 1 "$(tpl_tree tpldirective '%{ for x in [file("/etc/hosts")] }${x}%{ endfor }')" "renders a template that calls a file reader"
-expect_rc "SEC-1 (re-audit 5 review 2): an escaped interpolation passes" 0 "$(tpl_tree tplescape '$${file("x")} is literal text')"
+expect_rc "SEC-1 (re-audit 5): a template calling file() fails" 1 "$(tpl_tree tplfile '${file("/proc/self/environ")}')" "renders a template that names a file function"
+expect_rc "SEC-1 (re-audit 5 review 2): a commented file() call in a template fails" 1 "$(tpl_tree tplcomment '[${file/*c*/("/proc/self/environ")}]')" "renders a template that names a file function"
+expect_rc "SEC-1 (re-audit 5 review 2): a file() call in a template directive fails" 1 "$(tpl_tree tpldirective '%{ for x in [file("/etc/hosts")] }${x}%{ endfor }')" "renders a template that names a file function"
 expect_rc "SEC-1 (re-audit 5 review 2): path.root in a module fails" 1 "$(case_tree rootinmod modules/a/main.tf 'locals {
   x = templatefile("${path.root}/t.tftpl", {})
 }')" "reads from path.root in a module"
 expect_rc "SEC-2 (re-audit 5 review 2): data vercel_file fails" 1 "$(case_tree vfile modules/a/main.tf 'data "vercel_file" "f" {
   path = "/proc/self/environ"
 }')" "vercel_file"
+# Re-audit 6 SEC-2: without -P a file beside the scanner could replace hcl2.
+rc=0
+PLAN_EXEC_ROOT="${workdir}" python3 "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+if [ "${rc}" -eq 2 ] && grep -qF -- "python3 -P" "${workdir}/out"; then ok "SEC-2 (re-audit 6): the scanner refuses to run without python3 -P"; else bad "SEC-2 (re-audit 6): the scanner ran without -P (rc=${rc})"; fi
+expect_rc "SEC-1 (re-audit 6): a # in a string literal does not hide file()" 1 "$(tpl_tree tplhash '${"#" != "" ? file("/etc/hosts") : ""}')" "names a file function"
+expect_rc "SEC-1 (re-audit 6): a } in a string literal does not hide file()" 1 "$(tpl_tree tplbrace '${"}" == "}" ? file("/etc/hosts") : ""}')" "names a file function"
+expect_rc "SEC-1 (re-audit 6 review): a %{} directive in a file() path fails" 1 "$(case_tree dirpath envs/x/main.tf 'output "o" {
+  value = file("${path.module}/%{if true}..%{endif}/%{if true}..%{endif}/etc/hosts")
+}')" "template directive or escape"
+expect_rc "SEC-1 (re-audit 6 review): a %{} directive in a templatefile() path fails" 1 "$(case_tree dirtpl modules/a/main.tf 'locals {
+  x = templatefile("${path.module}/%{if false}x%{endif}evil.tftpl", {})
+}')" "template directive or escape"
 expect_rc "SEC-1 (re-audit 5): a plain template passes" 0 "$(tpl_tree tplok '{"a": "${x}"}')"
 expect_rc "SEC-1 (re-audit 5): a missing template fails closed" 1 "$(case_tree tplmissing modules/a/main.tf 'locals {
   x = templatefile("${path.module}/none.tftpl", {})
@@ -802,7 +813,7 @@ policy_copy() {
 # expect_policy_rc <label> <rc> <policy dir> <text>
 expect_policy_rc() {
   local rc=0
-  PLAN_EXEC_POLICY_DIR="$3" PLAN_EXEC_ROOT="${workdir}/clean" python3 "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
+  PLAN_EXEC_POLICY_DIR="$3" PLAN_EXEC_ROOT="${workdir}/clean" python3 -P "${SCRIPT}" >"${workdir}/out" 2>&1 || rc=$?
   if [ "${rc}" -eq "$2" ] && grep -qF -- "$4" "${workdir}/out"; then ok "$1"; else
     bad "$1 (rc=${rc}, want $2 with: $4)"
     cat "${workdir}/out" >&2

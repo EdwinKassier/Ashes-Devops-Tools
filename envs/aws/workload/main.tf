@@ -376,6 +376,18 @@ resource "aws_secretsmanager_secret_policy" "saas_bridge" {
 # Re-audit 5 CMP-2/CMP-3: a regulated environment (aws.workload_environments
 # .<env>.compliance_class: regulated) keeps every production control and
 # encrypts app traffic in transit. Explicit variables cannot weaken it.
+resource "terraform_data" "compliance_class_guard" {
+  count = try(local.cfg.workload_compliance_class[local.environment], null) == null ? 0 : 1
+  input = try(local.cfg.workload_compliance_class[local.environment], null)
+
+  lifecycle {
+    precondition {
+      condition     = contains(["standard", "regulated"], try(local.cfg.workload_compliance_class[local.environment], "standard"))
+      error_message = "aws.workload_environments.${local.environment}.compliance_class must be standard or regulated (a typo would silently make the environment standard here)."
+    }
+  }
+}
+
 resource "terraform_data" "regulated_guard" {
   count = local.regulated ? 1 : 0
   input = local.environment
@@ -389,6 +401,18 @@ resource "terraform_data" "regulated_guard" {
     precondition {
       condition     = local.enable_gateway_endpoint_policies
       error_message = "aws-workload-${local.environment} is regulated, so its S3 and DynamoDB gateway endpoints must keep the organization-only policies: remove enable_gateway_endpoint_policies = false."
+    }
+
+    # Re-audit 6 CMP-1: a regulated internet-facing ALB keeps its WAF, and a
+    # regulated ALB writes access logs (PCI 6.4.2, 10.2).
+    precondition {
+      condition     = length(local.services) == 0 || !local.app_public_alb || var.enable_app_waf
+      error_message = "aws-workload-${local.environment} is regulated, so its internet-facing ALB must keep the regional WAF: remove enable_app_waf = false."
+    }
+
+    precondition {
+      condition     = length(local.services) == 0 || var.app_alb_access_logs_bucket != null
+      error_message = "aws-workload-${local.environment} is regulated, so its ALB must write access logs: set app_alb_access_logs_bucket (a bucket in this account that allows ELB log delivery)."
     }
 
     precondition {

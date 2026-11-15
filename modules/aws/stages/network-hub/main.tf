@@ -532,10 +532,10 @@ resource "terraform_data" "production_egress_enforced" {
     precondition {
       condition = (
         !var.enforce_egress_allowlist || var.egress_alert_only_waived ||
-        (contains(var.network_firewall_stateful_default_actions, "aws:drop_established") &&
+        (length([for a in var.network_firewall_stateful_default_actions : a if startswith(a, "aws:drop_")]) > 0 &&
         length(var.network_firewall_egress_domain_allowlist) > 0)
       )
-      error_message = "Production and regulated egress must fail closed: set network_firewall_stateful_default_actions to include aws:drop_established AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
+      error_message = "Production and regulated egress must fail closed: set network_firewall_stateful_default_actions to include a drop action (aws:drop_established_app_layer_to_server recommended) AND a non-empty network_firewall_egress_domain_allowlist (config aws.network.stateful_default_actions / aws.network.egress_domain_allowlist), or explicitly waive with egress_alert_only_waived (config aws.network.egress_alert_only_waived: true)."
     }
   }
 }

@@ -623,3 +623,33 @@ run "regulated_env_refuses_a_long_egress_waiver" {
 
   expect_failures = [terraform_data.regulated_egress_waiver_guard]
 }
+
+# Re-audit 6 CMP-4: the gcp-projects contract keeps the class even when this
+# workspace reads a config file (here: none) that does not mark it regulated.
+run "contract_keeps_the_regulated_class" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = ""
+    zones                    = ["europe-west2-a", "europe-west2-b", "europe-west2-c"]
+    projects_contract = {
+      environment_config = {
+        prod = {
+          folder_id               = "333"
+          host_project_id         = "acme-prod-host-abcd"
+          host_project_number     = "333333333333"
+          region                  = "europe-west2"
+          cidr_block              = "10.30.0.0/16"
+          is_production           = true
+          vpc_sc_access_policy_id = "555555555"
+          compliance_class        = "regulated"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition     = local.regulated
+    error_message = "compliance_class: regulated in the gcp-projects contract must make the environment regulated."
+  }
+}

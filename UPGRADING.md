@@ -41,6 +41,44 @@ patch knowingly and expect conflicts here.
 Manual steps for the next release, grouped by area. A breaking change
 (`feat!:` or a `BREAKING CHANGE` footer) must add its entry here; CI enforces it.
 
+### What your next run does (re-audit 6 fixes)
+
+The fixes for [re-audit 6](docs/audit/2026-11-15-due-diligence-reaudit-6.md)
+change these runs:
+
+- **Firewall default actions (ARC-1).** The firewall module and the
+  production egress gate accept the app-layer actions
+  (`aws:drop_established_app_layer`, `aws:drop_established_app_layer_to_server`
+  and the matching alert actions); the gate accepts any drop action. The example config and the
+  scaffolder now set `aws:drop_established_app_layer_to_server` and
+  `aws:alert_established_app_layer_to_server`: they wait for the TLS ClientHello before
+  dropping, so a handshake split across packets (post-quantum key shares)
+  still matches the domain allowlist. Switch both entries of `aws.network.stateful_default_actions`
+  to them (AWS refuses a mix of `aws:*_established` and `*_app_layer*`; the
+  plan now fails on it); the policy updates in place. The `_to_server` form
+  leaves server-to-client packets alone.
+- **Aurora TLS (IAC-2).** A new cluster enforces `rds.force_ssl` from the
+  start. An existing cluster enforces it only after each instance reboots
+  (the parameter group change is `pending-reboot`, the one method AWS accepts
+  whether the parameter is static or dynamic). Reboot the instances in a
+  maintenance window after the apply, then check that clients use TLS.
+- **Regulated AWS workloads (CMP-1, breaking).** With services, a regulated
+  `aws-workload-<env>` also needs `app_alb_access_logs_bucket`, and on
+  `public_alb` refuses `enable_app_waf = false`. An unknown `compliance_class`
+  (for example `Regulated`) now fails the plan instead of meaning standard.
+- **Regulated class in the contract (CMP-3, CMP-4).** gcp-projects publishes
+  `environment_config.<env>.compliance_class`, and gcp-workload treats an
+  environment as regulated when its config file or that contract says so.
+  Apply gcp-projects first. gcp-organization refuses an `environments`
+  variable that drops `compliance_class: regulated`.
+- **Plan-time scanner (SEC-1, SEC-2, breaking for forks).** A template read
+  by `templatefile()` may not name a file function anywhere. The scanner must
+  run as `python3 -P` (it exits 2 otherwise); `make consistency` does.
+- **CODEOWNERS.** The firewall module, the network hub stage, `vault-secrets`,
+  the release verifier, `check-tag-patterns.py` and the two ruleset guides
+  need a security approval. Copy the new lines into your fork's
+  `.github/CODEOWNERS`.
+
 ### What your next run does (re-audit 5 fixes)
 
 The fixes for [re-audit 5](docs/audit/2026-11-15-due-diligence-reaudit-5.md)

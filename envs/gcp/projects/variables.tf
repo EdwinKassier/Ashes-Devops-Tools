@@ -18,7 +18,7 @@ variable "landing_zone_config_path" {
   # drop the whole config and fall back to built-in defaults.
   validation {
     condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
-    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path, or set \"\" to disable the config file."
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path (in HCP Terraform only config/landing-zone.yaml or config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only)."
   }
 }
 
@@ -74,8 +74,20 @@ variable "environments" {
     labels                  = optional(map(string), {})
     is_production           = optional(bool, false)
     data_classification     = optional(string, "internal")
+    compliance_class        = optional(string, "standard")
   }))
   default = null
+
+  validation {
+    # Review of the re-audit 6 fixes: an explicit environments map (a workspace
+    # variable no review sees) must keep every regulated config environment,
+    # still regulated, or the contract would publish it as standard.
+    condition = var.environments == null || alltrue([
+      for k, e in coalesce(local.cfg.environments, {}) :
+      try(var.environments[k].compliance_class, "missing") == "regulated" if try(e.compliance_class, "standard") == "regulated"
+    ])
+    error_message = "environments must keep every environment that config/landing-zone.yaml marks regulated, with compliance_class = \"regulated\": ${join(", ", [for k, e in coalesce(local.cfg.environments, {}) : k if try(e.compliance_class, "standard") == "regulated" && try(var.environments[k].compliance_class, "missing") != "regulated"])}."
+  }
 
   validation {
     condition     = var.environments != null || length(local.cfg.environments) > 0

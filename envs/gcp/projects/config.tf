@@ -56,6 +56,11 @@ locals {
         labels                  = try({ for lk, lv in e.labels : lk => tostring(lv) }, {})
         is_production           = tobool(try(e.is_production, false))
         data_classification     = tostring(try(e.data_classification, "internal"))
+        # Published in environment_config (re-audit 6 CMP-4): gcp-workload
+        # treats an environment as regulated when either its own config file or
+        # this contract says so, so repointing one workload's config path at
+        # another estate's file does not drop the class.
+        compliance_class = tostring(try(e.compliance_class, "standard"))
       }
     }
     # Environment keys whose is_production is missing or not a boolean. The

@@ -358,6 +358,7 @@ run "regulated_refuses_is_production_false" {
     landing_zone_config_path         = "tests/fixtures/landing-zone-regulated.yaml"
     app_ingress_mode                 = "internal"
     app_alb_certificate_arn          = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    app_alb_access_logs_bucket       = "acme-alb-logs"
     is_production                    = false
     enable_gateway_endpoint_policies = true # isolate the is_production precondition
   }
@@ -372,6 +373,7 @@ run "regulated_refuses_open_gateway_endpoints" {
     landing_zone_config_path         = "tests/fixtures/landing-zone-regulated.yaml"
     app_ingress_mode                 = "internal"
     app_alb_certificate_arn          = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    app_alb_access_logs_bucket       = "acme-alb-logs"
     enable_gateway_endpoint_policies = false
   }
 
@@ -382,9 +384,10 @@ run "regulated_with_https_ingress_plans" {
   command = plan
 
   variables {
-    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
-    app_ingress_mode         = "internal"
-    app_alb_certificate_arn  = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    landing_zone_config_path   = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode           = "internal"
+    app_alb_certificate_arn    = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    app_alb_access_logs_bucket = "acme-alb-logs"
   }
 
   assert {
@@ -407,6 +410,34 @@ run "regulated_account_under_another_environment_name" {
   assert {
     condition     = local.regulated
     error_message = "an environment deploying into a regulated environment's account must be regulated."
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+# Re-audit 6 CMP-1: a regulated ALB writes access logs, and an internet-facing
+# one keeps its WAF.
+run "regulated_needs_alb_access_logs" {
+  command = plan
+
+  variables {
+    landing_zone_config_path = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode         = "internal"
+    app_alb_certificate_arn  = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+  }
+
+  expect_failures = [terraform_data.regulated_guard]
+}
+
+run "regulated_public_alb_keeps_its_waf" {
+  command = plan
+
+  variables {
+    landing_zone_config_path   = "tests/fixtures/landing-zone-regulated.yaml"
+    app_ingress_mode           = "public_alb"
+    app_alb_certificate_arn    = "arn:aws:acm:eu-west-2:222222222222:certificate/00000000-0000-0000-0000-000000000001"
+    app_alb_access_logs_bucket = "acme-alb-logs"
+    enable_app_waf             = false
   }
 
   expect_failures = [terraform_data.regulated_guard]

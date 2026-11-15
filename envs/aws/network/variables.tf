@@ -22,7 +22,7 @@ variable "landing_zone_config_path" {
   # drop the whole config and fall back to built-in defaults.
   validation {
     condition     = var.landing_zone_config_path == null || var.landing_zone_config_path == "" || startswith(coalesce(var.landing_zone_config_path, "/"), "/") || fileexists("${path.root}/${coalesce(var.landing_zone_config_path, "x")}")
-    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path, or set \"\" to disable the config file."
+    error_message = "landing_zone_config_path is set to \"${var.landing_zone_config_path == null ? "" : var.landing_zone_config_path}\" but no file exists there (relative to this root). Fix the path (in HCP Terraform only config/landing-zone.yaml or config/<estate>/landing-zone.yaml passes the policy check; \"\" disables the file in local and test runs only)."
   }
 }
 
@@ -375,7 +375,7 @@ variable "network_firewall_internal_pass_cidrs" {
 }
 
 variable "network_firewall_stateful_default_actions" {
-  description = "STRICT_ORDER default actions for unmatched traffic. Null = aws.network.stateful_default_actions from config, else [\"aws:alert_established\"] (log-but-pass). Production needs aws:drop_established."
+  description = "STRICT_ORDER default actions for unmatched traffic. Null = aws.network.stateful_default_actions from config, else [\"aws:alert_established\"] (log-but-pass). Production needs a drop action (aws:drop_established_app_layer_to_server recommended)."
   type        = list(string)
   default     = null
 }
@@ -387,7 +387,7 @@ variable "egress_alert_only_waived" {
 
   validation {
     condition     = !(coalesce(var.egress_alert_only_waived, local.cfg.egress_alert_only_waived, false) && length(local.cfg.workload_regulated) > 0)
-    error_message = "The alert-only egress waiver (egress_alert_only_waived / aws.network.egress_alert_only_waived) is not allowed: ${join(", ", local.cfg.workload_regulated)} ${length(local.cfg.workload_regulated) == 1 ? "is" : "are"} regulated (aws.workload_environments.<env>.compliance_class: regulated in config/landing-zone.yaml). Set aws.network.stateful_default_actions to include aws:drop_established and list the allowed domains in aws.network.egress_domain_allowlist."
+    error_message = "The alert-only egress waiver (egress_alert_only_waived / aws.network.egress_alert_only_waived) is not allowed: ${join(", ", local.cfg.workload_regulated)} ${length(local.cfg.workload_regulated) == 1 ? "is" : "are"} regulated (aws.workload_environments.<env>.compliance_class: regulated in config/landing-zone.yaml). Set aws.network.stateful_default_actions to include a drop action (aws:drop_established_app_layer_to_server recommended) and list the allowed domains in aws.network.egress_domain_allowlist."
   }
 }
 

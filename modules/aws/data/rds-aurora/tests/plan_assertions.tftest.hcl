@@ -215,3 +215,28 @@ run "force_ssl_can_be_disabled" {
     error_message = "enable_force_ssl = false must create no parameter group."
   }
 }
+
+# Re-audit 6 IAC-1: the cluster really uses the TLS parameter group, and the
+# family follows the engine's major version.
+run "cluster_attaches_the_tls_parameter_group" {
+  command = apply
+
+  variables {
+    engine_version = "17.4"
+  }
+
+  assert {
+    condition     = aws_rds_cluster.this.db_cluster_parameter_group_name == aws_rds_cluster_parameter_group.this[0].name
+    error_message = "The cluster must use the rds.force_ssl parameter group."
+  }
+
+  assert {
+    condition     = aws_rds_cluster_parameter_group.this[0].family == "aurora-postgresql17"
+    error_message = "The parameter group family must follow the engine major version."
+  }
+
+  assert {
+    condition     = one([for p in aws_rds_cluster_parameter_group.this[0].parameter : p.apply_method if p.name == "rds.force_ssl"]) == "pending-reboot"
+    error_message = "rds.force_ssl must use pending-reboot, which AWS accepts whether the parameter is static or dynamic."
+  }
+}

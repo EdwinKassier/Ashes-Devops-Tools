@@ -172,7 +172,7 @@ variable "network_firewall_managed_rule_groups" {
 }
 
 variable "network_firewall_stateful_default_actions" {
-  description = "STRICT_ORDER default actions for unmatched traffic. Default [\"aws:alert_established\"] = log-but-pass (no day-one blackhole); move to [\"aws:drop_established\", \"aws:alert_established\"] once allow rules cover legitimate egress."
+  description = "STRICT_ORDER default actions for unmatched traffic. Default [\"aws:alert_established\"] = log-but-pass (no day-one blackhole); move to [\"aws:drop_established_app_layer_to_server\", \"aws:alert_established_app_layer_to_server\"] once allow rules cover legitimate egress (the app-layer actions let the allowlist see a TLS ClientHello split across packets)."
   type        = list(string)
   default     = ["aws:alert_established"]
 }
@@ -184,7 +184,7 @@ variable "network_firewall_egress_domain_allowlist" {
 }
 
 variable "enforce_egress_allowlist" {
-  description = "Production egress gate. When true (and egress_alert_only_waived is false) the plan fails unless network_firewall_stateful_default_actions contains aws:drop_established and network_firewall_egress_domain_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is_production, or when any AWS workload environment is compliance_class: regulated."
+  description = "Production egress gate. When true (and egress_alert_only_waived is false) the plan fails unless network_firewall_stateful_default_actions contains a drop action (aws:drop_established_app_layer_to_server recommended) and network_firewall_egress_domain_allowlist is non-empty, so production never runs alert-only. The aws-network root sets it when org.profile is production and an AWS workload environment is_production, or when any AWS workload environment is compliance_class: regulated."
   type        = bool
   default     = false
 }

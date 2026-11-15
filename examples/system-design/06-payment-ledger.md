@@ -531,7 +531,7 @@ aws:
   workload:
     app_ingress_mode: cloudfront_vpc_origin # public HTTPS for PSP webhooks; see the gap below
   network:
-    stateful_default_actions: ["aws:drop_established", "aws:alert_established"] # fail closed, log drops
+    stateful_default_actions: ["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"] # fail closed, log drops
     egress_domain_allowlist: # org-wide: append to the existing list, never replace it
       - api.ecr.<region>.amazonaws.com # image pulls (no interface endpoint)
       - .dkr.ecr.<region>.amazonaws.com

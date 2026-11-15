@@ -78,6 +78,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Re-audit 6 SEC-2: run as `python3 -P` so a file beside this script (for
+# example a platform-owned scripts/hcl2.py or scripts/json.py) cannot shadow a
+# module. Without -P, sys.path[0] is this directory: fail closed.
+if not sys.flags.safe_path and sys.path and \
+        Path(sys.path[0] or ".").resolve() == Path(__file__).resolve().parent:
+    sys.stderr.write("check-plan-time-exec: run with `python3 -P` (the script directory must "
+                     "not be on sys.path, so no file beside it can replace a module)\n")
+    sys.exit(2)
+
 try:
     import hcl2
 except ImportError:  # fail closed with the install hint
@@ -657,51 +666,26 @@ def remote_state_config_problems(rel: str, name: str, config) -> list[str]:
     return out
 
 
-TEMPLATE_CALL = re.compile(r"(?<![\w.])(?:file\w*|templatefile|templatestring)\s*\(")
-TEMPLATE_COMMENT = re.compile(r"/\*.*?\*/|#[^\n]*|//[^\n]*", re.S)
-
-
-def template_expressions(body: str) -> list[str] | None:
-    """The text of every ${...} and %{...} sequence of a template (where
-    functions can run), braces matched; None when one does not close."""
-    out, i = [], 0
-    while True:
-        starts = [x for x in (body.find("${", i), body.find("%{", i)) if x >= 0]
-        if not starts:
-            return out
-        i = min(starts)
-        if i > 0 and body[i - 1] == body[i]:  # $${ and %%{ are literal escapes
-            i += 2
-            continue
-        depth, j = 0, i + 1
-        while j < len(body):
-            depth += {"{": 1, "}": -1}.get(body[j], 0)
-            if depth == 0:
-                break
-            j += 1
-        if depth:
-            return None
-        out.append(body[i + 2:j])
-        i = j + 1
+# Re-audit 6 SEC-1: any file-function name anywhere in a template fails. A
+# scan of the ${...} parts only lost twice (a "#" or "}" inside a string
+# literal hid the call), so no attempt is made to parse the template.
+TEMPLATE_TOKEN = re.compile(r"(?<![\w.])(?:file\w*|templatefile|templatestring)(?!\w)")
 
 
 def template_problems(rel: str, fn: str, lit: str, suffix: str) -> list[str]:
     """Re-audit 5 review: a templatefile() template is code too. Terraform lets
     a template call file(), so a .tftpl holding ${file("/proc/self/environ")}
     reads the runner's environment. The template must exist in the repository
-    and call no file reader."""
+    and must not name a file function anywhere (re-audit 6: string literals
+    hid calls from an expression scan)."""
     path = ROOT / posixpath.normpath(posixpath.join(posixpath.dirname(rel), "." + suffix))
     try:
         body = path.read_text()
     except (OSError, UnicodeDecodeError):
         return [f'{rel}: {fn}("{lit}") reads a template this check cannot read; fail closed']
-    exprs = template_expressions(body)
-    if exprs is None:
-        return [f'{rel}: {fn}("{lit}") renders a template with an unclosed interpolation; fail closed']
-    # Comments are removed first: file/*x*/("...") is still a call.
-    if any(TEMPLATE_CALL.search(TEMPLATE_COMMENT.sub("", e)) for e in exprs):
-        return [f'{rel}: {fn}("{lit}") renders a template that calls a file reader '
-                "(file(), templatefile(), ...): it would read files on the runner"]
+    if TEMPLATE_TOKEN.search(body):
+        return [f'{rel}: {fn}("{lit}") renders a template that names a file function '
+                "(file, filebase64, templatefile, ...): it could read files on the runner"]
     return []
 
 
@@ -748,6 +732,13 @@ def file_function_problems(rel: str, doc: dict, dir_locals: dict | None = None,
             fn, at = m.group(1), m.end()
             if text.startswith('"', at):
                 lit = string_literal(text, at)
+                # Review of the re-audit 6 fixes: Terraform evaluates %{ } directives
+                # (and the $${ / %%{ escapes) in a quoted path, so the path this
+                # check resolves is not the one Terraform reads.
+                if lit is not None and ("%{" in lit or "$${" in lit or "%%{" in lit):
+                    out.append(f'{rel}: {fn}("{lit}") holds a template directive or escape in '
+                               "its path, which Terraform evaluates and this check does not")
+                    continue
                 rest = suffix = None
                 for prefix in ("${path.module}", "${path.root}"):
                     if lit is not None and lit.startswith(prefix):

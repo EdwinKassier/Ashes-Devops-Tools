@@ -542,11 +542,13 @@ aws:
       - .github.com
       - .githubusercontent.com
       - .terraform.io
-    # The firewall passes all traffic inside top_cidr (spokes to the central
-    # endpoints, the Resolver and other spokes; the transit gateway keeps prod
-    # and nonprod apart) and to and from the VPN onprem_cidrs. The allowlist
-    # above covers only traffic to the internet. List other internal ranges
-    # outside top_cidr here, for example on-premises over Direct Connect.
+    # The firewall's internal pass rules let every spoke reach the hub VPCs
+    # (central endpoints, Resolver) and the VPN onprem_cidrs, and let spokes of
+    # one segment reach each other (their spoke_attachments cidr). Prod to
+    # nonprod is never passed, and a spoke without a cidr gets no east-west
+    # traffic under a fail-closed policy. The allowlist above covers only
+    # traffic to the internet. List other internal ranges outside top_cidr
+    # here, for example on-premises over Direct Connect (private ranges only).
     # internal_pass_cidrs: [192.168.0.0/16]
     # Custom Suricata rules (STRICT_ORDER), evaluated before the internal pass
     # rules and the allowlist: drop a specific internal flow, or pass an
@@ -598,8 +600,8 @@ aws:
     #   dev:  {attachment_id: tgw-attach-0123456789abcdef0, segment: nonprod}
     #   prod: {attachment_id: tgw-attach-0fedcba9876543210, segment: prod}
     stateful_default_actions:
-      - aws:drop_established
-      - aws:alert_established
+      - aws:drop_established_app_layer_to_server
+      - aws:alert_established_app_layer_to_server
 
   # Application golden path (aws-workload-<env>). All optional: uncomment the
   # keys you need and delete the {} below them.

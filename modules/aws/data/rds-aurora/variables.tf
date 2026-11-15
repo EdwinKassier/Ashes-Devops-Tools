@@ -311,7 +311,7 @@ variable "master_password_version" {
 }
 
 variable "enable_force_ssl" {
-  description = "Attach a cluster parameter group with rds.force_ssl = 1, so the cluster refuses unencrypted client connections. Default true. The parameter applies at the next reboot (apply_method pending-reboot); an existing cluster shows an in-place parameter group change."
+  description = "Attach a cluster parameter group with rds.force_ssl = 1, so the cluster refuses unencrypted client connections. Default true. A new cluster enforces it from the start. An existing cluster shows an in-place parameter group change and enforces TLS only after each instance reboots (apply_method pending-reboot); reboot them in a maintenance window."
   type        = bool
   default     = true
 }

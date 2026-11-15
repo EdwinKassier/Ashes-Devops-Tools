@@ -261,7 +261,7 @@ echo "==> No plan-time code execution, unlisted providers or endpoint overrides 
 # also covers provisioners in removed blocks, which the plan JSON does not show.
 # The TFC permission model (runs = read on secret-bearing projects) covers CLI
 # uploads that never reach this check.
-python3 scripts/check-plan-time-exec.py \
+python3 -P scripts/check-plan-time-exec.py \
   || note "plan/apply-time code execution or credential redirection (see the errors above; exit 2 = python-hcl2 missing or the policy unreadable)"
 
 echo "==> Non-delegable workload folder roles are identical in bootstrap, organization and projects"

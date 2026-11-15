@@ -69,7 +69,7 @@ run "scaffold_aws_plans" {
   }
 
   assert {
-    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established", "aws:alert_established"])
+    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"])
     error_message = "aws.network egress settings from the config file must reach the network-hub stage inputs."
   }
 }
@@ -105,7 +105,7 @@ run "scaffold_gcp_aws_plans" {
   }
 
   assert {
-    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established", "aws:alert_established"])
+    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"])
     error_message = "aws.network egress settings from the config file must reach the network-hub stage inputs."
   }
 }
@@ -141,7 +141,7 @@ run "scaffold_gcp_aws_saas_plans" {
   }
 
   assert {
-    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established", "aws:alert_established"])
+    condition     = local.network_firewall_egress_domain_allowlist == tolist(["api.ecr.eu-west-2.amazonaws.com", ".dkr.ecr.eu-west-2.amazonaws.com", "secretsmanager.eu-west-2.amazonaws.com", ".github.com", ".githubusercontent.com", ".terraform.io"]) && local.network_firewall_stateful_default_actions == tolist(["aws:drop_established_app_layer_to_server", "aws:alert_established_app_layer_to_server"])
     error_message = "aws.network egress settings from the config file must reach the network-hub stage inputs."
   }
 }

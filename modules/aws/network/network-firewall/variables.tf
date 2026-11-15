@@ -53,15 +53,16 @@ variable "managed_rule_groups" {
 }
 
 variable "stateful_default_actions" {
-  description = "STRICT_ORDER default actions for traffic no rule matched. Default [\"aws:alert_established\"] = log-but-pass (safe on day one: never blackholes existing flows). AWS-recommended steady state once allow rules exist: [\"aws:drop_established\", \"aws:alert_established\"]. At most one drop and one alert action."
+  description = "STRICT_ORDER default actions for traffic no rule matched. Default [\"aws:alert_established\"] = log-but-pass (safe on day one: never blackholes existing flows). Fail-closed steady state once allow rules exist: [\"aws:drop_established_app_layer_to_server\", \"aws:alert_established_app_layer_to_server\"]. The app-layer actions wait for the application layer (a TLS ClientHello split across packets, as post-quantum key shares make common) before dropping, so domain allowlist rules can match it; aws:drop_established can drop the second packet first. The _to_server form leaves server-to-client packets (window updates, keep-alives, resets) alone; the bidirectional form drops them unless pass rules exist. Never mix the established and app-layer families. At most one drop and one alert action."
   type        = list(string)
   default     = ["aws:alert_established"]
 
   validation {
     condition = alltrue([for a in var.stateful_default_actions : contains([
-      "aws:drop_strict", "aws:drop_established", "aws:alert_strict", "aws:alert_established",
+      "aws:drop_strict", "aws:drop_established", "aws:drop_established_app_layer", "aws:drop_established_app_layer_to_server",
+      "aws:alert_strict", "aws:alert_established", "aws:alert_established_app_layer", "aws:alert_established_app_layer_to_server",
     ], a)])
-    error_message = "stateful_default_actions entries must be aws:drop_strict, aws:drop_established, aws:alert_strict or aws:alert_established."
+    error_message = "stateful_default_actions entries must be one of the AWS STRICT_ORDER default actions: aws:drop_strict, aws:drop_established, aws:drop_established_app_layer, aws:drop_established_app_layer_to_server, or the matching aws:alert_* action."
   }
 
   validation {
@@ -70,6 +71,16 @@ variable "stateful_default_actions" {
       length([for a in var.stateful_default_actions : a if startswith(a, "aws:alert_")]) <= 1
     )
     error_message = "stateful_default_actions may contain at most one drop action and one alert action."
+  }
+
+  # AWS refuses a policy that mixes aws:{drop,alert}_established with any
+  # *_app_layer* action (Strict evaluation order); catch it at plan.
+  validation {
+    condition = !(
+      length([for a in var.stateful_default_actions : a if contains(["aws:drop_established", "aws:alert_established"], a)]) > 0 &&
+      length([for a in var.stateful_default_actions : a if strcontains(a, "_app_layer")]) > 0
+    )
+    error_message = "stateful_default_actions must not mix aws:drop_established / aws:alert_established with an *_app_layer* action (AWS rejects the policy). Switch both entries, for example to aws:drop_established_app_layer_to_server and aws:alert_established_app_layer_to_server."
   }
 }
 
