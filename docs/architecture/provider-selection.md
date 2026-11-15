@@ -219,7 +219,7 @@ provider "vercel" {
 The placeholders are inline literals because `no_plan_time_code_execution` and `scripts/check-plan-time-exec.py` allow only these exact literals (`allowed_credential_literals`) in these arguments; a check cannot see what a local evaluates to.
 
 - **Enabled:** the attribute is `null`, so the provider reads `SUPABASE_ACCESS_TOKEN` / `VERCEL_API_TOKEN` from the environment exactly as before.
-- **Disabled:** the provider gets a format-valid placeholder (`sbp_` + 40 zeros, or 24 zeros). Neither provider calls its API while configuring, and with the feature off no resource or data source uses it, so the placeholder is never sent anywhere. It is not a credential. Provider configuration takes precedence over the environment, so a stray token in the environment is ignored for the disabled provider.
+- **Disabled:** the provider gets a fixed placeholder (`sbp_disabled_placeholder`, or 24 zeros). Neither provider calls its API while configuring, and with the feature off no resource or data source uses it, so the placeholder is never sent anywhere. It is not a credential. Provider configuration takes precedence over the environment, so a stray token in the environment is ignored for the disabled provider.
 
 **Evidence** (2026-11-05, `supabase/supabase` 1.9.1, `vercel/vercel` 4.8.2, Terraform 1.14). A real `terraform plan` ran against a local-backend copy of the root with both token variables unset, not under `mock_provider`:
 

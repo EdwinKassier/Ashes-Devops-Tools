@@ -27,7 +27,7 @@
 # (fail-closed, nothing is changed). Destroy them first with the feature still
 # enabled, then flip the flag. See provider-selection.md.
 #
-# The placeholders are inline literals (sbp_ + 40 zeros; 24 zeros), not locals:
+# The placeholders are inline literals (sbp_disabled_placeholder; 24 zeros), not locals:
 # the plan-time execution guard (policies/opa/no_plan_time_code_execution*.rego
 # and scripts/check-plan-time-exec.py) allows exactly these literals in these
 # arguments, and it cannot check what a local evaluates to.
