@@ -1,4 +1,4 @@
 # GitHub Actions static analysis (meta-lint and `make zizmor`). Pinned to a
 # release at least two weeks old when the lock was made (supply-chain cooling).
 # The Makefile reads this pin, so local runs use the same version as CI.
-zizmor==1.31.1
+zizmor==1.32.0
